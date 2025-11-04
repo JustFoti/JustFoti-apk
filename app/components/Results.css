@@ -1,0 +1,331 @@
+/* Futuristic Results Component */
+.results {
+  margin: 2rem 0;
+  position: relative;
+}
+
+.results h2 {
+  margin-left: 2rem; /* Match container padding */
+  margin-bottom: 1.5rem;
+  position: relative;
+  display: inline-block;
+}
+
+/* Carousel Container */
+.carousel-container {
+  position: relative;
+  overflow: visible;
+  padding: 0 2rem; /* Full width with minimal edge padding */
+}
+
+.movies-carousel {
+  display: flex;
+  gap: 1.2rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  padding: 1.5rem 0 2rem 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.movies-carousel::-webkit-scrollbar {
+  display: none;
+}
+
+/* Movie Card - Enhanced Futuristic Design */
+.movie-card {
+  position: relative;
+  min-width: 240px;
+  height: 380px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-lg);
+  backdrop-filter: blur(20px) saturate(180%);
+  cursor: pointer;
+  transition: all 0.5s cubic-bezier(0.23, 1, 0.320, 1);
+  overflow: hidden;
+  box-shadow: var(--shadow-glass);
+  transform-origin: center bottom;
+  z-index: 1; /* Default z-index */
+}
+
+.movie-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, 
+    rgba(0, 245, 255, 0.1) 0%,
+    rgba(138, 43, 226, 0.1) 100%);
+  opacity: 0;
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.320, 1);
+  z-index: 1;
+}
+
+.movie-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(0, 245, 255, 0.4) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.8s cubic-bezier(0.23, 1, 0.320, 1);
+  z-index: 2;
+}
+
+.movie-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  border-color: var(--neon-cyan);
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.6),
+    0 0 30px rgba(0, 245, 255, 0.4),
+    0 0 60px rgba(0, 245, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  z-index: 999; /* Highest z-index on hover to prevent clipping */
+}
+
+.movie-card:hover::before {
+  opacity: 0.8;
+}
+
+.movie-card:hover::after {
+  opacity: 0.3;
+  transform: scale(1);
+}
+
+.movie-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--border-radius-lg);
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.320, 1);
+  position: relative;
+  z-index: 3;
+  filter: brightness(0.9) contrast(1.2) saturate(1.1);
+}
+
+.movie-card:hover img {
+  transform: scale(1.05);
+  filter: brightness(1.2) contrast(1.3) saturate(1.3);
+}
+
+/* Movie Details Overlay - Enhanced */
+.movie-details {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(
+    transparent 0%, 
+    rgba(10, 10, 15, 0.7) 20%, 
+    rgba(10, 10, 15, 0.95) 70%,
+    rgba(10, 10, 15, 0.98) 100%
+  );
+  padding: 3.5rem 1.5rem 1.5rem 1.5rem;
+  color: var(--text-primary);
+  transform: translateY(calc(100% - 20px));
+  transition: all 0.6s cubic-bezier(0.23, 1, 0.320, 1);
+  backdrop-filter: blur(15px) saturate(150%);
+  z-index: 4;
+  border-radius: 0 0 var(--border-radius-lg) var(--border-radius-lg);
+  border-top: 1px solid rgba(0, 245, 255, 0.2);
+}
+
+.movie-card:hover .movie-details {
+  transform: translateY(0);
+}
+
+.movie-details p {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.movie-details p:first-child {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--neon-cyan);
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.movie-details strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Carousel Navigation Arrows - Thin Rectangle Design */
+.left-arrow, .right-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  width: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  backdrop-filter: blur(20px);
+  transition: all 0.4s cubic-bezier(0.23, 1, 0.320, 1);
+  z-index: 9999;
+  box-shadow: var(--shadow-glass);
+  opacity: 0.8;
+}
+
+.left-arrow::before, .right-arrow::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--gradient-primary);
+  border-radius: 8px;
+  opacity: 0;
+  transform: scaleX(0.8);
+  transition: all 0.5s cubic-bezier(0.23, 1, 0.320, 1);
+  z-index: -1;
+}
+
+.left-arrow {
+  left: -2rem;
+}
+
+.right-arrow {
+  right: -2rem;
+}
+
+.left-arrow:hover, .right-arrow:hover {
+  border-color: var(--neon-cyan);
+  transform: scaleX(1.1);
+  box-shadow: 
+    0 10px 30px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(0, 245, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  opacity: 1;
+}
+
+.left-arrow:hover::before, .right-arrow:hover::before {
+  opacity: 0.1;
+  transform: scaleX(1);
+}
+
+.left-arrow:active, .right-arrow:active {
+  transform: scaleX(0.95);
+}
+
+/* Loading State */
+.results .loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+}
+
+/* Flag Styling */
+.movie-details img[style*="width: 12px"], 
+.movie-details img[style*="width: 24px"] {
+  display: inline-block;
+  margin: 0 2px;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .movie-card {
+    min-width: 220px;
+    height: 350px;
+  }
+}
+
+@media (max-width: 768px) {
+  .carousel-container {
+    padding: 0 1.5rem; /* Maintained padding for breathing room */
+  }
+  
+  .results h2 {
+    margin-left: 1.5rem; /* Matched with container padding */
+    font-size: 1.5rem;
+  }
+  
+  .movie-card {
+    min-width: 200px;
+    height: 320px;
+  }
+  
+  .movies-carousel {
+    gap: 1rem;
+  }
+  
+  .left-arrow, .right-arrow {
+    width: 40px;
+    font-size: 1.2rem;
+  }
+  
+  .left-arrow {
+    left: -1.5rem;
+  }
+  
+  .right-arrow {
+    right: -1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .carousel-container {
+    padding: 0 1rem;
+  }
+  
+  .results h2 {
+    margin-left: 1rem;
+  }
+  
+  .movie-card {
+    min-width: 170px;
+    height: 260px;
+  }
+  
+  .movie-card:hover {
+    transform: translateY(-6px) scale(1.01);
+  }
+  
+  .movies-carousel {
+    gap: 0.8rem;
+  }
+  
+  .movie-details {
+    padding: 2rem 1rem 1rem 1rem;
+  }
+  
+  .movie-details p {
+    font-size: 0.8rem;
+  }
+  
+  .left-arrow, .right-arrow {
+    width: 35px;
+    font-size: 1.1rem;
+  }
+  
+  .left-arrow {
+    left: -1rem;
+  }
+  
+  .right-arrow {
+    right: -1rem;
+  }
+}
+  

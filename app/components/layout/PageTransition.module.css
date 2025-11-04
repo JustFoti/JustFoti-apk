@@ -1,0 +1,15 @@
+/* Page Transition Container */
+.pageTransition {
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* View Transitions API Styles */
+@supports (view-transition-name: page) {
+  .pageTransition {
+    view-transition-name: page;
+  }
+}
+
+/* View Transition Animations - moved to globals.css for global scope */

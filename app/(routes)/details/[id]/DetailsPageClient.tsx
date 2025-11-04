@@ -1,0 +1,284 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import type { MediaItem, Season } from '@/types/media';
+import { ParallaxContainer } from '@/components/ui/ParallaxContainer';
+import { GlassPanel } from '@/components/ui/GlassPanel';
+import { FluidButton } from '@/components/ui/FluidButton';
+import { ContentGrid } from '@/components/content/ContentGrid';
+import { SeasonSelector } from './SeasonSelector';
+import { EpisodeList } from './EpisodeList';
+import styles from './DetailsPage.module.css';
+
+// Prefetch video stream data on component mount
+const prefetchStreamData = async (contentId: string, mediaType: 'movie' | 'tv') => {
+  try {
+    // Prefetch stream extraction in the background using extract-shadowlands
+    fetch(`/api/extract-shadowlands?tmdbId=${contentId}${mediaType === 'tv' ? '&season=1&episode=1' : ''}`, {
+      method: 'GET',
+      priority: 'low',
+    } as any).catch(() => {
+      // Silent fail - this is just a prefetch optimization
+    });
+  } catch (error) {
+    // Silent fail
+  }
+};
+
+interface DetailsPageClientProps {
+  content: MediaItem | null;
+  relatedContent: MediaItem[];
+  error: string | null;
+}
+
+/**
+ * DetailsPageClient - Client-side details page component
+ * Features:
+ * - Parallax hero section with backdrop
+ * - Metadata display (title, description, ratings, cast, genres)
+ * - Season and episode selection for TV shows
+ * - Related content recommendations
+ * - Watch Now button with smooth transition
+ */
+export default function DetailsPageClient({
+  content,
+  relatedContent,
+  error,
+}: DetailsPageClientProps) {
+  const router = useRouter();
+  const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const [seasonData, setSeasonData] = useState<Season | null>(null);
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+
+  // Load episodes when season changes for TV shows
+  useEffect(() => {
+    if (content?.mediaType === 'tv' && content.seasons && content.seasons.length > 0) {
+      loadSeasonEpisodes(selectedSeason);
+    }
+  }, [selectedSeason, content]);
+
+  // Prefetch video stream data on page load
+  useEffect(() => {
+    if (content) {
+      prefetchStreamData(content.id, content.mediaType);
+    }
+  }, [content]);
+
+  const loadSeasonEpisodes = async (seasonNumber: number) => {
+    if (!content) return;
+    
+    setLoadingEpisodes(true);
+    try {
+      const response = await fetch(
+        `/api/content/season?tvId=${content.id}&seasonNumber=${seasonNumber}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSeasonData(data);
+      }
+    } catch (err) {
+      console.error('Error loading episodes:', err);
+    } finally {
+      setLoadingEpisodes(false);
+    }
+  };
+
+  const handleWatchNow = () => {
+    if (!content) return;
+    
+    if (content.mediaType === 'movie') {
+      router.push(`/watch/${content.id}?type=movie`);
+    } else {
+      // For TV shows, watch first episode of selected season
+      const episode = seasonData?.episodes[0];
+      if (episode) {
+        router.push(
+          `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${episode.episodeNumber}`
+        );
+      }
+    }
+  };
+
+  const handleEpisodeSelect = (episodeNumber: number) => {
+    if (!content) return;
+    router.push(
+      `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${episodeNumber}`
+    );
+  };
+
+  const handleRelatedSelect = (id: string) => {
+    // Navigate to the related content's details page
+    const relatedItem = relatedContent.find(item => item.id === id);
+    if (relatedItem) {
+      router.push(`/details/${id}?type=${relatedItem.mediaType}`);
+    }
+  };
+
+  if (error && !content) {
+    return (
+      <div className={styles.errorContainer}>
+        <GlassPanel className={styles.errorPanel}>
+          <h2 className={styles.errorTitle}>Oops! Something went wrong</h2>
+          <p className={styles.errorMessage}>{error}</p>
+          <FluidButton onClick={() => router.push('/')} variant="primary">
+            Go Home
+          </FluidButton>
+        </GlassPanel>
+      </div>
+    );
+  }
+
+  if (!content) {
+    return null;
+  }
+
+  const formattedRating = content.rating.toFixed(1);
+  const releaseYear = content.releaseDate
+    ? new Date(content.releaseDate).getFullYear()
+    : 'N/A';
+
+  return (
+    <div className={styles.container}>
+      {/* Hero Section with Parallax Backdrop */}
+      <ParallaxContainer className={styles.heroSection}>
+        {/* Backdrop Image */}
+        {content.backdropPath && (
+          <div className={styles.backdrop}>
+            <img
+              src={content.backdropPath}
+              alt={content.title}
+              className={styles.backdropImage}
+            />
+            {/* Gradient overlays */}
+            <div className={styles.backdropGradientTop} />
+            <div className={styles.backdropGradientBottom} />
+          </div>
+        )}
+
+        {/* Hero Content */}
+        <div className={styles.heroContent}>
+          <motion.div
+            className={styles.heroInner}
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            {/* Poster */}
+            <div className={styles.posterContainer}>
+              {content.posterPath ? (
+                <img
+                  src={content.posterPath}
+                  alt={content.title}
+                  className={styles.poster}
+                />
+              ) : (
+                <div className={styles.posterPlaceholder}>
+                  <span className={styles.posterIcon}>
+                    {content.mediaType === 'movie' ? '🎬' : '📺'}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Metadata */}
+            <div className={styles.metadata}>
+              <h1 className={styles.title}>{content.title}</h1>
+
+              {/* Info Row */}
+              <div className={styles.infoRow}>
+                <span className={styles.rating}>⭐ {formattedRating}</span>
+                <span className={styles.separator}>•</span>
+                <span className={styles.year}>{releaseYear}</span>
+                {content.runtime && (
+                  <>
+                    <span className={styles.separator}>•</span>
+                    <span className={styles.runtime}>{content.runtime} min</span>
+                  </>
+                )}
+                <span className={styles.separator}>•</span>
+                <span className={styles.mediaType}>
+                  {content.mediaType === 'movie' ? 'Movie' : 'TV Show'}
+                </span>
+              </div>
+
+              {/* Genres */}
+              {content.genres && content.genres.length > 0 && (
+                <div className={styles.genres}>
+                  {content.genres.map((genre) => (
+                    <span key={genre.id} className={styles.genreTag}>
+                      {genre.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Overview */}
+              <p className={styles.overview}>{content.overview}</p>
+
+              {/* Watch Now Button */}
+              <div className={styles.actions}>
+                <FluidButton
+                  onClick={handleWatchNow}
+                  variant="primary"
+                  size="lg"
+                  className={styles.watchButton}
+                >
+                  <svg
+                    className={styles.playIcon}
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Watch Now
+                </FluidButton>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </ParallaxContainer>
+
+      {/* TV Show Season/Episode Selection */}
+      {content.mediaType === 'tv' && content.seasons && content.seasons.length > 0 && (
+        <section className={styles.seasonsSection}>
+          <GlassPanel className={styles.seasonsPanel}>
+            <h2 className={styles.sectionTitle}>Episodes</h2>
+            
+            <SeasonSelector
+              seasons={content.seasons}
+              selectedSeason={selectedSeason}
+              onSeasonChange={setSelectedSeason}
+            />
+
+            {loadingEpisodes ? (
+              <div className={styles.loadingEpisodes}>
+                <div className={styles.spinner} />
+                <p>Loading episodes...</p>
+              </div>
+            ) : seasonData ? (
+              <EpisodeList
+                episodes={seasonData.episodes}
+                onEpisodeSelect={handleEpisodeSelect}
+              />
+            ) : null}
+          </GlassPanel>
+        </section>
+      )}
+
+      {/* Related Content */}
+      {relatedContent.length > 0 && (
+        <section className={styles.relatedSection}>
+          <h2 className={styles.sectionTitle}>You May Also Like</h2>
+          <ContentGrid
+            items={relatedContent}
+            onItemSelect={handleRelatedSelect}
+            layout="grid"
+          />
+        </section>
+      )}
+    </div>
+  );
+}

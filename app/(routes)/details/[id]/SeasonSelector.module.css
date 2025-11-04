@@ -1,0 +1,78 @@
+.container {
+  margin: 1.5rem 0;
+}
+
+.seasonList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.seasonButton {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  min-width: 140px;
+}
+
+.seasonButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-2px);
+}
+
+.seasonButton:focus-visible {
+  outline: 2px solid rgba(139, 92, 246, 0.6);
+  outline-offset: 2px;
+}
+
+.seasonButton.selected {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2));
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #fff;
+}
+
+.seasonLabel {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.episodeCount {
+  font-size: 0.875rem;
+  opacity: 0.8;
+}
+
+.selectedIndicator {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  border: 2px solid rgba(139, 92, 246, 0.8);
+  pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .seasonButton {
+    min-width: 120px;
+    padding: 0.875rem 1.25rem;
+  }
+
+  .seasonLabel {
+    font-size: 0.9375rem;
+  }
+
+  .episodeCount {
+    font-size: 0.8125rem;
+  }
+}

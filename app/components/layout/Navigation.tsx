@@ -1,0 +1,311 @@
+'use client';
+
+import React, { useState, useRef, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useIsScrolled } from '@/app/lib/hooks/useScrollPosition';
+import { useIsMobile } from '@/app/lib/hooks/useMediaQuery';
+import styles from './Navigation.module.css';
+
+interface NavigationProps {
+  transparent?: boolean;
+  onSearch?: (query: string) => void;
+}
+
+interface NavLinkProps {
+  children: React.ReactNode;
+  isActive: boolean;
+  onClick: () => void;
+}
+
+const NavLink: React.FC<NavLinkProps> = ({ children, isActive, onClick }) => {
+  const linkRef = useRef<HTMLButtonElement>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  const [isHovering, setIsHovering] = useState(false);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (!linkRef.current) return;
+    
+    const rect = linkRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    setMousePosition({ x, y });
+  };
+
+  const handleMouseEnter = () => {
+    setIsHovering(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovering(false);
+  };
+
+  return (
+    <button
+      ref={linkRef}
+      className={`${styles.navLink} ${isActive ? styles.active : ''}`}
+      onClick={onClick}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      aria-current={isActive ? 'page' : undefined}
+    >
+      {isHovering && (
+        <span
+          className={styles.magneticGlow}
+          style={{
+            left: `${mousePosition.x}px`,
+            top: `${mousePosition.y}px`,
+          }}
+        />
+      )}
+      <span className={styles.navLinkText}>{children}</span>
+      {isActive && <span className={styles.activeIndicator} />}
+    </button>
+  );
+};
+
+export const Navigation: React.FC<NavigationProps> = ({ 
+  transparent = false,
+  onSearch 
+}) => {
+  const router = useRouter();
+  const pathname = usePathname();
+  const isScrolled = useIsScrolled(50);
+  const isMobile = useIsMobile();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
+  const handleNavigation = (path: string) => {
+    // Prefetch on hover is handled by Next.js Link component
+    // For instant navigation, we use router.push
+    router.push(path);
+    setMobileMenuOpen(false);
+  };
+
+  const handleLogoClick = () => {
+    if (pathname === '/') {
+      // Scroll to top if already on home
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      router.push('/');
+    }
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim() && onSearch) {
+      onSearch(searchQuery);
+      setSearchOpen(false);
+    }
+  };
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
+  };
+
+  const toggleSearch = () => {
+    setSearchOpen(!searchOpen);
+    if (!searchOpen) {
+      // Focus search input when opening
+      setTimeout(() => {
+        const input = document.getElementById('nav-search-input');
+        input?.focus();
+      }, 100);
+    }
+  };
+
+  const navClasses = [
+    styles.navigation,
+    (isScrolled || !transparent) ? styles.scrolled : '',
+    mobileMenuOpen ? styles.menuOpen : '',
+  ].filter(Boolean).join(' ');
+
+  return (
+    <>
+      <nav className={navClasses} role="navigation" aria-label="Main navigation">
+        <div className={styles.navContainer}>
+          {/* Logo */}
+          <button 
+            className={styles.logo}
+            onClick={handleLogoClick}
+            aria-label="Flyx home"
+          >
+            <div className={styles.logoIcon}>
+              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <defs>
+                  <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#00f5ff" />
+                    <stop offset="50%" stopColor="#8b5cf6" />
+                    <stop offset="100%" stopColor="#f471b5" />
+                  </linearGradient>
+                </defs>
+                <path 
+                  d="M4 8L16 2L28 8V24L16 30L4 24V8Z" 
+                  stroke="url(#logoGradient)" 
+                  strokeWidth="2" 
+                  fill="rgba(139, 92, 246, 0.1)" 
+                />
+                <circle cx="16" cy="16" r="6" fill="url(#logoGradient)" />
+                <path 
+                  d="M12 16L15 19L20 13" 
+                  stroke="white" 
+                  strokeWidth="2.5" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                />
+              </svg>
+            </div>
+            <div className={styles.logoText}>
+              <span className={styles.logoTitle}>FLYX</span>
+              <span className={styles.logoTagline}>Stream Beyond</span>
+            </div>
+          </button>
+
+          {/* Desktop Navigation Links */}
+          {!isMobile && (
+            <div className={styles.navLinks}>
+              <NavLink
+                isActive={pathname === '/'}
+                onClick={() => handleNavigation('/')}
+              >
+                Home
+              </NavLink>
+              <NavLink
+                isActive={pathname === '/about'}
+                onClick={() => handleNavigation('/about')}
+              >
+                About
+              </NavLink>
+            </div>
+          )}
+
+          {/* Search and Mobile Menu Toggle */}
+          <div className={styles.navActions}>
+            {!isMobile && (
+              <button
+                className={styles.searchToggle}
+                onClick={toggleSearch}
+                aria-label="Toggle search"
+                aria-expanded={searchOpen}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                  <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+            
+            {isMobile && (
+              <button
+                className={styles.mobileMenuToggle}
+                onClick={toggleMobileMenu}
+                aria-label="Toggle menu"
+                aria-expanded={mobileMenuOpen}
+              >
+                <span className={styles.hamburger}>
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        {searchOpen && !isMobile && (
+          <div className={styles.searchContainer}>
+            <form onSubmit={handleSearchSubmit} className={styles.searchForm}>
+              <input
+                id="nav-search-input"
+                type="text"
+                className={styles.searchInput}
+                placeholder="Search movies and TV shows..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search"
+              />
+              <button 
+                type="submit" 
+                className={styles.searchButton}
+                aria-label="Submit search"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                  <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Mobile Menu */}
+        {isMobile && mobileMenuOpen && (
+          <div className={styles.mobileMenu}>
+            <NavLink
+              isActive={pathname === '/'}
+              onClick={() => handleNavigation('/')}
+            >
+              Home
+            </NavLink>
+            <NavLink
+              isActive={pathname === '/about'}
+              onClick={() => handleNavigation('/about')}
+            >
+              About
+            </NavLink>
+          </div>
+        )}
+      </nav>
+
+      {/* Mobile Bottom Navigation */}
+      {isMobile && (
+        <div className={styles.bottomNav}>
+          <button
+            className={`${styles.bottomNavItem} ${pathname === '/' ? styles.active : ''}`}
+            onClick={() => handleNavigation('/')}
+            aria-label="Home"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline points="9 22 9 12 15 12 15 22" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Home</span>
+          </button>
+          <button
+            className={styles.bottomNavItem}
+            onClick={toggleSearch}
+            aria-label="Search"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="11" cy="11" r="8" strokeWidth="2" />
+              <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span>Search</span>
+          </button>
+          <button
+            className={`${styles.bottomNavItem} ${pathname === '/about' ? styles.active : ''}`}
+            onClick={() => handleNavigation('/about')}
+            aria-label="About"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle cx="12" cy="12" r="10" strokeWidth="2" />
+              <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" strokeLinecap="round" />
+              <line x1="12" y1="8" x2="12.01" y2="8" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span>About</span>
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default Navigation;

@@ -1,0 +1,25 @@
+# Bun Configuration
+# https://bun.sh/docs/runtime/bunfig
+
+[install]
+# Use exact versions for reproducible builds
+exact = true
+
+# Install peer dependencies automatically
+peer = true
+
+# Use global cache
+cache = true
+
+[install.scopes]
+# Configure scoped registries if needed
+
+[test]
+# Test configuration
+preload = ["./bun.test.setup.ts"]
+coverage = true
+
+[run]
+# Runtime configuration
+bun = true
+smol = false

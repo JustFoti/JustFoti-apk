@@ -1,0 +1,123 @@
+/**
+ * SearchSuggestions Styles
+ * Smooth animations and hover effects for suggestions
+ */
+
+.suggestions {
+  padding: 0.5rem 0;
+}
+
+.suggestionsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.headerTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.clearButton {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.clearButton:hover {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.clearButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.suggestionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.suggestionItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.suggestionItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateX(4px);
+}
+
+.suggestionItem:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline-offset: 2px;
+}
+
+.suggestionIcon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  transition: color 0.2s ease;
+}
+
+.suggestionItem:hover .suggestionIcon {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.suggestionText {
+  flex: 1;
+  font-size: 0.9375rem;
+  color: inherit;
+}
+
+.suggestionArrow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.3);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.2s ease;
+}
+
+.suggestionItem:hover .suggestionArrow {
+  opacity: 1;
+  transform: translateX(0);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .suggestionItem {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .suggestionText {
+    font-size: 0.875rem;
+  }
+}
