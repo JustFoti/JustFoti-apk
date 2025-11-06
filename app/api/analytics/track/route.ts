@@ -51,7 +51,22 @@ function generateId() {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
-interface TrackingEvent {
+interface AnalyticsEvent {
+  id: string;
+  type: string;
+  userId: string;
+  sessionId: string;
+  deviceId: string;
+  timestamp: number;
+  data?: Record<string, any>;
+  metadata: Record<string, any>;
+}
+
+interface TrackingRequest {
+  events: AnalyticsEvent[];
+}
+
+interface LegacyTrackingEvent {
   event_type: string;
   content_id?: string;
   content_type?: 'movie' | 'tv';
@@ -110,14 +125,38 @@ export async function POST(request: NextRequest) {
   try {
     // Step 1: Parse request body
     console.log(`[${requestId}] Step 1: Parsing request body`);
-    let events: TrackingEvent[];
+    let events: AnalyticsEvent[];
     
     try {
-      events = await request.json();
+      const body = await request.json();
+      
+      // Handle both new format (with events array) and legacy format (direct array)
+      if (body.events && Array.isArray(body.events)) {
+        events = body.events;
+      } else if (Array.isArray(body)) {
+        // Legacy format - convert to new format
+        events = body.map((legacyEvent: LegacyTrackingEvent) => ({
+          id: generateId(),
+          type: legacyEvent.event_type,
+          userId: 'legacy_user',
+          sessionId: getSessionId(request),
+          deviceId: 'legacy_device',
+          timestamp: Date.now(),
+          data: legacyEvent,
+          metadata: {
+            userAgent: request.headers.get('user-agent') || '',
+            referrer: request.headers.get('referer') || '',
+          }
+        }));
+      } else {
+        throw new Error('Invalid request format');
+      }
+      
       console.log(`[${requestId}] Request body parsed successfully`, {
         isArray: Array.isArray(events),
-        length: Array.isArray(events) ? events.length : 'N/A',
-        firstEventType: Array.isArray(events) && events.length > 0 ? events[0].event_type : 'N/A'
+        length: events.length,
+        firstEventType: events.length > 0 ? events[0].type : 'N/A',
+        format: body.events ? 'new' : 'legacy'
       });
     } catch (parseError) {
       console.error(`[${requestId}] Failed to parse request body`, parseError);
@@ -207,34 +246,41 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
         console.log(`[${requestId}] Processing event ${i + 1}/${events.length}`, {
-          event_type: event.event_type,
-          content_id: event.content_id,
-          content_type: event.content_type
+          type: event.type,
+          userId: event.userId?.substring(0, 8) + '...',
+          sessionId: event.sessionId?.substring(0, 8) + '...',
+          deviceId: event.deviceId?.substring(0, 8) + '...'
         });
         
-        const metadata = {
-          ...event,
+        // Enhance metadata with server-side information
+        const enhancedMetadata = {
+          ...event.metadata,
+          ...event.data,
           country: location.country,
           region: location.region,
           user_agent: userAgent,
           referrer: referrer,
           ip_hash: hashIP(clientIP),
+          server_timestamp: Date.now(),
         };
 
-        const eventId = generateId();
-        const timestamp = Date.now();
-        
         try {
           await db.insertAnalyticsEvent({
-            id: eventId,
-            sessionId: sessionId,
-            timestamp: timestamp,
-            eventType: event.event_type,
-            metadata: metadata
+            id: event.id,
+            sessionId: event.sessionId,
+            timestamp: event.timestamp,
+            eventType: event.type,
+            metadata: enhancedMetadata
           });
-          console.log(`[${requestId}] Event ${i + 1} inserted successfully`, { eventId });
+          console.log(`[${requestId}] Event ${i + 1} inserted successfully`, { 
+            eventId: event.id,
+            type: event.type 
+          });
         } catch (insertError) {
-          console.error(`[${requestId}] Failed to insert event ${i + 1}`, insertError, { event });
+          console.error(`[${requestId}] Failed to insert event ${i + 1}`, insertError, { 
+            eventId: event.id,
+            type: event.type 
+          });
           throw insertError;
         }
       }
@@ -254,12 +300,26 @@ export async function POST(request: NextRequest) {
     try {
       for (let i = 0; i < events.length; i++) {
         const event = events[i];
-        if (event.event_type === 'watch_progress' && event.content_id) {
+        
+        // Check for watch events that should update content stats
+        if ((event.type === 'watch_event' || event.type === 'watch_progress') && 
+            (event.data?.contentId || event.metadata?.content_id)) {
+          
+          const contentId = event.data?.contentId || event.metadata?.content_id;
+          const contentType = event.data?.contentType || event.metadata?.content_type;
+          const watchTime = event.data?.currentTime || event.data?.watch_time || 0;
+          
           console.log(`[${requestId}] Updating content stats for event ${i + 1}`, {
-            content_id: event.content_id,
-            content_type: event.content_type
+            content_id: contentId,
+            content_type: contentType,
+            watch_time: watchTime
           });
-          await updateContentStats(event, requestId);
+          
+          await updateContentStats({
+            content_id: contentId,
+            content_type: contentType,
+            watch_time: watchTime
+          }, requestId);
         }
       }
       console.log(`[${requestId}] Content statistics updated successfully`);
@@ -351,7 +411,7 @@ function hashIP(ip: string): string {
 }
 
 // Update content statistics with debugging
-async function updateContentStats(event: TrackingEvent, requestId: string) {
+async function updateContentStats(event: { content_id?: string; content_type?: string; watch_time?: number }, requestId: string) {
   try {
     if (!event.content_id) {
       console.log(`[${requestId}] Skipping content stats update - no content_id`);

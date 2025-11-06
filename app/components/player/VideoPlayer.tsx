@@ -20,13 +20,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Analytics and progress tracking
-  const { trackEvent } = useAnalytics();
+  const { trackWatchEvent, trackContentEngagement, trackInteraction } = useAnalytics();
   const contentType = mediaType === 'tv' ? 'episode' : 'movie';
-  const { handleProgress, loadProgress } = useWatchProgress({
+  const { 
+    handleProgress, 
+    loadProgress, 
+    handleWatchStart, 
+    handleWatchPause, 
+    handleWatchResume 
+  } = useWatchProgress({
     contentId: tmdbId,
     contentType,
+    seasonNumber: season,
+    episodeNumber: episode,
     onProgress: (_time, _duration) => {
       // This will be called by the hook when progress is updated
+    },
+    onComplete: () => {
+      // Track completion in viewing history
+      trackContentEngagement(tmdbId, mediaType, 'completed', {
+        title,
+        season,
+        episode,
+      });
     },
   });
   
@@ -161,26 +177,41 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
 
     const handlePlay = () => {
       setIsPlaying(true);
-      trackEvent('video_play', {
-        content_id: tmdbId,
-        content_type: mediaType,
-        season,
-        episode,
-        title,
-        current_time: video.currentTime,
+      
+      if (video.currentTime === 0) {
+        // First play - track as start
+        handleWatchStart(video.currentTime, video.duration);
+      } else {
+        // Resume from pause
+        handleWatchResume(video.currentTime, video.duration);
+      }
+      
+      trackInteraction({
+        element: 'video_player',
+        action: 'click',
+        context: {
+          action_type: 'play',
+          contentId: tmdbId,
+          contentType: mediaType,
+          currentTime: video.currentTime,
+        },
       });
     };
 
     const handlePause = () => {
       setIsPlaying(false);
-      trackEvent('video_pause', {
-        content_id: tmdbId,
-        content_type: mediaType,
-        season,
-        episode,
-        title,
-        current_time: video.currentTime,
-        duration: video.duration,
+      handleWatchPause(video.currentTime, video.duration);
+      
+      trackInteraction({
+        element: 'video_player',
+        action: 'click',
+        context: {
+          action_type: 'pause',
+          contentId: tmdbId,
+          contentType: mediaType,
+          currentTime: video.currentTime,
+          duration: video.duration,
+        },
       });
     };
 
@@ -214,13 +245,13 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     const handleCanPlay = () => setIsBuffering(false);
     const handleLoadedData = () => {
       setIsLoading(false);
-      trackEvent('content_view', {
-        content_id: tmdbId,
-        content_type: mediaType,
+      
+      trackContentEngagement(tmdbId, mediaType, 'video_loaded', {
+        title,
         season,
         episode,
-        title,
         quality,
+        duration: video.duration,
       });
     };
 
@@ -312,6 +343,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     videoRef.current.volume = newVolume;
     setVolume(newVolume);
     setIsMuted(newVolume === 0);
+    
+    trackInteraction({
+      element: 'volume_control',
+      action: 'click',
+      context: {
+        action_type: 'volume_change',
+        volume: newVolume,
+        contentId: tmdbId,
+      },
+    });
   };
 
   const toggleMute = () => {
@@ -322,7 +363,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
 
   const seek = (time: number) => {
     if (!videoRef.current) return;
-    videoRef.current.currentTime = Math.max(0, Math.min(time, duration));
+    const newTime = Math.max(0, Math.min(time, duration));
+    videoRef.current.currentTime = newTime;
+    
+    trackInteraction({
+      element: 'video_player',
+      action: 'click',
+      context: {
+        action_type: 'seek',
+        contentId: tmdbId,
+        fromTime: currentTime,
+        toTime: newTime,
+        seekAmount: newTime - currentTime,
+      },
+    });
   };
 
   const toggleFullscreen = () => {
@@ -339,13 +393,34 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     videoRef.current.playbackRate = rate;
     setPlaybackRate(rate);
     setShowSettings(false);
+    
+    trackInteraction({
+      element: 'playback_rate_selector',
+      action: 'click',
+      context: {
+        action_type: 'playback_rate_change',
+        playbackRate: rate,
+        contentId: tmdbId,
+      },
+    });
   };
 
   const changeQuality = (qualityIndex: number) => {
     if (!hlsRef.current) return;
     hlsRef.current.currentLevel = qualityIndex - 1; // -1 for auto
-    setQuality(qualities[qualityIndex]);
+    const newQuality = qualities[qualityIndex];
+    setQuality(newQuality);
     setShowSettings(false);
+    
+    trackInteraction({
+      element: 'quality_selector',
+      action: 'click',
+      context: {
+        action_type: 'quality_change',
+        quality: newQuality,
+        contentId: tmdbId,
+      },
+    });
   };
 
   const resetControlsTimeout = () => {

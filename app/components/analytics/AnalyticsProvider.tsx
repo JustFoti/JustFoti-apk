@@ -1,11 +1,41 @@
 'use client';
 
-import { createContext, useContext, ReactNode, useRef, useCallback } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
+import { analyticsService, type WatchEvent, type SearchEvent, type InteractionEvent } from '@/lib/services/analytics';
+import { userTrackingService, type UserSession, type UserPreferences } from '@/lib/services/user-tracking';
 
 interface AnalyticsContextType {
+  // Basic tracking
   trackEvent: (event: string, properties?: Record<string, any>) => void;
-  trackPageView: (page: string) => void;
+  trackPageView: (page: string, data?: Record<string, any>) => void;
+  
+  // Watch tracking
   trackWatchProgress: (contentId: string, contentType: 'movie' | 'tv', watchTime: number, duration: number) => void;
+  trackWatchEvent: (event: WatchEvent) => void;
+  
+  // Search tracking
+  trackSearch: (event: SearchEvent) => void;
+  
+  // Interaction tracking
+  trackInteraction: (event: InteractionEvent) => void;
+  
+  // Content engagement
+  trackContentEngagement: (contentId: string, contentType: 'movie' | 'tv', action: string, data?: Record<string, any>) => void;
+  
+  // Error tracking
+  trackError: (error: Error, context?: Record<string, any>) => void;
+  
+  // Performance tracking
+  trackPerformance: (metric: string, value: number, context?: Record<string, any>) => void;
+  
+  // User session management
+  getUserSession: () => UserSession | null;
+  updateUserPreferences: (preferences: Partial<UserPreferences>) => void;
+  clearUserData: () => void;
+  
+  // Watch progress management
+  getWatchProgress: (contentId: string) => any;
+  getViewingHistory: () => any[];
 }
 
 const AnalyticsContext = createContext<AnalyticsContextType | null>(null);
@@ -23,79 +53,107 @@ interface AnalyticsProviderProps {
 }
 
 export default function AnalyticsProvider({ children }: AnalyticsProviderProps) {
-  const eventQueue = useRef<any[]>([]);
-  const flushTimeout = useRef<NodeJS.Timeout | null>(null);
-
-  const flushEvents = useCallback(async () => {
-    if (eventQueue.current.length === 0) return;
-
-    const events = [...eventQueue.current];
-    eventQueue.current = [];
-
-    try {
-      await fetch('/api/analytics/track', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(events),
-      });
-    } catch (error) {
-      console.error('Failed to track analytics:', error);
-      // Re-queue events on failure
-      eventQueue.current.unshift(...events);
-    }
+  // Initialize analytics service on mount
+  useEffect(() => {
+    analyticsService.initialize();
   }, []);
 
-  const queueEvent = useCallback((eventType: string, properties: Record<string, any> = {}) => {
-    eventQueue.current.push({
-      event_type: eventType,
-      ...properties,
-      timestamp: Date.now(),
-    });
-
-    // Debounce flush
-    if (flushTimeout.current) {
-      clearTimeout(flushTimeout.current);
-    }
-    flushTimeout.current = setTimeout(flushEvents, 1000);
-  }, [flushEvents]);
-
+  // Basic event tracking
   const trackEvent = useCallback((event: string, properties?: Record<string, any>) => {
-    queueEvent(event, properties);
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Analytics Event:', event, properties);
-    }
-  }, [queueEvent]);
+    analyticsService.track(event, properties);
+  }, []);
 
-  const trackPageView = useCallback((page: string) => {
-    queueEvent('page_view', { page });
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Page View:', page);
-    }
-  }, [queueEvent]);
+  const trackPageView = useCallback((page: string, data?: Record<string, any>) => {
+    analyticsService.trackPageView(page, data);
+  }, []);
 
+  // Watch tracking
   const trackWatchProgress = useCallback((
     contentId: string,
     contentType: 'movie' | 'tv',
     watchTime: number,
     duration: number
   ) => {
-    queueEvent('watch_progress', {
-      content_id: contentId,
-      content_type: contentType,
-      watch_time: watchTime,
-      duration: duration,
-      completion_percentage: Math.round((watchTime / duration) * 100),
+    analyticsService.trackWatchEvent({
+      contentId,
+      contentType,
+      action: 'progress',
+      currentTime: watchTime,
+      duration,
     });
-  }, [queueEvent]);
+  }, []);
+
+  const trackWatchEvent = useCallback((event: WatchEvent) => {
+    analyticsService.trackWatchEvent(event);
+  }, []);
+
+  // Search tracking
+  const trackSearch = useCallback((event: SearchEvent) => {
+    analyticsService.trackSearchEvent(event);
+  }, []);
+
+  // Interaction tracking
+  const trackInteraction = useCallback((event: InteractionEvent) => {
+    analyticsService.trackInteraction(event);
+  }, []);
+
+  // Content engagement tracking
+  const trackContentEngagement = useCallback((
+    contentId: string,
+    contentType: 'movie' | 'tv',
+    action: string,
+    data?: Record<string, any>
+  ) => {
+    analyticsService.trackContentEngagement(contentId, contentType, action, data);
+  }, []);
+
+  // Error tracking
+  const trackError = useCallback((error: Error, context?: Record<string, any>) => {
+    analyticsService.trackError(error, context);
+  }, []);
+
+  // Performance tracking
+  const trackPerformance = useCallback((metric: string, value: number, context?: Record<string, any>) => {
+    analyticsService.trackPerformance(metric, value, context);
+  }, []);
+
+  // User session management
+  const getUserSession = useCallback(() => {
+    return analyticsService.getUserSession();
+  }, []);
+
+  const updateUserPreferences = useCallback((preferences: Partial<UserPreferences>) => {
+    analyticsService.updateUserPreferences(preferences);
+  }, []);
+
+  const clearUserData = useCallback(() => {
+    analyticsService.clearUserData();
+  }, []);
+
+  // Watch progress management
+  const getWatchProgress = useCallback((contentId: string) => {
+    return userTrackingService.getWatchProgress(contentId);
+  }, []);
+
+  const getViewingHistory = useCallback(() => {
+    return userTrackingService.getViewingHistory();
+  }, []);
 
   const value = {
     trackEvent,
     trackPageView,
     trackWatchProgress,
+    trackWatchEvent,
+    trackSearch,
+    trackInteraction,
+    trackContentEngagement,
+    trackError,
+    trackPerformance,
+    getUserSession,
+    updateUserPreferences,
+    clearUserData,
+    getWatchProgress,
+    getViewingHistory,
   };
 
   return (

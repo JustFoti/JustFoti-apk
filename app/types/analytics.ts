@@ -39,3 +39,58 @@ export interface AdminUser {
   created_at: number;
   last_login?: number;
 }
+
+// Enhanced analytics types for user tracking
+export interface UserAnalytics {
+  userId: string;
+  deviceId: string;
+  sessionCount: number;
+  totalWatchTime: number;
+  favoriteGenres: string[];
+  preferredQuality: string;
+  avgSessionDuration: number;
+  completionRate: number;
+  lastActive: number;
+  createdAt: number;
+}
+
+export interface WatchSession {
+  sessionId: string;
+  userId: string;
+  contentId: string;
+  contentType: 'movie' | 'tv';
+  startTime: number;
+  endTime?: number;
+  watchTime: number;
+  completed: boolean;
+  quality: string;
+  device: string;
+}
+
+export interface SearchAnalytics {
+  query: string;
+  normalizedQuery: string;
+  userId: string;
+  sessionId: string;
+  resultsCount: number;
+  clickedResult?: string;
+  timestamp: number;
+}
+
+export interface InteractionAnalytics {
+  userId: string;
+  sessionId: string;
+  element: string;
+  action: string;
+  context: Record<string, any>;
+  timestamp: number;
+}
+
+export interface PerformanceMetrics {
+  userId: string;
+  sessionId: string;
+  metric: string;
+  value: number;
+  context: Record<string, any>;
+  timestamp: number;
+}

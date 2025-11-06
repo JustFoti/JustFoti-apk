@@ -7,6 +7,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useDebounce } from '@/lib/hooks/useDebounce';
+import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import styles from './SearchBar.module.css';
 
 export interface SearchBarProps {
@@ -27,6 +28,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const [query, setQuery] = useState('');
   const [internalExpanded, setInternalExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { trackSearch, trackInteraction } = useAnalytics();
   
   // Use controlled or uncontrolled expanded state
   const expanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
@@ -38,8 +40,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   useEffect(() => {
     if (debouncedQuery.trim()) {
       onSearch(debouncedQuery);
+      
+      // Track search event
+      trackSearch({
+        query: debouncedQuery,
+        resultsCount: 0, // Will be updated when results are received
+      });
     }
-  }, [debouncedQuery, onSearch]);
+  }, [debouncedQuery, onSearch, trackSearch]);
 
   // Auto-focus when expanded
   useEffect(() => {
@@ -62,6 +70,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({
       setInternalExpanded(newExpanded);
     }
     onExpandChange?.(newExpanded);
+    
+    trackInteraction({
+      element: 'search_bar',
+      action: 'click',
+      context: {
+        action_type: 'expand',
+      },
+    });
   };
 
   const handleCollapse = () => {
@@ -82,6 +98,15 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     setQuery('');
     onSearch('');
     inputRef.current?.focus();
+    
+    trackInteraction({
+      element: 'search_bar',
+      action: 'click',
+      context: {
+        action_type: 'clear',
+        previousQuery: query,
+      },
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
