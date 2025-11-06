@@ -62,10 +62,6 @@ interface AnalyticsEvent {
   metadata: Record<string, any>;
 }
 
-interface TrackingRequest {
-  events: AnalyticsEvent[];
-}
-
 interface LegacyTrackingEvent {
   event_type: string;
   content_id?: string;
