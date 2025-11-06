@@ -3,7 +3,14 @@
  * Manages anonymized user identification and tracking across sessions
  */
 
-import { v4 as uuidv4 } from 'uuid';
+// Simple UUID v4 generator to avoid dependency issues
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 export interface UserSession {
   userId: string;
@@ -23,6 +30,7 @@ export interface UserPreferences {
   volume: number;
   subtitles: boolean;
   theme: 'light' | 'dark' | 'auto';
+  dataCollectionEnabled: boolean;
 }
 
 export interface WatchProgress {
@@ -92,14 +100,14 @@ class UserTrackingService {
       let userId = localStorage.getItem(UserTrackingService.USER_ID_KEY);
       
       if (!userId) {
-        userId = `user_${uuidv4()}`;
+        userId = `user_${generateUUID()}`;
         localStorage.setItem(UserTrackingService.USER_ID_KEY, userId);
       }
       
       return userId;
     } catch (error) {
       // Fallback for when localStorage is not available
-      return `user_${uuidv4()}`;
+      return `user_${generateUUID()}`;
     }
   }
 
@@ -130,7 +138,7 @@ class UserTrackingService {
       
       return deviceId;
     } catch (error) {
-      return `device_${uuidv4()}`;
+      return `device_${generateUUID()}`;
     }
   }
 
@@ -151,7 +159,7 @@ class UserTrackingService {
       }
       
       // Create new session
-      const sessionId = `session_${uuidv4()}`;
+      const sessionId = `session_${generateUUID()}`;
       const sessionData = {
         sessionId,
         timestamp: Date.now(),
@@ -160,7 +168,7 @@ class UserTrackingService {
       sessionStorage.setItem(UserTrackingService.SESSION_ID_KEY, JSON.stringify(sessionData));
       return sessionId;
     } catch (error) {
-      return `session_${uuidv4()}`;
+      return `session_${generateUUID()}`;
     }
   }
 
@@ -198,6 +206,7 @@ class UserTrackingService {
       volume: 0.8,
       subtitles: false,
       theme: 'auto',
+      dataCollectionEnabled: true,
     };
   }
 
