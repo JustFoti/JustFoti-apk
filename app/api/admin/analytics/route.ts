@@ -24,7 +24,6 @@ export async function GET(request: NextRequest) {
     const period = searchParams.get('period') || 'week';
     const startDate = searchParams.get('startDate') || undefined;
     const endDate = searchParams.get('endDate') || undefined;
-    const contentType = searchParams.get('contentType') || undefined;
 
     // Calculate date range
     const now = new Date();
@@ -65,10 +64,10 @@ export async function GET(request: NextRequest) {
     
     // For now, return simplified data structure
     // TODO: Implement full analytics queries for the new database adapter
-    const dailyMetrics = [];
-    const topContent = [];
-    const geographic = [];
-    const devices = [];
+    const dailyMetrics: any[] = [];
+    const topContent: any[] = [];
+    const geographic: any[] = [];
+    const devices: any[] = [];
 
     return NextResponse.json({
       success: true,
