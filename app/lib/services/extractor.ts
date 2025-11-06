@@ -13,9 +13,10 @@ import { APIErrorHandler, fetchWithTimeout, createAPIError } from '@/lib/utils/e
  * Uses local extract-shadowlands API by default
  */
 function getExtractorURL(): string {
-  // For server-side calls, use localhost
+  // For server-side calls, we'll import and call the function directly
+  // This avoids the localhost issue in serverless environments
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_EXTRACTOR_URL || 'http://localhost:3000/api/extract-shadowlands';
+    return 'DIRECT_CALL'; // Special flag for direct function calls
   }
   // For client-side calls, use relative URL
   return process.env.NEXT_PUBLIC_EXTRACTOR_URL || '/api/extract-shadowlands';
@@ -80,7 +81,7 @@ function transformToVideoData(data: any): VideoData {
 }
 
 /**
- * Make a request to the local extractor service
+ * Make a request to the local extractor service or call directly
  */
 async function extractorRequest<T>(
   params: Record<string, any> = {},
@@ -88,7 +89,80 @@ async function extractorRequest<T>(
 ): Promise<APIResponse<T>> {
   const baseURL = getExtractorURL();
   
-  // Build URL with query params
+  console.log('Extractor request started', { params, baseURL, isServerSide: typeof window === 'undefined' });
+
+  // Check cache if enabled
+  if (config.cache !== false) {
+    const cacheKey = generateCacheKey('extractor', params);
+    const cached = await cacheManager.get<T>(cacheKey);
+    if (cached) {
+      console.log('Returning cached result', { cacheKey });
+      return {
+        data: cached,
+        cached: true,
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  // For server-side calls, import and call the function directly
+  if (baseURL === 'DIRECT_CALL') {
+    console.log('Making direct function call to extract-shadowlands');
+    try {
+      // Dynamic import to avoid circular dependencies
+      const { GET } = await import('../../api/extract-shadowlands/route.js');
+      
+      // Create a mock request object
+      const searchParams = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          searchParams.append(key, value.toString());
+        }
+      });
+      
+      const mockRequest = {
+        url: `http://localhost:3000/api/extract-shadowlands?${searchParams.toString()}`,
+        method: 'GET',
+        headers: new Map([['content-type', 'application/json']])
+      };
+      
+      console.log('Calling extract-shadowlands function directly', { url: mockRequest.url });
+      const response = await GET(mockRequest as any);
+      const data = await response.json();
+      
+      console.log('Direct function call completed', { success: data.success });
+      
+      if (!data.success) {
+        throw createAPIError(
+          'EXTRACTION_FAILED',
+          data.error || 'Stream extraction failed',
+          500,
+          true
+        );
+      }
+
+      // Cache the result
+      if (config.cache !== false) {
+        const cacheKey = generateCacheKey('extractor', params);
+        const ttl = config.cacheTTL || CACHE_DURATIONS.streams;
+        await cacheManager.set(cacheKey, data, ttl);
+      }
+
+      return {
+        data,
+        cached: false,
+        timestamp: Date.now(),
+      };
+    } catch (error) {
+      console.error('Direct function call failed', error);
+      return {
+        error: APIErrorHandler.handle(error),
+        timestamp: Date.now(),
+      };
+    }
+  }
+
+  // For client-side calls or when direct call is not available, use HTTP
   const queryParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -97,19 +171,7 @@ async function extractorRequest<T>(
   });
   
   const url = `${baseURL}?${queryParams.toString()}`;
-
-  // Check cache if enabled
-  if (config.cache !== false) {
-    const cacheKey = generateCacheKey('extractor', params);
-    const cached = await cacheManager.get<T>(cacheKey);
-    if (cached) {
-      return {
-        data: cached,
-        cached: true,
-        timestamp: Date.now(),
-      };
-    }
-  }
+  console.log('Making HTTP request to extractor', { url });
 
   // Make request with retry logic
   try {
@@ -151,6 +213,7 @@ async function extractorRequest<T>(
       timestamp: Date.now(),
     };
   } catch (error) {
+    console.error('HTTP request to extractor failed', error);
     return {
       error: APIErrorHandler.handle(error),
       timestamp: Date.now(),
@@ -166,6 +229,8 @@ export const extractorService = {
    * Extract video stream for a movie
    */
   async extractMovie(tmdbId: string): Promise<VideoData> {
+    console.log('ExtractorService.extractMovie called', { tmdbId });
+    
     const response = await extractorRequest<any>(
       { tmdbId },
       { 
@@ -174,7 +239,14 @@ export const extractorService = {
       }
     );
 
+    console.log('ExtractorService.extractMovie response', { 
+      hasError: !!response.error, 
+      hasData: !!response.data,
+      cached: response.cached 
+    });
+
     if (response.error || !response.data) {
+      console.error('ExtractorService.extractMovie failed', response.error);
       throw response.error || createAPIError(
         'EXTRACTION_FAILED',
         'Failed to extract video stream',
@@ -183,7 +255,13 @@ export const extractorService = {
       );
     }
 
-    return transformToVideoData(response.data);
+    const videoData = transformToVideoData(response.data);
+    console.log('ExtractorService.extractMovie completed', { 
+      sourcesCount: videoData.sources.length,
+      subtitlesCount: videoData.subtitles.length 
+    });
+    
+    return videoData;
   },
 
   /**
@@ -194,6 +272,8 @@ export const extractorService = {
     season: number,
     episode: number
   ): Promise<VideoData> {
+    console.log('ExtractorService.extractEpisode called', { tmdbId, season, episode });
+    
     const response = await extractorRequest<any>(
       { tmdbId, season, episode },
       { 
@@ -202,7 +282,14 @@ export const extractorService = {
       }
     );
 
+    console.log('ExtractorService.extractEpisode response', { 
+      hasError: !!response.error, 
+      hasData: !!response.data,
+      cached: response.cached 
+    });
+
     if (response.error || !response.data) {
+      console.error('ExtractorService.extractEpisode failed', response.error);
       throw response.error || createAPIError(
         'EXTRACTION_FAILED',
         'Failed to extract video stream',
@@ -211,7 +298,13 @@ export const extractorService = {
       );
     }
 
-    return transformToVideoData(response.data);
+    const videoData = transformToVideoData(response.data);
+    console.log('ExtractorService.extractEpisode completed', { 
+      sourcesCount: videoData.sources.length,
+      subtitlesCount: videoData.subtitles.length 
+    });
+    
+    return videoData;
   },
 
   /**
@@ -223,10 +316,14 @@ export const extractorService = {
     season?: number,
     episode?: number
   ): Promise<VideoData> {
+    console.log('ExtractorService.extract called', { tmdbId, mediaType, season, episode });
+    
     if (mediaType === 'movie') {
+      console.log('Extracting movie stream');
       return this.extractMovie(tmdbId);
     } else {
       if (season === undefined || episode === undefined) {
+        console.error('Missing season/episode for TV show', { tmdbId, season, episode });
         throw createAPIError(
           'INVALID_PARAMS',
           'Season and episode are required for TV shows',
@@ -234,6 +331,7 @@ export const extractorService = {
           false
         );
       }
+      console.log('Extracting TV episode stream');
       return this.extractEpisode(tmdbId, season, episode);
     }
   },
