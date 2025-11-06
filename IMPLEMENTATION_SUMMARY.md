@@ -5,7 +5,7 @@
 ### **Admin Panel System**
 - **Location**: `/admin` route
 - **Authentication**: JWT-based secure login
-- **Database**: SQLite with Bun's native SQLite
+- **Database**: Cross-platform SQLite (Bun's native SQLite in development, better-sqlite3 in production)
 - **Admin User**: Created (username: `admin`, password: `admin123`)
 
 ### **Analytics Dashboard**

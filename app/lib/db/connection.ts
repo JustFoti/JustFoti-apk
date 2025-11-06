@@ -1,15 +1,40 @@
 /**
- * Database Connection Management using Bun's built-in SQLite
+ * Database Connection Management - Cross-platform SQLite
+ * Uses Bun's SQLite in development and better-sqlite3 in production
  */
 
-import { Database } from 'bun:sqlite';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ALL_TABLES, SCHEMA_VERSION, TABLES } from './schema';
 
+// Dynamic import for database based on runtime
+let Database: any;
+let isBunRuntime = false;
+
+try {
+  // Check if we're running in Bun
+  if (typeof Bun !== 'undefined') {
+    Database = require('bun:sqlite').Database;
+    isBunRuntime = true;
+  } else {
+    // Fallback to better-sqlite3 for Node.js
+    Database = require('better-sqlite3');
+    isBunRuntime = false;
+  }
+} catch (error) {
+  // If bun:sqlite fails, try better-sqlite3
+  try {
+    Database = require('better-sqlite3');
+    isBunRuntime = false;
+  } catch (fallbackError) {
+    console.error('Failed to load SQLite database:', error, fallbackError);
+    throw new Error('No SQLite implementation available');
+  }
+}
+
 class DatabaseConnection {
   private static instance: DatabaseConnection | null = null;
-  private db: Database | null = null;
+  private db: any = null;
   private dbPath: string;
   private isInitialized = false;
 
@@ -42,8 +67,12 @@ class DatabaseConnection {
     }
 
     try {
-      // Create database connection using Bun's SQLite
-      this.db = new Database(this.dbPath);
+      // Create database connection based on runtime
+      if (isBunRuntime) {
+        this.db = new Database(this.dbPath);
+      } else {
+        this.db = new Database(this.dbPath);
+      }
 
       // Enable WAL mode for better concurrency
       this.db.exec('PRAGMA journal_mode = WAL;');
@@ -66,7 +95,7 @@ class DatabaseConnection {
       await this.ensureSchemaVersion();
 
       this.isInitialized = true;
-      console.log('✓ SQLite database initialized successfully');
+      console.log(`✓ SQLite database initialized successfully (${isBunRuntime ? 'Bun' : 'Node.js'} runtime)`);
     } catch (error) {
       console.error('Failed to initialize database:', error);
       throw new Error(`Database initialization failed: ${error}`);
@@ -94,7 +123,7 @@ class DatabaseConnection {
   /**
    * Get database instance
    */
-  getDatabase(): Database {
+  getDatabase(): any {
     if (!this.db || !this.isInitialized) {
       throw new Error('Database not initialized. Call initialize() first.');
     }
@@ -118,11 +147,17 @@ class DatabaseConnection {
   /**
    * Execute multiple queries in a transaction
    */
-  transaction<T>(callback: (db: Database) => T): T {
+  transaction<T>(callback: (db: any) => T): T {
     const db = this.getDatabase();
-    return db.transaction(() => {
-      return callback(db);
-    })();
+    if (isBunRuntime) {
+      // Bun SQLite transaction syntax
+      return db.transaction(() => {
+        return callback(db);
+      })();
+    } else {
+      // better-sqlite3 transaction syntax
+      return db.transaction(callback)(db);
+    }
   }
 
   /**
