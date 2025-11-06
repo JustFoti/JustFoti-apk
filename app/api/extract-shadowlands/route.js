@@ -277,6 +277,16 @@ function extractShadowlandsUrl(html, logger) {
         
         // Check if it's a valid stream URL
         if (url.includes('.m3u8')) {
+          // Handle multiple URLs separated by " or "
+          if (url.includes(' or ')) {
+            const urls = url.split(' or ').map(u => u.trim());
+            logger.info('Found multiple URLs, selecting first valid one', { 
+              count: urls.length,
+              urls: urls.map(u => u.substring(0, 60) + '...')
+            });
+            url = urls[0]; // Take the first URL
+          }
+          
           // Ensure it's a full URL
           if (!url.startsWith('http')) {
             if (url.startsWith('//')) {
@@ -291,7 +301,7 @@ function extractShadowlandsUrl(html, logger) {
           // Replace server placeholders with actual server names
           url = replacePlaceholders(url, logger);
           
-          logger.info('Found Shadowlands URL', { url: url.substring(0, 80) + '...' });
+          logger.info('Selected Shadowlands URL', { url: url.substring(0, 80) + '...' });
           return url;
         }
       }
