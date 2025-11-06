@@ -20,7 +20,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Analytics and progress tracking
-  const { trackWatchEvent, trackContentEngagement, trackInteraction } = useAnalytics();
+  const { trackContentEngagement, trackInteraction } = useAnalytics();
   const contentType = mediaType === 'tv' ? 'episode' : 'movie';
   const { 
     handleProgress, 
