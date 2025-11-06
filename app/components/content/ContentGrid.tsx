@@ -15,7 +15,6 @@ export interface ContentGridProps {
   layout?: 'grid' | 'masonry';
   className?: string;
   emptyMessage?: string;
-  virtualScroll?: boolean;
 }
 
 /**
@@ -37,7 +36,6 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
   layout = 'grid',
   className = '',
   emptyMessage = 'No content found',
-  virtualScroll = false,
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
   const [visibleItems, setVisibleItems] = useState<MediaItem[]>([]);
