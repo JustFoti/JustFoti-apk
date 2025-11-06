@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { initializeDB, getDB } from '@/lib/db/connection';
+import { initializeDB, getDB } from '@/lib/db/neon-connection';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const ADMIN_COOKIE = 'admin_token';
@@ -26,8 +26,19 @@ export async function POST(request: NextRequest) {
     // Initialize database and get admin user
     await initializeDB();
     const db = getDB();
-    const stmt = db.prepare('SELECT * FROM admin_users WHERE username = ?');
-    const admin = stmt.get(username) as any;
+    const adapter = db.getAdapter();
+    
+    let adminQuery, updateQuery;
+    if (db.isUsingNeon()) {
+      adminQuery = 'SELECT * FROM admin_users WHERE username = $1';
+      updateQuery = 'UPDATE admin_users SET last_login = $1 WHERE id = $2';
+    } else {
+      adminQuery = 'SELECT * FROM admin_users WHERE username = ?';
+      updateQuery = 'UPDATE admin_users SET last_login = ? WHERE id = ?';
+    }
+    
+    const adminResult = await adapter.query(adminQuery, [username]);
+    const admin = adminResult[0];
 
     if (!admin || !bcrypt.compareSync(password, admin.password_hash)) {
       return NextResponse.json(
@@ -37,8 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update last login
-    const updateStmt = db.prepare('UPDATE admin_users SET last_login = ? WHERE id = ?');
-    updateStmt.run(Date.now(), admin.id);
+    await adapter.execute(updateQuery, [Date.now(), admin.id]);
 
     // Create JWT token
     const token = jwt.sign(

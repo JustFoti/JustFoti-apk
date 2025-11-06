@@ -5,7 +5,7 @@
 ### **Admin Panel System**
 - **Location**: `/admin` route
 - **Authentication**: JWT-based secure login
-- **Database**: Cross-platform SQLite (Bun's native SQLite in development, better-sqlite3 in production)
+- **Database**: Neon PostgreSQL (production) / SQLite (development)
 - **Admin User**: Created (username: `admin`, password: `admin123`)
 
 ### **Analytics Dashboard**

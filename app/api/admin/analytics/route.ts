@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/connection';
+import { initializeDB, getDB } from '@/lib/db/neon-connection';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 
 
@@ -61,19 +61,14 @@ export async function GET(request: NextRequest) {
     const db = getDB();
 
     // Get overview statistics
-    const overview = getOverviewStats(db, startTimestamp, endTimestamp, contentType);
+    const overview = await db.getAnalyticsOverview(startTimestamp, endTimestamp);
     
-    // Get daily metrics
-    const dailyMetrics = getDailyMetrics(db, startTimestamp, endTimestamp, contentType);
-    
-    // Get top content
-    const topContent = getTopContent(db, startTimestamp, endTimestamp, contentType);
-    
-    // Get geographic data
-    const geographic = getGeographicData(db, startTimestamp, endTimestamp);
-    
-    // Get device/browser data
-    const devices = getDeviceData(db, startTimestamp, endTimestamp);
+    // For now, return simplified data structure
+    // TODO: Implement full analytics queries for the new database adapter
+    const dailyMetrics = [];
+    const topContent = [];
+    const geographic = [];
+    const devices = [];
 
     return NextResponse.json({
       success: true,
@@ -97,148 +92,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-
-function getOverviewStats(db: any, startTimestamp: number, endTimestamp: number, contentType?: string) {
-  const contentFilter = contentType ? `AND JSON_EXTRACT(metadata, '$.content_type') = '${contentType}'` : '';
-  
-  // Total views
-  const viewsStmt = db.prepare(`
-    SELECT COUNT(*) as count
-    FROM analytics_events
-    WHERE timestamp BETWEEN ? AND ?
-    AND event_type = 'content_view'
-    ${contentFilter}
-  `);
-  const views = viewsStmt.get(startTimestamp, endTimestamp) as { count: number };
-
-  // Total watch time
-  const watchTimeStmt = db.prepare(`
-    SELECT SUM(CAST(JSON_EXTRACT(metadata, '$.watch_time') AS INTEGER)) as total
-    FROM analytics_events
-    WHERE timestamp BETWEEN ? AND ?
-    AND event_type = 'watch_progress'
-    AND JSON_EXTRACT(metadata, '$.watch_time') IS NOT NULL
-    ${contentFilter}
-  `);
-  const watchTime = watchTimeStmt.get(startTimestamp, endTimestamp) as { total: number };
-
-  // Unique sessions
-  const sessionsStmt = db.prepare(`
-    SELECT COUNT(DISTINCT session_id) as count
-    FROM analytics_events
-    WHERE timestamp BETWEEN ? AND ?
-    ${contentFilter}
-  `);
-  const sessions = sessionsStmt.get(startTimestamp, endTimestamp) as { count: number };
-
-  // Average session duration
-  const avgSessionStmt = db.prepare(`
-    SELECT AVG(session_duration) as avg_duration
-    FROM (
-      SELECT session_id, (MAX(timestamp) - MIN(timestamp)) / 1000 as session_duration
-      FROM analytics_events
-      WHERE timestamp BETWEEN ? AND ?
-      ${contentFilter}
-      GROUP BY session_id
-      HAVING session_duration > 0
-    )
-  `);
-  const avgSession = avgSessionStmt.get(startTimestamp, endTimestamp) as { avg_duration: number };
-
-  return {
-    totalViews: views.count || 0,
-    totalWatchTime: Math.round((watchTime.total || 0) / 60), // Convert to minutes
-    uniqueSessions: sessions.count || 0,
-    avgSessionDuration: Math.round(avgSession.avg_duration || 0),
-  };
-}
-
-function getDailyMetrics(db: any, startTimestamp: number, endTimestamp: number, contentType?: string) {
-  const contentFilter = contentType ? `AND JSON_EXTRACT(metadata, '$.content_type') = '${contentType}'` : '';
-  
-  const stmt = db.prepare(`
-    SELECT 
-      DATE(timestamp / 1000, 'unixepoch') as date,
-      COUNT(CASE WHEN event_type = 'content_view' THEN 1 END) as views,
-      SUM(CASE WHEN event_type = 'watch_progress' THEN CAST(JSON_EXTRACT(metadata, '$.watch_time') AS INTEGER) ELSE 0 END) as watch_time,
-      COUNT(DISTINCT session_id) as sessions
-    FROM analytics_events
-    WHERE timestamp BETWEEN ? AND ?
-    ${contentFilter}
-    GROUP BY DATE(timestamp / 1000, 'unixepoch')
-    ORDER BY date
-  `);
-
-  const results = stmt.all(startTimestamp, endTimestamp) as Array<{
-    date: string;
-    views: number;
-    watch_time: number;
-    sessions: number;
-  }>;
-
-  return results.map(row => ({
-    date: row.date,
-    views: row.views || 0,
-    watchTime: Math.round((row.watch_time || 0) / 60), // Convert to minutes
-    sessions: row.sessions || 0,
-  }));
-}
-
-function getTopContent(db: any, startTimestamp: number, endTimestamp: number, contentType?: string) {
-  const contentFilter = contentType ? `AND content_type = '${contentType}'` : '';
-  
-  const stmt = db.prepare(`
-    SELECT 
-      content_id,
-      content_type,
-      view_count,
-      total_watch_time / 60 as watch_time_minutes,
-      completion_rate
-    FROM content_stats
-    WHERE last_viewed BETWEEN ? AND ?
-    ${contentFilter}
-    ORDER BY view_count DESC
-    LIMIT 20
-  `);
-
-  return stmt.all(startTimestamp, endTimestamp);
-}
-
-function getGeographicData(db: any, startTimestamp: number, endTimestamp: number) {
-  const stmt = db.prepare(`
-    SELECT 
-      JSON_EXTRACT(metadata, '$.country') as country,
-      JSON_EXTRACT(metadata, '$.region') as region,
-      COUNT(DISTINCT session_id) as sessions,
-      COUNT(*) as events
-    FROM analytics_events
-    WHERE timestamp BETWEEN ? AND ?
-    AND JSON_EXTRACT(metadata, '$.country') IS NOT NULL
-    GROUP BY country, region
-    ORDER BY sessions DESC
-    LIMIT 50
-  `);
-
-  return stmt.all(startTimestamp, endTimestamp);
-}
-
-function getDeviceData(db: any, startTimestamp: number, endTimestamp: number) {
-  const stmt = db.prepare(`
-    SELECT 
-      CASE 
-        WHEN JSON_EXTRACT(metadata, '$.user_agent') LIKE '%Mobile%' THEN 'Mobile'
-        WHEN JSON_EXTRACT(metadata, '$.user_agent') LIKE '%Tablet%' THEN 'Tablet'
-        ELSE 'Desktop'
-      END as device_type,
-      COUNT(DISTINCT session_id) as sessions
-    FROM analytics_events
-    WHERE timestamp BETWEEN ? AND ?
-    AND JSON_EXTRACT(metadata, '$.user_agent') IS NOT NULL
-    GROUP BY device_type
-    ORDER BY sessions DESC
-  `);
-
-  return stmt.all(startTimestamp, endTimestamp);
 }

@@ -1,67 +1,55 @@
 /**
  * Create Admin User Script
- * Run with: node scripts/create-admin.js <username> <password>
+ * Run with: bun scripts/create-admin.js <username> <password>
  */
 
 const bcrypt = require('bcryptjs');
-const path = require('path');
-const fs = require('fs');
-const { Database } = require('bun:sqlite');
 
-// Generate a simple ID function instead of nanoid
+// Generate a simple ID function
 function generateId() {
   return Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
-// Database setup
-const dataDir = path.join(process.cwd(), 'data');
-const dbPath = path.join(dataDir, 'analytics.db');
-
 async function createAdmin(username, password) {
   if (!username || !password) {
-    console.error('Usage: node scripts/create-admin.js <username> <password>');
+    console.error('Usage: bun scripts/create-admin.js <username> <password>');
     process.exit(1);
   }
 
-  // Ensure data directory exists
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
-
-  const db = new Database(dbPath);
-
   try {
-    // Create admin users table if it doesn't exist
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS admin_users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        created_at INTEGER DEFAULT (strftime('%s', 'now')),
-        last_login INTEGER
-      );
-    `);
+    // Import the database connection
+    const { initializeDB, getDB } = await import('../app/lib/db/neon-connection.ts');
+    
+    // Initialize database
+    await initializeDB();
+    const db = getDB();
+    const adapter = db.getAdapter();
 
     // Check if admin already exists
-    const existingAdmin = db.query('SELECT * FROM admin_users WHERE username = ?').get(username);
+    let existingAdminQuery, insertQuery, updateQuery;
+    
+    if (db.isUsingNeon()) {
+      existingAdminQuery = 'SELECT * FROM admin_users WHERE username = $1';
+      insertQuery = 'INSERT INTO admin_users (id, username, password_hash, created_at) VALUES ($1, $2, $3, $4)';
+      updateQuery = 'UPDATE admin_users SET password_hash = $1 WHERE username = $2';
+    } else {
+      existingAdminQuery = 'SELECT * FROM admin_users WHERE username = ?';
+      insertQuery = 'INSERT INTO admin_users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)';
+      updateQuery = 'UPDATE admin_users SET password_hash = ? WHERE username = ?';
+    }
+    
+    const existingAdminResult = await adapter.query(existingAdminQuery, [username]);
+    const existingAdmin = existingAdminResult[0];
+    
+    const passwordHash = bcrypt.hashSync(password, 10);
     
     if (existingAdmin) {
       console.log(`Admin user '${username}' already exists. Updating password...`);
-      
-      const passwordHash = bcrypt.hashSync(password, 10);
-      const updateStmt = db.query('UPDATE admin_users SET password_hash = ? WHERE username = ?');
-      updateStmt.run(passwordHash, username);
-      
+      await adapter.execute(updateQuery, [passwordHash, username]);
       console.log(`✅ Password updated for admin user '${username}'`);
     } else {
       // Create new admin user
-      const passwordHash = bcrypt.hashSync(password, 10);
-      const insertStmt = db.query(`
-        INSERT INTO admin_users (id, username, password_hash, created_at)
-        VALUES (?, ?, ?, ?)
-      `);
-      
-      insertStmt.run(generateId(), username, passwordHash, Date.now());
+      await adapter.execute(insertQuery, [generateId(), username, passwordHash, Date.now()]);
       console.log(`✅ Admin user '${username}' created successfully`);
     }
 
@@ -73,8 +61,6 @@ async function createAdmin(username, password) {
   } catch (error) {
     console.error('❌ Error creating admin user:', error.message);
     process.exit(1);
-  } finally {
-    db.close();
   }
 }
 

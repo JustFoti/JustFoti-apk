@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/connection';
+import { initializeDB, getDB } from '@/lib/db/neon-connection';
 import { getClientIP } from '@/lib/utils/api-rate-limiter';
 
 // GET endpoint for testing
@@ -17,16 +17,18 @@ export async function GET(_request: NextRequest) {
     // Test database connection
     await initializeDB();
     const db = getDB();
+    const adapter = db.getAdapter();
     
     // Test basic query
-    const testQuery = db.prepare('SELECT 1 as test').get();
+    const testQuery = await adapter.query('SELECT 1 as test');
     
-    console.log(`[${requestId}] Database test successful`, testQuery);
+    console.log(`[${requestId}] Database test successful`, testQuery[0]);
     
     return NextResponse.json({
       success: true,
       message: 'Analytics track endpoint is working',
       database: 'connected',
+      dbType: db.isUsingNeon() ? 'neon' : 'sqlite',
       timestamp: new Date().toISOString(),
       requestId
     });
@@ -169,72 +171,74 @@ export async function POST(request: NextRequest) {
       console.log(`[${requestId}] Database initialized successfully`);
     } catch (dbError) {
       console.error(`[${requestId}] Database initialization failed`, dbError);
+      
+      // In production, if database fails, log the events and return success
+      // This prevents 500 errors while still tracking what we can
+      if (process.env.NODE_ENV === 'production') {
+        console.log(`[${requestId}] Production fallback: Logging events to console`);
+        events.forEach((event, index) => {
+          console.log(`[${requestId}] Event ${index + 1}:`, {
+            ...event,
+            session_id: sessionId,
+            client_ip_hash: hashIP(clientIP),
+            timestamp: Date.now()
+          });
+        });
+        
+        return NextResponse.json({ 
+          success: true, 
+          requestId,
+          eventsProcessed: events.length,
+          mode: 'fallback_logging',
+          duration: Date.now() - startTime
+        });
+      }
+      
       return NextResponse.json(
         { error: 'Database connection failed', requestId },
         { status: 503 }
       );
     }
 
-    // Step 4: Prepare database statements
-    console.log(`[${requestId}] Step 4: Preparing database statements`);
-    let insertStmt;
+    // Step 4: Insert events
+    console.log(`[${requestId}] Step 4: Inserting ${events.length} events`);
     
     try {
-      insertStmt = db.prepare(`
-        INSERT INTO analytics_events (id, session_id, timestamp, event_type, metadata)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-      console.log(`[${requestId}] Database statements prepared successfully`);
-    } catch (stmtError) {
-      console.error(`[${requestId}] Failed to prepare database statements`, stmtError);
-      return NextResponse.json(
-        { error: 'Database statement preparation failed', requestId },
-        { status: 500 }
-      );
-    }
+      for (let i = 0; i < events.length; i++) {
+        const event = events[i];
+        console.log(`[${requestId}] Processing event ${i + 1}/${events.length}`, {
+          event_type: event.event_type,
+          content_id: event.content_id,
+          content_type: event.content_type
+        });
+        
+        const metadata = {
+          ...event,
+          country: location.country,
+          region: location.region,
+          user_agent: userAgent,
+          referrer: referrer,
+          ip_hash: hashIP(clientIP),
+        };
 
-    // Step 5: Insert events in transaction
-    console.log(`[${requestId}] Step 5: Inserting ${events.length} events`);
-    
-    try {
-      const insertTransaction = db.transaction(() => {
-        for (let i = 0; i < events.length; i++) {
-          const event = events[i];
-          console.log(`[${requestId}] Processing event ${i + 1}/${events.length}`, {
-            event_type: event.event_type,
-            content_id: event.content_id,
-            content_type: event.content_type
+        const eventId = generateId();
+        const timestamp = Date.now();
+        
+        try {
+          await db.insertAnalyticsEvent({
+            id: eventId,
+            sessionId: sessionId,
+            timestamp: timestamp,
+            eventType: event.event_type,
+            metadata: metadata
           });
-          
-          const metadata = {
-            ...event,
-            country: location.country,
-            region: location.region,
-            user_agent: userAgent,
-            referrer: referrer,
-            ip_hash: hashIP(clientIP),
-          };
-
-          const eventId = generateId();
-          const timestamp = Date.now();
-          
-          try {
-            insertStmt.run(
-              eventId,
-              sessionId,
-              timestamp,
-              event.event_type,
-              JSON.stringify(metadata)
-            );
-            console.log(`[${requestId}] Event ${i + 1} inserted successfully`, { eventId });
-          } catch (insertError) {
-            console.error(`[${requestId}] Failed to insert event ${i + 1}`, insertError, { event });
-            throw insertError;
-          }
+          console.log(`[${requestId}] Event ${i + 1} inserted successfully`, { eventId });
+        } catch (insertError) {
+          console.error(`[${requestId}] Failed to insert event ${i + 1}`, insertError, { event });
+          throw insertError;
         }
-      });
+      }
 
-      insertTransaction();
       console.log(`[${requestId}] All events inserted successfully`);
     } catch (transactionError) {
       console.error(`[${requestId}] Transaction failed`, transactionError);
@@ -362,30 +366,53 @@ async function updateContentStats(event: TrackingEvent, requestId: string) {
 
     await initializeDB();
     const db = getDB();
+    const adapter = db.getAdapter();
     
-    const upsertStmt = db.prepare(`
-      INSERT INTO content_stats (content_id, content_type, view_count, total_watch_time, last_viewed, updated_at)
-      VALUES (?, ?, 1, ?, ?, ?)
-      ON CONFLICT(content_id) DO UPDATE SET
-        view_count = view_count + 1,
-        total_watch_time = total_watch_time + ?,
-        last_viewed = ?,
-        updated_at = ?
-    `);
-
     const watchTime = event.watch_time || 0;
     const now = Date.now();
 
-    upsertStmt.run(
-      event.content_id,
-      event.content_type || 'unknown',
-      watchTime,
-      now,
-      now,
-      watchTime,
-      now,
-      now
-    );
+    // Use different SQL syntax based on database type
+    if (db.isUsingNeon()) {
+      // PostgreSQL syntax for Neon
+      await adapter.execute(`
+        INSERT INTO content_stats (content_id, content_type, view_count, total_watch_time, last_viewed, updated_at)
+        VALUES ($1, $2, 1, $3, $4, $5)
+        ON CONFLICT(content_id) DO UPDATE SET
+          view_count = content_stats.view_count + 1,
+          total_watch_time = content_stats.total_watch_time + $6,
+          last_viewed = $7,
+          updated_at = $8
+      `, [
+        event.content_id,
+        event.content_type || 'unknown',
+        watchTime,
+        now,
+        now,
+        watchTime,
+        now,
+        now
+      ]);
+    } else {
+      // SQLite syntax
+      await adapter.execute(`
+        INSERT INTO content_stats (content_id, content_type, view_count, total_watch_time, last_viewed, updated_at)
+        VALUES (?, ?, 1, ?, ?, ?)
+        ON CONFLICT(content_id) DO UPDATE SET
+          view_count = view_count + 1,
+          total_watch_time = total_watch_time + ?,
+          last_viewed = ?,
+          updated_at = ?
+      `, [
+        event.content_id,
+        event.content_type || 'unknown',
+        watchTime,
+        now,
+        now,
+        watchTime,
+        now,
+        now
+      ]);
+    }
     
     console.log(`[${requestId}] Content stats updated successfully`, {
       content_id: event.content_id,

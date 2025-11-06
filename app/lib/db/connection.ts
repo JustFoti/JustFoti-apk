@@ -43,13 +43,27 @@ class DatabaseConnection {
   private isInitialized = false;
 
   private constructor() {
-    // Ensure database directory exists
-    const dbDir = path.join(process.cwd(), 'data');
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
+    // Determine database path based on environment
+    if (process.env.NODE_ENV === 'production' && process.env.VERCEL) {
+      // Vercel serverless environment - use in-memory database
+      this.dbPath = ':memory:';
+      console.log('Using in-memory database for Vercel deployment');
+    } else if (process.env.DATABASE_PATH) {
+      // Custom database path from environment
+      this.dbPath = process.env.DATABASE_PATH;
+    } else {
+      // Local development - use file-based database
+      const dbDir = path.join(process.cwd(), 'data');
+      try {
+        if (!fs.existsSync(dbDir)) {
+          fs.mkdirSync(dbDir, { recursive: true });
+        }
+        this.dbPath = path.join(dbDir, 'analytics.db');
+      } catch (error) {
+        console.warn('Cannot create data directory, using in-memory database:', error);
+        this.dbPath = ':memory:';
+      }
     }
-    
-    this.dbPath = path.join(dbDir, 'analytics.db');
   }
 
   /**
@@ -71,19 +85,19 @@ class DatabaseConnection {
     }
 
     try {
-      // Ensure database directory exists with proper permissions
-      const dbDir = path.dirname(this.dbPath);
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true, mode: 0o755 });
-      }
-
       // Create database connection
+      console.log(`Initializing database at: ${this.dbPath}`);
       this.db = new Database(this.dbPath);
 
       // Configure database settings
       try {
-        // Enable WAL mode for better concurrency (may fail in some environments)
-        this.db.exec('PRAGMA journal_mode = WAL;');
+        // For in-memory databases, skip WAL mode
+        if (this.dbPath === ':memory:') {
+          this.db.exec('PRAGMA journal_mode = MEMORY;');
+        } else {
+          // Enable WAL mode for better concurrency (may fail in some environments)
+          this.db.exec('PRAGMA journal_mode = WAL;');
+        }
       } catch (walError) {
         console.warn('WAL mode not available, using default journal mode');
         this.db.exec('PRAGMA journal_mode = DELETE;');
@@ -93,7 +107,11 @@ class DatabaseConnection {
       this.db.exec('PRAGMA foreign_keys = ON;');
       
       // Set synchronous mode for better performance
-      this.db.exec('PRAGMA synchronous = NORMAL;');
+      if (this.dbPath === ':memory:') {
+        this.db.exec('PRAGMA synchronous = OFF;');
+      } else {
+        this.db.exec('PRAGMA synchronous = NORMAL;');
+      }
       
       // Set cache size (64MB)
       this.db.exec('PRAGMA cache_size = -64000;');
@@ -107,11 +125,17 @@ class DatabaseConnection {
       await this.ensureSchemaVersion();
 
       this.isInitialized = true;
-      console.log(`✓ SQLite database initialized successfully (${isBunRuntime ? 'Bun' : 'Node.js'} runtime)`);
+      const dbType = this.dbPath === ':memory:' ? 'in-memory' : 'file-based';
+      console.log(`✓ SQLite database initialized successfully (${isBunRuntime ? 'Bun' : 'Node.js'} runtime, ${dbType})`);
     } catch (error) {
       console.error('Failed to initialize database:', error);
       console.error('Database path:', this.dbPath);
       console.error('Current working directory:', process.cwd());
+      console.error('Environment:', {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        DATABASE_PATH: process.env.DATABASE_PATH
+      });
       throw new Error(`Database initialization failed: ${error}`);
     }
   }
