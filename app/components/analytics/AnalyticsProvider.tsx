@@ -1,13 +1,13 @@
 'use client';
 
 import { createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
-import { analyticsService, type WatchEvent, type SearchEvent, type InteractionEvent } from '@/lib/services/analytics';
+import { analyticsService, type WatchEvent, type SearchEvent, type InteractionEvent, type PageViewEvent } from '@/lib/services/analytics';
 import { userTrackingService, type UserSession, type UserPreferences } from '@/lib/services/user-tracking';
 
 interface AnalyticsContextType {
   // Basic tracking
   trackEvent: (event: string, properties?: Record<string, any>) => void;
-  trackPageView: (page: string, data?: Record<string, any>) => void;
+  trackPageView: (page: string, data?: PageViewEvent) => void;
   
   // Watch tracking
   trackWatchProgress: (contentId: string, contentType: 'movie' | 'tv', watchTime: number, duration: number) => void;
@@ -63,7 +63,7 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
     analyticsService.track(event, properties);
   }, []);
 
-  const trackPageView = useCallback((page: string, data?: Record<string, any>) => {
+  const trackPageView = useCallback((page: string, data?: PageViewEvent) => {
     analyticsService.trackPageView(page, data);
   }, []);
 
