@@ -226,23 +226,33 @@ function replacePlaceholders(url, logger) {
 function extractShadowlandsUrl(html, logger) {
   logger.info('Extracting Shadowlands URL from ProRCP HTML...');
   
+  // First, log a sample of the HTML to see what we're working with
+  logger.debug('ProRCP HTML sample for analysis', {
+    htmlLength: html.length,
+    containsPlayerjs: html.includes('Playerjs'),
+    containsFile: html.includes('file:'),
+    containsShadowlands: html.includes('shadowlands'),
+    containsTmstr: html.includes('tmstr'),
+    containsM3u8: html.includes('.m3u8'),
+    htmlSample1: html.substring(html.indexOf('file:') - 100, html.indexOf('file:') + 200) || 'file: not found',
+    htmlSample2: html.substring(html.indexOf('.m3u8') - 100, html.indexOf('.m3u8') + 100) || '.m3u8 not found'
+  });
+  
   const patterns = [
     // Playerjs file parameter - most common pattern
-    /new\s+Playerjs\s*\([^)]*file\s*:\s*['"]([^'"]*shadowlands[^'"]+\.m3u8[^'"]*)['"]/gi,
-    /\bfile\s*:\s*['"]([^'"]*shadowlands[^'"]+\.m3u8[^'"]*)['"]/gi,
+    /new\s+Playerjs\s*\([^)]*file\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/gi,
+    /\bfile\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/gi,
     
-    // Direct shadowlands URLs
-    /https?:\/\/[^\s"'<>]*shadowlands[^\s"'<>]*\.m3u8[^\s"'<>]*/gi,
-    /['"]([^'"]*shadowlands[^'"]*\.m3u8[^'"]*)['"]/gi,
+    // Direct URLs with full protocol
+    /https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/gi,
     
     // Player configurations
     /player[^{]*\{[^}]*file\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/gi,
-    /source\s*:\s*['"]([^'"]*\.m3u8[^'"]*)['"]/gi,
-    /src\s*:\s*['"]([^'"]*\.m3u8[^'"]*)['"]/gi,
+    /source\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/gi,
+    /src\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/gi,
     
-    // Any m3u8 URL (fallback)
-    /['"]([^'"]*\.m3u8[^'"]*)['"]/gi,
-    /https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/gi
+    // Quoted URLs (but must have more than just .m3u8)
+    /['"]([^'"]{10,}\.m3u8[^'"]*)['"]/gi
   ];
 
   for (let i = 0; i < patterns.length; i++) {
@@ -275,6 +285,17 @@ function extractShadowlandsUrl(html, logger) {
         }
         
         url = url.trim();
+        
+        // Skip if URL is too short (likely just ".m3u8" or similar)
+        if (url.length < 20) {
+          logger.debug('Skipping too-short URL match', {
+            rawMatch: match.substring(0, 50),
+            extractedUrl: url,
+            urlLength: url.length,
+            reason: 'URL too short, likely incomplete'
+          });
+          continue;
+        }
         
         logger.debug('Processing potential URL match', {
           rawMatch: match.substring(0, 150),
