@@ -5,8 +5,6 @@
  * Handles all rotating encryption methods (Caesar shifts, Base64, Hex, etc.)
  */
 
-import https from 'https';
-
 interface ExtractionResult {
   success: boolean;
   url?: string;
@@ -100,31 +98,26 @@ function tryHex(str: string): string | null {
 /**
  * Fetch page with proper headers
  */
-function fetchPage(url: string, referer = 'https://vidsrc-embed.ru/'): Promise<string> {
-  return new Promise((resolve, reject) => {
-    https.get(
-      url,
-      {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          Referer: referer,
-          Connection: 'keep-alive',
-        },
+async function fetchPage(url: string, referer = 'https://vidsrc-embed.ru/'): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        Referer: referer,
       },
-      (res) => {
-        let data = '';
+      redirect: 'follow',
+    });
 
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          return fetchPage(res.headers.location!, referer).then(resolve).catch(reject);
-        }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
 
-        res.on('data', (chunk) => (data += chunk));
-        res.on('end', () => resolve(data));
-      }
-    ).on('error', reject);
-  });
+    return await response.text();
+  } catch (error) {
+    throw new Error(`Failed to fetch ${url}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 /**
