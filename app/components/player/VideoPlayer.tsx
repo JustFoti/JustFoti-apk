@@ -76,7 +76,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       try {
         const params = new URLSearchParams({
           tmdbId,
-          mediaType: mediaType,
+          type: mediaType,
         });
         
         if (mediaType === 'tv' && season && episode) {
