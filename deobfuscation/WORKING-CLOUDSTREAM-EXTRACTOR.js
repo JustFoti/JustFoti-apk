@@ -70,6 +70,10 @@ async function extractCloudStreamM3U8() {
     console.log('First 20 chars:', encoded.substring(0, 20));
     console.log('Last 20 chars:', encoded.substring(encoded.length - 20));
     
+    // Save encoded data to file
+    require('fs').writeFileSync('encoded-full.txt', encoded);
+    console.log('Saved full encoded data to encoded-full.txt');
+    
     let decoded = null;
     let usedDecoder = null;
     

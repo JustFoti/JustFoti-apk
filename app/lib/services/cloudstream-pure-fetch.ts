@@ -85,10 +85,14 @@ function tryHex(str: string): string | null {
     // Try standard hex decode
     const cleaned = str.replace(/[^0-9a-fA-F]/g, '');
     if (cleaned.length % 2 !== 0) return null;
+    
+    // Try UTF-8 decode
     const decoded = Buffer.from(cleaned, 'hex').toString('utf8');
-
-    // Check if decoded result looks like a URL
     if (decoded.includes('http')) return decoded;
+    
+    // Try Latin1 decode (for binary data)
+    const latin1Decoded = Buffer.from(cleaned, 'hex').toString('latin1');
+    if (latin1Decoded.includes('http')) return latin1Decoded;
 
     return decoded;
   } catch {
@@ -165,7 +169,15 @@ export async function extractCloudStream(
     logs.push(`[3] ✓ RCP page fetched (${rcpPage.length} bytes)`);
     console.log(`[3] ✓ RCP page fetched (${rcpPage.length} bytes)`);
 
-    // Step 4: Extract player URL
+    // Step 4: Check for Cloudflare protection
+    if (rcpPage.includes('cloudflare') && rcpPage.length < 10000) {
+      const error = 'Cloudflare protection detected';
+      logs.push(`[4] ✗ ${error}`);
+      console.error(`[4] ✗ ${error}`);
+      return { success: false, error, logs };
+    }
+    
+    // Step 5: Extract player URL
     let playerUrl: string | null = null;
     const patterns = [
       /\/prorcp\/([A-Za-z0-9+\/=\-_]+)/,
@@ -188,40 +200,40 @@ export async function extractCloudStream(
     }
 
     if (!playerUrl) {
-      const error = 'Player URL not found';
-      logs.push(`[4] ✗ ${error}`);
-      console.error(`[4] ✗ ${error}`);
+      const error = 'Player URL not found - possible Cloudflare block';
+      logs.push(`[5] ✗ ${error}`);
+      console.error(`[5] ✗ ${error}`);
       return { success: false, error, logs };
     }
-    logs.push(`[4] ✓ Player URL found: ${playerUrl}`);
-    console.log(`[4] ✓ Player URL found: ${playerUrl}`);
+    logs.push(`[5] ✓ Player URL found`);
+    console.log(`[5] ✓ Player URL found`);
 
-    // Step 5: Fetch player page
-    logs.push(`[5] Fetching player page: ${playerUrl}`);
-    console.log(`[5] Fetching player page: ${playerUrl}`);
+    // Step 6: Fetch player page
+    logs.push(`[6] Fetching player page...`);
+    console.log(`[6] Fetching player page...`);
     const playerPage = await fetchPage(playerUrl, rcpUrl);
-    logs.push(`[5] ✓ Player page fetched (${playerPage.length} bytes)`);
-    console.log(`[5] ✓ Player page fetched (${playerPage.length} bytes)`);
+    logs.push(`[6] ✓ Player page fetched (${playerPage.length} bytes)`);
+    console.log(`[6] ✓ Player page fetched (${playerPage.length} bytes)`);
 
-    // Step 6: Extract hidden div
+    // Step 7: Extract hidden div
     const hiddenDivMatch = playerPage.match(
       /<div[^>]+id="([^"]+)"[^>]*style="display:\s*none;?"[^>]*>([^<]+)<\/div>/i
     );
     if (!hiddenDivMatch) {
       const error = 'Hidden div not found';
-      logs.push(`[6] ✗ ${error}`);
-      console.error(`[6] ✗ ${error}`);
+      logs.push(`[7] ✗ ${error}`);
+      console.error(`[7] ✗ ${error}`);
       return { success: false, error, logs };
     }
 
     const divId = hiddenDivMatch[1];
     const encoded = hiddenDivMatch[2];
-    logs.push(`[6] ✓ Hidden div found, divId: ${divId}, encoded length: ${encoded.length}`);
-    console.log(`[6] ✓ Hidden div found, divId: ${divId}`);
-    console.log(`[6] Encoded preview: ${encoded.substring(0, 100)}...`);
-    console.log(`[6] Encoded last 20: ...${encoded.substring(encoded.length - 20)}`);
+    logs.push(`[7] ✓ Hidden div found, divId: ${divId}, encoded length: ${encoded.length}`);
+    console.log(`[7] ✓ Hidden div found, divId: ${divId}`);
+    console.log(`[7] Encoded preview: ${encoded.substring(0, 100)}...`);
+    console.log(`[7] Encoded last 20: ...${encoded.substring(encoded.length - 20)}`);
 
-    // Step 7: Try all decoding methods
+    // Step 8: Try all decoding methods
     let decoded: string | null = null;
     let usedDecoder: string | null = null;
 
@@ -309,21 +321,44 @@ export async function extractCloudStream(
           })
           .join(''),
     });
+    
+    // 9. Hex + XOR with common keys
+    const xorKeys = [divId, '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'];
+    for (const key of xorKeys) {
+      allMethods.push({
+        name: `Hex + XOR(${key})`,
+        fn: (s) => {
+          try {
+            const cleaned = s.replace(/[^0-9a-fA-F]/g, '');
+            if (cleaned.length % 2 !== 0) return null;
+            const hexBytes = Buffer.from(cleaned, 'hex');
+            const keyBytes = Buffer.from(key, 'utf8');
+            const xored = Buffer.alloc(hexBytes.length);
+            for (let i = 0; i < hexBytes.length; i++) {
+              xored[i] = hexBytes[i] ^ keyBytes[i % keyBytes.length];
+            }
+            return xored.toString('utf8');
+          } catch {
+            return null;
+          }
+        },
+      });
+    }
 
     // Try all methods
-    logs.push(`[7] Trying ${allMethods.length} decoder methods...`);
-    console.log(`[7] Trying ${allMethods.length} decoder methods...`);
-    console.log(`[7] Encoded data characteristics: length=${encoded.length}, starts with=${encoded.substring(0, 10)}`);
+    logs.push(`[8] Trying ${allMethods.length} decoder methods...`);
+    console.log(`[8] Trying ${allMethods.length} decoder methods...`);
+    console.log(`[8] Encoded data characteristics: length=${encoded.length}, starts with=${encoded.substring(0, 10)}`);
     
     // If encoded data is very long (>1000 chars), it's likely Base64 - try Base64 + Caesar combinations first
     if (encoded.length > 1000) {
-      logs.push(`[7] Long encoded data detected (${encoded.length} bytes), trying Base64 + Caesar combinations...`);
-      console.log(`[7] Long encoded data detected, trying Base64 + Caesar combinations...`);
+      logs.push(`[8] Long encoded data detected (${encoded.length} bytes), trying Base64 + Caesar combinations...`);
+      console.log(`[8] Long encoded data detected, trying Base64 + Caesar combinations...`);
       
       try {
         const base64Decoded = Buffer.from(encoded, 'base64').toString('utf8');
-        console.log(`[7] Base64 decoded to ${base64Decoded.length} bytes`);
-        console.log(`[7] Base64 result preview: ${base64Decoded.substring(0, 100)}`);
+        console.log(`[8] Base64 decoded to ${base64Decoded.length} bytes`);
+        console.log(`[8] Base64 result preview: ${base64Decoded.substring(0, 100)}`);
         
         // Try Base64 alone first
         if (base64Decoded && (base64Decoded.includes('http://') || base64Decoded.includes('https://'))) {
@@ -405,10 +440,11 @@ export async function extractCloudStream(
     }
 
     if (!decoded) {
-      const error = `All ${allMethods.length} decoders failed`;
-      logs.push(`[7] ✗ ${error}`);
-      console.error(`[7] ✗ ${error}`);
-      console.error(`[7] Encoded data was: ${encoded}`);
+      const error = `CloudStream encryption has changed - all ${allMethods.length} known decoders failed. The site is using a new encryption method that requires reverse engineering their JavaScript decoder.`;
+      logs.push(`[8] ✗ ${error}`);
+      logs.push(`[8] Encoded data format: length=${encoded.length}, starts with="${encoded.substring(0, 20)}"`);
+      console.error(`[8] ✗ All decoders failed`);
+      console.error(`[8] CloudStream has updated their encryption - manual reverse engineering required`);
       return { success: false, error, logs };
     }
 

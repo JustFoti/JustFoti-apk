@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { extractCloudStream } from '@/app/lib/services/cloudstream-pure-fetch';
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,64 +41,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Use the new RCP extraction system
+    // Extract stream using CloudStream
     console.log('Extracting stream:', { tmdbId, type, season, episode });
-    
-    // Import the RCP extractors
-    const { twoEmbedExtractor } = await import('@/app/lib/services/rcp/providers/2embed-extractor');
-    const { superembedExtractor } = await import('@/app/lib/services/rcp/providers/superembed-extractor');
-    
-    let result: any = null;
-    
-    // Try 2embed first
-    console.log('Trying 2embed...');
-    try {
-      result = await twoEmbedExtractor.extract({
-        tmdbId,
-        type,
-        season,
-        episode,
-      });
-      
-      if (result.success) {
-        console.log('✓ 2embed succeeded!');
-      } else {
-        console.log(`✗ 2embed failed: ${result.error}`);
-        result = null;
-      }
-    } catch (err) {
-      console.log('✗ 2embed error:', err);
-      result = null;
-    }
-    
-    // Try superembed if 2embed failed
-    if (!result) {
-      console.log('Trying superembed...');
-      try {
-        result = await superembedExtractor.extract({
-          tmdbId,
-          type,
-          season,
-          episode,
-        });
-        
-        if (result.success) {
-          console.log('✓ Superembed succeeded!');
-        } else {
-          console.log(`✗ Superembed failed: ${result.error}`);
-          result = null;
-        }
-      } catch (err) {
-        console.log('✗ Superembed error:', err);
-        result = null;
-      }
-    }
-    
-    if (!result) {
-      result = { success: false, error: 'All providers failed' };
-    }
-    
-    console.log('Final extraction result:', result);
+    const result = await extractCloudStream(tmdbId, type, season, episode);
+    console.log('Extraction result:', result);
 
     if (!result.success) {
       console.error('Extraction failed:', result.error);
