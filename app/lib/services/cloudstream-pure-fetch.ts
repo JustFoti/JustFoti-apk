@@ -332,18 +332,51 @@ export async function extractCloudStream(
           logs.push(`[7] ✓ Base64 decoder succeeded!`);
           console.log(`[7] ✓ Base64 decoder succeeded!`);
         } else {
-          // Try Base64 + Caesar shifts (most common: +3, -3)
-          const caesarShifts = [3, -3, 1, -1, 2, -2, 4, -4, 5, -5];
-          for (const shift of caesarShifts) {
-            const caesarResult = caesarShift(base64Decoded, shift);
-            console.log(`[7] Trying Base64 + Caesar ${shift}: ${caesarResult.substring(0, 50)}...`);
+          // Maybe it's double Base64 encoded?
+          try {
+            const doubleBase64 = Buffer.from(base64Decoded, 'base64').toString('utf8');
+            logs.push(`[7] Trying double Base64 decode...`);
+            console.log(`[7] Double Base64 result: ${doubleBase64.substring(0, 100)}`);
             
-            if (caesarResult && (caesarResult.includes('http://') || caesarResult.includes('https://'))) {
-              decoded = caesarResult;
-              usedDecoder = `Base64 + Caesar ${shift}`;
-              logs.push(`[7] ✓ Base64 + Caesar ${shift} succeeded!`);
-              console.log(`[7] ✓ Base64 + Caesar ${shift} succeeded!`);
-              break;
+            if (doubleBase64 && (doubleBase64.includes('http://') || doubleBase64.includes('https://'))) {
+              decoded = doubleBase64;
+              usedDecoder = 'Double Base64';
+              logs.push(`[7] ✓ Double Base64 succeeded!`);
+              console.log(`[7] ✓ Double Base64 succeeded!`);
+            } else {
+              // Try double Base64 + Caesar
+              const caesarShifts = [3, -3, 1, -1, 2, -2, 4, -4, 5, -5];
+              for (const shift of caesarShifts) {
+                const caesarResult = caesarShift(doubleBase64, shift);
+                logs.push(`[7] Trying Double Base64 + Caesar ${shift}...`);
+                
+                if (caesarResult && (caesarResult.includes('http://') || caesarResult.includes('https://'))) {
+                  decoded = caesarResult;
+                  usedDecoder = `Double Base64 + Caesar ${shift}`;
+                  logs.push(`[7] ✓ Double Base64 + Caesar ${shift} succeeded!`);
+                  console.log(`[7] ✓ Double Base64 + Caesar ${shift} succeeded!`);
+                  break;
+                }
+              }
+            }
+          } catch (err) {
+            logs.push(`[7] Double Base64 failed, trying single Base64 + Caesar...`);
+          }
+          
+          // If double Base64 didn't work, try single Base64 + Caesar
+          if (!decoded) {
+            const caesarShifts = [3, -3, 1, -1, 2, -2, 4, -4, 5, -5];
+            for (const shift of caesarShifts) {
+              const caesarResult = caesarShift(base64Decoded, shift);
+              logs.push(`[7] Trying Base64 + Caesar ${shift}...`);
+              
+              if (caesarResult && (caesarResult.includes('http://') || caesarResult.includes('https://'))) {
+                decoded = caesarResult;
+                usedDecoder = `Base64 + Caesar ${shift}`;
+                logs.push(`[7] ✓ Base64 + Caesar ${shift} succeeded!`);
+                console.log(`[7] ✓ Base64 + Caesar ${shift} succeeded!`);
+                break;
+              }
             }
           }
         }
