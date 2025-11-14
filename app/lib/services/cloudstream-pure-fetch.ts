@@ -315,21 +315,37 @@ export async function extractCloudStream(
     console.log(`[7] Trying ${allMethods.length} decoder methods...`);
     console.log(`[7] Encoded data characteristics: length=${encoded.length}, starts with=${encoded.substring(0, 10)}`);
     
-    // If encoded data is very long (>1000 chars), it's likely Base64 - try that first
+    // If encoded data is very long (>1000 chars), it's likely Base64 - try Base64 + Caesar combinations first
     if (encoded.length > 1000) {
-      logs.push(`[7] Long encoded data detected (${encoded.length} bytes), trying Base64 first...`);
-      console.log(`[7] Long encoded data detected, trying Base64 first...`);
+      logs.push(`[7] Long encoded data detected (${encoded.length} bytes), trying Base64 + Caesar combinations...`);
+      console.log(`[7] Long encoded data detected, trying Base64 + Caesar combinations...`);
       
       try {
         const base64Decoded = Buffer.from(encoded, 'base64').toString('utf8');
         console.log(`[7] Base64 decoded to ${base64Decoded.length} bytes`);
         console.log(`[7] Base64 result preview: ${base64Decoded.substring(0, 100)}`);
         
+        // Try Base64 alone first
         if (base64Decoded && (base64Decoded.includes('http://') || base64Decoded.includes('https://'))) {
           decoded = base64Decoded;
           usedDecoder = 'Base64';
           logs.push(`[7] ✓ Base64 decoder succeeded!`);
           console.log(`[7] ✓ Base64 decoder succeeded!`);
+        } else {
+          // Try Base64 + Caesar shifts (most common: +3, -3)
+          const caesarShifts = [3, -3, 1, -1, 2, -2, 4, -4, 5, -5];
+          for (const shift of caesarShifts) {
+            const caesarResult = caesarShift(base64Decoded, shift);
+            console.log(`[7] Trying Base64 + Caesar ${shift}: ${caesarResult.substring(0, 50)}...`);
+            
+            if (caesarResult && (caesarResult.includes('http://') || caesarResult.includes('https://'))) {
+              decoded = caesarResult;
+              usedDecoder = `Base64 + Caesar ${shift}`;
+              logs.push(`[7] ✓ Base64 + Caesar ${shift} succeeded!`);
+              console.log(`[7] ✓ Base64 + Caesar ${shift} succeeded!`);
+              break;
+            }
+          }
         }
       } catch (err) {
         console.log(`[7] Base64 decode failed:`, err);
