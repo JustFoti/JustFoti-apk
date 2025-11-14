@@ -42,9 +42,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Extract stream using CloudStream pure fetch method
+    console.log('Extracting stream:', { tmdbId, type, season, episode });
     const result = await extractCloudStream(tmdbId, type, season, episode);
+    console.log('Extraction result:', result);
 
     if (!result.success) {
+      console.error('Extraction failed:', result.error);
       return NextResponse.json(
         { error: result.error || 'Extraction failed' },
         { status: 404 }

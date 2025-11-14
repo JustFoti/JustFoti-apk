@@ -91,7 +91,9 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
           throw new Error(data.message || data.error || 'Failed to load stream');
         }
 
-        if (data.data?.sources && data.data.sources.length > 0) {
+        if (data.url || data.streamUrl) {
+          setStreamUrl(data.url || data.streamUrl);
+        } else if (data.data?.sources && data.data.sources.length > 0) {
           setStreamUrl(data.data.sources[0].url);
         } else {
           throw new Error('No stream sources available');
