@@ -4,7 +4,7 @@
  * Implements the complete extraction chain for 2Embed provider
  */
 
-import { ExtractionParams, ERROR_CODES, ExtractionError, StepResult } from '../types';
+import { ExtractionParams, ERROR_CODES, StepResult } from '../types';
 import { hashExtractor } from '../hash-extractor';
 import { rcpFetcher } from '../rcp-fetcher';
 import { proRcpExtractor } from '../prorcp-extractor';
@@ -13,7 +13,6 @@ import { tryAllDecoders } from '../srcrcp-decoder';
 import { resolvePlaceholders } from '../placeholder-resolver';
 import { validateM3U8Url } from '../m3u8-validator';
 import { httpClient } from '../http-client';
-import { logger } from '../logger';
 import { generateRequestId } from '../request-id';
 
 export interface TwoEmbedExtractionResult {

@@ -10,6 +10,7 @@ import https from 'https';
 interface ExtractionResult {
   success: boolean;
   url?: string;
+  urls?: string[];
   method?: string;
   error?: string;
 }
@@ -163,9 +164,9 @@ function resolvePlaceholders(url: string): string[] {
   };
   
   // Find all placeholders in the URL
-  const placeholders = url.match(/\{[^}]+\}/g) || [];
+  const placeholders = url.match(/\{[^}]+\}/g);
   
-  if (placeholders.length === 0) {
+  if (!placeholders || placeholders.length === 0) {
     return [url];
   }
   
@@ -235,9 +236,12 @@ const DECODERS = [
   // Other methods
   {
     name: 'ROT13',
-    fn: (data: string) => data.replace(/[a-zA-Z]/g, c => 
-      String.fromCharCode((c <= 'Z' ? 90 : 122) >= (c = c.charCodeAt(0) + 13) ? c : c - 26)
-    )
+    fn: (data: string) => data.replace(/[a-zA-Z]/g, c => {
+      const code = c.charCodeAt(0);
+      const shifted = code + 13;
+      const limit = c <= 'Z' ? 90 : 122;
+      return String.fromCharCode(shifted > limit ? shifted - 26 : shifted);
+    })
   },
   {
     name: 'Reverse',
