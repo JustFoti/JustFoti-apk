@@ -441,16 +441,15 @@ export async function tryAllDecoders(
 ): Promise<DecoderResult | null> {
   const decoders = registry.getDecoders();
   
-  logger.debug('Starting decoder attempts', {
-    requestId,
+  logger.debug(requestId, 'Starting decoder attempts', {
     encodedLength: encoded.length,
     divId,
     decoderCount: decoders.length,
-  });
+  }, undefined, 'SrcRcpDecoder');
   
   for (const decoder of decoders) {
     try {
-      logger.debug(`Trying decoder: ${decoder.name}`, { requestId });
+      logger.debug(requestId, `Trying decoder: ${decoder.name}`, undefined, undefined, 'SrcRcpDecoder');
       
       const result = decoder.fn(encoded, divId);
       
@@ -459,10 +458,9 @@ export async function tryAllDecoders(
         // Record success
         registry.recordAttempt(decoder.name, true);
         
-        logger.info(`Decoder succeeded: ${decoder.name}`, {
-          requestId,
+        logger.info(requestId, `Decoder succeeded: ${decoder.name}`, {
           decodedUrl: result,
-        });
+        }, undefined, 'SrcRcpDecoder');
         
         return {
           url: result,
@@ -478,17 +476,15 @@ export async function tryAllDecoders(
       // Record failure
       registry.recordAttempt(decoder.name, false);
       
-      logger.debug(`Decoder failed: ${decoder.name}`, {
-        requestId,
+      logger.debug(requestId, `Decoder failed: ${decoder.name}`, {
         error: error instanceof Error ? error.message : String(error),
-      });
+      }, undefined, 'SrcRcpDecoder');
     }
   }
   
-  logger.error('All decoders failed', {
-    requestId,
+  logger.error(requestId, 'All decoders failed', {
     decodersTried: decoders.length,
-  });
+  }, undefined, 'SrcRcpDecoder');
   
   return null;
 }
