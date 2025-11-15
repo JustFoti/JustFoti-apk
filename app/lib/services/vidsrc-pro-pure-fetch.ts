@@ -4,6 +4,7 @@
  */
 
 import * as cheerio from 'cheerio';
+import * as https from 'https';
 
 interface FetchOptions {
   referer?: string;
@@ -11,19 +12,29 @@ interface FetchOptions {
 }
 
 async function fetchPage(url: string, options: FetchOptions = {}): Promise<string> {
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Referer': options.referer || '',
-      ...options.headers,
-    },
+  return new Promise((resolve, reject) => {
+    https.get(
+      url,
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Referer: options.referer || '',
+          ...options.headers,
+        },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          if (res.statusCode && res.statusCode >= 400) {
+            reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`));
+          } else {
+            resolve(data);
+          }
+        });
+      }
+    ).on('error', reject);
   });
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  }
-
-  return response.text();
 }
 
 function caesarDecode(str: string, shift: number): string {
