@@ -34,7 +34,7 @@ function extractDataHash(html: string): string | null {
 
 function extractEncodedUrl(html: string): string | null {
   const { document } = parseHTML(html);
-  const divs = document.querySelectorAll('div[id]');
+  const divs = Array.from(document.querySelectorAll('div[id]'));
   
   for (const div of divs) {
     const content = div.textContent?.trim() || '';
