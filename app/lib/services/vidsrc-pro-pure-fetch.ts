@@ -121,12 +121,13 @@ export async function extractVidsrcPro(
       }
     }
 
-    // Pattern 2: Div with potential whitespace/newlines
+    // Pattern 2: Capture everything between div tags that contains ://
     if (!encodedUrl) {
-      const divRegex2 = /<div[^>]+id="[^"]+"[^>]*>[\s\S]*?([a-z]+:\/\/[^\s<]+)[\s\S]*?<\/div>/g;
+      const divRegex2 = /<div[^>]+id="[^"]+"[^>]*>([\s\S]*?)<\/div>/g;
       while ((match = divRegex2.exec(proRcpHtml)) !== null) {
         const content = match[1].trim();
-        if (content.length > 100) {
+        // Look for URL pattern in the content
+        if (content.length > 100 && content.includes('://') && !content.includes('<')) {
           encodedUrl = content;
           break;
         }
