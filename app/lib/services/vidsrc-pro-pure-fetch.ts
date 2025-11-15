@@ -1,9 +1,7 @@
 /**
  * VidSrc Pro - Pure Fetch Extractor
- * No VM, no Puppeteer - just HTTP requests and Caesar cipher decoding
+ * No VM, no Puppeteer, no Cheerio - just HTTP requests and Caesar cipher decoding
  */
-
-import * as cheerio from 'cheerio';
 
 interface FetchOptions {
   referer?: string;
@@ -24,6 +22,28 @@ async function fetchPage(url: string, options: FetchOptions = {}): Promise<strin
   }
 
   return response.text();
+}
+
+function extractDataHash(html: string): string | null {
+  // Match data-hash attribute: data-hash="..."
+  const match = html.match(/data-hash=["']([^"']+)["']/);
+  return match ? match[1] : null;
+}
+
+function extractEncodedUrl(html: string): string | null {
+  // Find divs with id and extract long content with ://
+  const divRegex = /<div[^>]+id=["'][^"']*["'][^>]*>(.*?)<\/div>/g;
+  let match;
+  
+  while ((match = divRegex.exec(html)) !== null) {
+    const content = match[1].trim();
+    // Look for long content with :// pattern (encoded URL)
+    if (content.length > 100 && content.includes('://') && !content.includes('<')) {
+      return content;
+    }
+  }
+  
+  return null;
 }
 
 function caesarDecode(str: string, shift: number): string {
@@ -70,8 +90,7 @@ export async function extractVidsrcPro(
     }`;
 
     const embedHtml = await fetchPage(embedUrl);
-    const $ = cheerio.load(embedHtml);
-    const dataHash = $('[data-hash]').first().attr('data-hash');
+    const dataHash = extractDataHash(embedHtml);
 
     if (!dataHash) {
       return { success: false, error: 'Data hash not found in embed page' };
@@ -95,18 +114,7 @@ export async function extractVidsrcPro(
       referer: 'https://vidsrc-embed.ru/',
     });
 
-    // Find div with encoded URL using cheerio
-    const $$ = cheerio.load(proRcpHtml);
-    let encodedUrl: string | null = null;
-
-    $$('div[id]').each((_i, elem) => {
-      const content = $$(elem).text().trim();
-      // Look for long content with :// pattern
-      if (content.length > 100 && content.includes('://') && !content.includes('<')) {
-        encodedUrl = content;
-        return false; // Stop iteration
-      }
-    });
+    const encodedUrl = extractEncodedUrl(proRcpHtml);
 
     if (!encodedUrl) {
       return { success: false, error: 'Encoded URL not found in ProRCP page' };
