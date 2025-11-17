@@ -1,0 +1,1 @@
+function Vi(e){var t=String.fromCharCode(e[0],e[1],e[2],e[3]),r=Di(e,4);return{type:t,size:r,data:e.subarray(10,10+r)}}var Hi=10,Yi=10;function Wi(e){for(var t=0,r=[];bi(e,t);){var i=Di(e,t+6);e[t+5]>>6&1&&(t+=Hi);for(var n=(t+=Hi)+i;t+Yi<n;){var a=Vi(e.subarray(t)),s=Ki(a);s&&r.push(s),t+=a.size+Hi}ki(e,t)&&(t+=Hi)}return r}

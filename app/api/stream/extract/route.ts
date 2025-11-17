@@ -1,37 +1,89 @@
 /**
- * Stream Extract API - Direct RCP Extraction with Cheerio
+ * Stream Extract API - Self-Hosted Decoder (Primary Method)
  * 
- * Uses Cheerio-based extraction with Caesar cipher decoding
+ * Uses the self-hosted decoder running on Vercel's Node.js runtime
  * GET /api/stream/extract?tmdbId=550&type=movie
  * GET /api/stream/extract?tmdbId=1396&type=tv&season=1&episode=1
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import * as cheerio from 'cheerio';
+import { extract2EmbedStreams } from '@/app/lib/services/2embed-extractor';
 
-function caesarDecode(str: string, shift: number): string {
-  return str.split('').map((char) => {
-    const code = char.charCodeAt(0);
-    if (code >= 97 && code <= 122) {
-      return String.fromCharCode(((code - 97 + shift + 26) % 26) + 97);
+// Node.js runtime (default) - required for fetch
+
+// Simple in-memory cache - now stores multiple quality sources
+const cache = new Map<string, { sources: any[]; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Request deduplication - prevent duplicate concurrent requests
+const pendingRequests = new Map<string, Promise<any>>();
+
+/**
+ * Get IMDB ID from TMDB
+ */
+async function getImdbId(tmdbId: string, type: 'movie' | 'tv'): Promise<string | null> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+    if (!apiKey) {
+      throw new Error('TMDB API key not configured');
     }
-    if (code >= 65 && code <= 90) {
-      return String.fromCharCode(((code - 65 + shift + 26) % 26) + 65);
+
+    const url = `https://api.themoviedb.org/3/${type}/${tmdbId}/external_ids?api_key=${apiKey}`;
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`TMDB API error: ${response.status}`);
     }
-    return char;
-  }).join('');
+
+    const data = await response.json();
+    return data.imdb_id || null;
+  } catch (error) {
+    console.error('[EXTRACT] Failed to get IMDB ID:', error);
+    return null;
+  }
 }
 
-function resolvePlaceholders(url: string): string {
-  return url
-    .replace(/\{v1\}/g, 'shadowlandschronicles.com')
-    .replace(/\{v2\}/g, 'shadowlandschronicles.com')
-    .replace(/\{v3\}/g, 'shadowlandschronicles.com')
-    .replace(/\{v4\}/g, 'shadowlandschronicles.com')
-    .replace(/\{s1\}/g, 'shadowlandschronicles.com');
+/**
+ * Complete extraction flow using 2Embed with multi-quality support
+ */
+async function extractWith2Embed(
+  tmdbId: string,
+  type: 'movie' | 'tv',
+  season?: number,
+  episode?: number
+): Promise<any[]> {
+  console.log('[EXTRACT] Using 2Embed extractor (2embed.cc → player4u → yesmovies.baby)');
+
+  // Get IMDB ID from TMDB
+  const imdbId = await getImdbId(tmdbId, type);
+  if (!imdbId) {
+    throw new Error('Failed to get IMDB ID from TMDB');
+  }
+
+  console.log(`[EXTRACT] Got IMDB ID: ${imdbId}`);
+
+  const result = await extract2EmbedStreams(imdbId, season, episode);
+
+  if (!result.success || result.sources.length === 0) {
+    throw new Error(result.error || 'Failed to extract streams');
+  }
+
+  console.log(`[EXTRACT] Successfully extracted ${result.sources.length} quality options`);
+  return result.sources;
 }
 
+/**
+ * GET /api/stream/extract
+ * 
+ * Query params:
+ * - tmdbId: TMDB ID (required)
+ * - type: 'movie' or 'tv' (required)
+ * - season: Season number (required for TV)
+ * - episode: Episode number (required for TV)
+ */
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+
   try {
     const searchParams = request.nextUrl.searchParams;
     
@@ -63,131 +115,136 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Cheerio-based RCP extraction
-    console.log('[EXTRACT] Start - Cheerio method');
+    console.log('[EXTRACT] Request:', { tmdbId, type, season, episode });
+
+    // Check cache
+    const cacheKey = `${tmdbId}-${type}-${season || ''}-${episode || ''}`;
+    const cached = cache.get(cacheKey);
     
-    const embedUrl = `https://vidsrc.xyz/embed/${type}/${tmdbId}${type === 'tv' ? `/${season}/${episode}` : ''}`;
-    console.log('[EXTRACT] Embed:', embedUrl);
-    
-    // Step 1: Extract data-hash using Cheerio
-    const embedHtml = await fetch(embedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-      }
-    }).then(r => r.text());
-    
-    const $embed = cheerio.load(embedHtml);
-    let dataHash = $embed('[data-hash]').first().attr('data-hash');
-    
-    // Fallback: search in scripts
-    if (!dataHash) {
-      const scripts = $embed('script');
-      for (let i = 0; i < scripts.length; i++) {
-        const content = $embed(scripts[i]).html();
-        if (content) {
-          const match = content.match(/data-hash=["']([^"']+)["']/);
-          if (match) {
-            dataHash = match[1];
-            break;
-          }
-        }
-      }
-    }
-    
-    if (!dataHash) {
-      return NextResponse.json({ error: 'data-hash not found' }, { status: 404 });
-    }
-    
-    console.log('[EXTRACT] Hash found');
-    
-    // Step 2: Get RCP page
-    const rcpHtml = await fetch(`https://cloudnestra.com/rcp/${dataHash}`, {
-      headers: { 
-        'Referer': 'https://vidsrc-embed.ru/', 
-        'Origin': 'https://vidsrc-embed.ru',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    }).then(r => r.text());
-    
-    // Extract iframe src
-    let srcMatch = rcpHtml.match(/src:\s*['"]([^'"]+)['"]/);
-    
-    if (!srcMatch) {
-      const $rcp = cheerio.load(rcpHtml);
-      const iframeSrc = $rcp('iframe[src]').first().attr('src');
-      if (iframeSrc && (iframeSrc.includes('/prorcp/') || iframeSrc.includes('/srcrcp/'))) {
-        srcMatch = ['', iframeSrc];
-      }
-    }
-    
-    if (!srcMatch) {
-      return NextResponse.json({ error: 'ProRCP iframe not found' }, { status: 404 });
-    }
-    
-    const proRcpUrl = srcMatch[1].startsWith('http') 
-      ? srcMatch[1] 
-      : `https://cloudnestra.com${srcMatch[1]}`;
-    console.log('[EXTRACT] ProRCP URL found');
-    
-    // Step 3: Get ProRCP page and extract hidden div
-    const proRcpHtml = await fetch(proRcpUrl, {
-      headers: { 
-        'Referer': 'https://vidsrc-embed.ru/', 
-        'Origin': 'https://vidsrc-embed.ru',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    }).then(r => r.text());
-    
-    const $proRcp = cheerio.load(proRcpHtml);
-    
-    let divId = '';
-    let encoded = '';
-    
-    $proRcp('div').each((_i, elem) => {
-      const $elem = $proRcp(elem);
-      const style = $elem.attr('style');
-      const id = $elem.attr('id');
-      const content = $elem.html();
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log('[EXTRACT] Cache hit');
+      const executionTime = Date.now() - startTime;
       
-      if (style && style.includes('display:none') && id && content && content.length > 50) {
-        divId = id;
-        encoded = content.trim();
-        return false;
-      }
-    });
-    
-    if (!encoded || !divId) {
-      return NextResponse.json({ error: 'Hidden div not found' }, { status: 404 });
+      // Return multiple quality sources
+      const sources = cached.sources.map((source: any) => ({
+        quality: source.quality,
+        url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=2embed&referer=${encodeURIComponent(source.referer)}`,
+        directUrl: source.url,
+        referer: source.referer,
+        type: source.type,
+        requiresSegmentProxy: source.requiresSegmentProxy
+      }));
+      
+      return NextResponse.json({
+        success: true,
+        sources,
+        // Backward compatibility - return first source as default
+        streamUrl: sources[0].url,
+        url: sources[0].url,
+        provider: '2embed',
+        requiresProxy: true,
+        requiresSegmentProxy: true,
+        cached: true,
+        executionTime
+      });
     }
-    
-    console.log('[EXTRACT] Hidden div found, length:', encoded.length);
-    
-    // Step 4: Decode with Caesar cipher +3
-    const decoded = caesarDecode(encoded, 3);
-    const resolved = resolvePlaceholders(decoded).split(' or ')[0];
-    
-    if (!resolved.startsWith('http')) {
-      return NextResponse.json({ error: 'Decoded URL invalid' }, { status: 500 });
+
+    // Check if there's already a pending request for this content
+    if (pendingRequests.has(cacheKey)) {
+      console.log('[EXTRACT] Waiting for existing request to complete...');
+      const sources = await pendingRequests.get(cacheKey)!;
+      
+      const executionTime = Date.now() - startTime;
+      const proxiedSources = sources.map((source: any) => ({
+        quality: source.quality,
+        url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=2embed&referer=${encodeURIComponent(source.referer)}`,
+        directUrl: source.url,
+        referer: source.referer,
+        type: source.type,
+        requiresSegmentProxy: source.requiresSegmentProxy
+      }));
+      
+      return NextResponse.json({
+        success: true,
+        sources: proxiedSources,
+        streamUrl: proxiedSources[0].url,
+        url: proxiedSources[0].url,
+        provider: '2embed',
+        requiresProxy: true,
+        requiresSegmentProxy: true,
+        cached: false,
+        deduplicated: true,
+        executionTime
+      });
     }
-    
-    console.log('[EXTRACT] Success!');
-    
-    const proxiedUrl = `/api/stream-proxy?url=${encodeURIComponent(resolved)}&referer=${encodeURIComponent('https://vidsrc-embed.ru/')}&origin=${encodeURIComponent('https://vidsrc-embed.ru')}`;
-    
-    return NextResponse.json({
-      success: true,
-      streamUrl: proxiedUrl,
-      url: proxiedUrl,
-      provider: 'vidsrc-cheerio',
-      requiresProxy: true,
-    });
+
+    // Create a promise for this extraction
+    const extractionPromise = extractWith2Embed(tmdbId, type, season, episode);
+    pendingRequests.set(cacheKey, extractionPromise);
+
+    try {
+      // Extract using 2Embed method
+      const sources = await extractionPromise;
+      
+      // Remove from pending requests
+      pendingRequests.delete(cacheKey);
+
+      // Cache result
+      cache.set(cacheKey, {
+        sources,
+        timestamp: Date.now()
+      });
+
+      const executionTime = Date.now() - startTime;
+      console.log(`[EXTRACT] Success in ${executionTime}ms - ${sources.length} qualities`);
+
+      // Return proxied URLs
+      const proxiedSources = sources.map((source: any) => ({
+        quality: source.quality,
+        url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=2embed&referer=${encodeURIComponent(source.referer)}`,
+        directUrl: source.url,
+        referer: source.referer,
+        type: source.type,
+        requiresSegmentProxy: source.requiresSegmentProxy
+      }));
+      
+      return NextResponse.json({
+        success: true,
+        sources: proxiedSources,
+        // Backward compatibility - return first source as default
+        streamUrl: proxiedSources[0].url,
+        url: proxiedSources[0].url,
+        provider: '2embed',
+        requiresProxy: true,
+        requiresSegmentProxy: true,
+        cached: false,
+        executionTime
+      });
+    } catch (error) {
+      // Remove from pending requests on error
+      pendingRequests.delete(cacheKey);
+      throw error;
+    }
 
   } catch (error) {
-    console.error('Stream extraction error:', error);
+    const executionTime = Date.now() - startTime;
+    console.error('[EXTRACT] ERROR:', error);
+    console.error('[EXTRACT] Stack:', error instanceof Error ? error.stack : 'No stack');
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const isCloudflareBlock = errorMessage.includes('Cloudflare') || errorMessage.includes('anti-bot') || errorMessage.includes('unavailable');
+    const isDecoderFailed = errorMessage.includes('decoder') || errorMessage.includes('decoding');
+    const isAllProvidersFailed = errorMessage.includes('All providers failed');
+    
     return NextResponse.json(
-      { error: 'Failed to extract stream' },
-      { status: 500 }
+      { 
+        error: isDecoderFailed ? 'Stream extraction temporarily unavailable' : isAllProvidersFailed ? 'No streams available' : isCloudflareBlock ? 'Stream source temporarily unavailable' : 'Failed to extract stream',
+        details: errorMessage,
+        suggestion: isDecoderFailed ? 'The stream provider has updated their protection. This will be fixed soon. Please try a different title for now.' : isAllProvidersFailed ? 'This content may not be available from any provider at the moment.' : isCloudflareBlock ? 'The stream provider is currently blocking automated requests. Please try again in a few minutes.' : 'Please try again or select a different title.',
+        executionTime,
+        isTemporary: true
+      },
+      { status: 503 }
     );
   }
 }

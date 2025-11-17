@@ -1,0 +1,1 @@
+function Ua(e){var t=Fa(e,3);if(Math.floor(Math.abs(t)).toString().length>12)throw Da(e,Na);var r=t.toString();return r.includes(".")?r:r+".0"}var Ba="String",Ga=/[\x00-\x1f\x7f]+/,Ka="Token";function Va(e){var t,r=(t=e).description||t.toString().slice(7,-1);if(!1===/^([a-zA-Z*])([!#$%&'*+\-.^_`|~\w:/]*)$/.test(r))throw Da(r,Ka);return r}

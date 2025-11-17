@@ -1,0 +1,1 @@
+function xs(e){for(var t=5381,r=e.length;r;)t=33*t^e.charCodeAt(--r);return(t>>>0).toString()}var Ms=.025,Fs=function(e){return e[e.Point=0]="Point",e[e.Range=1]="Range",e}

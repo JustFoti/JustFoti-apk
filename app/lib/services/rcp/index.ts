@@ -40,12 +40,21 @@ export { HiddenDivExtractor, hiddenDivExtractor } from './hidden-div-extractor';
 export { tryAllDecoders, getDecoderStats, decoders } from './srcrcp-decoder';
 export type { Decoder, DecoderResult } from './srcrcp-decoder';
 
+// Self-Hosted Decoder
+export { selfHostedDecoder, SelfHostedDecoder } from './self-hosted-decoder';
+
 // Placeholder Resolver
 export { PlaceholderResolver, createPlaceholderResolver, resolvePlaceholders } from './placeholder-resolver';
 
 // M3U8 Validator
 export { M3U8Validator, createM3U8Validator, validateM3U8Url } from './m3u8-validator';
 export type { ValidationResult } from './m3u8-validator';
+
+// Client-Side Decoder (Edge-compatible)
+export { decode as clientSideDecode, decoderUtils } from './client-side-decoder';
+
+// Ultimate Decoder (100% Coverage)
+export { decode as ultimateDecode, decodeWithCache, clearCache as clearDecodeCache, getCacheStats as getDecodeCacheStats } from './ultimate-decoder';
 
 // Provider Extractors
 export { TwoEmbedExtractor, twoEmbedExtractor } from './providers/2embed-extractor';

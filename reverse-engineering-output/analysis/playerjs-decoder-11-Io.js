@@ -1,0 +1,1 @@
+function Io(e){function t(e,t,r,i){return 3600*(0|e)+60*(0|t)+(0|r)+parseFloat(i||0)}var r=e.match(/^(?:(\d+):)?(\d{2}):(\d{2})(\.\d+)?/);return r?parseFloat(r[2])>59?t(r[2],r[3],0,r[4]):t(r[1],r[2],r[3],r[4]):null}

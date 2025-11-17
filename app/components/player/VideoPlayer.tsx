@@ -20,6 +20,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const fetchedRef = useRef(false);
   
   // Analytics and progress tracking
   const { trackContentEngagement, trackInteraction } = useAnalytics();
@@ -57,11 +58,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
+  const [availableSources, setAvailableSources] = useState<any[]>([]);
+  const [currentSourceIndex, setCurrentSourceIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [buffered, setBuffered] = useState(0);
   const [isBuffering, setIsBuffering] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSources, setShowSources] = useState(false);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [savedProgress, setSavedProgress] = useState<number>(0);
   const [quality, setQuality] = useState('auto');
   const [qualities, setQualities] = useState<string[]>(['auto']);
 
@@ -69,6 +75,14 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
 
   // Fetch stream URL
   useEffect(() => {
+    // Prevent duplicate fetches in StrictMode
+    if (fetchedRef.current) {
+      console.log('[VideoPlayer] Skipping duplicate fetch (already fetched)');
+      return;
+    }
+    
+    fetchedRef.current = true;
+    
     const fetchStream = async () => {
       setIsLoading(true);
       setError(null);
@@ -84,22 +98,50 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
           params.append('episode', episode.toString());
         }
 
+        console.log('[VideoPlayer] Fetching stream:', `/api/stream/extract?${params}`);
         const response = await fetch(`/api/stream/extract?${params}`);
         const data = await response.json();
+
+        console.log('[VideoPlayer] Stream response:', {
+          ok: response.ok,
+          status: response.status,
+          data: data
+        });
 
         if (!response.ok) {
           throw new Error(data.message || data.error || 'Failed to load stream');
         }
 
-        if (data.url || data.streamUrl) {
-          setStreamUrl(data.url || data.streamUrl);
-        } else if (data.data?.sources && data.data.sources.length > 0) {
-          setStreamUrl(data.data.sources[0].url);
+        // Try multiple possible response formats
+        let sources = [];
+        
+        if (data.sources && Array.isArray(data.sources) && data.sources.length > 0) {
+          sources = data.sources;
+          console.log('[VideoPlayer] Found sources array:', sources.length, 'sources');
+        } else if (data.data?.sources && Array.isArray(data.data.sources) && data.data.sources.length > 0) {
+          sources = data.data.sources;
+          console.log('[VideoPlayer] Found data.sources array:', sources.length, 'sources');
+        } else if (data.url || data.streamUrl) {
+          // Single source - wrap in array
+          sources = [{
+            quality: 'auto',
+            url: data.url || data.streamUrl
+          }];
+          console.log('[VideoPlayer] Single source found');
+        }
+
+        if (sources.length > 0) {
+          console.log('[VideoPlayer] Available sources:', sources.map((s: any) => s.quality));
+          setAvailableSources(sources);
+          setCurrentSourceIndex(0);
+          setStreamUrl(sources[0].url);
+          console.log('[VideoPlayer] Setting initial stream URL:', sources[0].url);
         } else {
+          console.error('[VideoPlayer] No stream URL found in response:', data);
           throw new Error('No stream sources available');
         }
       } catch (err) {
-        console.error('Stream fetch error:', err);
+        console.error('[VideoPlayer] Stream fetch error:', err);
         setError(err instanceof Error ? err.message : 'Failed to load video');
       } finally {
         setIsLoading(false);
@@ -107,34 +149,53 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     };
 
     fetchStream();
+    
+    // Reset fetchedRef when dependencies change
+    return () => {
+      fetchedRef.current = false;
+    };
   }, [tmdbId, mediaType, season, episode]);
 
   // Initialize HLS
   useEffect(() => {
-    if (!streamUrl || !videoRef.current) return;
+    if (!streamUrl || !videoRef.current) {
+      console.log('[VideoPlayer] HLS init skipped:', { streamUrl: !!streamUrl, videoRef: !!videoRef.current });
+      return;
+    }
 
     const video = videoRef.current;
+    console.log('[VideoPlayer] Initializing HLS with URL:', streamUrl);
 
-    if (streamUrl.includes('.m3u8')) {
+    if (streamUrl.includes('.m3u8') || streamUrl.includes('stream-proxy')) {
       if (Hls.isSupported()) {
+        console.log('[VideoPlayer] HLS.js is supported, creating instance');
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
           backBufferLength: 90,
+          // For proxied streams, ensure we use the proxy for all requests
+          xhrSetup: (xhr, url) => {
+            console.log('[VideoPlayer] HLS.js XHR request:', url);
+            // The URL is already proxied by our rewritePlaylistUrls function
+            // Just ensure CORS is handled
+            xhr.withCredentials = false;
+          },
         });
 
+        console.log('[VideoPlayer] Loading source:', streamUrl);
         hls.loadSource(streamUrl);
         hls.attachMedia(video);
 
         hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-          console.log('HLS manifest loaded, found ' + data.levels.length + ' quality levels');
+          console.log('[VideoPlayer] HLS manifest loaded, found ' + data.levels.length + ' quality levels');
+          console.log('[VideoPlayer] Quality levels:', data.levels);
           const levels = data.levels.map((level, index) => 
             level.height ? `${level.height}p` : `Level ${index}`
           );
           setQualities(['auto', ...levels]);
           
           // Auto-play after manifest is loaded
-          video.play().catch(e => console.log('Autoplay prevented:', e));
+          video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
         });
 
         hls.on(Hls.Events.ERROR, async (_event, data) => {
@@ -193,15 +254,19 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
           hls.destroy();
         };
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        console.log('[VideoPlayer] Using native HLS support');
         video.src = streamUrl;
         video.addEventListener('loadedmetadata', () => {
-          video.play().catch(e => console.log('Autoplay prevented:', e));
+          video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
         });
+      } else {
+        console.error('[VideoPlayer] HLS not supported and native playback not available');
       }
     } else {
+      console.log('[VideoPlayer] Direct video source (not HLS)');
       video.src = streamUrl;
       video.addEventListener('loadedmetadata', () => {
-        video.play().catch(e => console.log('Autoplay prevented:', e));
+        video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
       });
     }
   }, [streamUrl]);
@@ -317,7 +382,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       // Load saved progress when duration is available
       const savedTime = loadProgress();
       if (savedTime > 0 && savedTime < video.duration - 30) {
-        video.currentTime = savedTime;
+        // Show resume prompt instead of auto-resuming
+        setSavedProgress(savedTime);
+        setShowResumePrompt(true);
+        video.pause(); // Pause until user decides
       }
     };
 
@@ -508,6 +576,81 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     });
   };
 
+  const changeSource = (sourceIndex: number) => {
+    if (sourceIndex < 0 || sourceIndex >= availableSources.length) return;
+    
+    const newSource = availableSources[sourceIndex];
+    console.log('[VideoPlayer] Switching to source:', newSource.quality, newSource.url);
+    
+    // Save current time
+    const savedTime = videoRef.current?.currentTime || 0;
+    
+    // Destroy current HLS instance if exists
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    
+    // Update source
+    setCurrentSourceIndex(sourceIndex);
+    setStreamUrl(newSource.url);
+    setShowSettings(false);
+    
+    // The useEffect will reinitialize HLS with the new URL
+    // and we'll restore the time after it loads
+    setTimeout(() => {
+      if (videoRef.current && savedTime > 0) {
+        videoRef.current.currentTime = savedTime;
+        videoRef.current.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+      }
+    }, 1000);
+    
+    trackInteraction({
+      element: 'source_selector',
+      action: 'click',
+      context: {
+        action_type: 'source_change',
+        source: newSource.quality,
+        contentId: tmdbId,
+      },
+    });
+  };
+
+  const handleResume = () => {
+    if (videoRef.current && savedProgress > 0) {
+      videoRef.current.currentTime = savedProgress;
+      videoRef.current.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+    }
+    setShowResumePrompt(false);
+    
+    trackInteraction({
+      element: 'resume_prompt',
+      action: 'click',
+      context: {
+        action_type: 'resume',
+        resumeTime: savedProgress,
+        contentId: tmdbId,
+      },
+    });
+  };
+
+  const handleStartOver = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      videoRef.current.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+    }
+    setShowResumePrompt(false);
+    
+    trackInteraction({
+      element: 'resume_prompt',
+      action: 'click',
+      context: {
+        action_type: 'start_over',
+        contentId: tmdbId,
+      },
+    });
+  };
+
   const resetControlsTimeout = () => {
     setShowControls(true);
     if (controlsTimeoutRef.current) {
@@ -517,6 +660,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
         setShowSettings(false);
+        setShowSources(false);
       }, 3000);
     }
   };
@@ -641,8 +785,44 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
           </div>
 
           <div className={styles.rightControls}>
+            {availableSources.length > 1 && (
+              <div className={styles.settingsContainer}>
+                <button onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setShowSources(!showSources);
+                  setShowSettings(false);
+                }} className={styles.btn}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                  <span style={{ marginLeft: '4px', fontSize: '14px' }}>Sources</span>
+                </button>
+                
+                {showSources && (
+                  <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
+                    <div className={styles.settingsSection}>
+                      <div className={styles.settingsLabel}>Quality</div>
+                      {availableSources.map((source, index) => (
+                        <button
+                          key={index}
+                          className={`${styles.settingsOption} ${currentSourceIndex === index ? styles.active : ''}`}
+                          onClick={() => changeSource(index)}
+                        >
+                          {source.quality}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className={styles.settingsContainer}>
-              <button onClick={(e) => { e.stopPropagation(); setShowSettings(!showSettings); }} className={styles.btn}>
+              <button onClick={(e) => { 
+                e.stopPropagation(); 
+                setShowSettings(!showSettings);
+                setShowSources(false);
+              }} className={styles.btn}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
                 </svg>
@@ -651,7 +831,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
               {showSettings && (
                 <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
                   <div className={styles.settingsSection}>
-                    <div className={styles.settingsLabel}>Playback Speed</div>
+                    <div className={styles.settingsLabel}>Speed</div>
                     {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(rate => (
                       <button
                         key={rate}
@@ -662,21 +842,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
                       </button>
                     ))}
                   </div>
-                  
-                  {qualities.length > 1 && (
-                    <div className={styles.settingsSection}>
-                      <div className={styles.settingsLabel}>Quality</div>
-                      {qualities.map((q, index) => (
-                        <button
-                          key={q}
-                          className={`${styles.settingsOption} ${quality === q ? styles.active : ''}`}
-                          onClick={() => changeQuality(index)}
-                        >
-                          {q}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
@@ -704,12 +869,30 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       )}
 
       {/* Center play button */}
-      {!isPlaying && !isLoading && (
+      {!isPlaying && !isLoading && !showResumePrompt && (
         <button className={styles.centerPlayButton} onClick={(e) => { e.stopPropagation(); togglePlay(); }}>
           <svg width="80" height="80" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z"/>
           </svg>
         </button>
+      )}
+
+      {/* Resume prompt */}
+      {showResumePrompt && (
+        <div className={styles.resumePrompt} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.resumePromptContent}>
+            <h3>Resume Playback?</h3>
+            <p>Continue from {formatTime(savedProgress)}</p>
+            <div className={styles.resumePromptButtons}>
+              <button onClick={handleStartOver} className={styles.resumeButton}>
+                Start Over
+              </button>
+              <button onClick={handleResume} className={`${styles.resumeButton} ${styles.resumeButtonPrimary}`}>
+                Resume
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

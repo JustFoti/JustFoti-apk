@@ -49,7 +49,10 @@ export async function extractStream(request: StreamRequest): Promise<StreamResul
     },
     {
       name: 'superembed',
-      fn: async () => extractSuperembed(tmdbIdStr, type, season, episode)
+      fn: async () => {
+        const result = await extractSuperembed({ tmdbId: tmdbIdStr, type, season, episode });
+        return result.success && result.url ? [{ url: result.url, quality: 'auto' }] : [];
+      }
     },
     {
       name: '2embed',

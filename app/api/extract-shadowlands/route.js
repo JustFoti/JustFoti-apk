@@ -742,9 +742,59 @@ export async function GET(request) {
     const contentType = (season && episode) ? 'tv' : 'movie';
     logger.info('Content type determined', { contentType, tmdbId, season, episode });
     
-    // Use CloudStream pure fetch method
+    // Try self-hosted extractor first (faster, more reliable)
+    logger.info('Trying VidSrc self-hosted extraction first...');
+    let extractionStartTime = Date.now();
+    
+    try {
+      const { extractVidsrcSelfHosted } = await import('@/app/lib/services/vidsrc-self-hosted-extractor');
+      
+      const selfHostedResult = await Promise.race([
+        extractVidsrcSelfHosted(tmdbId, contentType, season ? parseInt(season) : undefined, episode ? parseInt(episode) : undefined),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Self-hosted extraction timeout after 30 seconds')), 30000)
+      ]);
+      
+      if (selfHostedResult.success) {
+        const extractionDuration = Date.now() - extractionStartTime;
+        logger.info('Self-hosted extraction succeeded!', { duration: extractionDuration });
+        
+        // Format response
+        const response = {
+          success: true,
+          streamUrl: selfHostedResult.url,
+          streamType: 'hls',
+          server: 'vidsrc-self-hosted',
+          extractionMethod: 'self-hosted-decoder',
+          requiresProxy: false,
+          metadata: {
+            tmdbId,
+            season,
+            episode,
+            extractionDuration,
+            totalDuration: Date.now() - startTime,
+            contentType,
+            requestId,
+            timestamp: new Date().toISOString()
+          }
+        };
+        
+        logger.info('=== EXTRACTION REQUEST COMPLETED (SELF-HOSTED) ===', {
+          success: true,
+          duration: Date.now() - startTime
+        });
+        
+        return NextResponse.json(response);
+      }
+      
+      logger.warn('Self-hosted extraction failed, falling back to CloudStream', { error: selfHostedResult.error });
+    } catch (error) {
+      logger.warn('Self-hosted extraction error, falling back to CloudStream', { error: error.message });
+    }
+    
+    // Fallback to CloudStream pure fetch method
     logger.info('Using CloudStream pure fetch extraction...');
-    const extractionStartTime = Date.now();
+    extractionStartTime = Date.now();
     
     // Import the CloudStream extractor
     const { extractCloudStream } = await import('@/app/lib/services/cloudstream-pure-fetch');

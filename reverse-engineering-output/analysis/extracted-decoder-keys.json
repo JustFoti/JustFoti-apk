@@ -1,0 +1,510 @@
+{
+  "timestamp": "2025-11-17T00:51:27.368Z",
+  "totalDecoders": 11,
+  "decoders": [
+    {
+      "index": 1,
+      "name": "X",
+      "file": "playerjs-decoder-1-X.js",
+      "size": 187,
+      "signature": {
+        "name": "X",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Hex"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [
+            ",r=0;r<e.length;r++){var i=e[r].toString(16);i.length<2&&(i=",
+            "+i),t+=i}return t}function Q(e){return Uint8Array.from(e.replace(/^0x/,"
+          ],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": true,
+          "hexOperations": [
+            ".toString(16)"
+          ]
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": true,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function X(e){for(var t=\"\",r=0;r<e.length;r++){var i=e[r].toString(16);i.length<2&&(i=\"0\"+i),t+=i}return t}function Q(e){return Uint8Array.from(e.replace(/^0x/,\"\").replace(/([\\da-fA-F]{2}"
+    },
+    {
+      "index": 2,
+      "name": "le",
+      "file": "playerjs-decoder-2-le.js",
+      "size": 172,
+      "signature": {
+        "name": "le",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": true
+        }
+      },
+      "code": "function le(e){return String.fromCharCode.apply(null,e)}function ue(e,t){var r=e[t]<<8|e[t+1];return r<0?65536+r:r}function de(e,t){var r=fe(e,t);return r<0?4294967296+r:r}"
+    },
+    {
+      "index": 3,
+      "name": "He",
+      "file": "playerjs-decoder-3-He.js",
+      "size": 277,
+      "signature": {
+        "name": "He",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [
+            "audio/mpeg",
+            "audio/mp4; codecs=\"mp3\"",
+            "audio/mp4; codecs=\"ac-3\"",
+            "']?([^"
+          ],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": true,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function He(e){var t=W(e)||{isTypeSupported:function(){return!1}};return{mpeg:t.isTypeSupported(\"audio/mpeg\"),mp3:t.isTypeSupported('audio/mp4; codecs=\"mp3\"'),ac3:t.isTypeSupported('audio/mp4; codecs=\"ac-3\"')}}function Ye(e){return e.replace(/^.+codecs=[\"']?([^\"']+).*$/,\"$1\")}"
+    },
+    {
+      "index": 4,
+      "name": "Ar",
+      "file": "playerjs-decoder-4-Ar.js",
+      "size": 191,
+      "signature": {
+        "name": "Ar",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Base64"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [],
+          "keyGeneration": null,
+          "charCodeOperations": [
+            ".charCodeAt(0)",
+            ".charCodeAt(0)"
+          ]
+        },
+        "base64": {
+          "hasAtob": true,
+          "hasBtoa": false,
+          "hasBase64": true
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": true,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function Ar(e){return Uint8Array.from(atob(e),(function(e){return e.charCodeAt(0)}))}function Lr(e){return Uint8Array.from(unescape(encodeURIComponent(e)),(function(e){return e.charCodeAt(0)}"
+    },
+    {
+      "index": 5,
+      "name": "ci",
+      "file": "playerjs-decoder-5-ci.js",
+      "size": 150,
+      "signature": {
+        "name": "ci",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": true,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function ci(e){return e.replace(/\\?[^?]*$/,\"\")}function gi(e,t){for(var r=0,i=e.length;r<i;r++){var n;if((null==(n=e[r])?void 0:n.cc)===t)return e[r]}"
+    },
+    {
+      "index": 6,
+      "name": "Vi",
+      "file": "playerjs-decoder-6-Vi.js",
+      "size": 327,
+      "signature": {
+        "name": "Vi",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": true
+        }
+      },
+      "code": "function Vi(e){var t=String.fromCharCode(e[0],e[1],e[2],e[3]),r=Di(e,4);return{type:t,size:r,data:e.subarray(10,10+r)}}var Hi=10,Yi=10;function Wi(e){for(var t=0,r=[];bi(e,t);){var i=Di(e,t+6);e[t+5]>>6&1&&(t+=Hi);for(var n=(t+=Hi)+i;t+Yi<n;){var a=Vi(e.subarray(t)),s=Ki(a);s&&r.push(s),t+=a.size+Hi}ki(e,t)&&(t+=Hi)}return r}"
+    },
+    {
+      "index": 7,
+      "name": "Oa",
+      "file": "playerjs-decoder-7-Oa.js",
+      "size": 220,
+      "signature": {
+        "name": "Oa",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Base64"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [
+            "+(t=e,btoa(String.fromCharCode.apply(String,t))+",
+            ");var t}var xa="
+          ],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": true,
+          "hasBase64": true
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": true
+        }
+      },
+      "code": "function Oa(e){if(!1===ArrayBuffer.isView(e))throw Da(e,wa);return\":\"+(t=e,btoa(String.fromCharCode.apply(String,t))+\":\");var t}var xa=\"Integer\";function Ma(e){if(function(e){return e<-999999999999999||999999999999999<e}"
+    },
+    {
+      "index": 8,
+      "name": "Ua",
+      "file": "playerjs-decoder-8-Ua.js",
+      "size": 340,
+      "signature": {
+        "name": "Ua",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [
+            ")?r:r+",
+            "}var Ba=",
+            ",Ga=/[\\x00-\\x1f\\x7f]+/,Ka="
+          ],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function Ua(e){var t=Fa(e,3);if(Math.floor(Math.abs(t)).toString().length>12)throw Da(e,Na);var r=t.toString();return r.includes(\".\")?r:r+\".0\"}var Ba=\"String\",Ga=/[\\x00-\\x1f\\x7f]+/,Ka=\"Token\";function Va(e){var t,r=(t=e).description||t.toString().slice(7,-1);if(!1===/^([a-zA-Z*])([!#$%&'*+\\-.^_`|~\\w:/]*)$/.test(r))throw Da(r,Ka);return r}"
+    },
+    {
+      "index": 9,
+      "name": "Wa",
+      "file": "playerjs-decoder-9-Wa.js",
+      "size": 209,
+      "signature": {
+        "name": "Wa",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [
+            ":Object.entries(e).map((function(e){var t=e[0],r=e[1];return!0===r?",
+            "+Wa(t):",
+            "+Wa(t)+"
+          ],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function Wa(e){if(!1===/^[a-z*][a-z0-9\\-_.*]*$/.test(e))throw Da(e,Ya);return e}function ja(e){return null==e?\"\":Object.entries(e).map((function(e){var t=e[0],r=e[1];return!0===r?\";\"+Wa(t):\";\"+Wa(t)+\"=\"+Ha(r)}"
+    },
+    {
+      "index": 10,
+      "name": "xs",
+      "file": "playerjs-decoder-10-xs.js",
+      "size": 172,
+      "signature": {
+        "name": "xs",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "XOR"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": true,
+          "xorOperations": [
+            "t^e"
+          ],
+          "potentialKeys": [
+            "Point",
+            "Range"
+          ],
+          "keyGeneration": null,
+          "charCodeOperations": [
+            ".charCodeAt(--r)"
+          ]
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": true,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function xs(e){for(var t=5381,r=e.length;r;)t=33*t^e.charCodeAt(--r);return(t>>>0).toString()}var Ms=.025,Fs=function(e){return e[e.Point=0]=\"Point\",e[e.Range=1]=\"Range\",e}"
+    },
+    {
+      "index": 11,
+      "name": "Io",
+      "file": "playerjs-decoder-11-Io.js",
+      "size": 215,
+      "signature": {
+        "name": "Io",
+        "parameters": [
+          "e"
+        ]
+      },
+      "types": [
+        "Utility"
+      ],
+      "analysis": {
+        "xor": {
+          "hasXor": false,
+          "xorOperations": [],
+          "potentialKeys": [],
+          "keyGeneration": null
+        },
+        "base64": {
+          "hasAtob": false,
+          "hasBtoa": false,
+          "hasBase64": false
+        },
+        "hex": {
+          "hasHexConversion": false,
+          "hexOperations": []
+        },
+        "string": {
+          "hasReverse": false,
+          "hasSplit": false,
+          "hasJoin": false,
+          "hasSubstring": false,
+          "hasReplace": false,
+          "hasCharCodeAt": false,
+          "hasFromCharCode": false
+        }
+      },
+      "code": "function Io(e){function t(e,t,r,i){return 3600*(0|e)+60*(0|t)+(0|r)+parseFloat(i||0)}var r=e.match(/^(?:(\\d+):)?(\\d{2}):(\\d{2})(\\.\\d+)?/);return r?parseFloat(r[2])>59?t(r[2],r[3],0,r[4]):t(r[1],r[2],r[3],r[4]):null}"
+    }
+  ],
+  "summary": {
+    "xorDecoders": 1,
+    "base64Decoders": 2,
+    "hexDecoders": 1,
+    "extractedKeys": [
+      "Point",
+      "Range"
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+$(document).ready(function() {
+    $("#top_buttons #report").click(function() {
+        $("#reporting").fadeIn("fast");
+    });
+    $("#reporting #list div").click(function() {
+        $("#reporting .selected_problem").removeClass("selected_problem");
+        $(this).addClass("selected_problem");
+    });
+    $("#reporting #report_submit").click(function() {
+        if ($("#reporting .selected_problem").length) {
+            $("#loading_overlay").fadeIn("fast", function() {
+                $.post("/report.php", {
+                    hash: $("#the_frame iframe").attr("src").replace("//rcp.vidsrc.me/rcp/", ""),
+                    id: $("#reporting .selected_problem").data("id")
+                }, function(data) {
+                    alert("Thanks for reporting\nIt will be fixed as soon as possible.");
+                    $("#reporting").fadeOut("fast");
+                    $("#loading_overlay").fadeOut("fast");
+                });
+            });
+        } else {
+            alert("Please select a problem.")
+        }
+    });
+});

@@ -1,0 +1,31 @@
+{
+  "timestamp": "2025-11-16T18:27:06.554Z",
+  "inlineScript": {
+    "file": "cloudnestra-prorcp-inline-0.js",
+    "size": 26496,
+    "divIds": [
+      "player_parent"
+    ],
+    "decoderCalls": 1,
+    "encodedVars": [],
+    "implementations": [
+      "XOR",
+      "Base64"
+    ],
+    "completeFunctions": []
+  },
+  "findings": {
+    "totalDecoderPatterns": 2,
+    "decoderTypes": [
+      "XOR",
+      "Base64"
+    ],
+    "completeFunctionsFound": 0
+  },
+  "nextSteps": [
+    "Analyze extracted decoder functions in detail",
+    "Test decoder functions with sample encoded data",
+    "Identify which decoder method is used for which pattern",
+    "Replicate the decoder logic in pure Node.js"
+  ]
+}
