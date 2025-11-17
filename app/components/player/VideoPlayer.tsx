@@ -68,8 +68,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const [showSources, setShowSources] = useState(false);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [savedProgress, setSavedProgress] = useState<number>(0);
-  const [quality, setQuality] = useState('auto');
-  const [qualities, setQualities] = useState<string[]>(['auto']);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -186,13 +184,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
         hls.loadSource(streamUrl);
         hls.attachMedia(video);
 
-        hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-          console.log('[VideoPlayer] HLS manifest loaded, found ' + data.levels.length + ' quality levels');
-          console.log('[VideoPlayer] Quality levels:', data.levels);
-          const levels = data.levels.map((level, index) => 
-            level.height ? `${level.height}p` : `Level ${index}`
-          );
-          setQualities(['auto', ...levels]);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log('[VideoPlayer] HLS manifest loaded');
           
           // Auto-play after manifest is loaded
           video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
@@ -403,7 +396,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
         title,
         season,
         episode,
-        quality,
         duration: video.duration,
       });
     };
