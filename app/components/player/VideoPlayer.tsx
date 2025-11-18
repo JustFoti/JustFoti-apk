@@ -733,8 +733,9 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       console.log('[VideoPlayer] Loaded subtitle:', subtitle.language);
       setCurrentSubtitle(subtitle.id);
       
-      // Save subtitle preference
+      // Save subtitle preference - both language and enabled state
       setSubtitleLanguage(subtitle.langCode, subtitle.language);
+      setSubtitlesEnabled(true);
     } else {
       console.log('[VideoPlayer] Clearing subtitles');
       setCurrentSubtitle(null);
@@ -831,11 +832,23 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     setShowSettings(false);
     
     // The useEffect will reinitialize HLS with the new URL
-    // and we'll restore the time after it loads
+    // and we'll restore the time and subtitles after it loads
     setTimeout(() => {
-      if (videoRef.current && savedTime > 0) {
-        videoRef.current.currentTime = savedTime;
-        videoRef.current.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+      if (videoRef.current) {
+        if (savedTime > 0) {
+          videoRef.current.currentTime = savedTime;
+          videoRef.current.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+        }
+        
+        // Reload subtitles if they were enabled
+        const preferences = getSubtitlePreferences();
+        if (preferences.enabled && currentSubtitle && availableSubtitles.length > 0) {
+          const currentSub = availableSubtitles.find(sub => sub.id === currentSubtitle);
+          if (currentSub) {
+            console.log('[VideoPlayer] Reloading subtitle after source change');
+            loadSubtitle(currentSub);
+          }
+        }
       }
     }, 1000);
     
