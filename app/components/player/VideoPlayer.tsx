@@ -6,7 +6,7 @@ import { useAnalytics } from '../analytics/AnalyticsProvider';
 import { useWatchProgress } from '@/lib/hooks/useWatchProgress';
 import { streamRetryManager } from '@/lib/utils/stream-retry';
 import { trackWatchStart, trackWatchProgress, trackWatchPause, trackWatchComplete } from '@/lib/utils/live-activity';
-import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage } from '@/lib/utils/subtitle-preferences';
+import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage, getSubtitleStyle, setSubtitleStyle, type SubtitleStyle } from '@/lib/utils/subtitle-preferences';
 import styles from './VideoPlayer.module.css';
 
 interface VideoPlayerProps {
@@ -68,9 +68,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const [isBuffering, setIsBuffering] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showSubtitles, setShowSubtitles] = useState(false);
+  const [showSubtitleCustomization, setShowSubtitleCustomization] = useState(false);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
   const [availableSubtitles, setAvailableSubtitles] = useState<any[]>([]);
   const [subtitlesLoading, setSubtitlesLoading] = useState(false);
+  const [subtitleStyle, setSubtitleStyleState] = useState<SubtitleStyle>(getSubtitleStyle());
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [savedProgress, setSavedProgress] = useState<number>(0);
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
@@ -639,6 +641,56 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     }
   };
 
+  const updateSubtitleStyle = (newStyle: Partial<SubtitleStyle>) => {
+    const updated = { ...subtitleStyle, ...newStyle };
+    setSubtitleStyleState(updated);
+    setSubtitleStyle(updated);
+    
+    // Apply styles dynamically to video element
+    if (videoRef.current) {
+      const video = videoRef.current;
+      const styleId = 'dynamic-subtitle-style';
+      let styleEl = document.getElementById(styleId) as HTMLStyleElement;
+      
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+      }
+      
+      const bgOpacity = updated.backgroundOpacity / 100;
+      
+      // Calculate line position (0 = top, 100 = bottom)
+      // VTT uses line position where negative values are from top, positive from bottom
+      // We'll use percentage positioning
+      const linePosition = updated.verticalPosition;
+      
+      styleEl.textContent = `
+        video::cue {
+          font-size: ${updated.fontSize}% !important;
+          color: ${updated.textColor} !important;
+          background-color: rgba(0, 0, 0, ${bgOpacity}) !important;
+          text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8) !important;
+          line: ${linePosition}% !important;
+        }
+      `;
+      
+      // Also update existing text tracks
+      if (video.textTracks && video.textTracks.length > 0) {
+        const track = video.textTracks[0];
+        if (track.cues) {
+          for (let i = 0; i < track.cues.length; i++) {
+            const cue = track.cues[i] as any;
+            if (cue.line !== undefined) {
+              cue.line = linePosition;
+              cue.snapToLines = false; // Use percentage positioning
+            }
+          }
+        }
+      }
+    }
+  };
+
   const loadSubtitle = (subtitle: any | null) => {
     if (!videoRef.current) return;
     
@@ -725,6 +777,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       setSubtitlesLoading(false);
     }
   };
+
+  // Apply saved subtitle style on mount
+  useEffect(() => {
+    updateSubtitleStyle(subtitleStyle);
+  }, []);
 
   // Apply saved subtitle preferences after subtitles are loaded
   useEffect(() => {
@@ -1118,6 +1175,110 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
                         No subtitles available
                       </div>
                     )}
+                    
+                    {/* Subtitle Customization Button */}
+                    <button
+                      className={styles.settingsOption}
+                      onClick={() => {
+                        setShowSubtitleCustomization(!showSubtitleCustomization);
+                        setShowSubtitles(false);
+                      }}
+                      style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '0.5rem', paddingTop: '0.75rem' }}
+                    >
+                      ⚙️ Customize Appearance
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {/* Subtitle Customization Menu */}
+              {showSubtitleCustomization && (
+                <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
+                  <div className={styles.settingsSection}>
+                    <div className={styles.settingsLabel}>Subtitle Appearance</div>
+                    
+                    {/* Font Size */}
+                    <div style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        Font Size: {subtitleStyle.fontSize}%
+                      </div>
+                      <input
+                        type="range"
+                        min="50"
+                        max="200"
+                        value={subtitleStyle.fontSize}
+                        onChange={(e) => updateSubtitleStyle({ fontSize: Number(e.target.value) })}
+                        className={styles.volumeSlider}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    
+                    {/* Background Opacity */}
+                    <div style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        Background Opacity: {subtitleStyle.backgroundOpacity}%
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={subtitleStyle.backgroundOpacity}
+                        onChange={(e) => updateSubtitleStyle({ backgroundOpacity: Number(e.target.value) })}
+                        className={styles.volumeSlider}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    
+                    {/* Text Color */}
+                    <div style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        Text Color
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {['#ffffff', '#ffff00', '#00ff00', '#00ffff', '#ff00ff'].map(color => (
+                          <button
+                            key={color}
+                            onClick={() => updateSubtitleStyle({ textColor: color })}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '4px',
+                              backgroundColor: color,
+                              border: subtitleStyle.textColor === color ? '2px solid #e50914' : '2px solid rgba(255, 255, 255, 0.3)',
+                              cursor: 'pointer',
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* Vertical Position */}
+                    <div style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
+                        Vertical Position: {subtitleStyle.verticalPosition}% {subtitleStyle.verticalPosition < 30 ? '(Top)' : subtitleStyle.verticalPosition > 70 ? '(Bottom)' : '(Middle)'}
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={subtitleStyle.verticalPosition}
+                        onChange={(e) => updateSubtitleStyle({ verticalPosition: Number(e.target.value) })}
+                        className={styles.volumeSlider}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    
+                    {/* Back Button */}
+                    <button
+                      className={styles.settingsOption}
+                      onClick={() => {
+                        setShowSubtitleCustomization(false);
+                        setShowSubtitles(true);
+                      }}
+                      style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '0.5rem' }}
+                    >
+                      ← Back to Subtitles
+                    </button>
                   </div>
                 </div>
               )}

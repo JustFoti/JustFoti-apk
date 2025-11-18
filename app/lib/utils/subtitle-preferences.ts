@@ -2,10 +2,19 @@
  * Subtitle Preferences - LocalStorage management for user subtitle settings
  */
 
+export interface SubtitleStyle {
+  fontSize: number; // 50-200 (percentage)
+  backgroundColor: string; // rgba color
+  textColor: string; // color
+  backgroundOpacity: number; // 0-100
+  verticalPosition: number; // 0-100 (0 = top, 100 = bottom)
+}
+
 export interface SubtitlePreferences {
   enabled: boolean;
   languageCode: string;
   languageName: string;
+  style: SubtitleStyle;
 }
 
 const STORAGE_KEY = 'vynx_subtitle_preferences';
@@ -13,6 +22,13 @@ const DEFAULT_PREFERENCES: SubtitlePreferences = {
   enabled: true,
   languageCode: 'eng',
   languageName: 'English',
+  style: {
+    fontSize: 100,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    textColor: '#ffffff',
+    backgroundOpacity: 80,
+    verticalPosition: 90, // Default near bottom
+  },
 };
 
 /**
@@ -68,6 +84,22 @@ export function setSubtitleLanguage(languageCode: string, languageName: string):
   preferences.languageCode = languageCode;
   preferences.languageName = languageName;
   saveSubtitlePreferences(preferences);
+}
+
+/**
+ * Update subtitle style preferences
+ */
+export function setSubtitleStyle(style: Partial<SubtitleStyle>): void {
+  const preferences = getSubtitlePreferences();
+  preferences.style = { ...preferences.style, ...style };
+  saveSubtitlePreferences(preferences);
+}
+
+/**
+ * Get subtitle style preferences
+ */
+export function getSubtitleStyle(): SubtitleStyle {
+  return getSubtitlePreferences().style;
 }
 
 /**
