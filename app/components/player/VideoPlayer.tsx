@@ -83,9 +83,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
 
   // Fetch stream URL
   useEffect(() => {
-    // Reset subtitle auto-load flag for new video
-    subtitlesAutoLoadedRef.current = false;
-    
     // Prevent duplicate fetches in StrictMode
     if (fetchedRef.current) {
       console.log('[VideoPlayer] Skipping duplicate fetch (already fetched)');
@@ -93,6 +90,9 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
     }
     
     fetchedRef.current = true;
+    
+    // Reset subtitle auto-load flag for new video (only on first mount)
+    subtitlesAutoLoadedRef.current = false;
     
     const fetchStream = async () => {
       setIsLoading(true);
@@ -216,6 +216,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           console.log('[VideoPlayer] HLS manifest loaded');
+          
+          // Reload subtitles if they were enabled (they may have been lost during HLS init)
+          if (currentSubtitle && availableSubtitles.length > 0) {
+            const currentSub = availableSubtitles.find(sub => sub.id === currentSubtitle);
+            if (currentSub) {
+              console.log('[VideoPlayer] Reloading subtitle after HLS manifest parsed');
+              setTimeout(() => {
+                loadSubtitle(currentSub);
+              }, 100);
+            }
+          }
           
           // Auto-play after manifest is loaded
           video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
