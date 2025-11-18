@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getLocationFromHeaders, formatLocation } from '@/app/lib/utils/geolocation';
 
 // POST - Update/create live activity
 export async function POST(request: NextRequest) {
@@ -38,44 +39,9 @@ export async function POST(request: NextRequest) {
     const deviceType = userAgent.includes('Mobile') ? 'mobile' : 
                       userAgent.includes('Tablet') ? 'tablet' : 'desktop';
 
-    // Get location from headers (Vercel/Cloudflare provides these)
-    let country = request.headers.get('x-vercel-ip-country') || 
-                  request.headers.get('cf-ipcountry') || 
-                  data.country || 
-                  null;
-    
-    let city = request.headers.get('x-vercel-ip-city') || '';
-    let region = request.headers.get('x-vercel-ip-country-region') || '';
-    
-    // Decode URL-encoded values (Vercel encodes city names)
-    if (city) {
-      try {
-        city = decodeURIComponent(city);
-      } catch (e) {
-        console.warn('[Live Activity] Failed to decode city:', city);
-      }
-    }
-    
-    if (region) {
-      try {
-        region = decodeURIComponent(region);
-      } catch (e) {
-        console.warn('[Live Activity] Failed to decode region:', region);
-      }
-    }
-    
-    // Format location string
-    let location: string;
-    if (city && region && country) {
-      location = `${city}, ${region}, ${country}`;
-    } else if (region && country) {
-      location = `${region}, ${country}`;
-    } else if (country) {
-      location = country;
-    } else {
-      // Fallback: Try to get from IP (in production Vercel should provide this)
-      location = process.env.NODE_ENV === 'development' ? 'Local' : 'Unknown';
-    }
+    // Get location using utility
+    const locationData = getLocationFromHeaders(request);
+    const location = formatLocation(locationData);
 
     console.log('[Live Activity] Location:', location, 'Device:', deviceType);
 

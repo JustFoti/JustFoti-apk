@@ -274,6 +274,71 @@
   transform: scale(1.2);
 }
 
+/* Volume Indicator Overlay */
+.volumeIndicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  z-index: 100;
+  animation: volumeFadeIn 0.2s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+@keyframes volumeFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.volumeIndicatorIcon {
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.volumeIndicatorBar {
+  width: 6px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.volumeIndicatorFill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, #e50914, #ff4444);
+  transition: height 0.1s ease;
+  border-radius: 3px;
+}
+
+.volumeIndicatorText {
+  color: white;
+  font-size: 1.125rem;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: center;
+}
+
 /* Time display */
 .time {
   color: white;

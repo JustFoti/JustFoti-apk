@@ -42,6 +42,8 @@ export default function LiveActivityPage() {
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     fetchLiveActivity();
@@ -54,17 +56,20 @@ export default function LiveActivityPage() {
 
   const fetchLiveActivity = async () => {
     try {
+      setRefreshing(true);
       const response = await fetch('/api/analytics/live-activity?maxAge=5');
       const data = await response.json();
 
       if (data.success) {
         setActivities(data.activities);
         setStats(data.stats);
+        setLastUpdated(new Date());
       }
     } catch (error) {
       console.error('Failed to fetch live activity:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -107,7 +112,14 @@ export default function LiveActivityPage() {
       <div className={styles.header}>
         <div>
           <h1>Live Activity</h1>
-          <p className={styles.subtitle}>Real-time user activity monitoring</p>
+          <p className={styles.subtitle}>
+            Real-time user activity monitoring
+            {lastUpdated && (
+              <span style={{ marginLeft: '1rem', color: '#64748b' }}>
+                • Last updated: {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
+          </p>
         </div>
         <div className={styles.controls}>
           <button
@@ -116,8 +128,13 @@ export default function LiveActivityPage() {
           >
             {autoRefresh ? '⏸ Pause' : '▶ Resume'} Auto-refresh
           </button>
-          <button className={styles.refreshButton} onClick={fetchLiveActivity}>
-            🔄 Refresh Now
+          <button 
+            className={styles.refreshButton} 
+            onClick={fetchLiveActivity}
+            disabled={refreshing}
+            style={{ opacity: refreshing ? 0.6 : 1, cursor: refreshing ? 'not-allowed' : 'pointer' }}
+          >
+            {refreshing ? '⏳ Refreshing...' : '🔄 Refresh Now'}
           </button>
         </div>
       </div>
@@ -255,10 +272,10 @@ export default function LiveActivityPage() {
                   </div>
                 </div>
 
-                {activity.content_title && (
+                {activity.activity_type === 'watching' && (
                   <div className={styles.activityContent}>
                     <div className={styles.contentTitle}>
-                      {activity.content_title}
+                      {activity.content_title || `${activity.content_type || 'Content'} #${activity.content_id || 'Unknown'}`}
                     </div>
                     {activity.season_number && activity.episode_number && (
                       <div className={styles.contentEpisode}>
@@ -295,7 +312,7 @@ export default function LiveActivityPage() {
                   )}
                   {activity.country && (
                     <span className={styles.metaItem}>
-                      🌍 {activity.country}
+                      📍 {activity.country}
                     </span>
                   )}
                   <span className={styles.metaItem}>

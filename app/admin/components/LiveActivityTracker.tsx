@@ -41,6 +41,8 @@ export default function LiveActivityTracker() {
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   useEffect(() => {
     fetchLiveActivity();
@@ -53,17 +55,20 @@ export default function LiveActivityTracker() {
 
   const fetchLiveActivity = async () => {
     try {
+      setRefreshing(true);
       const response = await fetch('/api/analytics/live-activity?maxAge=5');
       const data = await response.json();
 
       if (data.success) {
         setActivities(data.activities);
         setStats(data.stats);
+        setLastUpdated(new Date());
       }
     } catch (error) {
       console.error('Failed to fetch live activity:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -113,7 +118,13 @@ export default function LiveActivityTracker() {
   return (
     <div>
       {/* Controls */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1.5rem', gap: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', gap: '0.75rem' }}>
+        {lastUpdated && (
+          <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
+            Last updated: {lastUpdated.toLocaleTimeString()}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '0.75rem', marginLeft: 'auto' }}>
         <button
           onClick={() => setAutoRefresh(!autoRefresh)}
           style={{
@@ -132,20 +143,23 @@ export default function LiveActivityTracker() {
         </button>
         <button
           onClick={fetchLiveActivity}
+          disabled={refreshing}
           style={{
             padding: '0.5rem 1rem',
             background: 'rgba(255, 255, 255, 0.05)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
             borderRadius: '8px',
-            color: '#94a3b8',
-            cursor: 'pointer',
+            color: refreshing ? '#64748b' : '#94a3b8',
+            cursor: refreshing ? 'not-allowed' : 'pointer',
             fontSize: '0.875rem',
             fontWeight: '500',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            opacity: refreshing ? 0.6 : 1
           }}
         >
-          🔄 Refresh Now
+          {refreshing ? '⏳ Refreshing...' : '🔄 Refresh Now'}
         </button>
+        </div>
       </div>
 
       {stats && (
@@ -414,7 +428,7 @@ export default function LiveActivityTracker() {
                   </div>
                 </div>
 
-                {activity.activity_type === 'watching' && activity.content_title ? (
+                {activity.activity_type === 'watching' ? (
                   <div style={{ marginBottom: '1rem' }}>
                     <div style={{ 
                       color: '#f8fafc', 
@@ -426,7 +440,7 @@ export default function LiveActivityTracker() {
                       gap: '0.5rem'
                     }}>
                       <span>🎬</span>
-                      {activity.content_title}
+                      {activity.content_title || `${activity.content_type || 'Content'} #${activity.content_id || 'Unknown'}`}
                     </div>
                     {activity.season_number && activity.episode_number && (
                       <div style={{ 
@@ -466,9 +480,13 @@ export default function LiveActivityTracker() {
                     <div style={{ 
                       color: '#94a3b8', 
                       fontSize: '0.875rem',
-                      fontStyle: 'italic'
+                      fontStyle: 'italic',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
                     }}>
-                      Browsing the site...
+                      <span>🔍</span>
+                      Exploring content...
                     </div>
                   </div>
                 ) : null}
@@ -490,7 +508,7 @@ export default function LiveActivityTracker() {
                   )}
                   {activity.country && (
                     <span style={{ color: '#94a3b8', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      🌍 {activity.country}
+                      📍 {activity.country}
                     </span>
                   )}
                   <span style={{ color: '#94a3b8', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
