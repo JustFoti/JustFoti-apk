@@ -717,6 +717,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       track.src = proxiedUrl;
       track.default = true;
       
+      // Add load handler to ensure track is ready
+      track.addEventListener('load', () => {
+        console.log('[VideoPlayer] Track loaded successfully');
+        if (videoRef.current && videoRef.current.textTracks && videoRef.current.textTracks.length > 0) {
+          const textTrack = videoRef.current.textTracks[0];
+          textTrack.mode = 'showing';
+          console.log('[VideoPlayer] Track mode set to showing after load');
+        }
+      });
+      
       // Add error handler
       track.addEventListener('error', (e) => {
         console.error('[VideoPlayer] Track error:', e);
@@ -726,13 +736,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       
       console.log('[VideoPlayer] Track added, textTracks count:', videoRef.current.textTracks.length);
       
-      // Wait a bit for the track to load, then set mode
+      // Also try to set mode immediately (for cached tracks)
       setTimeout(() => {
         if (videoRef.current && videoRef.current.textTracks && videoRef.current.textTracks.length > 0) {
-          videoRef.current.textTracks[0].mode = 'showing';
-          console.log('[VideoPlayer] Track mode set to showing');
+          const textTrack = videoRef.current.textTracks[0];
+          if (textTrack.mode !== 'showing') {
+            textTrack.mode = 'showing';
+            console.log('[VideoPlayer] Track mode set to showing (immediate)');
+          }
         }
-      }, 100);
+      }, 500);
       
       console.log('[VideoPlayer] Loaded subtitle:', subtitle.language);
       setCurrentSubtitle(subtitle.id);
