@@ -191,6 +191,7 @@ export async function GET(request: NextRequest) {
       // Return multiple quality sources
       const sources = cached.sources.map((source: any) => ({
         quality: source.quality,
+        title: source.title || source.quality,
         url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=2embed&referer=${encodeURIComponent(source.referer)}`,
         directUrl: source.url,
         referer: source.referer,
@@ -221,6 +222,7 @@ export async function GET(request: NextRequest) {
       const executionTime = Date.now() - startTime;
       const proxiedSources = sources.map((source: any) => ({
         quality: source.quality,
+        title: source.title || source.quality,
         url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=2embed&referer=${encodeURIComponent(source.referer)}`,
         directUrl: source.url,
         referer: source.referer,
@@ -275,6 +277,7 @@ export async function GET(request: NextRequest) {
       // Return proxied URLs
       const proxiedSources = sources.map((source: any) => ({
         quality: source.quality,
+        title: source.title || source.quality,
         url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=2embed&referer=${encodeURIComponent(source.referer)}`,
         directUrl: source.url,
         referer: source.referer,

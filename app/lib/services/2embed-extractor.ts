@@ -82,9 +82,21 @@ function extractQualityOptions(html: string): QualityOption[] {
   for (const match of qualityMatches) {
     const url = match[1];
     
-    // Extract title from URL
+    // Extract title from URL - this is the cleaned source name
     const titleMatch = url.match(/tit=([^&]+)/);
-    const title = titleMatch ? decodeURIComponent(titleMatch[1].replace(/\+/g, ' ')) : 'Unknown';
+    let title = titleMatch ? decodeURIComponent(titleMatch[1].replace(/\+/g, ' ')) : '';
+    
+    // Clean up title - remove common junk patterns
+    title = title
+      .replace(/\s*\(.*?\)\s*/g, '') // Remove parenthetical content
+      .replace(/\s*\[.*?\]\s*/g, '') // Remove bracket content
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim();
+    
+    // If title is empty after cleaning, use a generic name
+    if (!title) {
+      title = 'Source';
+    }
     
     const urlLower = url.toLowerCase();
     const titleLower = title.toLowerCase();
@@ -104,10 +116,9 @@ function extractQualityOptions(html: string): QualityOption[] {
       quality = '360p';
     }
     
-    // If still "other", use the title as quality for better display
-    const displayQuality = quality === 'other' ? title : quality;
-
-    qualities[quality].push({ quality: displayQuality, url, title });
+    // Always use the cleaned title as the display name
+    // The quality is used for sorting/grouping, but title is what users see
+    qualities[quality].push({ quality: title, url, title });
   }
 
   // Return ALL sources, sorted by quality (highest first)
