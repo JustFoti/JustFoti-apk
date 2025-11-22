@@ -5,7 +5,7 @@
 
 // Simple UUID v4 generator to avoid dependency issues
 function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -61,7 +61,7 @@ class UserTrackingService {
   private static readonly PREFERENCES_KEY = 'flyx_preferences';
   private static readonly WATCH_PROGRESS_KEY = 'flyx_watch_progress';
   private static readonly VIEWING_HISTORY_KEY = 'flyx_viewing_history';
-  
+
   private static readonly SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
   private static readonly MAX_HISTORY_ITEMS = 100;
 
@@ -98,12 +98,12 @@ class UserTrackingService {
   private getOrCreateUserId(): string {
     try {
       let userId = localStorage.getItem(UserTrackingService.USER_ID_KEY);
-      
+
       if (!userId) {
         userId = `user_${generateUUID()}`;
         localStorage.setItem(UserTrackingService.USER_ID_KEY, userId);
       }
-      
+
       return userId;
     } catch (error) {
       // Fallback for when localStorage is not available
@@ -117,13 +117,13 @@ class UserTrackingService {
   private getOrCreateDeviceId(): string {
     try {
       let deviceId = localStorage.getItem(UserTrackingService.DEVICE_ID_KEY);
-      
+
       if (!deviceId) {
         // Create device fingerprint based on available info
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         ctx?.fillText('device-fingerprint', 10, 10);
-        
+
         const fingerprint = [
           navigator.userAgent,
           navigator.language,
@@ -131,11 +131,11 @@ class UserTrackingService {
           new Date().getTimezoneOffset(),
           canvas.toDataURL(),
         ].join('|');
-        
+
         deviceId = `device_${this.hashString(fingerprint)}`;
         localStorage.setItem(UserTrackingService.DEVICE_ID_KEY, deviceId);
       }
-      
+
       return deviceId;
     } catch (error) {
       return `device_${generateUUID()}`;
@@ -148,23 +148,23 @@ class UserTrackingService {
   private getOrCreateSessionId(): string {
     try {
       const stored = sessionStorage.getItem(UserTrackingService.SESSION_ID_KEY);
-      
+
       if (stored) {
         const { sessionId, timestamp } = JSON.parse(stored);
-        
+
         // Check if session is still valid
         if (Date.now() - timestamp < UserTrackingService.SESSION_TIMEOUT) {
           return sessionId;
         }
       }
-      
+
       // Create new session
       const sessionId = `session_${generateUUID()}`;
       const sessionData = {
         sessionId,
         timestamp: Date.now(),
       };
-      
+
       sessionStorage.setItem(UserTrackingService.SESSION_ID_KEY, JSON.stringify(sessionData));
       return sessionId;
     } catch (error) {
@@ -178,7 +178,7 @@ class UserTrackingService {
   private loadPreferences(): UserPreferences {
     try {
       const stored = localStorage.getItem(UserTrackingService.PREFERENCES_KEY);
-      
+
       if (stored) {
         const preferences = JSON.parse(stored);
         return {
@@ -189,7 +189,7 @@ class UserTrackingService {
     } catch (error) {
       console.error('Failed to load preferences:', error);
     }
-    
+
     return this.getDefaultPreferences();
   }
 
@@ -230,19 +230,30 @@ class UserTrackingService {
   }
 
   /**
+   * Generate storage key for watch progress
+   */
+  private getStorageKey(contentId: string, season?: number, episode?: number): string {
+    if (season !== undefined && episode !== undefined) {
+      return `${contentId}_s${season}_e${episode}`;
+    }
+    return contentId;
+  }
+
+  /**
    * Update watch progress
    */
   updateWatchProgress(progress: WatchProgress): void {
     if (!this.preferences) return;
 
-    this.preferences.watchProgress[progress.contentId] = progress;
-    
+    const key = this.getStorageKey(progress.contentId, progress.seasonNumber, progress.episodeNumber);
+    this.preferences.watchProgress[key] = progress;
+
     try {
       localStorage.setItem(
         UserTrackingService.WATCH_PROGRESS_KEY,
         JSON.stringify(this.preferences.watchProgress)
       );
-      
+
       // Also update in preferences
       this.updatePreferences({ watchProgress: this.preferences.watchProgress });
     } catch (error) {
@@ -253,8 +264,9 @@ class UserTrackingService {
   /**
    * Get watch progress for content
    */
-  getWatchProgress(contentId: string): WatchProgress | null {
-    return this.preferences?.watchProgress[contentId] || null;
+  getWatchProgress(contentId: string, season?: number, episode?: number): WatchProgress | null {
+    const key = this.getStorageKey(contentId, season, episode);
+    return this.preferences?.watchProgress[key] || null;
   }
 
   /**
@@ -264,18 +276,18 @@ class UserTrackingService {
     try {
       const stored = localStorage.getItem(UserTrackingService.VIEWING_HISTORY_KEY);
       let history: ViewingHistory[] = stored ? JSON.parse(stored) : [];
-      
+
       // Remove existing entry for same content
       history = history.filter(h => h.contentId !== item.contentId);
-      
+
       // Add new entry at the beginning
       history.unshift(item);
-      
+
       // Limit history size
       if (history.length > UserTrackingService.MAX_HISTORY_ITEMS) {
         history = history.slice(0, UserTrackingService.MAX_HISTORY_ITEMS);
       }
-      
+
       localStorage.setItem(UserTrackingService.VIEWING_HISTORY_KEY, JSON.stringify(history));
     } catch (error) {
       console.error('Failed to save viewing history:', error);
@@ -304,7 +316,7 @@ class UserTrackingService {
         sessionId: this.sessionId,
         timestamp: Date.now(),
       };
-      
+
       sessionStorage.setItem(UserTrackingService.SESSION_ID_KEY, JSON.stringify(sessionData));
     } catch (error) {
       // Ignore errors for session storage
@@ -340,7 +352,7 @@ class UserTrackingService {
       localStorage.removeItem(UserTrackingService.WATCH_PROGRESS_KEY);
       localStorage.removeItem(UserTrackingService.VIEWING_HISTORY_KEY);
       sessionStorage.removeItem(UserTrackingService.SESSION_ID_KEY);
-      
+
       // Reset internal state
       this.userId = null;
       this.sessionId = null;

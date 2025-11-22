@@ -523,6 +523,14 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       });
     };
 
+    const handleEnded = () => {
+      setIsPlaying(false);
+      if (nextEpisode && onNextEpisode) {
+        console.log('[VideoPlayer] Video ended, auto-playing next episode');
+        onNextEpisode();
+      }
+    };
+
     video.addEventListener('play', handlePlay);
     video.addEventListener('pause', handlePause);
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -531,6 +539,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('loadeddata', handleLoadedData);
+    video.addEventListener('ended', handleEnded);
 
     return () => {
       video.removeEventListener('play', handlePlay);
@@ -541,6 +550,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('loadeddata', handleLoadedData);
+      video.removeEventListener('ended', handleEnded);
     };
   }, []);
 

@@ -8,35 +8,35 @@ interface AnalyticsContextType {
   // Basic tracking
   trackEvent: (event: string, properties?: Record<string, any>) => void;
   trackPageView: (page: string, data?: PageViewEvent) => void;
-  
+
   // Watch tracking
   trackWatchProgress: (contentId: string, contentType: 'movie' | 'tv', watchTime: number, duration: number) => void;
   trackWatchEvent: (event: WatchEvent) => void;
-  
+
   // Search tracking
   trackSearch: (event: SearchEvent) => void;
-  
+
   // Interaction tracking
   trackInteraction: (event: InteractionEvent) => void;
-  
+
   // Content engagement
   trackContentEngagement: (contentId: string, contentType: 'movie' | 'tv', action: string, data?: Record<string, any>) => void;
-  
+
   // Error tracking
   trackError: (error: Error, context?: Record<string, any>) => void;
-  
+
   // Performance tracking
   trackPerformance: (metric: string, value: number, context?: Record<string, any>) => void;
-  
+
   // User session management
   getUserSession: () => UserSession | null;
   updateUserPreferences: (preferences: Partial<UserPreferences>) => void;
   clearUserData: () => void;
-  
+
   // Watch progress management
-  getWatchProgress: (contentId: string) => any;
+  getWatchProgress: (contentId: string, season?: number, episode?: number) => any;
   getViewingHistory: () => any[];
-  
+
   // Live activity
   updateActivity: (activity: {
     type: 'browsing' | 'watching';
@@ -144,8 +144,8 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
   }, []);
 
   // Watch progress management
-  const getWatchProgress = useCallback((contentId: string) => {
-    return userTrackingService.getWatchProgress(contentId);
+  const getWatchProgress = useCallback((contentId: string, season?: number, episode?: number) => {
+    return userTrackingService.getWatchProgress(contentId, season, episode);
   }, []);
 
   const getViewingHistory = useCallback(() => {

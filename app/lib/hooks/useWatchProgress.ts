@@ -22,23 +22,23 @@ const ANALYTICS_INTERVAL = 30000; // Track analytics every 30 seconds
 const COMPLETION_THRESHOLD = 0.9; // Consider 90% as completed
 
 export function useWatchProgress(options: WatchProgressOptions) {
-  const { 
-    contentId, 
+  const {
+    contentId,
     contentType,
     contentTitle,
-    seasonNumber, 
-    episodeNumber, 
-    onProgress, 
-    onComplete 
+    seasonNumber,
+    episodeNumber,
+    onProgress,
+    onComplete
   } = options;
-  
-  const { 
-    trackWatchEvent, 
-    getWatchProgress, 
+
+  const {
+    trackWatchEvent,
+    getWatchProgress,
     trackContentEngagement,
-    updateActivity 
+    updateActivity
   } = useAnalytics();
-  
+
   const lastSaveTimeRef = useRef<number>(0);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastAnalyticsTimeRef = useRef<number>(0);
@@ -50,8 +50,8 @@ export function useWatchProgress(options: WatchProgressOptions) {
     if (!contentId) return 0;
 
     try {
-      const progress = getWatchProgress(contentId);
-      
+      const progress = getWatchProgress(contentId, seasonNumber, episodeNumber);
+
       if (progress) {
         // Only restore if watched within last 7 days and not completed
         const daysSince = (Date.now() - progress.lastWatched) / (1000 * 60 * 60 * 24);
@@ -64,16 +64,16 @@ export function useWatchProgress(options: WatchProgressOptions) {
     }
 
     return 0;
-  }, [contentId, getWatchProgress]);
+  }, [contentId, seasonNumber, episodeNumber, getWatchProgress]);
 
   // Track watch start
   const handleWatchStart = useCallback((currentTime: number, duration: number) => {
     if (!contentId || hasStartedRef.current) return;
-    
+
     hasStartedRef.current = true;
-    
+
     const mappedContentType = contentType === 'episode' ? 'tv' : 'movie';
-    
+
     trackWatchEvent({
       contentId,
       contentType: mappedContentType,
@@ -84,7 +84,7 @@ export function useWatchProgress(options: WatchProgressOptions) {
       seasonNumber,
       episodeNumber,
     });
-    
+
     trackContentEngagement(contentId, mappedContentType, 'watch_start', {
       contentTitle,
       seasonNumber,
@@ -107,9 +107,9 @@ export function useWatchProgress(options: WatchProgressOptions) {
   // Track watch pause
   const handleWatchPause = useCallback((currentTime: number, duration: number) => {
     if (!contentId) return;
-    
+
     const mappedContentType = contentType === 'episode' ? 'tv' : 'movie';
-    
+
     trackWatchEvent({
       contentId,
       contentType: mappedContentType,
@@ -125,9 +125,9 @@ export function useWatchProgress(options: WatchProgressOptions) {
   // Track watch resume
   const handleWatchResume = useCallback((currentTime: number, duration: number) => {
     if (!contentId) return;
-    
+
     const mappedContentType = contentType === 'episode' ? 'tv' : 'movie';
-    
+
     trackWatchEvent({
       contentId,
       contentType: mappedContentType,
@@ -143,21 +143,21 @@ export function useWatchProgress(options: WatchProgressOptions) {
   // Handle progress updates
   const handleProgress = useCallback((currentTime: number, duration: number) => {
     if (!contentId) return;
-    
+
     onProgress?.(currentTime, duration);
-    
+
     // Track start if not already tracked
     if (!hasStartedRef.current) {
       handleWatchStart(currentTime, duration);
     }
-    
+
     // Check for completion
     const completionPercentage = currentTime / duration;
     if (completionPercentage >= COMPLETION_THRESHOLD && !wasCompletedRef.current) {
       wasCompletedRef.current = true;
-      
+
       const mappedContentType = contentType === 'episode' ? 'tv' : 'movie';
-      
+
       trackWatchEvent({
         contentId,
         contentType: mappedContentType,
@@ -168,21 +168,21 @@ export function useWatchProgress(options: WatchProgressOptions) {
         seasonNumber,
         episodeNumber,
       });
-      
+
       trackContentEngagement(contentId, mappedContentType, 'watch_complete', {
         seasonNumber,
         episodeNumber,
         completionPercentage: Math.round(completionPercentage * 100),
       });
-      
+
       onComplete?.();
     }
-    
+
     // Save progress periodically (handled by analytics service now)
     const timeSinceLastSave = Date.now() - lastSaveTimeRef.current;
     if (timeSinceLastSave >= SAVE_INTERVAL && currentTime >= MIN_WATCH_THRESHOLD) {
       const mappedContentType = contentType === 'episode' ? 'tv' : 'movie';
-      
+
       trackWatchEvent({
         contentId,
         contentType: mappedContentType,
@@ -193,7 +193,7 @@ export function useWatchProgress(options: WatchProgressOptions) {
         seasonNumber,
         episodeNumber,
       });
-      
+
       // Update live activity with current position
       updateActivity({
         type: 'watching',
@@ -205,10 +205,10 @@ export function useWatchProgress(options: WatchProgressOptions) {
         currentPosition: Math.round(currentTime),
         duration: Math.round(duration),
       });
-      
+
       lastSaveTimeRef.current = Date.now();
     }
-    
+
     // Track analytics periodically
     const timeSinceLastAnalytics = Date.now() - lastAnalyticsTimeRef.current;
     if (timeSinceLastAnalytics >= ANALYTICS_INTERVAL) {
@@ -219,7 +219,7 @@ export function useWatchProgress(options: WatchProgressOptions) {
         seasonNumber,
         episodeNumber,
       });
-      
+
       lastAnalyticsTimeRef.current = Date.now();
     }
   }, [
@@ -243,10 +243,10 @@ export function useWatchProgress(options: WatchProgressOptions) {
   // Mark as completed manually
   const markAsCompleted = useCallback((currentTime: number, duration: number) => {
     if (!contentId || wasCompletedRef.current) return;
-    
+
     wasCompletedRef.current = true;
     const mappedContentType = contentType === 'episode' ? 'tv' : 'movie';
-    
+
     trackWatchEvent({
       contentId,
       contentType: mappedContentType,
@@ -257,13 +257,13 @@ export function useWatchProgress(options: WatchProgressOptions) {
       seasonNumber,
       episodeNumber,
     });
-    
+
     trackContentEngagement(contentId, mappedContentType, 'watch_complete', {
       seasonNumber,
       episodeNumber,
       completionPercentage: Math.round((currentTime / duration) * 100),
     });
-    
+
     onComplete?.();
   }, [contentId, contentType, seasonNumber, episodeNumber, trackWatchEvent, trackContentEngagement, onComplete]);
 
