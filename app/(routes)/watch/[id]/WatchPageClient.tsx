@@ -7,7 +7,7 @@ import styles from './WatchPage.module.css';
 
 const VideoPlayer = dynamic(
   () => import('../../../components/player/VideoPlayer'),
-  { 
+  {
     ssr: false,
     loading: () => (
       <div className={styles.loading}>
@@ -22,16 +22,16 @@ function WatchContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const contentId = params.id as string;
   const mediaType = searchParams.get('type') as 'movie' | 'tv';
   const season = searchParams.get('season');
   const episode = searchParams.get('episode');
   const titleParam = searchParams.get('title') || searchParams.get('name');
-  
+
   // Decode title if it exists
   const title = titleParam ? decodeURIComponent(titleParam) : 'Loading...';
-  
+
   const seasonId = season ? parseInt(season) : undefined;
   const episodeId = episode ? parseInt(episode) : undefined;
 
@@ -73,13 +73,29 @@ function WatchContent() {
         <button onClick={handleBack} className={styles.backButtonOverlay}>
           ← Back
         </button>
-        
+
         <VideoPlayer
           tmdbId={contentId}
           mediaType={mediaType}
           season={seasonId}
           episode={episodeId}
           title={title}
+          nextEpisode={mediaType === 'tv' && seasonId && episodeId ? {
+            season: seasonId,
+            episode: episodeId + 1,
+            title: `Episode ${episodeId + 1}`
+          } : null}
+          onNextEpisode={() => {
+            if (mediaType === 'tv' && seasonId && episodeId) {
+              const params = new URLSearchParams({
+                type: 'tv',
+                season: seasonId.toString(),
+                episode: (episodeId + 1).toString(),
+                title: title
+              });
+              router.push(`/watch/${contentId}?${params.toString()}`);
+            }
+          }}
         />
       </div>
     </div>

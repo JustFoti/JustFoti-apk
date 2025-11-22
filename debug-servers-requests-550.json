@@ -1,0 +1,732 @@
+[
+  {
+    "url": "https://vidsrc-embed.ru/embed/movie/550",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/css/all.min.css",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/style.css?t=1710289820",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/jquery-3.7.1.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.16.0/js/md5.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/base64.js?t=1688387834",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/sources.js?t=1745104089",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/reporting.js?t=1688387834",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cloudnestra.com/asdf.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/sbx.js?t=1754734900",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://unpkg.com/disable-devtool@0.3.9/disable-devtool.min.js#/misdir.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cloudnestra.com/rcp/Zjg5NTg1OGJmY2Q2ODA4MDFkODhhYzQyNjkzZDFkY2Q6TTBwdEszUkdkVTlNYm5Sak56Rm1XRzgwVWt4S1dGTXZSMUJrWTI5U1pFVTFkSHBKWVdrNE4wTjJVRWs1SzJ4UmVHZ3ZWRXh2UW10dFYwTmFOWFZYZW5sNWNFbFBWV0pHWlRaYWRESnFVMmhDYTBzM1ZrTkRLM0pVZVRjeFUzZDVha1ppUkdGaWJEUTBNWEZ1U0ROS1FYZENPV3A2Y210U00wRjZZbUZrWldkcVNGSnFVMlZZYkdOWmMybFpWR1JQVGk5VlIwazJWMEZEZWxkelFuYzRiMmhEYkZCT1pWQnFWMU51TlhkckszUm1ZamRHU21sSGNXUjVRbWx2TVZsc2QzUTFhVE5QTUZBMWVsSjRXU3Q0VEdvMGJqaDRkMmNyTjFSeldGbExXazVXV0ZveVYydHBhREZOZWswNVpUbHlPV3RRV2toSFlqRmtMMEZFVmtrMVZHZFlORXhuY0hweWRGWTFTVWg2TVd4NmVVbE9aMU5USzFBeGNEZEdObEZrTUM5blJUa3hhVE5KY205dWVWcDJlbVZRYTNsUGFTOVpVWEJHVVVOQk5GVmxUbkJXY2l0Qk0zRkVkemt4ZG5VM1JHMURlWEkxTW5VdlV6UkpiVE5JVkZsVk9UZzRhR04wY0VSQlRsTlJVVk4xUldJMWJqVllhWFpaTUV0NWVTdFBlRkF5U0VGaFpWZFBTek5YYmtjek5ITlVMMkZsYVVOblVqTmtUVk5oTm5oclFrdFJVWGd2VUZocFZUVktUVEpxVEZoS2JERlJNMkZpTURCRlpsbEZkbkF6U1dVeGQwRkliV0phYlZOb1VEY3diV2Q0T0M5cU4xUjFaRzFGUlhSR1ZsZEtkazlxTVdKc2JYbEpSbVZIWkVWR1FVSjNhV3MyT0hkMFoxVndiMDgyV1N0Nk1DOW5XalJNYkd3Mk5tZEJhVmgwY0ZaT2ExcFRlVEZNV0hndmREaGFOSGRvUVRSbmEyMHlUbnBLVDB4a1UxaERiMUk0ZHpaTVQwOWpla3B6YjFjeE9WcEdibmhoVVZKTWRGZDFOMkZaWld0aE5GbFRjR3hPUmtWamFVRXlOVWhEZEc1aVpDOVNXVEZxUkN0Q2VGbDNTMnRCU2tJMVNXcDFkMk5FY21WRE5rWmhSMjU2ZUVSQmRIRTJSblEzVkZWRGIyNHdhVlZ2U2pOWGJrdFJNRlZvWW1aYWRHczNhSFpOT1dSSVVsUkNMek54WW1WRWVFWmlUbEJpZGtSRGJIZ3pZMXBuTUZndlEwRmpLMHh2YmxkRmVsUjRVV0pHUWxKWE9GbzFVekpOU20xeFlUUkVPRTFIT1U1Vk1HMDFiVGxzYkZseFdESnhPWGhxVEhSeksxTlNORTVQT1M5VEt6VjRlRlJITkVzclkxcHJZMUZwU1RoSFoyWmFVMnhTTUUwelFWZDNWbGN3YnpKTWVVdEtVVVJ6TldKb1NrVlhVRFpNVUZWVFRHY3plbVp0U2xKSFIxcE1lbGhKT1ZCb1UzVk9Ta3cwVlZkSVRFRkdjVVpPTVhCUGNHRkJhaXQxU0N0dE0zVXpSVEkzVlRjeWRsZzFZVUp1TUZaeldFcHpkVWxZZDA4d1RtdG9VMDV0WkdOUWQyUldlQzlQYzA5NmNXNXVPRGhSWVM5aFlUQkZlWE52WTJSUGVWRXdabkZQY214UWNVNXdTR1JNTWtaMU0xcHZNbEUxVjFNMFFsWlRZVnBxUW1ncmMyWjZRbHBLUzNZcldXVXhUSFowZFZGVlNGZFNVekUxVkVGTE9HbEVhbmt2ZUV4aE9XdFFaMDh6YWxoamRqWXZhRnB1ZFc1cFNtazRVMEpsTlZwUlV6WjBlRWREZURrM1dWUk1jelpwVGs1NVQwc3lWblo2YlZWSE1rWjBWSEI0TXpOUEx6Z3ZlbHBaUkRnelkxbGxPVnBuUTJkMFZWbFlXSFYxYnpObmFXbFdPVVJwVldZdmNsRktWSGhQVG04MFFqVTFkbU5oWW1GWVdUUklSVTVYVkd4ckwyWktaMHg0YVZGTWFtSXpkMUZ0WW10bFJsTlVLM1ZNYVRGd2RFcGxaVUppVDIxTlFUMDk-",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/rings.svg",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://s10.histats.com/js15_as.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/f59d610a61063c7ef3ccdc1fd40d2ae6.js?_=1763699560",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/css/all.min.css",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/jquery-cookie/1.4.1/jquery.cookie.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cloudnestra.com/style_rcp-e600e6.css?t=1744906951",
+    "method": "GET",
+    "resourceType": "stylesheet"
+  },
+  {
+    "url": "https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cloudnestra.com/base64.js?t=",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cloudnestra.com/sbx.js?t=1751380596",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://static.cloudflareinsights.com/beacon.min.js/vcd15cbe7772f49c399c6a5babf22c1241717689176015",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://image.tmdb.org/t/p/w780/5TiwfWEaPSwD20uwXjCTUqpQX70.jpg",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://adexchangeclear.com/script/suurl5.php?r=10576742&chu=%22Chromium%22%3Bv%3D142%2C%20%22Google%20Chrome%22%3Bv%3D142%2C%20%22%3BNot%20A%20Brand%22%3Bv%3D99&chmob=%3F0&chp=Windows&chpv=10.0&chuafv=142.0.0.0&cbur=0.8818096962619242&cbiframe=0&cbWidth=1280&cbHeight=720&cbtitle=Fight%20Club%20(1999)&cbpage=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550&cbref=&cbdescription=&cbkeywords=&cbcdn=rpyztjadsbonh.store&ufp=Win32%2FMozilla%2FNetscape%2Ftrue%2Ffalse%2FGoogle%20Inc.800x600360en-US8424%20bits&ts=1763699583370&srs=cc68a6003e098b44d4489ebaf23d8421&atv=71.2-a&abtg=1&adbv=3-cdn-js",
+    "method": "GET",
+    "resourceType": "fetch"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/webfonts/fa-solid-900.woff2",
+    "method": "GET",
+    "resourceType": "font"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/webfonts/fa-solid-900.woff2",
+    "method": "GET",
+    "resourceType": "font"
+  },
+  {
+    "url": "https://s4.histats.com/stats/0.php?4873540&@f16&@g1&@h1&@i1&@j1763699583392&@k0&@l1&@mFight%20Club%20(1999)&@n0&@o1000&@q0&@r0&@s511&@ten-US&@u800&@b1:90103846&@b3:1763699583&@b4:js15_as.js&@b5:-360&@a-_0.2.1&@vhttps%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550&@w",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://s10.histats.com/counters/cc_511.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://usrpubtrk.com/ut/hb.php?cb=0.9855759817055816&v=1",
+    "method": "POST",
+    "resourceType": "ping"
+  },
+  {
+    "url": "data:image/png;base64,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",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/webfonts/fa-solid-900.woff2",
+    "method": "GET",
+    "resourceType": "font"
+  },
+  {
+    "url": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.0-2/webfonts/fa-solid-900.woff2",
+    "method": "GET",
+    "resourceType": "font"
+  },
+  {
+    "url": "https://e.dtscout.com/e/?v=1a&pid=5200&site=1&l=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550&j=",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cloudnestra.com/cdn-cgi/rum?",
+    "method": "POST",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://pxdrop.lijit.com/1/d/t.dhj?cls=sync&dmn=vidsrc-embed.ru&GDPR_v2=&us_privacy=&pubid=dt_scout&gpp=&gpp_sid=",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://t.dtscout.com/idg/?su=51A01763699583D7C68F3560B7FCF817",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://pd.sharethis.com/pd/dtscout",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://cdn.tynt.com/afwu.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://p.mrktmtrcs.net/mm.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://t.dtscout.com/pv/?_a=v&_h=vidsrc-embed.ru&_ss=5sjd49s6wh&_pv=1&_ls=0&_u1=1&_u3=1&_cc=us&_pl=d&_cbid=4nmm&_cb=_dtspv.c",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://pxdrop.lijit.com/a/t_.htm?ver=1.1948.1050&cid=c026&cls=sync#cls=sync&dmn=vidsrc-embed.ru&GDPR_v2=&us_privacy=&pubid=dt_scout&gpp=&gpp_sid=&tt=t.dhj&cid=c026&lbl=lijit&flbl=pxcel&ll=d&ver=1.1948.1050&ell=d&cck=ljt_reader&pn=%2Fembed%2Fmovie%2F550&qs=na&rdn=vidsrc-embed.ru&rpn=%2Fembed%2Fmovie%2F550&rqs=na&cc=US&cont=NA&rc=IL&ipaddr=76.141.205.158",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://t.sharethis.com/1/k/t.dhj?cid=c010&cls=C&rnd=0.8965745894651527&stid=ZH6AAmkf64AAAAAILwClAw%3D%3D",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://pd.sharethis.com/pd/dtscout?_t_=px&url=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550&event_source=dtscout&rnd=0.8965745894651527&exptid=ZH6AAmkf64AAAAAILwClAw%3D%3D&fcmp=false",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ic.tynt.com/b/p?id=wu!&lm=0&ts=1763699584144&dn=AFWU&iso=0&pu=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550&t=Fight%20Club%20(1999)&chpv=10.0&chuav=Not_A%20Brand%3Bv%3D99.0.0.0%2C%20Chromium%3Bv%3D142.0.7444.61&chp=Windows&chmob=0&chua=Chromium%3Bv%3D142%2C%20Google%20Chrome%3Bv%3D142%2C%20%3BNot%20A%20Brand%3Bv%3D99",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pxdrop.lijit.com/1.1948.1050/a/US/t_.js?cid=c026&cls=sync#cls=sync&dmn=vidsrc-embed.ru&GDPR_v2=&us_privacy=&pubid=dt_scout&gpp=&gpp_sid=&tt=t.dhj&cid=c026&lbl=lijit&flbl=pxcel&ll=d&ver=1.1948.1050&ell=d&cck=ljt_reader&pn=%2Fembed%2Fmovie%2F550&qs=na&rdn=vidsrc-embed.ru&rpn=%2Fembed%2Fmovie%2F550&rqs=na&cc=US&cont=NA&rc=IL&ipaddr=76.141.205.158&htmReqTime=1763699584218",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://t.sharethis.com/a/t_.htm?ver=1.1948.23419&cid=c010&cls=C#cid=c010&cls=C&rnd=0.8965745894651527&stid=ZH6AAmkf64AAAAAILwClAw%253D%253D&tt=t.dhj&dhjLcy=1763699584229&lbl=pxcel&flbl=pxcel&ll=d&ver=1.1948.23419&ell=d&cck=__stid&dmn=vidsrc-embed.ru&pn=%2Fembed%2Fmovie%2F550&qs=na&rdn=vidsrc-embed.ru&rpn=%2Fembed%2Fmovie%2F550&rqs=na&cc=US&cont=NA&rc=IL&ipaddr=76.141.205.158",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://de.tynt.com/deb/v2?id=wu!&dn=AFWU&cc=1&chpv=10.0&chuav=Not_A%20Brand%3Bv%3D99.0.0.0%2C%20Chromium%3Bv%3D142.0.7444.61&chp=Windows&chmob=0&chua=Chromium%3Bv%3D142%2C%20Google%20Chrome%3Bv%3D142%2C%20%3BNot%20A%20Brand%3Bv%3D99&r=&pu=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://tags.crwdcntrl.net/lt/c/3825/lt.min.js",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://t.dtscdn.com/widget/?d=51A01763699583D7C68F3560B7FCF817&nid=300&p=2114454483&t=360&s=800x600x24&u=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550&r=",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://pixel.onaudience.com/?partner=137085098&mapped=51A01763699583D7C68F3560B7FCF817",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ps.eyeota.net/pixel?pid=gdomg51&t=gif&cat=Entertainment+%3E+Television&us_privacy=&random=1763699584419.1",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://px.ads.linkedin.com/db_sync?pid=15927&puuid=CoIKSmkf64BrJaXlBDEoAg%3D%3D&us_privacy=&_rand=1763699584419.2",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://map.go.affec.tv/map/3a/?pid=CoIKSmkf64BrJaXlBDEoAg%3D%3D&us_privacy=&ts=1763699584419.3",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel.tapad.com/idsync/ex/receive?partner_id=1388&partner_device_id=CoIKSmkf64BrJaXlBDEoAg%3D%3D&us_privacy=&random=1763699584419.4&redirect=https%3A%2F%2Fthinkcxad.azurewebsites.net%2Fapi%2Fpixel%3Fid%3D%24%7BTA_DEVICE_ID%7D%26partner%3DTAPAD",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://dp2.33across.com/ps/?pid=1205&rand=1763699584419.5",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://i.simpli.fi/dpx?cid=11411&us_privacy=&33random=1763699584419.6&ref=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://dp1.33across.com/ps/?pid=669&uid=CoIKSmkf64BrJaXlBDEoAg%3D%3D&us_privacy=&random=1763699584419.7&pu=https%3A%2F%2Fvidsrc-embed.ru%2Fembed%2Fmovie%2F550",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://t.sharethis.com/1.1948.23419/a/US/t_.js?cid=c010&cls=C#cid=c010&cls=C&rnd=0.8965745894651527&stid=ZH6AAmkf64AAAAAILwClAw%253D%253D&tt=t.dhj&dhjLcy=1763699584229&lbl=pxcel&flbl=pxcel&ll=d&ver=1.1948.23419&ell=d&cck=__stid&dmn=vidsrc-embed.ru&pn=%2Fembed%2Fmovie%2F550&qs=na&rdn=vidsrc-embed.ru&rpn=%2Fembed%2Fmovie%2F550&rqs=na&cc=US&cont=NA&rc=IL&ipaddr=76.141.205.158&htmReqTime=1763699584525",
+    "method": "GET",
+    "resourceType": "script"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=1h1y1a7&ttd_tpi=1&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://idsync.rlcdn.com/386076.gif?partner_uid=ZH6AAmkf64AAAAAILwClAw%3D%3D&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ps.eyeota.net/pixel?pid=1mpb5m0&t=gif&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ml314.com/utsync.ashx?eid=50131&et=13&cid=lr&fp=ZH6AAmkf64AAAAAILwClAw%3D%3D&gdpr=0&gdpr_consent=&return=https%3A%2F%2Fidsync.rlcdn.com%2F395886.gif%3Fpartner_uid%3D%5BPersonID%5D",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://idsync.rlcdn.com/405716.gif?partner_uid=213480350419794",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://secure.adnxs.com/mapuid?t=2&member=1001&user=213480093017004&seg_code=33x&random=1763699584",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel.tapad.com/idsync/ex/receive/check?partner_id=1388&partner_device_id=CoIKSmkf64BrJaXlBDEoAg%3D%3D&us_privacy=&random=1763699584419.4&redirect=https%3A%2F%2Fthinkcxad.azurewebsites.net%2Fapi%2Fpixel%3Fid%3D%24%7BTA_DEVICE_ID%7D%26partner%3DTAPAD",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://secure.adnxs.com/getuid?https%3A%2F%2Fmap.go.affec.tv%2Fmap%2Fan%2F%24UID%3Fch%3D691feb80e72e9800018f7319%26chc%3Dtt%26redirect_url%3D%26gdpr%3D%26gdpr_consent%3D&gdpr=&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://px.ads.linkedin.com/db_sync?pid=15927&puuid=CoIKSmkf64BrJaXlBDEoAg%3D%3D&us_privacy=&_rand=1763699584419.2&expected_cookie=e42eb56b-0f18-40c2-abdb-6a453fa21994",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ps.eyeota.net/pixel/bounce/?pid=gdomg51&t=gif&cat=Entertainment+%3E+Television&us_privacy=&random=1763699584419.1",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=tapad&ttd_tpi=1&ttd_puid=767bcea4-ea68-4c07-ad1e-6e166215fbca%252Chttps%25253A%25252F%25252Fusermatch.krxd.net%25252Fum%25252Fv2%25253Fpartner%25253Dtapad%252C&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmb/generic?ttd_pid=1h1y1a7&ttd_tpi=1&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://idsync.rlcdn.com/1000.gif?memo=CJzIFxIjCh8IARCAVxoYWkg2QUFta2Y2NEFBQUFBSUx3Q2xBdz09EAAaDQiA1__IBhIFCOgHEABCAEoA",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://idsync.rlcdn.com/395886.gif?partner_uid=3657039342652096568",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=eyeota&ttd_tpi=1&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ps.eyeota.net/pixel/bounce/?pid=1mpb5m0&t=gif&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://secure.adnxs.com/bounce?%2Fmapuid%3Ft%3D2%26member%3D1001%26user%3D213480093017004%26seg_code%3D33x%26random%3D1763699584",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.sharethis.com/ttd?uid=f240e55e-a518-490f-a579-9b20a4479f63&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pippio.com/api/sync?pid=5324&it=1&iv=f07b74060bd19c44e37063f811d4ab26e5719827317771335cd4db8939192876791426b5417dce21&_=2",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ml314.com/csync.ashx?fp=adec0b035507a277fac081d172713f17866dce1527ba9213e40f9a4abd49d1e2f4cb09cee1a4f8eb&person_id=3657039342652096568&eid=50082",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://secure.adnxs.com/bounce?%2Fgetuid%3Fhttps%253A%252F%252Fmap.go.affec.tv%252Fmap%252Fan%252F%2524UID%253Fch%253D691feb80e72e9800018f7319%2526chc%253Dtt%2526redirect_url%253D%2526gdpr%253D%2526gdpr_consent%253D%26gdpr%3D%26gdpr_consent%3D",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=xksw9la&ttd_tpi=1&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.sharethis.com/eyeota?uid=20HPUnufjgQQwF0frGvkkgbsM7Fq-7EaHcnSpcdx_COU&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://map.go.affec.tv/map/an/1272360393225761755?ch=691feb80e72e9800018f7319&chc=tt&redirect_url=&gdpr=&gdpr_consent=&gdpr=&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel.onaudience.com/?partner=147&mapped=f240e55e-a518-490f-a579-9b20a4479f63&icm&gdpr=0&gdpr_consent=&cver",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel.tapad.com/idsync/ex/receive?partner_id=1830&partner_device_id=f240e55e-a518-490f-a579-9b20a4479f63&ttd_puid=767bcea4-ea68-4c07-ad1e-6e166215fbca%2Chttps%253A%252F%252Fusermatch.krxd.net%252Fum%252Fv2%253Fpartner%253Dtapad%2C",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ps.eyeota.net/match?uid=f240e55e-a518-490f-a579-9b20a4479f63&bid=1e2n4ou",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=mssm115&ttd_tpi=1&gdpr=&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://px.ads.linkedin.com/db_sync?pid=10339&puuid=f07b74060bd19c44e37063f811d4ab26e5719827317771335cd4db8939192876791426b5417dce21&rand=03708305",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://usermatch.krxd.net/um/v2?partner=tapad",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://map.go.affec.tv/map/ttd/f240e55e-a518-490f-a579-9b20a4479f63?ttd_puid=&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ib.adnxs.com/setuid?entity=145&code=9y7pfzHtWQnYTXnQnSaYggUW&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://tags.crwdcntrl.net/lt/c/3825/optimus_rules.json",
+    "method": "GET",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/cdn-cgi/rum?",
+    "method": "POST",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://vidsrc-embed.ru/favicon.ico",
+    "method": "GET",
+    "resourceType": "other"
+  },
+  {
+    "url": "https://bcp.crwdcntrl.net/6/data?xcid=3825",
+    "method": "POST",
+    "resourceType": "xhr"
+  },
+  {
+    "url": "https://a.dtssrv.com/a?i=51A01763699583D7C68F3560B7FCF817&k=lotpano&v=944160bcc3cf150a4cfd862f9b914945a702224849493649c9404051202f642d",
+    "method": "POST",
+    "resourceType": "ping"
+  },
+  {
+    "url": "https://tags.crwdcntrl.net/lt/shared/2/lt.iframe.html?c=3825",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://bcp.crwdcntrl.net/pixels?src=LTJS&s=41%2C92%2C54%2C2%2C94%2C135%2C168%2C33%2C122%2C121%2C26%2C164%2C116%2C153%2C61%2C106%2C104%2C7%2C100%2C145%2C3%2C49%2C22&lac=true&c=3825&ch=%7B%22brands%22%3A%5B%7B%22brand%22%3A%22Chromium%22%2C%22version%22%3A%22142%22%7D%2C%7B%22brand%22%3A%22Google%20Chrome%22%2C%22version%22%3A%22142%22%7D%2C%7B%22brand%22%3A%22%3BNot%20A%20Brand%22%2C%22version%22%3A%2299%22%7D%5D%2C%22fullVersionList%22%3A%5B%7B%22brand%22%3A%22Not_A%20Brand%22%2C%22version%22%3A%2299.0.0.0%22%7D%2C%7B%22brand%22%3A%22Chromium%22%2C%22version%22%3A%22142.0.7444.61%22%7D%5D%2C%22mobile%22%3Afalse%2C%22model%22%3A%22%22%2C%22platform%22%3A%22Windows%22%2C%22platformVersion%22%3A%2210.0%22%7D",
+    "method": "GET",
+    "resourceType": "document"
+  },
+  {
+    "url": "https://ups.analytics.yahoo.com/ups/58736/cms?partner_id=LOTME&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://c.cintnetworks.com/identity?a=5461&gdpr=0&id=Lotame:834e6c807399a5aa7481c37dbbbd5ec",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.srv.stackadapt.com/sync?nid=lotame&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://secure.adnxs.com/getuid?https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D281%2Ftp%3DANXS%2Ftpid%3D%24UID%2Fgdpr%3D0%2Frand=211665559",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://dpm.demdex.net/ibs:dpid=121998&dpuuid=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0&redir=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D9828%2Ftp%3DADBE%2Ftpid%3D%24%7BDD_UUID%7D%2Fgdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://id5-sync.com/s/19/9.gif?puid=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://lotame-match.dotomi.com/match/bounce/current?networkId=9253738&version=1&nuid=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0&rurl=https%3A%2F%2Fsync.crwdcntrl.net%2Fqmap%3Fc%3D18048%26tp%3DEPSN%26tpid%3D%24UID%26gdpr%3D0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel-sync.sitescout.com/connectors/lotame/usersync?gdpr=0&redir=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D1389%2Ftp%3DSTSC%2Ftpid%3D%24UUID%2Fgdpr%3D0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://i.liadm.com/s/41715?bidder_id=127211&bidder_uuid=834e6c807399a5aa7481c37dbbbd5ec",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.prod.bidr.io/cookie-sync/lotame?gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync-tm.everesttech.net/upi/pid/bsTd8NdE?gdpr=0&redir=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D1811%2Ftp%3DTBMG%2Ftpid%3D%24%7BTM_USER_ID%7D%2Fgdpr%3D0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.teads.tv/lo/sync",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.adsrvr.org/track/cmf/generic?ttd_pid=lotame&ttd_tpi=1&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://s.amazon-adsystem.com/dcm?pid=a8acf3b3-7ede-4e18-8405-edaf41005f97&id=834e6c807399a5aa7481c37dbbbd5ec",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ml314.com/utsync.ashx?eid=50146&et=0&fp=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel.tapad.com/idsync/ex/receive?partner_id=LOTAME&partner_device_id=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0&partner_url=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D10158%2Ftp%3DTPAD%2Ftpid%3D%24%7BTA_DEVICE_ID%7D&ch=%7B%22fullVersionList%22%3A%5B%7B%22brand%22%3A%22Not_A%20Brand%22%2C%22version%22%3A%2299.0.0.0%22%7D%2C%7B%22brand%22%3A%22Chromium%22%2C%22version%22%3A%22142.0.7444.61%22%7D%5D%2C%22mobile%22%3Afalse%2C%22model%22%3A%22%22%2C%22platform%22%3A%22Windows%22%2C%22platformVersion%22%3A%2210.0%22%7D",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://dmp.truoptik.com/f2d2e39fc16bc9cc/sync.gif?cbp=tpid&cbk=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D10832%2Ftp%3DTRUP",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://cm.g.doubleclick.net/pixel?google_nid=lotameddp&google_hm=ODM0ZTZjODA3Mzk5YTVhYTc0ODFjMzdkYmJiZDVlYw&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://loadus.exelator.com/load/?p=204&g=260&buid=834e6c807399a5aa7481c37dbbbd5ec&j=0&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://c1.adform.net/serving/cookie/match?party=1040",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://d.turn.com/r/dd/id/L2NzaWQvMS9jaWQvMzQ4ODM4MC90LzI/dpuid/834e6c807399a5aa7481c37dbbbd5ec/url/https://sync.crwdcntrl.net/map/c=10915/tp=TRNN/tpid=$!%7BTURN_UUID%7D/gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ps.eyeota.net/match?bid=51mdg9u&uid=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://cm.g.doubleclick.net/pixel?google_nid=lotame_dmp&google_hm=ODM0ZTZjODA3Mzk5YTVhYTc0ODFjMzdkYmJiZDVlYw&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/map/c=10620/tp=TRAD/tpid=f240e55e-a518-490f-a579-9b20a4479f63/gdpr=0/gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://ups.analytics.yahoo.com/ups/58736/cms?partner_id=LOTME&gdpr=0&verify=true",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel-sync.sitescout.com/connectors/lotame/usersync?cookieQ=1&gdpr=0&redir=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D1389%2Ftp%3DSTSC%2Ftpid%3D%24UUID%2Fgdpr%3D0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/map/c=1389/tp=STSC/tpid=8c6e4fe9-aa7a-4db6-8019-09462ec64d43-691feb82-5553/gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://dpm.demdex.net/demconf.jpg?et:ibs%7cdata:dpid=121998&dpuuid=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0&redir=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D9828%2Ftp%3DADBE%2Ftpid%3D%24%7BDD_UUID%7D%2Fgdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/qmap?c=5437&tp=DTAX&tpid=y-ouAm4NVE2pw8.NSsTLsDZ5Bwbelt4VFBTmc-~A&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/qmap?c=6569&tp=STKA&tpid=0-57e865c2-c7f8-5cc4-7550-90a07d3ad4c8$ip$76.141.205.158&gdpr=0&gdpr_consent=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://match.prod.bidr.io/cookie-sync/lotame?gdpr=0&_bee_ppp=1",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/map/c=9828/tp=ADBE/tpid=73118983273737945962555807129529546697/gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync-tm.everesttech.net/ct/upi/pid/bsTd8NdE?gdpr=0&redir=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D1811%2Ftp%3DTBMG%2Ftpid%3D%24%7BTM_USER_ID%7D%2Fgdpr%3D0&_test=aR-rggAFOKlsiAAs",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/qmap?c=9130&tp=BEES&tpid=AAB0B07SP9cAAAGhxAdH8A&gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/qmap?c=9664&tp=TEAD&tpid=c6571422-bd93-4c1a-a0f2-dcc52fd11a4b_us",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://lotame-match.dotomi.com/match/bounce/current?DotomiTest=73aef63a9ebb0642&is_secure=true&networkId=9253738&version=1&nuid=834e6c807399a5aa7481c37dbbbd5ec&gdpr=0&rurl=https%3A%2F%2Fsync.crwdcntrl.net%2Fqmap%3Fc%3D18048%26tp%3DEPSN%26tpid%3D%24UID%26gdpr%3D0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://s.amazon-adsystem.com/dcm?pid=a8acf3b3-7ede-4e18-8405-edaf41005f97&id=834e6c807399a5aa7481c37dbbbd5ec&dcc=t",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://cm.g.doubleclick.net/pixel?google_nid=lotameddp&google_hm=ODM0ZTZjODA3Mzk5YTVhYTc0ODFjMzdkYmJiZDVlYw&gdpr=0&google_tc=",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/qmap?c=18048&tp=EPSN&tpid=AQAAh9UGw3pnhwJKiDCJAQEBAQEBAQCbpa70RgEBAJulrvRG&gdpr=0&expiration=1763785986",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://pixel-ipv46.tapad.com/idsync/ex/receive?gdpr=0&ch=%7B%22fullVersionList%22%3A%5B%7B%22brand%22%3A%22Not_A+Brand%22%2C%22version%22%3A%2299.0.0.0%22%7D%2C%7B%22brand%22%3A%22Chromium%22%2C%22version%22%3A%22142.0.7444.61%22%7D%5D%2C%22mobile%22%3Afalse%2C%22model%22%3A%22%22%2C%22platform%22%3A%22Windows%22%2C%22platformVersion%22%3A%2210.0%22%7D&partner_device_id=834e6c807399a5aa7481c37dbbbd5ec&partner_url=https%3A%2F%2Fsync.crwdcntrl.net%2Fmap%2Fc%3D10158%2Ftp%3DTPAD%2Ftpid%3D%24%7BTA_DEVICE_ID%7D&ipv4_red_cont=62906221-3031-426f-84e6-613b5419f796&redirect_count=1&partner_id=LOTAME",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://c1.adform.net/serving/cookie/match?CC=1&party=1040",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/qmap?c=6466&tp=ADFM&tpid=8165594689968594742",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/map/c=10915/tp=TRNN/tpid=8058080655316360629/gdpr=0",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://secure.adnxs.com/getuid?https%3A%2F%2Fpixel.tapad.com%2Fidsync%2Fex%2Freceive%3Fpartner_id%3DAPPNEXUS%26partner_device_id%3D%24UID%26pt%3D767bcea4-ea68-4c07-ad1e-6e166215fbca%252Chttps%25253A%25252F%25252Fsync.crwdcntrl.net%25252Fmap%25252Fc%25253D10158%25252Ftp%25253DTPAD%25252Ftpid%25253D767bcea4-ea68-4c07-ad1e-6e166215fbca%252C%25257B%252522fullVersionList%252522%25253A%25255B%25257B%252522brand%252522%25253A%252522Not_A%252520Brand%252522%25252C%252522version%252522%25253A%25252299.0.0.0%252522%25257D%25252C%25257B%252522brand%252522%25253A%252522Chromium%252522%25252C%252522version%252522%25253A%252522142.0.7444.61%252522%25257D%25255D%25252C%252522mobile%252522%25253Afalse%25252C%252522model%252522%25253A%252522%252522%25252C%252522platform%252522%25253A%252522Windows%252522%25252C%252522platformVersion%252522%25253A%25252210.0%252522%25257D",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://t.sharethis.com/d/a.gif?cid=c010&cls=C&stid=ZH6AAmkf64AAAAAILwClAw%253D%253D&tt=t.dhj&dhjLcy=1763699584229&lbl=pxcel&flbl=pxcel&ll=d&ver=1.1948.23419&ell=d&cck=__stid&dmn=vidsrc-embed.ru&pn=%2Fembed%2Fmovie%2F550&qs=na&rdn=vidsrc-embed.ru&rpn=%2Fembed%2Fmovie%2F550&rqs=na&cc=US&cont=NA&rc=IL&evid=84-rkqZABBE5m14ySQyA&urls=!1!466!b-13j,!0!650!b-13l,!1!467!b-14s,!1!384!b-150&rnd=1763699587590&cid=c010&version=1.1948.23419&cc=US&cont=NA&cls=C&repeat=0&htmLcy=44",
+    "method": "GET",
+    "resourceType": "image"
+  },
+  {
+    "url": "https://sync.crwdcntrl.net/map/c=10832/tp=TRUP/tpid=a24d7f33493edfb4c77d5f5353f21240",
+    "method": "GET",
+    "resourceType": "image"
+  }
+]

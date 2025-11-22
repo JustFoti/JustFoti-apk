@@ -15,9 +15,15 @@ interface VideoPlayerProps {
   season?: number;
   episode?: number;
   title?: string;
+  nextEpisode?: {
+    season: number;
+    episode: number;
+    title?: string;
+  } | null;
+  onNextEpisode?: () => void;
 }
 
-export default function VideoPlayer({ tmdbId, mediaType, season, episode, title }: VideoPlayerProps) {
+export default function VideoPlayer({ tmdbId, mediaType, season, episode, title, nextEpisode, onNextEpisode }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,6 +83,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [savedProgress, setSavedProgress] = useState<number>(0);
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
+  const [showNextEpisodeButton, setShowNextEpisodeButton] = useState(false);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
   const volumeIndicatorTimeoutRef = useRef<NodeJS.Timeout>();
@@ -436,6 +443,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
       setCurrentTime(video.currentTime);
       if (video.buffered.length > 0) {
         setBuffered((video.buffered.end(video.buffered.length - 1) / video.duration) * 100);
+      }
+
+      // Show "Next Episode" button in last 90 seconds
+      if (nextEpisode && video.duration > 0) {
+        const timeRemaining = video.duration - video.currentTime;
+        if (timeRemaining <= 90) {
+          setShowNextEpisodeButton(true);
+        } else {
+          setShowNextEpisodeButton(false);
+        }
       }
 
       // Track watch progress
@@ -1105,6 +1122,25 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title 
         className={styles.video}
         playsInline
       />
+
+      {/* Next Episode Button */}
+      {showNextEpisodeButton && nextEpisode && (
+        <button
+          className={styles.nextEpisodeButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onNextEpisode) onNextEpisode();
+          }}
+        >
+          <span className={styles.nextEpisodeLabel}>Up Next</span>
+          <span className={styles.nextEpisodeTitle}>
+            {nextEpisode.title || `Episode ${nextEpisode.episode}`}
+          </span>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+          </svg>
+        </button>
+      )}
 
       {/* Controls */}
       <div className={`${styles.controls} ${showControls || !isPlaying ? styles.visible : ''}`}>
