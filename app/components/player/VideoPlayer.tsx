@@ -1149,7 +1149,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 }}
                 style={{ flex: '0 1 120px' }}
               >
-                Server 1
+                2Embed
               </button>
               <button
                 className={`${styles.tab} ${provider === 'moviesapi' ? styles.active : ''}`}
@@ -1161,7 +1161,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 }}
                 style={{ flex: '0 1 120px' }}
               >
-                Server 2
+                MoviesAPI
               </button>
             </div>
           </div>
@@ -1568,7 +1568,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                       }
                     }}
                   >
-                    Server 1
+                    2Embed
                   </button>
                   <button
                     className={`${styles.tab} ${provider === 'moviesapi' ? styles.active : ''}`}
@@ -1580,7 +1580,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                       }
                     }}
                   >
-                    Server 2
+                    MoviesAPI
                   </button>
                 </div>
 
@@ -1665,7 +1665,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           <div className={styles.dialog}>
             <h3>Switch Server?</h3>
             <p>
-              Are you sure you want to switch to <strong>{pendingProvider === '2embed' ? 'Server 1' : 'Server 2'}</strong>?
+              Are you sure you want to switch to <strong>{pendingProvider === '2embed' ? '2Embed' : 'MoviesAPI'}</strong>?
               The current video will stop playing.
             </p>
             <div className={styles.dialogButtons}>
