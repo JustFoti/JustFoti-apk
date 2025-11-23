@@ -45,19 +45,17 @@ const SCRAPIFY_URL = "https://ww2.moviesapi.to/api/scrapify";
 const ENCRYPTION_KEY = "moviesapi-secure-encryption-key-2024-v1";
 const PLAYER_API_KEY = "moviesapi-player-auth-key-2024-secure";
 
-const tmdbId = '1396'; // Breaking Bad
-const season = 2;
-const episode = 10;
-const type = 'tv';
+const tmdbId = '1054867'; // The movie from user logs
+const season = undefined;
+const episode = undefined;
+const type = 'movie';
 
 // Construct Payload
 const payloadObj = {
-    source: "vidcloud",
+    source: "vidora",
     type: type,
     id: tmdbId,
     srv: "0", // Try 0 first
-    season: season,
-    episode: episode
 };
 
 const encryptedPayload = encrypt(JSON.stringify(payloadObj), ENCRYPTION_KEY);

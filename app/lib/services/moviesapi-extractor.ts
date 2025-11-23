@@ -198,9 +198,32 @@ export async function extractMoviesApiStreams(
                     }
 
                     // Apply proxy if needed (for sflix2/Apollo)
+                    // But first check if the API provided specific headers
+                    let streamReferer = 'https://ww2.moviesapi.to/';
+                    if (apiData.referer) {
+                        streamReferer = apiData.referer;
+                    }
+
                     if (payloadObj.source === "sflix2") {
-                        const noProtocol = videoUrl.replace(/^https?:\/\//, '');
-                        videoUrl = `https://ax.1hd.su/${noProtocol}`;
+                        // Check if we can use the URL directly with the provided referer
+                        // instead of forcing the proxy
+                        if (apiData.referer && apiData.origin) {
+                            console.log(`[MoviesApi] Source provided specific headers. Origin: ${apiData.origin}, Referer: ${apiData.referer}`);
+                            // If the URL is already a proxy or direct link, we might not need to modify it
+                            // But the previous issue was 502 from ax.1hd.su.
+                            // Let's try to use the URL as is if it doesn't look like it needs our manual proxying
+                            // OR if the manual proxying was the problem.
+
+                            // However, the URL returned in the debug log was:
+                            // https://cloudspark91.live/file2/...
+                            // This domain (cloudspark91.live) might be accessible directly with the correct referer.
+
+                            // Let's NOT force the ax.1hd.su proxy if we have a direct URL and specific headers.
+                            // But we need to make sure the frontend uses these headers.
+                        } else {
+                            const noProtocol = videoUrl.replace(/^https?:\/\//, '');
+                            videoUrl = `https://ax.1hd.su/${noProtocol}`;
+                        }
                     }
 
                     if (!seenUrls.has(videoUrl)) {
@@ -209,7 +232,7 @@ export async function extractMoviesApiStreams(
                             quality: `Server ${srvId + 1}`, // Label as Server 1, 2, 3...
                             url: videoUrl,
                             type: 'hls',
-                            referer: 'https://ww2.moviesapi.to/',
+                            referer: streamReferer, // Use the specific referer from API
                             requiresSegmentProxy: true
                         });
                     }
