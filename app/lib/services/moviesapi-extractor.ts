@@ -30,7 +30,7 @@ function evpBytesToKey(password: string, salt: string, keyLen: number, ivLen: nu
         hash.update(saltBuffer);
         const digest = hash.digest();
         digests.push(digest);
-        lastDigest = digest;
+        lastDigest = Buffer.from(digest);
         genLen += digest.length;
     }
 
