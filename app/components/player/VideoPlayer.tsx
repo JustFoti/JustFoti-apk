@@ -1112,6 +1112,39 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               Retry
             </button>
           </div>
+
+          {/* Server Selection on Error Screen */}
+          <div style={{ marginTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1.5rem', width: '100%' }}>
+            <p style={{ marginBottom: '1rem', color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem' }}>Switch Server</p>
+            <div className={styles.tabsContainer} style={{ justifyContent: 'center', marginBottom: 0 }}>
+              <button
+                className={`${styles.tab} ${provider === '2embed' ? styles.active : ''}`}
+                onClick={() => {
+                  if (provider !== '2embed') {
+                    setProvider('2embed');
+                    setError(null);
+                    setIsLoading(true);
+                  }
+                }}
+                style={{ flex: '0 1 120px' }}
+              >
+                Server 1
+              </button>
+              <button
+                className={`${styles.tab} ${provider === 'moviesapi' ? styles.active : ''}`}
+                onClick={() => {
+                  if (provider !== 'moviesapi') {
+                    setProvider('moviesapi');
+                    setError(null);
+                    setIsLoading(true);
+                  }
+                }}
+                style={{ flex: '0 1 120px' }}
+              >
+                Server 2
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
