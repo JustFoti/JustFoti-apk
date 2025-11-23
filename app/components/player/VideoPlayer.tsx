@@ -126,6 +126,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         }
 
         console.log('[VideoPlayer] Fetching stream:', `/api/stream/extract?${params}`);
+        console.log('[VideoPlayer] Current Provider:', provider);
 
         // Use fetch with priority hint for faster loading
         const response = await fetch(`/api/stream/extract?${params}`, {
@@ -1682,6 +1683,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 className={styles.confirmButton}
                 onClick={() => {
                   if (pendingProvider) {
+                    console.log('[VideoPlayer] Switching provider to:', pendingProvider);
                     setProvider(pendingProvider);
                     setError(null);
                     setIsLoading(true);
