@@ -1242,9 +1242,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                             changeSource(source, index);
                           }
                         }}
-                        style={{ padding: '0.6rem 1rem', fontSize: '0.9rem' }}
+                        style={{
+                          padding: '0.6rem 1rem',
+                          fontSize: '0.9rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          opacity: source.status === 'down' ? 0.5 : 1
+                        }}
                       >
-                        {source.title || source.quality}
+                        <span>{source.title || source.quality}</span>
+                        {source.status && (
+                          <span
+                            style={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: source.status === 'working' ? '#4ade80' : '#f87171',
+                              marginLeft: '8px',
+                              boxShadow: `0 0 4px ${source.status === 'working' ? 'rgba(74, 222, 128, 0.5)' : 'rgba(248, 113, 113, 0.5)'}`
+                            }}
+                            title={source.status === 'working' ? 'Available' : 'Unavailable'}
+                          />
+                        )}
                       </button>
                     ))
                   ) : (

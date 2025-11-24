@@ -16,6 +16,7 @@ interface StreamSource {
   referer: string;
   type: 'hls' | 'm3u8';
   requiresSegmentProxy?: boolean;
+  status?: 'working' | 'down' | 'unknown';
 }
 
 interface ExtractionResult {
@@ -27,7 +28,7 @@ interface ExtractionResult {
 /**
  * Fetch with proper headers and timeout
  */
-async function fetchWithHeaders(url: string, referer?: string, timeoutMs: number = 15000): Promise<string> {
+async function fetchWithHeaders(url: string, referer?: string, timeoutMs: number = 15000, method: string = 'GET'): Promise<Response> {
   const headers: HeadersInit = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -43,17 +44,13 @@ async function fetchWithHeaders(url: string, referer?: string, timeoutMs: number
 
   try {
     const response = await fetch(url, {
+      method,
       headers,
       signal: controller.signal
     });
 
     clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    return response.text();
+    return response;
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
@@ -61,6 +58,51 @@ async function fetchWithHeaders(url: string, referer?: string, timeoutMs: number
     }
     throw error;
   }
+}
+
+/**
+ * Check if a stream URL is reachable
+ */
+async function checkStreamAvailability(url: string, referer: string): Promise<'working' | 'down' | 'unknown'> {
+  try {
+    // Use a shorter timeout for availability checks to avoid slowing down the UI too much
+    const response = await fetchWithHeaders(url, referer, 5000, 'HEAD');
+    return response.ok ? 'working' : 'down';
+  } catch (error) {
+    console.warn(`[2Embed] Availability check failed for ${url}:`, error);
+    return 'down';
+  }
+}
+
+/**
+ * Check if a source title indicates English content
+ */
+function isEnglishSource(title: string): boolean {
+  const lowerTitle = title.toLowerCase();
+  const nonEnglishKeywords = [
+    'latino', 'spanish', 'español', 'french', 'français', 'german', 'deutsch',
+    'italian', 'italiano', 'portuguese', 'português', 'russian', 'hindi',
+    'subtitulado', 'dubbed' // Sometimes "dubbed" implies non-English dub, but context matters. 
+    // For now, let's assume "dubbed" usually means English dub if the site is English-centric,
+    // OR it means foreign language dubbed into English.
+    // However, if the user wants STRICT English, we might want to be careful.
+    // Let's stick to explicit language names for now.
+  ];
+
+  // If it explicitly says "English" or "Eng", it's definitely English
+  if (lowerTitle.includes('english') || lowerTitle.includes('eng')) {
+    return true;
+  }
+
+  // Check for non-English keywords
+  for (const keyword of nonEnglishKeywords) {
+    if (lowerTitle.includes(keyword)) {
+      return false;
+    }
+  }
+
+  // Default to true if no language is specified (assume original audio/English)
+  return true;
 }
 
 /**
@@ -96,6 +138,11 @@ function extractQualityOptions(html: string): QualityOption[] {
     // If title is empty after cleaning, use a generic name
     if (!title) {
       title = 'Source';
+    }
+
+    // Filter out non-English sources
+    if (!isEnglishSource(title)) {
+      continue;
     }
 
     const urlLower = url.toLowerCase();
@@ -191,7 +238,8 @@ async function extractStreamFromQuality(
   try {
     // Step 1: Fetch /swp/ page
     const swpUrl = `https://player4u.xyz${qualityOption.url}`;
-    const swpHtml = await fetchWithHeaders(swpUrl, player4uUrl);
+    const swpResponse = await fetchWithHeaders(swpUrl, player4uUrl);
+    const swpHtml = await swpResponse.text();
 
     // Step 2: Extract iframe src
     const iframeMatch = swpHtml.match(/<iframe[^>]+src=["']([^"']+)["']/i);
@@ -201,7 +249,8 @@ async function extractStreamFromQuality(
     const yesmoviesUrl = `https://yesmovies.baby/e/${iframeId}`;
 
     // Step 3: Fetch yesmovies.baby page
-    const yesmoviesHtml = await fetchWithHeaders(yesmoviesUrl, swpUrl);
+    const yesmoviesResponse = await fetchWithHeaders(yesmoviesUrl, swpUrl);
+    const yesmoviesHtml = await yesmoviesResponse.text();
 
     // Step 4: Decode JWPlayer config
     const sources = decodeJWPlayer(yesmoviesHtml);
@@ -216,13 +265,19 @@ async function extractStreamFromQuality(
       ? streamUrl
       : `https://yesmovies.baby${streamUrl}`;
 
+    const referer = 'https://www.2embed.cc';
+
+    // Check availability
+    const status = await checkStreamAvailability(finalUrl, referer);
+
     return {
       quality: qualityOption.quality,
       title: qualityOption.title,
       url: finalUrl,
-      referer: 'https://www.2embed.cc',
+      referer,
       type: finalUrl.includes('.txt') ? 'hls' : 'm3u8',
-      requiresSegmentProxy: true // 2embed streams need referer on ALL requests
+      requiresSegmentProxy: true, // 2embed streams need referer on ALL requests
+      status
     };
   } catch (error) {
     console.error(`Failed to extract ${qualityOption.quality}:`, error);
@@ -244,7 +299,8 @@ export async function extract2EmbedStreams(
       ? `https://www.2embed.cc/embedtv/${imdbId}&s=${season}&e=${episode}`
       : `https://www.2embed.cc/embed/${imdbId}`;
 
-    const embedHtml = await fetchWithHeaders(embedUrl);
+    const embedResponse = await fetchWithHeaders(embedUrl);
+    const embedHtml = await embedResponse.text();
 
     // Step 2: Extract player4u URL from myDropdown
     const serverRegex = /onclick="go\('([^']+)'\)"/g;
@@ -260,7 +316,8 @@ export async function extract2EmbedStreams(
     }
 
     // Step 3: Fetch player4u page
-    const player4uHtml = await fetchWithHeaders(player4uUrl, embedUrl);
+    const player4uResponse = await fetchWithHeaders(player4uUrl, embedUrl);
+    const player4uHtml = await player4uResponse.text();
 
     // Step 4: Extract quality options
     const qualityOptions = extractQualityOptions(player4uHtml);
