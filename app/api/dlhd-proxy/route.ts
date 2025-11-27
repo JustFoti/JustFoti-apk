@@ -161,39 +161,16 @@ function constructM3U8Url(serverKey: string, channelKey: string): string {
 }
 
 
-// CORS proxy services to try when direct fetch fails
-const CORS_PROXIES = [
-  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
-];
+// Use allorigins.win proxy directly - works reliably
+function proxyUrl(url: string): string {
+  return `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+}
 
-async function fetchWithProxy(url: string): Promise<Response> {
-  // Try direct fetch first
-  try {
-    const response = await fetchWithHeaders(url);
-    if (response.ok) return response;
-    console.log(`[DLHD] Direct fetch failed: ${response.status}, trying proxies...`);
-  } catch (err) {
-    console.log(`[DLHD] Direct fetch error, trying proxies...`);
-  }
-
-  // Try each CORS proxy
-  for (const proxyFn of CORS_PROXIES) {
-    const proxyUrl = proxyFn(url);
-    try {
-      console.log(`[DLHD] Trying proxy: ${proxyUrl.substring(0, 50)}...`);
-      const response = await fetch(proxyUrl, { cache: 'no-store' });
-      if (response.ok) {
-        console.log(`[DLHD] Proxy succeeded`);
-        return response;
-      }
-    } catch {
-      // Continue to next proxy
-    }
-  }
-
-  throw new Error('All fetch attempts failed (direct + proxies)');
+async function fetchViaProxy(url: string): Promise<Response> {
+  const proxied = proxyUrl(url);
+  const response = await fetch(proxied, { cache: 'no-store' });
+  if (!response.ok) throw new Error(`Proxy fetch failed: ${response.status}`);
+  return response;
 }
 
 async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url: string; playerDomain: string }> {
@@ -207,56 +184,26 @@ async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url:
   const { serverKey, playerDomain } = await getServerKey(channelKey);
   const m3u8Url = constructM3U8Url(serverKey, channelKey);
   
-  console.log(`[DLHD] Fetching M3U8: ${m3u8Url}`);
+  console.log(`[DLHD] Fetching M3U8 via proxy: ${m3u8Url}`);
   
-  const response = await fetchWithProxy(m3u8Url);
+  const response = await fetchViaProxy(m3u8Url);
   const content = await response.text();
-  
-  console.log(`[DLHD] M3U8 content length: ${content.length}, valid: ${content.includes('#EXTM3U')}`);
   
   if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
     throw new Error('Invalid M3U8 content received');
   }
   
-  // Cache the M3U8
   cacheM3U8(channelId, content, m3u8Url, playerDomain);
-  console.log(`[DLHD] Fetched M3U8 for ${channelId}, length: ${content.length}`);
+  console.log(`[DLHD] M3U8 fetched for ${channelId}, length: ${content.length}`);
   return { content, m3u8Url, playerDomain };
 }
 
-async function fetchKey(keyUrl: string, playerDomain: string): Promise<ArrayBuffer> {
-  // Try direct fetch first
-  try {
-    const response = await fetchWithHeaders(keyUrl, {
-      'Referer': `https://${playerDomain}/`,
-      'Origin': `https://${playerDomain}`,
-    });
-    if (response.ok) {
-      const buffer = await response.arrayBuffer();
-      if (buffer.byteLength === 16) return buffer;
-    }
-    console.log(`[DLHD] Direct key fetch failed: ${response.status}, trying proxies...`);
-  } catch {
-    console.log(`[DLHD] Direct key fetch error, trying proxies...`);
-  }
-
-  // Try CORS proxies
-  for (const proxyFn of CORS_PROXIES) {
-    try {
-      const response = await fetch(proxyFn(keyUrl), { cache: 'no-store' });
-      if (response.ok) {
-        const buffer = await response.arrayBuffer();
-        if (buffer.byteLength === 16) {
-          console.log(`[DLHD] Key proxy succeeded`);
-          return buffer;
-        }
-      }
-    } catch {
-      // Continue to next proxy
-    }
-  }
-
-  throw new Error('Key fetch failed (direct + proxies)');
+async function fetchKey(keyUrl: string): Promise<ArrayBuffer> {
+  console.log(`[DLHD] Fetching key via proxy`);
+  const response = await fetchViaProxy(keyUrl);
+  const buffer = await response.arrayBuffer();
+  if (buffer.byteLength !== 16) throw new Error(`Invalid key length: ${buffer.byteLength}`);
+  return buffer;
 }
 
 
@@ -322,7 +269,7 @@ export async function GET(request: NextRequest) {
         keyFromCache = true;
       } else {
         try {
-          const keyBuffer = await fetchKey(keyUrl, playerDomain);
+          const keyBuffer = await fetchKey(keyUrl);
           const cached = cacheKey(channel, keyBuffer, keyUrl, playerDomain);
           keyBase64 = cached.keyBase64;
           keyHex = cached.keyHex;
