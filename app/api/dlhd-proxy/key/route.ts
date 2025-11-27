@@ -81,6 +81,13 @@ function cacheKey(channelId: string, keyBuffer: ArrayBuffer, keyUrl: string, pla
   return cached;
 }
 
+// CORS proxy services to try when direct fetch fails
+const CORS_PROXIES = [
+  (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+];
+
 async function fetchWithHeaders(url: string, headers: Record<string, string> = {}): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -134,22 +141,33 @@ function constructM3U8Url(serverKey: string, channelKey: string): string {
   return `https://${serverKey}new.giokko.ru/${serverKey}/${channelKey}/mono.css`;
 }
 
+async function fetchM3U8WithProxy(url: string): Promise<string> {
+  // Try direct fetch first
+  try {
+    const response = await fetchWithHeaders(url);
+    if (response.ok) return response.text();
+  } catch {
+    // Continue to proxies
+  }
+
+  // Try CORS proxies
+  for (const proxyFn of CORS_PROXIES) {
+    try {
+      const response = await fetch(proxyFn(url), { cache: 'no-store' });
+      if (response.ok) return response.text();
+    } catch {
+      // Continue to next proxy
+    }
+  }
+  throw new Error('M3U8 fetch failed');
+}
+
 async function getKeyUrlFromChannel(channelId: string): Promise<{ keyUrl: string; playerDomain: string }> {
   const channelKey = `premium${channelId}`;
   const { serverKey, playerDomain } = await getServerKey(channelKey);
   const m3u8Url = constructM3U8Url(serverKey, channelKey);
-  const referer = `https://${playerDomain}/`;
   
-  const response = await fetchWithHeaders(m3u8Url, {
-    'Referer': referer,
-    'Origin': `https://${playerDomain}`,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Failed to fetch M3U8: HTTP ${response.status}`);
-  }
-
-  const content = await response.text();
+  const content = await fetchM3U8WithProxy(m3u8Url);
   const keyMatch = content.match(/URI="([^"]+)"/);
 
   if (!keyMatch) {
@@ -159,36 +177,43 @@ async function getKeyUrlFromChannel(channelId: string): Promise<{ keyUrl: string
   return { keyUrl: keyMatch[1], playerDomain };
 }
 
-async function fetchKey(keyUrl: string, playerDomain: string, retries = 3): Promise<ArrayBuffer> {
+async function fetchKey(keyUrl: string, playerDomain: string): Promise<ArrayBuffer> {
   const referer = `https://${playerDomain}/`;
   
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetchWithHeaders(keyUrl, {
-        'Referer': referer,
-        'Origin': `https://${playerDomain}`,
-      });
+  // Try direct fetch first
+  try {
+    const response = await fetchWithHeaders(keyUrl, {
+      'Referer': referer,
+      'Origin': `https://${playerDomain}`,
+    });
+    if (response.ok) {
+      const buffer = await response.arrayBuffer();
+      if (buffer.byteLength === 16) return buffer;
+    }
+    console.log(`[DLHD Key] Direct fetch failed: ${response.status}, trying proxies...`);
+  } catch {
+    console.log(`[DLHD Key] Direct fetch error, trying proxies...`);
+  }
 
-      if (response.status === 418) {
-        // Rate limited - wait and retry
-        if (attempt < retries - 1) {
-          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-          continue;
+  // Try CORS proxies
+  for (const proxyFn of CORS_PROXIES) {
+    try {
+      const proxyUrl = proxyFn(keyUrl);
+      console.log(`[DLHD Key] Trying proxy...`);
+      const response = await fetch(proxyUrl, { cache: 'no-store' });
+      if (response.ok) {
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength === 16) {
+          console.log(`[DLHD Key] Proxy succeeded`);
+          return buffer;
         }
       }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      return response.arrayBuffer();
-    } catch (err) {
-      if (attempt === retries - 1) throw err;
-      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+    } catch {
+      // Continue to next proxy
     }
   }
   
-  throw new Error('Key fetch failed after retries');
+  throw new Error('Key fetch failed (direct + proxies)');
 }
 
 export async function GET(request: NextRequest) {
