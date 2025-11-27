@@ -178,6 +178,12 @@ export const Navigation: React.FC<NavigationProps> = ({
                 Home
               </NavLink>
               <NavLink
+                isActive={pathname === '/livetv'}
+                onClick={() => handleNavigation('/livetv')}
+              >
+                Live TV
+              </NavLink>
+              <NavLink
                 isActive={pathname === '/about'}
                 onClick={() => handleNavigation('/about')}
               >
@@ -256,6 +262,12 @@ export const Navigation: React.FC<NavigationProps> = ({
               Home
             </NavLink>
             <NavLink
+              isActive={pathname === '/livetv'}
+              onClick={() => handleNavigation('/livetv')}
+            >
+              Live TV
+            </NavLink>
+            <NavLink
               isActive={pathname === '/about'}
               onClick={() => handleNavigation('/about')}
             >
@@ -278,6 +290,17 @@ export const Navigation: React.FC<NavigationProps> = ({
               <polyline points="9 22 9 12 15 12 15 22" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span>Home</span>
+          </button>
+          <button
+            className={`${styles.bottomNavItem} ${pathname === '/livetv' ? styles.active : ''}`}
+            onClick={() => handleNavigation('/livetv')}
+            aria-label="Live TV"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="2" y="7" width="20" height="15" rx="2" ry="2" strokeWidth="2" />
+              <polyline points="17 2 12 7 7 2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Live TV</span>
           </button>
           <button
             className={styles.bottomNavItem}

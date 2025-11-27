@@ -25,7 +25,8 @@
       "@/styles/*": ["./app/styles/*"],
       "@/utils/*": ["./app/utils/*"],
       "@/hooks/*": ["./app/hooks/*"],
-      "@/services/*": ["./app/services/*"]
+      "@/services/*": ["./app/services/*"],
+      "@/data/*": ["./data/*"]
     },
     "plugins": [
       {
@@ -45,6 +46,10 @@
   ],
   "exclude": [
     "node_modules",
-    "server/**/*"
+    "server/**/*",
+    "scripts/**/*",
+    "**/__tests__/**/*",
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

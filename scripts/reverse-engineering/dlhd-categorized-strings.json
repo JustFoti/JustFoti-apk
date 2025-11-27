@@ -1,0 +1,309 @@
+{
+  "urls": [
+    {
+      "i": 450,
+      "decoded": "HTTP error"
+    },
+    {
+      "i": 1153,
+      "decoded": "=\"http://w"
+    },
+    {
+      "i": 1646,
+      "decoded": "://"
+    },
+    {
+      "i": 1710,
+      "decoded": "a http-equ"
+    },
+    {
+      "i": 2173,
+      "decoded": "XMLHttpReq"
+    },
+    {
+      "i": 3104,
+      "decoded": "https:"
+    },
+    {
+      "i": 3217,
+      "decoded": "http://"
+    },
+    {
+      "i": 3506,
+      "decoded": "http://www"
+    },
+    {
+      "i": 3884,
+      "decoded": "HTTP Error"
+    },
+    {
+      "i": 4295,
+      "decoded": "me://"
+    },
+    {
+      "i": 4999,
+      "decoded": "PS to HTTP"
+    },
+    {
+      "i": 5556,
+      "decoded": "XMLHTTP"
+    }
+  ],
+  "cdn": [
+    {
+      "i": 1158,
+      "decoded": "&cbcdn="
+    },
+    {
+      "i": 3083,
+      "decoded": "cdnDomain"
+    },
+    {
+      "i": 3328,
+      "decoded": "velocecdn."
+    },
+    {
+      "i": 4213,
+      "decoded": "getCdnDoma"
+    }
+  ],
+  "stream": [],
+  "player": [
+    {
+      "i": 1121,
+      "decoded": "PLAYERSTAT"
+    },
+    {
+      "i": 3551,
+      "decoded": "playerColl"
+    },
+    {
+      "i": 3600,
+      "decoded": "playerExpa"
+    },
+    {
+      "i": 3784,
+      "decoded": "PLAYERCAPA"
+    },
+    {
+      "i": 4496,
+      "decoded": "PLAYERSIZE"
+    }
+  ],
+  "m3u8": [],
+  "hls": [],
+  "video": [
+    {
+      "i": 1175,
+      "decoded": "divideonti"
+    },
+    {
+      "i": 1855,
+      "decoded": "/video/sli"
+    },
+    {
+      "i": 2028,
+      "decoded": "video wait"
+    },
+    {
+      "i": 2050,
+      "decoded": "dio/video "
+    },
+    {
+      "i": 2490,
+      "decoded": "videoSlide"
+    },
+    {
+      "i": 2856,
+      "decoded": "VideoClick"
+    },
+    {
+      "i": 2866,
+      "decoded": "ioVideo"
+    },
+    {
+      "i": 2936,
+      "decoded": "video src"
+    },
+    {
+      "i": 3155,
+      "decoded": "clearVideo"
+    },
+    {
+      "i": 3502,
+      "decoded": "videoClick"
+    },
+    {
+      "i": 3653,
+      "decoded": "video"
+    },
+    {
+      "i": 3996,
+      "decoded": "Video load"
+    },
+    {
+      "i": 4097,
+      "decoded": "video erro"
+    },
+    {
+      "i": 4143,
+      "decoded": "videoslide"
+    },
+    {
+      "i": 4621,
+      "decoded": "runVideoSl"
+    },
+    {
+      "i": 4650,
+      "decoded": "/video/sel"
+    },
+    {
+      "i": 5191,
+      "decoded": "VideoAdSer"
+    },
+    {
+      "i": 5192,
+      "decoded": "video ende"
+    },
+    {
+      "i": 5510,
+      "decoded": "videosToOv"
+    },
+    {
+      "i": 5547,
+      "decoded": "VideoSlide"
+    },
+    {
+      "i": 5616,
+      "decoded": "videoCusto"
+    },
+    {
+      "i": 5684,
+      "decoded": "VIDEO OVER"
+    },
+    {
+      "i": 5686,
+      "decoded": "video stal"
+    }
+  ],
+  "source": [
+    {
+      "i": 1736,
+      "decoded": "source"
+    },
+    {
+      "i": 1747,
+      "decoded": "c source"
+    },
+    {
+      "i": 2291,
+      "decoded": "Resource"
+    },
+    {
+      "i": 2663,
+      "decoded": "source_zon"
+    },
+    {
+      "i": 4485,
+      "decoded": "eResources"
+    },
+    {
+      "i": 5518,
+      "decoded": "resource"
+    }
+  ],
+  "file": [
+    {
+      "i": 553,
+      "decoded": "mediaFiles"
+    },
+    {
+      "i": 620,
+      "decoded": "mediaFileU"
+    },
+    {
+      "i": 1687,
+      "decoded": "file selec"
+    },
+    {
+      "i": 2404,
+      "decoded": "ionFile"
+    },
+    {
+      "i": 2780,
+      "decoded": "edia file "
+    },
+    {
+      "i": 4060,
+      "decoded": "fileURL"
+    },
+    {
+      "i": 4094,
+      "decoded": "Media file"
+    },
+    {
+      "i": 4175,
+      "decoded": "ionFiles"
+    },
+    {
+      "i": 4339,
+      "decoded": "MediaFile"
+    },
+    {
+      "i": 4378,
+      "decoded": "fileSize"
+    },
+    {
+      "i": 4937,
+      "decoded": "MediaFiles"
+    }
+  ],
+  "config": [
+    {
+      "i": 255,
+      "decoded": "th config:"
+    },
+    {
+      "i": 295,
+      "decoded": "e config! "
+    },
+    {
+      "i": 997,
+      "decoded": "config"
+    },
+    {
+      "i": 1942,
+      "decoded": " configura"
+    },
+    {
+      "i": 3022,
+      "decoded": "ith config"
+    },
+    {
+      "i": 3249,
+      "decoded": " config. a"
+    },
+    {
+      "i": 3933,
+      "decoded": "e config"
+    },
+    {
+      "i": 5558,
+      "decoded": "ZoneConfig"
+    }
+  ],
+  "domain": [
+    {
+      "i": 3328,
+      "decoded": "velocecdn."
+    },
+    {
+      "i": 3642,
+      "decoded": "k.com/ut/h"
+    },
+    {
+      "i": 4947,
+      "decoded": "clear.com"
+    }
+  ]
+}

@@ -1,0 +1,6056 @@
+{
+  "dayTitle": "Thursday 27th Nov 2025 - Schedule Time UK GMT",
+  "categories": [
+    {
+      "name": "TV Shows",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "07:00",
+          "title": "Thanksgiving in America Live",
+          "channels": [
+            {
+              "name": "CNN USA",
+              "href": "https://dlhd.dad/watch.php?id=345",
+              "channelId": 345
+            },
+            {
+              "name": "Headline News",
+              "href": "https://dlhd.dad/watch.php?id=323",
+              "channelId": 323
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "07:30",
+          "title": "99th Macy's Thanksgiving Day Parade Live",
+          "channels": [
+            {
+              "name": "NBCNY USA",
+              "href": "https://dlhd.dad/watch.php?id=769",
+              "channelId": 769
+            },
+            {
+              "name": "NBC USA",
+              "href": "https://dlhd.dad/watch.php?id=53",
+              "channelId": 53
+            },
+            {
+              "name": "Telemundo USA",
+              "href": "https://dlhd.dad/watch.php?id=131",
+              "channelId": 131
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:30"
+        },
+        {
+          "time": "10:00",
+          "title": "FOX NFL Sunday Episode 4 • Live",
+          "channels": [
+            {
+              "name": "FOXNY USA",
+              "href": "https://dlhd.dad/watch.php?id=768",
+              "channelId": 768
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:00"
+        },
+        {
+          "time": "11:00",
+          "title": "The National Dog Show New",
+          "channels": [
+            {
+              "name": "NBCNY USA",
+              "href": "https://dlhd.dad/watch.php?id=769",
+              "channelId": 769
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "13:00",
+          "title": "Hollywood Demons Season 1, Episode 9",
+          "channels": [
+            {
+              "name": "ID USA",
+              "href": "https://dlhd.dad/watch.php?id=324",
+              "channelId": 324
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        },
+        {
+          "time": "16:00",
+          "title": "Mysteries of the Abandoned: Hidden America Season 4, Episode 9",
+          "channels": [
+            {
+              "name": "Science Channel",
+              "href": "https://dlhd.dad/watch.php?id=294",
+              "channelId": 294
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:00"
+        },
+        {
+          "time": "16:00",
+          "title": "Love & Hip Hop: New York Season 6, Episode 12",
+          "channels": [
+            {
+              "name": "VH1 USA",
+              "href": "https://dlhd.dad/watch.php?id=344",
+              "channelId": 344
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:00"
+        },
+        {
+          "time": "16:00",
+          "title": "Inside ACCess Thanksgiving Special",
+          "channels": [
+            {
+              "name": "ACC Network USA",
+              "href": "https://dlhd.dad/watch.php?id=664",
+              "channelId": 664
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:00"
+        },
+        {
+          "time": "17:00",
+          "title": "NHRA Sportsman Series Episode 15",
+          "channels": [
+            {
+              "name": "Fox Sports 1 USA",
+              "href": "https://dlhd.dad/watch.php?id=39",
+              "channelId": 39
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:00"
+        },
+        {
+          "time": "18:00",
+          "title": "Jeopardy! Season 42, Episode 59",
+          "channels": [
+            {
+              "name": "ABC NY USA",
+              "href": "https://dlhd.dad/watch.php?id=766",
+              "channelId": 766
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:00"
+        },
+        {
+          "time": "18:30",
+          "title": "Prep & Landing: The Snowball Protocol New",
+          "channels": [
+            {
+              "name": "Disney Channel",
+              "href": "https://dlhd.dad/watch.php?id=312",
+              "channelId": 312
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:30"
+        },
+        {
+          "time": "19:00",
+          "title": "Homicide for the Holidays Season 4",
+          "channels": [
+            {
+              "name": "Oxygen True Crime",
+              "href": "https://dlhd.dad/watch.php?id=332",
+              "channelId": 332
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "19:00",
+          "title": "Strangest Things Turin Shroud, Rocket Belt, Scythian Cups",
+          "channels": [
+            {
+              "name": "National Geographic (NGC)",
+              "href": "https://dlhd.dad/watch.php?id=328",
+              "channelId": 328
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "19:00",
+          "title": "90 Day Fiancé: The Other Way Season 7",
+          "channels": [
+            {
+              "name": "TLC USA",
+              "href": "https://dlhd.dad/watch.php?id=337",
+              "channelId": 337
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "20:00",
+          "title": "Poker Night New",
+          "channels": [
+            {
+              "name": "Altitude Sports",
+              "href": "https://dlhd.dad/watch.php?id=923",
+              "channelId": 923
+            }
+          ],
+          "isLive": false,
+          "dataTime": "02:00"
+        },
+        {
+          "time": "21:00",
+          "title": "Elsbeth Season 3, Episode 2",
+          "channels": [
+            {
+              "name": "CBSNY USA",
+              "href": "https://dlhd.dad/watch.php?id=767",
+              "channelId": 767
+            }
+          ],
+          "isLive": false,
+          "dataTime": "03:00"
+        },
+        {
+          "time": "23:00",
+          "title": "TNA iMPACT!",
+          "channels": [
+            {
+              "name": "AXS TV USA",
+              "href": "https://dlhd.dad/watch.php?id=742",
+              "channelId": 742
+            }
+          ],
+          "isLive": false,
+          "dataTime": "05:00"
+        }
+      ]
+    },
+    {
+      "name": "Soccer",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "01:45",
+          "title": "Asia - AFC Champions League Two : Macarthur vs Wofoo Tai Po",
+          "channels": [
+            {
+              "name": "Sportklub 2 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=102",
+              "channelId": 102
+            },
+            {
+              "name": "Nova Sport Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=468",
+              "channelId": 468
+            },
+            {
+              "name": "beIN Sports MENA 4",
+              "href": "https://dlhd.dad/watch.php?id=94",
+              "channelId": 94
+            }
+          ],
+          "isLive": false,
+          "dataTime": "07:45"
+        },
+        {
+          "time": "02:30",
+          "title": "Indonesia - Super League : Persik Kediri vs Semen Padang",
+          "channels": [
+            {
+              "name": "Indosiar",
+              "href": "https://dlhd.dad/watch.php?id=1",
+              "channelId": 1
+            }
+          ],
+          "isLive": false,
+          "dataTime": "08:30"
+        },
+        {
+          "time": "04:00",
+          "title": "Asia - AFC Champions League Two : Ratchaburi vs Nam Dinh",
+          "channels": [
+            {
+              "name": "ESPN 1 NL",
+              "href": "https://dlhd.dad/watch.php?id=379",
+              "channelId": 379
+            },
+            {
+              "name": "Sportklub 3 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=103",
+              "channelId": 103
+            },
+            {
+              "name": "beIN Sports MENA 4",
+              "href": "https://dlhd.dad/watch.php?id=94",
+              "channelId": 94
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        },
+        {
+          "time": "04:00",
+          "title": "Asia - AFC Champions League Two : Eastern SC vs Gamba Osaka",
+          "channels": [
+            {
+              "name": "Nova Sport Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=468",
+              "channelId": 468
+            },
+            {
+              "name": "beIN Sports MENA 5",
+              "href": "https://dlhd.dad/watch.php?id=95",
+              "channelId": 95
+            },
+            {
+              "name": "Sportklub 1 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=101",
+              "channelId": 101
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        },
+        {
+          "time": "04:00",
+          "title": "Asia - AFC Champions League Two : Pohang Steelers vs Bangkok Glass",
+          "channels": [
+            {
+              "name": "Sportklub 2 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=102",
+              "channelId": 102
+            },
+            {
+              "name": "beIN Sports MENA 6",
+              "href": "https://dlhd.dad/watch.php?id=96",
+              "channelId": 96
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        },
+        {
+          "time": "06:00",
+          "title": "Indonesia - Super League : PSBS Biak Numfor vs Persijap",
+          "channels": [
+            {
+              "name": "Indosiar",
+              "href": "https://dlhd.dad/watch.php?id=1",
+              "channelId": 1
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:00"
+        },
+        {
+          "time": "06:05",
+          "title": "Asia - AFC Champions League Two : Cong An Ha Noi FC vs Beijing FC",
+          "channels": [
+            {
+              "name": "Canal 11 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=540",
+              "channelId": 540
+            },
+            {
+              "name": "Nova Sport Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=468",
+              "channelId": 468
+            },
+            {
+              "name": "Sportklub 1 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=101",
+              "channelId": 101
+            },
+            {
+              "name": "beIN Sports MENA 4",
+              "href": "https://dlhd.dad/watch.php?id=94",
+              "channelId": 94
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:05"
+        },
+        {
+          "time": "06:15",
+          "title": "Asia - AFC Champions League Two : Tampines Rovers vs Kaya",
+          "channels": [
+            {
+              "name": "Sportklub 2 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=102",
+              "channelId": 102
+            },
+            {
+              "name": "beIN Sports MENA 5",
+              "href": "https://dlhd.dad/watch.php?id=95",
+              "channelId": 95
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:15"
+        },
+        {
+          "time": "06:30",
+          "title": "FIFA U-17 World Cup Third Place Match : Brazil U17 vs Italy U17",
+          "channels": [
+            {
+              "name": "Fox Sports 2 USA",
+              "href": "https://dlhd.dad/watch.php?id=758",
+              "channelId": 758
+            },
+            {
+              "name": "ITV 4 UK",
+              "href": "https://dlhd.dad/watch.php?id=353",
+              "channelId": 353
+            },
+            {
+              "name": "RAI Sport 1 IT",
+              "href": "https://dlhd.dad/watch.php?id=882",
+              "channelId": 882
+            },
+            {
+              "name": "TVP Sport Poland",
+              "href": "https://dlhd.dad/watch.php?id=128",
+              "channelId": 128
+            },
+            {
+              "name": "ČT Sport CZ",
+              "href": "https://dlhd.dad/watch.php?id=1033",
+              "channelId": 1033
+            },
+            {
+              "name": "Match Football 1 Russia",
+              "href": "https://dlhd.dad/watch.php?id=136",
+              "channelId": 136
+            },
+            {
+              "name": "Sport 1 Israel",
+              "href": "https://dlhd.dad/watch.php?id=140",
+              "channelId": 140
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:30"
+        },
+        {
+          "time": "09:00",
+          "title": "Russia - Russian Cup : KAMAZ vs Krylya Sovetov",
+          "channels": [
+            {
+              "name": "Match Premier Russia",
+              "href": "https://dlhd.dad/watch.php?id=573",
+              "channelId": 573
+            },
+            {
+              "name": "Match TV Russia",
+              "href": "https://dlhd.dad/watch.php?id=127",
+              "channelId": 127
+            }
+          ],
+          "isLive": false,
+          "dataTime": "15:00"
+        },
+        {
+          "time": "10:00",
+          "title": "FIFA U-17 World Cup Final : Portugal U17 vs Austria U17",
+          "channels": [
+            {
+              "name": "Fox Sports 2 USA",
+              "href": "https://dlhd.dad/watch.php?id=758",
+              "channelId": 758
+            },
+            {
+              "name": "TSN3",
+              "href": "https://dlhd.dad/watch.php?id=113",
+              "channelId": 113
+            },
+            {
+              "name": "ITV 4 UK",
+              "href": "https://dlhd.dad/watch.php?id=353",
+              "channelId": 353
+            },
+            {
+              "name": "NBC UNIVERSO",
+              "href": "https://dlhd.dad/watch.php?id=845",
+              "channelId": 845
+            },
+            {
+              "name": "TVP Sport Poland",
+              "href": "https://dlhd.dad/watch.php?id=128",
+              "channelId": 128
+            },
+            {
+              "name": "Sky Sport Austria 8",
+              "href": "https://dlhd.dad/watch.php?id=2",
+              "channelId": 2
+            },
+            {
+              "name": "RAI Sport 1 IT",
+              "href": "https://dlhd.dad/watch.php?id=882",
+              "channelId": 882
+            },
+            {
+              "name": "Sky Sport Top Event DE",
+              "href": "https://dlhd.dad/watch.php?id=556",
+              "channelId": 556
+            },
+            {
+              "name": "Canal 11 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=540",
+              "channelId": 540
+            },
+            {
+              "name": "L'Equipe France",
+              "href": "https://dlhd.dad/watch.php?id=645",
+              "channelId": 645
+            },
+            {
+              "name": "Match Football 1 Russia",
+              "href": "https://dlhd.dad/watch.php?id=136",
+              "channelId": 136
+            },
+            {
+              "name": "ČT Sport CZ",
+              "href": "https://dlhd.dad/watch.php?id=1033",
+              "channelId": 1033
+            },
+            {
+              "name": "TUDN MX",
+              "href": "https://dlhd.dad/watch.php?id=935",
+              "channelId": 935
+            },
+            {
+              "name": "TV2 Sport X Denmark",
+              "href": "https://dlhd.dad/watch.php?id=808",
+              "channelId": 808
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:00"
+        },
+        {
+          "time": "11:30",
+          "title": "Russia - Russian Cup : Dinamo Moskva vs Zenit",
+          "channels": [
+            {
+              "name": "Match Premier Russia",
+              "href": "https://dlhd.dad/watch.php?id=573",
+              "channelId": 573
+            },
+            {
+              "name": "Match TV Russia",
+              "href": "https://dlhd.dad/watch.php?id=127",
+              "channelId": 127
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:30"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League / Conference League : Simulcast",
+          "channels": [
+            {
+              "name": "Sky Sport Austria 1",
+              "href": "https://dlhd.dad/watch.php?id=559",
+              "channelId": 559
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Ziggo Sport 4 NL",
+              "href": "https://dlhd.dad/watch.php?id=396",
+              "channelId": 396
+            },
+            {
+              "name": "Movistar Liga de Campeones 3",
+              "href": "https://dlhd.dad/watch.php?id=3",
+              "channelId": 3
+            },
+            {
+              "name": "Cosmote Sport 1 Greece",
+              "href": "https://dlhd.dad/watch.php?id=622",
+              "channelId": 622
+            },
+            {
+              "name": "Cosmote Sport 2 Greece",
+              "href": "https://dlhd.dad/watch.php?id=623",
+              "channelId": 623
+            },
+            {
+              "name": "Sport 2 Israel",
+              "href": "https://dlhd.dad/watch.php?id=141",
+              "channelId": 141
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Feyenoord vs Celtic",
+          "channels": [
+            {
+              "name": "TNT Sports 3 UK",
+              "href": "https://dlhd.dad/watch.php?id=33",
+              "channelId": 33
+            },
+            {
+              "name": "Ziggo Sport 1 NL",
+              "href": "https://dlhd.dad/watch.php?id=393",
+              "channelId": 393
+            },
+            {
+              "name": "Sky Sport Austria 3",
+              "href": "https://dlhd.dad/watch.php?id=4",
+              "channelId": 4
+            },
+            {
+              "name": "Canal+ Live 5 France",
+              "href": "https://dlhd.dad/watch.php?id=161",
+              "channelId": 161
+            },
+            {
+              "name": "Movistar Liga de Campeones 4",
+              "href": "https://dlhd.dad/watch.php?id=5",
+              "channelId": 5
+            },
+            {
+              "name": "Sky Sport Top Event DE",
+              "href": "https://dlhd.dad/watch.php?id=556",
+              "channelId": 556
+            },
+            {
+              "name": "Sky Sport Mix DE",
+              "href": "https://dlhd.dad/watch.php?id=557",
+              "channelId": 557
+            },
+            {
+              "name": "DAZN Eleven 2 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=456",
+              "channelId": 456
+            },
+            {
+              "name": "Arena 3 Premium Serbia",
+              "href": "https://dlhd.dad/watch.php?id=139",
+              "channelId": 139
+            },
+            {
+              "name": "Polsat Sport Extra 4 Poland",
+              "href": "https://dlhd.dad/watch.php?id=178",
+              "channelId": 178
+            },
+            {
+              "name": "Cosmote Sport 8 Greece",
+              "href": "https://dlhd.dad/watch.php?id=629",
+              "channelId": 629
+            },
+            {
+              "name": "ESPN4 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=55",
+              "channelId": 55
+            },
+            {
+              "name": "SuperSport Variety 3",
+              "href": "https://dlhd.dad/watch.php?id=418",
+              "channelId": 418
+            },
+            {
+              "name": "beIN SPORTS MENA 3",
+              "href": "https://dlhd.dad/watch.php?id=93",
+              "channelId": 93
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : PAOK vs Brann",
+          "channels": [
+            {
+              "name": "Cosmote Sport 3 Greece",
+              "href": "https://dlhd.dad/watch.php?id=624",
+              "channelId": 624
+            },
+            {
+              "name": "V Sport 1 Norway",
+              "href": "https://dlhd.dad/watch.php?id=6",
+              "channelId": 6
+            },
+            {
+              "name": "Movistar Liga de Campeones 11",
+              "href": "https://dlhd.dad/watch.php?id=59",
+              "channelId": 59
+            },
+            {
+              "name": "Canal+ Live 9 France",
+              "href": "https://dlhd.dad/watch.php?id=162",
+              "channelId": 162
+            },
+            {
+              "name": "Digi Sport 4 Romania",
+              "href": "https://dlhd.dad/watch.php?id=403",
+              "channelId": 403
+            },
+            {
+              "name": "Prima Sport 3 Romania",
+              "href": "https://dlhd.dad/watch.php?id=585",
+              "channelId": 585
+            },
+            {
+              "name": "Ring bg",
+              "href": "https://dlhd.dad/watch.php?id=471",
+              "channelId": 471
+            },
+            {
+              "name": "beIN Sports MENA 7",
+              "href": "https://dlhd.dad/watch.php?id=97",
+              "channelId": 97
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Ludogorets vs Celta de Vigo",
+          "channels": [
+            {
+              "name": "Canal+ Live 8 France",
+              "href": "https://dlhd.dad/watch.php?id=163",
+              "channelId": 163
+            },
+            {
+              "name": "Movistar Liga de Campeones",
+              "href": "https://dlhd.dad/watch.php?id=435",
+              "channelId": 435
+            },
+            {
+              "name": "MAX Sport 3 Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=474",
+              "channelId": 474
+            },
+            {
+              "name": "Arena Sport 4 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=581",
+              "channelId": 581
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Fenerbahçe vs Ferencváros",
+          "channels": [
+            {
+              "name": "M4 Sports Hungary",
+              "href": "https://dlhd.dad/watch.php?id=265",
+              "channelId": 265
+            },
+            {
+              "name": "TRT 1 Turkey",
+              "href": "https://dlhd.dad/watch.php?id=1012",
+              "channelId": 1012
+            },
+            {
+              "name": "Movistar Liga de Campeones 8",
+              "href": "https://dlhd.dad/watch.php?id=68",
+              "channelId": 68
+            },
+            {
+              "name": "Canal+ Live 6 France",
+              "href": "https://dlhd.dad/watch.php?id=164",
+              "channelId": 164
+            },
+            {
+              "name": "Ziggo Sport 6 NL",
+              "href": "https://dlhd.dad/watch.php?id=901",
+              "channelId": 901
+            },
+            {
+              "name": "Arena Sport 5 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=940",
+              "channelId": 940
+            },
+            {
+              "name": "ESPN2 Mexico",
+              "href": "https://dlhd.dad/watch.php?id=926",
+              "channelId": 926
+            },
+            {
+              "name": "SuperSport Action",
+              "href": "https://dlhd.dad/watch.php?id=420",
+              "channelId": 420
+            },
+            {
+              "name": "beIN Sports MENA 6",
+              "href": "https://dlhd.dad/watch.php?id=96",
+              "channelId": 96
+            },
+            {
+              "name": "Sport 3 Israel",
+              "href": "https://dlhd.dad/watch.php?id=142",
+              "channelId": 142
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Roma vs Midtjylland",
+          "channels": [
+            {
+              "name": "TNT Sports 7 UK",
+              "href": "https://dlhd.dad/watch.php?id=7",
+              "channelId": 7
+            },
+            {
+              "name": "Sky Sport 252 IT",
+              "href": "https://dlhd.dad/watch.php?id=8",
+              "channelId": 8
+            },
+            {
+              "name": "Sky Sport Uno IT",
+              "href": "https://dlhd.dad/watch.php?id=461",
+              "channelId": 461
+            },
+            {
+              "name": "Sky Sport Austria 6",
+              "href": "https://dlhd.dad/watch.php?id=9",
+              "channelId": 9
+            },
+            {
+              "name": "Canal+ Live 4 France",
+              "href": "https://dlhd.dad/watch.php?id=165",
+              "channelId": 165
+            },
+            {
+              "name": "Movistar Liga de Campeones 7",
+              "href": "https://dlhd.dad/watch.php?id=69",
+              "channelId": 69
+            },
+            {
+              "name": "beIN Sports 2 Malaysia",
+              "href": "https://dlhd.dad/watch.php?id=713",
+              "channelId": 713
+            },
+            {
+              "name": "Polsat Sport Extra 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=10",
+              "channelId": 10
+            },
+            {
+              "name": "DAZN Eleven 3 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=457",
+              "channelId": 457
+            },
+            {
+              "name": "Arena Sport 2 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=430",
+              "channelId": 430
+            },
+            {
+              "name": "Prima Sport 4 Romania",
+              "href": "https://dlhd.dad/watch.php?id=586",
+              "channelId": 586
+            },
+            {
+              "name": "Digi Sport 3 Romania",
+              "href": "https://dlhd.dad/watch.php?id=402",
+              "channelId": 402
+            },
+            {
+              "name": "Cosmote Sport 7 Greece",
+              "href": "https://dlhd.dad/watch.php?id=628",
+              "channelId": 628
+            },
+            {
+              "name": "MAX Sport 4 Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=475",
+              "channelId": 475
+            },
+            {
+              "name": "ESPN2 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=150",
+              "channelId": 150
+            },
+            {
+              "name": "SuperSport Laliga",
+              "href": "https://dlhd.dad/watch.php?id=415",
+              "channelId": 415
+            },
+            {
+              "name": "beIN Sports MENA 2",
+              "href": "https://dlhd.dad/watch.php?id=92",
+              "channelId": 92
+            },
+            {
+              "name": "Sport 4 Israel",
+              "href": "https://dlhd.dad/watch.php?id=143",
+              "channelId": 143
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Lille vs Dinamo Zagreb",
+          "channels": [
+            {
+              "name": "Canal+ Foot France",
+              "href": "https://dlhd.dad/watch.php?id=463",
+              "channelId": 463
+            },
+            {
+              "name": "Canal+ Live 2 France",
+              "href": "https://dlhd.dad/watch.php?id=166",
+              "channelId": 166
+            },
+            {
+              "name": "Arena Sport 1 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=432",
+              "channelId": 432
+            },
+            {
+              "name": "Movistar Liga de Campeones 9",
+              "href": "https://dlhd.dad/watch.php?id=76",
+              "channelId": 76
+            },
+            {
+              "name": "Arena Sport 9 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=944",
+              "channelId": 944
+            },
+            {
+              "name": "beIN Sports MENA 5",
+              "href": "https://dlhd.dad/watch.php?id=95",
+              "channelId": 95
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Viktoria Plzeň vs Freiburg",
+          "channels": [
+            {
+              "name": "TNT Sports 8 UK",
+              "href": "https://dlhd.dad/watch.php?id=77",
+              "channelId": 77
+            },
+            {
+              "name": "Sport 1 CZ",
+              "href": "https://dlhd.dad/watch.php?id=11",
+              "channelId": 11
+            },
+            {
+              "name": "Sky Sport Austria 5",
+              "href": "https://dlhd.dad/watch.php?id=12",
+              "channelId": 12
+            },
+            {
+              "name": "Canal+ Live 7 France",
+              "href": "https://dlhd.dad/watch.php?id=167",
+              "channelId": 167
+            },
+            {
+              "name": "Movistar Liga de Campeones 10",
+              "href": "https://dlhd.dad/watch.php?id=86",
+              "channelId": 86
+            },
+            {
+              "name": "Sky Sport 254 IT",
+              "href": "https://dlhd.dad/watch.php?id=13",
+              "channelId": 13
+            },
+            {
+              "name": "beIN Sports MENA 8",
+              "href": "https://dlhd.dad/watch.php?id=98",
+              "channelId": 98
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Porto vs Nice",
+          "channels": [
+            {
+              "name": "TNT Sports 6 UK",
+              "href": "https://dlhd.dad/watch.php?id=14",
+              "channelId": 14
+            },
+            {
+              "name": "Sport TV5 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=290",
+              "channelId": 290
+            },
+            {
+              "name": "Canal+ Sport France",
+              "href": "https://dlhd.dad/watch.php?id=122",
+              "channelId": 122
+            },
+            {
+              "name": "Canal+ Live 3 France",
+              "href": "https://dlhd.dad/watch.php?id=168",
+              "channelId": 168
+            },
+            {
+              "name": "Sky Sport Austria 4",
+              "href": "https://dlhd.dad/watch.php?id=15",
+              "channelId": 15
+            },
+            {
+              "name": "Movistar Liga de Campeones 5",
+              "href": "https://dlhd.dad/watch.php?id=105",
+              "channelId": 105
+            },
+            {
+              "name": "Sky Sport 255 IT",
+              "href": "https://dlhd.dad/watch.php?id=16",
+              "channelId": 16
+            },
+            {
+              "name": "Ziggo Sport 5 NL",
+              "href": "https://dlhd.dad/watch.php?id=383",
+              "channelId": 383
+            },
+            {
+              "name": "beIN Sports 3 Malaysia",
+              "href": "https://dlhd.dad/watch.php?id=714",
+              "channelId": 714
+            },
+            {
+              "name": "Polsat Sport Extra 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=179",
+              "channelId": 179
+            },
+            {
+              "name": "Cosmote Sport 6 Greece",
+              "href": "https://dlhd.dad/watch.php?id=627",
+              "channelId": 627
+            },
+            {
+              "name": "ESPN3 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=798",
+              "channelId": 798
+            },
+            {
+              "name": "SuperSport Football",
+              "href": "https://dlhd.dad/watch.php?id=56",
+              "channelId": 56
+            },
+            {
+              "name": "beIN Sports MENA 4",
+              "href": "https://dlhd.dad/watch.php?id=94",
+              "channelId": 94
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Europa League : Aston Villa vs Young Boys",
+          "channels": [
+            {
+              "name": "TNT Sports 2 UK",
+              "href": "https://dlhd.dad/watch.php?id=32",
+              "channelId": 32
+            },
+            {
+              "name": "Blue Sport D 2",
+              "href": "https://dlhd.dad/watch.php?id=17",
+              "channelId": 17
+            },
+            {
+              "name": "Sky Sport Austria 7",
+              "href": "https://dlhd.dad/watch.php?id=18",
+              "channelId": 18
+            },
+            {
+              "name": "Movistar Liga de Campeones 6",
+              "href": "https://dlhd.dad/watch.php?id=106",
+              "channelId": 106
+            },
+            {
+              "name": "Tipik Belgium",
+              "href": "https://dlhd.dad/watch.php?id=19",
+              "channelId": 19
+            },
+            {
+              "name": "DAZN Eleven 1 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=455",
+              "channelId": 455
+            },
+            {
+              "name": "Polsat Sport Extra 3 Poland",
+              "href": "https://dlhd.dad/watch.php?id=20",
+              "channelId": 20
+            },
+            {
+              "name": "Sky Sport Max IT",
+              "href": "https://dlhd.dad/watch.php?id=460",
+              "channelId": 460
+            },
+            {
+              "name": "Sky Sport 253 IT",
+              "href": "https://dlhd.dad/watch.php?id=21",
+              "channelId": 21
+            },
+            {
+              "name": "Arena Sport 3 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=431",
+              "channelId": 431
+            },
+            {
+              "name": "beIN Sports Malaysia",
+              "href": "https://dlhd.dad/watch.php?id=712",
+              "channelId": 712
+            },
+            {
+              "name": "TUDN USA",
+              "href": "https://dlhd.dad/watch.php?id=66",
+              "channelId": 66
+            },
+            {
+              "name": "ESPN Argentina",
+              "href": "https://dlhd.dad/watch.php?id=149",
+              "channelId": 149
+            },
+            {
+              "name": "bTV Action Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=481",
+              "channelId": 481
+            },
+            {
+              "name": "SuperSport Premier League",
+              "href": "https://dlhd.dad/watch.php?id=414",
+              "channelId": 414
+            },
+            {
+              "name": "Supersport Grandstand",
+              "href": "https://dlhd.dad/watch.php?id=412",
+              "channelId": 412
+            },
+            {
+              "name": "beIN Sports MENA 1",
+              "href": "https://dlhd.dad/watch.php?id=91",
+              "channelId": 91
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Slovan Bratislava vs Rayo Vallecano",
+          "channels": [
+            {
+              "name": "Canal+ Live 10 France",
+              "href": "https://dlhd.dad/watch.php?id=169",
+              "channelId": 169
+            },
+            {
+              "name": "Movistar Liga de Campeones 2",
+              "href": "https://dlhd.dad/watch.php?id=22",
+              "channelId": 22
+            },
+            {
+              "name": "beIN Sports MENA 9",
+              "href": "https://dlhd.dad/watch.php?id=99",
+              "channelId": 99
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Raków Częstochowa vs Rapid Wien",
+          "channels": [
+            {
+              "name": "Canal+ Live 15 France",
+              "href": "https://dlhd.dad/watch.php?id=170",
+              "channelId": 170
+            },
+            {
+              "name": "Polsat Sport 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=50",
+              "channelId": 50
+            },
+            {
+              "name": "Polsat Sport Premium 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=23",
+              "channelId": 23
+            },
+            {
+              "name": "Sky Sport Austria 2",
+              "href": "https://dlhd.dad/watch.php?id=24",
+              "channelId": 24
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Sigma Olomouc vs Celje",
+          "channels": [
+            {
+              "name": "Canal+ Live 16 France",
+              "href": "https://dlhd.dad/watch.php?id=171",
+              "channelId": 171
+            },
+            {
+              "name": "Sport 2 CZ",
+              "href": "https://dlhd.dad/watch.php?id=25",
+              "channelId": 25
+            },
+            {
+              "name": "ŠTV 1 Slovenia",
+              "href": "https://dlhd.dad/watch.php?id=26",
+              "channelId": 26
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Hamrun Spartans vs Lincoln Red Imps",
+          "channels": [
+            {
+              "name": "Canal+ Live 18 France",
+              "href": "https://dlhd.dad/watch.php?id=172",
+              "channelId": 172
+            },
+            {
+              "name": "TVMSport+ Malta",
+              "href": "https://dlhd.dad/watch.php?id=27",
+              "channelId": 27
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Omonia Nicosia vs Dynamo Kyiv",
+          "channels": [
+            {
+              "name": "Canal+ Live 14 France",
+              "href": "https://dlhd.dad/watch.php?id=173",
+              "channelId": 173
+            },
+            {
+              "name": "Cosmote Sport 9 Greece",
+              "href": "https://dlhd.dad/watch.php?id=630",
+              "channelId": 630
+            },
+            {
+              "name": "beIN Sports MENA Xtra 1",
+              "href": "https://dlhd.dad/watch.php?id=100",
+              "channelId": 100
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Lech Poznań vs Lausanne Sport",
+          "channels": [
+            {
+              "name": "Blue Sport D 1",
+              "href": "https://dlhd.dad/watch.php?id=28",
+              "channelId": 28
+            },
+            {
+              "name": "Canal+ Live 13 France",
+              "href": "https://dlhd.dad/watch.php?id=174",
+              "channelId": 174
+            },
+            {
+              "name": "Polsat Sport Poland",
+              "href": "https://dlhd.dad/watch.php?id=47",
+              "channelId": 47
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : CSU Craiova vs Mainz 05",
+          "channels": [
+            {
+              "name": "Canal+ Live 12 France",
+              "href": "https://dlhd.dad/watch.php?id=175",
+              "channelId": 175
+            },
+            {
+              "name": "Digi Sport 1 Romania",
+              "href": "https://dlhd.dad/watch.php?id=400",
+              "channelId": 400
+            },
+            {
+              "name": "Prima Sport 1 Romania",
+              "href": "https://dlhd.dad/watch.php?id=583",
+              "channelId": 583
+            },
+            {
+              "name": "Movistar Liga de Campeones 12",
+              "href": "https://dlhd.dad/watch.php?id=107",
+              "channelId": 107
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : AZ vs Shelbourne",
+          "channels": [
+            {
+              "name": "TNT Sports 5 UK",
+              "href": "https://dlhd.dad/watch.php?id=29",
+              "channelId": 29
+            },
+            {
+              "name": "Ziggo Sport 3 NL",
+              "href": "https://dlhd.dad/watch.php?id=919",
+              "channelId": 919
+            },
+            {
+              "name": "Canal+ Live 11 France",
+              "href": "https://dlhd.dad/watch.php?id=176",
+              "channelId": 176
+            },
+            {
+              "name": "DAZN Eleven 4 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=458",
+              "channelId": 458
+            },
+            {
+              "name": "beIN Sports MENA English 2",
+              "href": "https://dlhd.dad/watch.php?id=90",
+              "channelId": 90
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Europe - UEFA Conference League : Zrinjski vs Häcken",
+          "channels": [
+            {
+              "name": "Canal+ Live 17 France",
+              "href": "https://dlhd.dad/watch.php?id=177",
+              "channelId": 177
+            },
+            {
+              "name": "Arena Sport 1P",
+              "href": "https://dlhd.dad/watch.php?id=30",
+              "channelId": 30
+            },
+            {
+              "name": "Arena Sport 6 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=108",
+              "channelId": 108
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "14:00",
+          "title": "England - League Two : Grimsby Town vs Tranmere Rovers",
+          "channels": [
+            {
+              "name": "Sky Sports Football UK",
+              "href": "https://dlhd.dad/watch.php?id=35",
+              "channelId": 35
+            },
+            {
+              "name": "Astro Football",
+              "href": "https://dlhd.dad/watch.php?id=124",
+              "channelId": 124
+            },
+            {
+              "name": "Nova Sport 4 CZ",
+              "href": "https://dlhd.dad/watch.php?id=1024",
+              "channelId": 1024
+            },
+            {
+              "name": "V Sport Premium",
+              "href": "https://dlhd.dad/watch.php?id=109",
+              "channelId": 109
+            },
+            {
+              "name": "Diema Sport 2 Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=466",
+              "channelId": 466
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League / Conference League : Simulcast",
+          "channels": [
+            {
+              "name": "Sky Sport Austria 1",
+              "href": "https://dlhd.dad/watch.php?id=559",
+              "channelId": 559
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Ziggo Sport 4 NL",
+              "href": "https://dlhd.dad/watch.php?id=396",
+              "channelId": 396
+            },
+            {
+              "name": "Movistar Liga de Campeones 3",
+              "href": "https://dlhd.dad/watch.php?id=3",
+              "channelId": 3
+            },
+            {
+              "name": "Cosmote Sport 1 Greece",
+              "href": "https://dlhd.dad/watch.php?id=622",
+              "channelId": 622
+            },
+            {
+              "name": "Cosmote Sport 2 Greece",
+              "href": "https://dlhd.dad/watch.php?id=623",
+              "channelId": 623
+            },
+            {
+              "name": "Sport 2 Israel",
+              "href": "https://dlhd.dad/watch.php?id=141",
+              "channelId": 141
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Bologna vs Salzburg",
+          "channels": [
+            {
+              "name": "TNT Sports 8 UK",
+              "href": "https://dlhd.dad/watch.php?id=77",
+              "channelId": 77
+            },
+            {
+              "name": "Sky Sport 252 IT",
+              "href": "https://dlhd.dad/watch.php?id=8",
+              "channelId": 8
+            },
+            {
+              "name": "Sky Sport Uno IT",
+              "href": "https://dlhd.dad/watch.php?id=461",
+              "channelId": 461
+            },
+            {
+              "name": "Sky Sport Austria 2",
+              "href": "https://dlhd.dad/watch.php?id=24",
+              "channelId": 24
+            },
+            {
+              "name": "Canal+ Live 6 France",
+              "href": "https://dlhd.dad/watch.php?id=164",
+              "channelId": 164
+            },
+            {
+              "name": "Movistar Liga de Campeones 6",
+              "href": "https://dlhd.dad/watch.php?id=106",
+              "channelId": 106
+            },
+            {
+              "name": "Sport 1 CZ",
+              "href": "https://dlhd.dad/watch.php?id=11",
+              "channelId": 11
+            },
+            {
+              "name": "Polsat Sport Extra 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=10",
+              "channelId": 10
+            },
+            {
+              "name": "beIN Sports 2 Malaysia",
+              "href": "https://dlhd.dad/watch.php?id=713",
+              "channelId": 713
+            },
+            {
+              "name": "Cosmote Sport 7 Greece",
+              "href": "https://dlhd.dad/watch.php?id=628",
+              "channelId": 628
+            },
+            {
+              "name": "ESPN3 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=798",
+              "channelId": 798
+            },
+            {
+              "name": "beIN Sports MENA 5",
+              "href": "https://dlhd.dad/watch.php?id=95",
+              "channelId": 95
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Rangers vs Sporting Braga",
+          "channels": [
+            {
+              "name": "TNT Sports 3 UK",
+              "href": "https://dlhd.dad/watch.php?id=33",
+              "channelId": 33
+            },
+            {
+              "name": "DAZN Eleven 1 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=455",
+              "channelId": 455
+            },
+            {
+              "name": "Sky Sport Austria 5",
+              "href": "https://dlhd.dad/watch.php?id=12",
+              "channelId": 12
+            },
+            {
+              "name": "Canal+ Live 4 France",
+              "href": "https://dlhd.dad/watch.php?id=165",
+              "channelId": 165
+            },
+            {
+              "name": "Movistar Liga de Campeones 4",
+              "href": "https://dlhd.dad/watch.php?id=5",
+              "channelId": 5
+            },
+            {
+              "name": "Cosmote Sport 3 Greece",
+              "href": "https://dlhd.dad/watch.php?id=624",
+              "channelId": 624
+            },
+            {
+              "name": "TV8 IT",
+              "href": "https://dlhd.dad/watch.php?id=110",
+              "channelId": 110
+            },
+            {
+              "name": "Sky Sport 256 IT",
+              "href": "https://dlhd.dad/watch.php?id=151",
+              "channelId": 151
+            },
+            {
+              "name": "Ziggo Sport 5 NL",
+              "href": "https://dlhd.dad/watch.php?id=383",
+              "channelId": 383
+            },
+            {
+              "name": "SuperSport Football",
+              "href": "https://dlhd.dad/watch.php?id=56",
+              "channelId": 56
+            },
+            {
+              "name": "Arena Sport 4 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=581",
+              "channelId": 581
+            },
+            {
+              "name": "ESPN4 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=55",
+              "channelId": 55
+            },
+            {
+              "name": "SuperSport MaXimo 1",
+              "href": "https://dlhd.dad/watch.php?id=572",
+              "channelId": 572
+            },
+            {
+              "name": "beIN Sports MENA 3",
+              "href": "https://dlhd.dad/watch.php?id=93",
+              "channelId": 93
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Go Ahead Eagles vs Stuttgart",
+          "channels": [
+            {
+              "name": "RTL DE",
+              "href": "https://dlhd.dad/watch.php?id=740",
+              "channelId": 740
+            },
+            {
+              "name": "Ziggo Sport 2 NL",
+              "href": "https://dlhd.dad/watch.php?id=398",
+              "channelId": 398
+            },
+            {
+              "name": "Canal+ Live 7 France",
+              "href": "https://dlhd.dad/watch.php?id=167",
+              "channelId": 167
+            },
+            {
+              "name": "Sky Sport Austria 3",
+              "href": "https://dlhd.dad/watch.php?id=4",
+              "channelId": 4
+            },
+            {
+              "name": "Arena Sport 8 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=943",
+              "channelId": 943
+            },
+            {
+              "name": "Movistar Liga de Campeones 7",
+              "href": "https://dlhd.dad/watch.php?id=69",
+              "channelId": 69
+            },
+            {
+              "name": "Ring bg",
+              "href": "https://dlhd.dad/watch.php?id=471",
+              "channelId": 471
+            },
+            {
+              "name": "beIN Sports MENA 6",
+              "href": "https://dlhd.dad/watch.php?id=96",
+              "channelId": 96
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Crvena Zvezda vs FCSB",
+          "channels": [
+            {
+              "name": "RTS 1 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=152",
+              "channelId": 152
+            },
+            {
+              "name": "Digi Sport 1 Romania",
+              "href": "https://dlhd.dad/watch.php?id=400",
+              "channelId": 400
+            },
+            {
+              "name": "Prima Sport 1 Romania",
+              "href": "https://dlhd.dad/watch.php?id=583",
+              "channelId": 583
+            },
+            {
+              "name": "Sky Sport Austria 4",
+              "href": "https://dlhd.dad/watch.php?id=15",
+              "channelId": 15
+            },
+            {
+              "name": "Canal+ Live 9 France",
+              "href": "https://dlhd.dad/watch.php?id=162",
+              "channelId": 162
+            },
+            {
+              "name": "Arena 1 Premium Serbia",
+              "href": "https://dlhd.dad/watch.php?id=134",
+              "channelId": 134
+            },
+            {
+              "name": "Arena Sport 4 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=580",
+              "channelId": 580
+            },
+            {
+              "name": "Movistar Liga de Campeones 10",
+              "href": "https://dlhd.dad/watch.php?id=86",
+              "channelId": 86
+            },
+            {
+              "name": "MAX Sport 3 Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=474",
+              "channelId": 474
+            },
+            {
+              "name": "beIN Sports MENA 9",
+              "href": "https://dlhd.dad/watch.php?id=99",
+              "channelId": 99
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Real Betis vs Utrecht",
+          "channels": [
+            {
+              "name": "TNT Sports 7 UK",
+              "href": "https://dlhd.dad/watch.php?id=7",
+              "channelId": 7
+            },
+            {
+              "name": "Ziggo Sport 3 NL",
+              "href": "https://dlhd.dad/watch.php?id=919",
+              "channelId": 919
+            },
+            {
+              "name": "Movistar Liga de Campeones",
+              "href": "https://dlhd.dad/watch.php?id=435",
+              "channelId": 435
+            },
+            {
+              "name": "Canal+ Live 5 France",
+              "href": "https://dlhd.dad/watch.php?id=161",
+              "channelId": 161
+            },
+            {
+              "name": "Arena Sport 3 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=431",
+              "channelId": 431
+            },
+            {
+              "name": "TUDN USA",
+              "href": "https://dlhd.dad/watch.php?id=66",
+              "channelId": 66
+            },
+            {
+              "name": "UniMás",
+              "href": "https://dlhd.dad/watch.php?id=133",
+              "channelId": 133
+            },
+            {
+              "name": "Cosmote Sport 9 Greece",
+              "href": "https://dlhd.dad/watch.php?id=630",
+              "channelId": 630
+            },
+            {
+              "name": "ESPN Argentina",
+              "href": "https://dlhd.dad/watch.php?id=149",
+              "channelId": 149
+            },
+            {
+              "name": "SuperSport Laliga",
+              "href": "https://dlhd.dad/watch.php?id=415",
+              "channelId": 415
+            },
+            {
+              "name": "beIN Sports MENA 4",
+              "href": "https://dlhd.dad/watch.php?id=94",
+              "channelId": 94
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Panathinaikos vs Sturm Graz",
+          "channels": [
+            {
+              "name": "Cosmote Sport 4 Greece",
+              "href": "https://dlhd.dad/watch.php?id=625",
+              "channelId": 625
+            },
+            {
+              "name": "Movistar Liga de Campeones 8",
+              "href": "https://dlhd.dad/watch.php?id=68",
+              "channelId": 68
+            },
+            {
+              "name": "Canal+ Live 10 France",
+              "href": "https://dlhd.dad/watch.php?id=169",
+              "channelId": 169
+            },
+            {
+              "name": "Polsat Sport Extra 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=179",
+              "channelId": 179
+            },
+            {
+              "name": "Arena 2 Premium Serbia",
+              "href": "https://dlhd.dad/watch.php?id=135",
+              "channelId": 135
+            },
+            {
+              "name": "beIN Sports MENA 7",
+              "href": "https://dlhd.dad/watch.php?id=97",
+              "channelId": 97
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Nottingham Forest vs Malmö FF",
+          "channels": [
+            {
+              "name": "TNT Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "Sky Sport Austria 7",
+              "href": "https://dlhd.dad/watch.php?id=18",
+              "channelId": 18
+            },
+            {
+              "name": "Movistar Liga de Campeones 2",
+              "href": "https://dlhd.dad/watch.php?id=22",
+              "channelId": 22
+            },
+            {
+              "name": "Canal+ Live 3 France",
+              "href": "https://dlhd.dad/watch.php?id=168",
+              "channelId": 168
+            },
+            {
+              "name": "Sky Sport Top Event DE",
+              "href": "https://dlhd.dad/watch.php?id=556",
+              "channelId": 556
+            },
+            {
+              "name": "Sky Sport Mix DE",
+              "href": "https://dlhd.dad/watch.php?id=557",
+              "channelId": 557
+            },
+            {
+              "name": "Sport 2 CZ",
+              "href": "https://dlhd.dad/watch.php?id=25",
+              "channelId": 25
+            },
+            {
+              "name": "DAZN Eleven 2 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=456",
+              "channelId": 456
+            },
+            {
+              "name": "Digi Sport 3 Romania",
+              "href": "https://dlhd.dad/watch.php?id=402",
+              "channelId": 402
+            },
+            {
+              "name": "Sky Sport 254 IT",
+              "href": "https://dlhd.dad/watch.php?id=13",
+              "channelId": 13
+            },
+            {
+              "name": "Prima Sport 4 Romania",
+              "href": "https://dlhd.dad/watch.php?id=586",
+              "channelId": 586
+            },
+            {
+              "name": "Polsat Sport Extra 4 Poland",
+              "href": "https://dlhd.dad/watch.php?id=178",
+              "channelId": 178
+            },
+            {
+              "name": "Ziggo Sport 6 NL",
+              "href": "https://dlhd.dad/watch.php?id=901",
+              "channelId": 901
+            },
+            {
+              "name": "ESPN2 Mexico",
+              "href": "https://dlhd.dad/watch.php?id=926",
+              "channelId": 926
+            },
+            {
+              "name": "beIN Sports Malaysia",
+              "href": "https://dlhd.dad/watch.php?id=712",
+              "channelId": 712
+            },
+            {
+              "name": "Arena 3 Premium Serbia",
+              "href": "https://dlhd.dad/watch.php?id=139",
+              "channelId": 139
+            },
+            {
+              "name": "Cosmote Sport 6 Greece",
+              "href": "https://dlhd.dad/watch.php?id=627",
+              "channelId": 627
+            },
+            {
+              "name": "bTV Action Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=481",
+              "channelId": 481
+            },
+            {
+              "name": "SuperSport Premier League",
+              "href": "https://dlhd.dad/watch.php?id=414",
+              "channelId": 414
+            },
+            {
+              "name": "Supersport Grandstand",
+              "href": "https://dlhd.dad/watch.php?id=412",
+              "channelId": 412
+            },
+            {
+              "name": "beIN Sports MENA 2",
+              "href": "https://dlhd.dad/watch.php?id=92",
+              "channelId": 92
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Genk vs Basel",
+          "channels": [
+            {
+              "name": "SRF zwei",
+              "href": "https://dlhd.dad/watch.php?id=153",
+              "channelId": 153
+            },
+            {
+              "name": "Tipik Belgium",
+              "href": "https://dlhd.dad/watch.php?id=19",
+              "channelId": 19
+            },
+            {
+              "name": "Blue Sport D 2",
+              "href": "https://dlhd.dad/watch.php?id=17",
+              "channelId": 17
+            },
+            {
+              "name": "Canal+ Live 8 France",
+              "href": "https://dlhd.dad/watch.php?id=163",
+              "channelId": 163
+            },
+            {
+              "name": "Sky Sport Austria 6",
+              "href": "https://dlhd.dad/watch.php?id=9",
+              "channelId": 9
+            },
+            {
+              "name": "Movistar Liga de Campeones 9",
+              "href": "https://dlhd.dad/watch.php?id=76",
+              "channelId": 76
+            },
+            {
+              "name": "beIN Sports MENA 8",
+              "href": "https://dlhd.dad/watch.php?id=98",
+              "channelId": 98
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Europa League : Maccabi Tel Aviv vs Olympique Lyonnais",
+          "channels": [
+            {
+              "name": "TNT Sports 9 UK",
+              "href": "https://dlhd.dad/watch.php?id=154",
+              "channelId": 154
+            },
+            {
+              "name": "Canal+ Foot France",
+              "href": "https://dlhd.dad/watch.php?id=463",
+              "channelId": 463
+            },
+            {
+              "name": "Canal+ Live 2 France",
+              "href": "https://dlhd.dad/watch.php?id=166",
+              "channelId": 166
+            },
+            {
+              "name": "Sport 1 Israel",
+              "href": "https://dlhd.dad/watch.php?id=140",
+              "channelId": 140
+            },
+            {
+              "name": "Sky Sport 255 IT",
+              "href": "https://dlhd.dad/watch.php?id=16",
+              "channelId": 16
+            },
+            {
+              "name": "Movistar Liga de Campeones 5",
+              "href": "https://dlhd.dad/watch.php?id=105",
+              "channelId": 105
+            },
+            {
+              "name": "DAZN Eleven 3 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=457",
+              "channelId": 457
+            },
+            {
+              "name": "ESPN2 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=150",
+              "channelId": 150
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Rijeka vs AEK Larnaca",
+          "channels": [
+            {
+              "name": "Arena Sport 2 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=433",
+              "channelId": 433
+            },
+            {
+              "name": "Canal+ Live 13 France",
+              "href": "https://dlhd.dad/watch.php?id=174",
+              "channelId": 174
+            },
+            {
+              "name": "Arena Sport 1P",
+              "href": "https://dlhd.dad/watch.php?id=30",
+              "channelId": 30
+            },
+            {
+              "name": "Arena Sport 9 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=944",
+              "channelId": 944
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Fiorentina vs AEK Athens",
+          "channels": [
+            {
+              "name": "TNT Sports 6 UK",
+              "href": "https://dlhd.dad/watch.php?id=14",
+              "channelId": 14
+            },
+            {
+              "name": "Cosmote Sport 5 Greece",
+              "href": "https://dlhd.dad/watch.php?id=626",
+              "channelId": 626
+            },
+            {
+              "name": "Sky Sport 253 IT",
+              "href": "https://dlhd.dad/watch.php?id=21",
+              "channelId": 21
+            },
+            {
+              "name": "Canal+ Live 11 France",
+              "href": "https://dlhd.dad/watch.php?id=176",
+              "channelId": 176
+            },
+            {
+              "name": "Sky Sport Calcio IT",
+              "href": "https://dlhd.dad/watch.php?id=870",
+              "channelId": 870
+            },
+            {
+              "name": "Prima Sport 3 Romania",
+              "href": "https://dlhd.dad/watch.php?id=585",
+              "channelId": 585
+            },
+            {
+              "name": "Arena Sport 5 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=940",
+              "channelId": 940
+            },
+            {
+              "name": "Movistar Liga de Campeones 11",
+              "href": "https://dlhd.dad/watch.php?id=59",
+              "channelId": 59
+            },
+            {
+              "name": "DAZN Eleven 4 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=458",
+              "channelId": 458
+            },
+            {
+              "name": "Digi Sport 4 Romania",
+              "href": "https://dlhd.dad/watch.php?id=403",
+              "channelId": 403
+            },
+            {
+              "name": "beIN Sports MENA Xtra 1",
+              "href": "https://dlhd.dad/watch.php?id=100",
+              "channelId": 100
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Breidablik vs Samsunspor",
+          "channels": [
+            {
+              "name": "Canal+ Live 17 France",
+              "href": "https://dlhd.dad/watch.php?id=177",
+              "channelId": 177
+            },
+            {
+              "name": "TRT 1 Turkey",
+              "href": "https://dlhd.dad/watch.php?id=1012",
+              "channelId": 1012
+            },
+            {
+              "name": "TRT Spor Turkey",
+              "href": "https://dlhd.dad/watch.php?id=889",
+              "channelId": 889
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Aberdeen vs Noah",
+          "channels": [
+            {
+              "name": "TNT Sports 4 UK",
+              "href": "https://dlhd.dad/watch.php?id=34",
+              "channelId": 34
+            },
+            {
+              "name": "Canal+ Live 12 France",
+              "href": "https://dlhd.dad/watch.php?id=175",
+              "channelId": 175
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Strasbourg vs Crystal Palace",
+          "channels": [
+            {
+              "name": "TNT Sports 2 UK",
+              "href": "https://dlhd.dad/watch.php?id=32",
+              "channelId": 32
+            },
+            {
+              "name": "Canal+ France",
+              "href": "https://dlhd.dad/watch.php?id=121",
+              "channelId": 121
+            },
+            {
+              "name": "Sky Sport Austria 8",
+              "href": "https://dlhd.dad/watch.php?id=2",
+              "channelId": 2
+            },
+            {
+              "name": "Movistar Liga de Campeones 12",
+              "href": "https://dlhd.dad/watch.php?id=107",
+              "channelId": 107
+            },
+            {
+              "name": "Arena Sport 2 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=430",
+              "channelId": 430
+            },
+            {
+              "name": "beIN Sports 3 Malaysia",
+              "href": "https://dlhd.dad/watch.php?id=714",
+              "channelId": 714
+            },
+            {
+              "name": "Polsat Sport Extra 3 Poland",
+              "href": "https://dlhd.dad/watch.php?id=20",
+              "channelId": 20
+            },
+            {
+              "name": "Cosmote Sport 8 Greece",
+              "href": "https://dlhd.dad/watch.php?id=629",
+              "channelId": 629
+            },
+            {
+              "name": "MAX Sport 4 Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=475",
+              "channelId": 475
+            },
+            {
+              "name": "SuperSport Variety 3",
+              "href": "https://dlhd.dad/watch.php?id=418",
+              "channelId": 418
+            },
+            {
+              "name": "beIN Sports MENA 1",
+              "href": "https://dlhd.dad/watch.php?id=91",
+              "channelId": 91
+            },
+            {
+              "name": "Sport 4 Israel",
+              "href": "https://dlhd.dad/watch.php?id=143",
+              "channelId": 143
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Legia Warszawa vs Sparta Praha",
+          "channels": [
+            {
+              "name": "Nova Sport 5 CZ",
+              "href": "https://dlhd.dad/watch.php?id=1025",
+              "channelId": 1025
+            },
+            {
+              "name": "Polsat Sport Poland",
+              "href": "https://dlhd.dad/watch.php?id=47",
+              "channelId": 47
+            },
+            {
+              "name": "Polsat Sport Premium 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=180",
+              "channelId": 180
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Shamrock Rovers vs Shakhtar Donetsk",
+          "channels": [
+            {
+              "name": "TNT Sports 5 UK",
+              "href": "https://dlhd.dad/watch.php?id=29",
+              "channelId": 29
+            },
+            {
+              "name": "Canal+ Live 14 France",
+              "href": "https://dlhd.dad/watch.php?id=173",
+              "channelId": 173
+            },
+            {
+              "name": "Premier Sports 1 Ireland",
+              "href": "https://dlhd.dad/watch.php?id=771",
+              "channelId": 771
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Drita vs Škendija 79",
+          "channels": [
+            {
+              "name": "Canal+ Live 16 France",
+              "href": "https://dlhd.dad/watch.php?id=171",
+              "channelId": 171
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Europe - UEFA Conference League : Jagiellonia Białystok vs KuPS",
+          "channels": [
+            {
+              "name": "Canal+ Live 15 France",
+              "href": "https://dlhd.dad/watch.php?id=170",
+              "channelId": 170
+            },
+            {
+              "name": "Polsat Sport Premium 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=23",
+              "channelId": 23
+            },
+            {
+              "name": "Polsat Sport 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=50",
+              "channelId": 50
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "17:30",
+          "title": "Brazil - Brasileirão : Fluminense vs São Paulo",
+          "channels": [
+            {
+              "name": "Sportv Brazil",
+              "href": "https://dlhd.dad/watch.php?id=78",
+              "channelId": 78
+            },
+            {
+              "name": "Premiere BR",
+              "href": "https://dlhd.dad/watch.php?id=88",
+              "channelId": 88
+            },
+            {
+              "name": "Arena Sport 2 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=433",
+              "channelId": 433
+            },
+            {
+              "name": "Match Football 3 Russia",
+              "href": "https://dlhd.dad/watch.php?id=138",
+              "channelId": 138
+            },
+            {
+              "name": "Match TV Russia",
+              "href": "https://dlhd.dad/watch.php?id=127",
+              "channelId": 127
+            },
+            {
+              "name": "Arena Sport 1P",
+              "href": "https://dlhd.dad/watch.php?id=30",
+              "channelId": 30
+            },
+            {
+              "name": "Arena 2 Premium Serbia",
+              "href": "https://dlhd.dad/watch.php?id=135",
+              "channelId": 135
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:30"
+        },
+        {
+          "time": "18:00",
+          "title": "Concacaf Women's World Cup Qualifiers 2026 : Cayman Islands vs. Bermuda",
+          "channels": [
+            {
+              "name": "TUDN USA",
+              "href": "https://dlhd.dad/watch.php?id=66",
+              "channelId": 66
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:00"
+        },
+        {
+          "time": "18:30",
+          "title": "Colombia - Primera A : América de Cali vs Medellín",
+          "channels": [
+            {
+              "name": "Win+ Futbol Colombia",
+              "href": "https://dlhd.dad/watch.php?id=392",
+              "channelId": 392
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:30"
+        },
+        {
+          "time": "19:30",
+          "title": "Honduras - Liga Nacional : UPNFM vs Motagua",
+          "channels": [
+            {
+              "name": "FOX Deportes",
+              "href": "https://dlhd.dad/watch.php?id=643",
+              "channelId": 643
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:30"
+        },
+        {
+          "time": "20:07",
+          "title": "Mexico - Liga MX : Guadalajara vs Cruz Azul",
+          "channels": [
+            {
+              "name": "TUDN USA",
+              "href": "https://dlhd.dad/watch.php?id=66",
+              "channelId": 66
+            },
+            {
+              "name": "NBC UNIVERSO USA",
+              "href": "https://dlhd.dad/watch.php?id=845",
+              "channelId": 845
+            }
+          ],
+          "isLive": false,
+          "dataTime": "02:07"
+        }
+      ]
+    },
+    {
+      "name": "Cricket",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "22:10",
+          "title": "Big Bash League Women : Melbourne Renegades W vs Perth W",
+          "channels": [
+            {
+              "name": "Willow Cricket",
+              "href": "https://dlhd.dad/watch.php?id=346",
+              "channelId": 346
+            },
+            {
+              "name": "Sky Sports Cricket UK",
+              "href": "https://dlhd.dad/watch.php?id=65",
+              "channelId": 65
+            },
+            {
+              "name": "Astro Cricket",
+              "href": "https://dlhd.dad/watch.php?id=370",
+              "channelId": 370
+            },
+            {
+              "name": "Sky Sport 3 NZ",
+              "href": "https://dlhd.dad/watch.php?id=590",
+              "channelId": 590
+            }
+          ],
+          "isLive": false,
+          "dataTime": "04:10"
+        },
+        {
+          "time": "03:30",
+          "title": "Women's Premier League Auction",
+          "channels": [
+            {
+              "name": "Sky Sport 2 NZ",
+              "href": "https://dlhd.dad/watch.php?id=589",
+              "channelId": 589
+            }
+          ],
+          "isLive": false,
+          "dataTime": "09:30"
+        },
+        {
+          "time": "05:30",
+          "title": "T10 League : Vista Riders vs Quetta Qavalry",
+          "channels": [
+            {
+              "name": "Viaplay Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=451",
+              "channelId": 451
+            },
+            {
+              "name": "Willow 2 Cricket",
+              "href": "https://dlhd.dad/watch.php?id=598",
+              "channelId": 598
+            }
+          ],
+          "isLive": false,
+          "dataTime": "11:30"
+        },
+        {
+          "time": "07:45",
+          "title": "T10 League : Delhi Bulls vs Aspin Stallions",
+          "channels": [
+            {
+              "name": "Viaplay Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=451",
+              "channelId": 451
+            },
+            {
+              "name": "Willow 2 Cricket",
+              "href": "https://dlhd.dad/watch.php?id=598",
+              "channelId": 598
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:45"
+        },
+        {
+          "time": "08:30",
+          "title": "T20 Tri-Series : Pakistan vs Sri Lanka",
+          "channels": [
+            {
+              "name": "Willow Cricket",
+              "href": "https://dlhd.dad/watch.php?id=346",
+              "channelId": 346
+            },
+            {
+              "name": "Astro Cricket",
+              "href": "https://dlhd.dad/watch.php?id=370",
+              "channelId": 370
+            },
+            {
+              "name": "SuperSport Cricket",
+              "href": "https://dlhd.dad/watch.php?id=368",
+              "channelId": 368
+            },
+            {
+              "name": "SuperSport Grandstand",
+              "href": "https://dlhd.dad/watch.php?id=412",
+              "channelId": 412
+            }
+          ],
+          "isLive": false,
+          "dataTime": "14:30"
+        },
+        {
+          "time": "10:00",
+          "title": "T10 League : Northern Warriors vs Royal Champs",
+          "channels": [
+            {
+              "name": "Viaplay Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=451",
+              "channelId": 451
+            },
+            {
+              "name": "Willow 2 Cricket",
+              "href": "https://dlhd.dad/watch.php?id=598",
+              "channelId": 598
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:00"
+        }
+      ]
+    },
+    {
+      "name": "Field Hockey",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "00:00",
+          "title": "31st Sultan Azlan Shah Cup 2025 M10: Korea vs Canada",
+          "channels": [
+            {
+              "name": "Astro Grandstand",
+              "href": "https://dlhd.dad/watch.php?id=123",
+              "channelId": 123
+            }
+          ],
+          "isLive": false,
+          "dataTime": "06:00"
+        },
+        {
+          "time": "02:00",
+          "title": "31st Sultan Azlan Shah Cup 2025 M11: India vs New Zealand",
+          "channels": [
+            {
+              "name": "Astro Grandstand",
+              "href": "https://dlhd.dad/watch.php?id=123",
+              "channelId": 123
+            }
+          ],
+          "isLive": false,
+          "dataTime": "08:00"
+        },
+        {
+          "time": "04:00",
+          "title": "31st Sultan Azlan Shah Cup 2025 M12: Malaysia vs Belgium",
+          "channels": [
+            {
+              "name": "Astro Grandstand",
+              "href": "https://dlhd.dad/watch.php?id=123",
+              "channelId": 123
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        }
+      ]
+    },
+    {
+      "name": "Tennis",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "07:00",
+          "title": "Maia Open - ATP Challenger Tour",
+          "channels": [
+            {
+              "name": "Sport TV3 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=454",
+              "channelId": 454
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "09:00",
+          "title": "Maia Open - ATP Challenger Tour",
+          "channels": [
+            {
+              "name": "Sport TV3 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=454",
+              "channelId": 454
+            }
+          ],
+          "isLive": false,
+          "dataTime": "15:00"
+        }
+      ]
+    },
+    {
+      "name": "Motorsport",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "22:20",
+          "title": "Supercars Championship : Grand Final Practice 1",
+          "channels": [
+            {
+              "name": "Sky Sport 1 NZ",
+              "href": "https://dlhd.dad/watch.php?id=588",
+              "channelId": 588
+            }
+          ],
+          "isLive": false,
+          "dataTime": "04:20"
+        },
+        {
+          "time": "23:08",
+          "title": "WRC Rally Saudi Arabia Stage 2",
+          "channels": [
+            {
+              "name": "Rally Tv",
+              "href": "https://dlhd.dad/watch.php?id=607",
+              "channelId": 607
+            },
+            {
+              "name": "TNT Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "TV4 Motor",
+              "href": "https://dlhd.dad/watch.php?id=702",
+              "channelId": 702
+            },
+            {
+              "name": "Motowizja Poland",
+              "href": "https://dlhd.dad/watch.php?id=563",
+              "channelId": 563
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Cosmote Sport 5 Greece",
+              "href": "https://dlhd.dad/watch.php?id=626",
+              "channelId": 626
+            }
+          ],
+          "isLive": false,
+          "dataTime": "05:08"
+        },
+        {
+          "time": "00:06",
+          "title": "WRC Rally Saudi Arabia Stage 3",
+          "channels": [
+            {
+              "name": "Rally Tv",
+              "href": "https://dlhd.dad/watch.php?id=607",
+              "channelId": 607
+            },
+            {
+              "name": "TNT Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "TV4 Motor",
+              "href": "https://dlhd.dad/watch.php?id=702",
+              "channelId": 702
+            },
+            {
+              "name": "Motowizja Poland",
+              "href": "https://dlhd.dad/watch.php?id=563",
+              "channelId": 563
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Cosmote Sport 5 Greece",
+              "href": "https://dlhd.dad/watch.php?id=626",
+              "channelId": 626
+            }
+          ],
+          "isLive": false,
+          "dataTime": "06:06"
+        },
+        {
+          "time": "05:22",
+          "title": "WRC Rally Saudi Arabia Stage 5",
+          "channels": [
+            {
+              "name": "Rally Tv",
+              "href": "https://dlhd.dad/watch.php?id=607",
+              "channelId": 607
+            },
+            {
+              "name": "TNT Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "TV4 Motor",
+              "href": "https://dlhd.dad/watch.php?id=702",
+              "channelId": 702
+            },
+            {
+              "name": "Motowizja Poland",
+              "href": "https://dlhd.dad/watch.php?id=563",
+              "channelId": 563
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Cosmote Sport 5 Greece",
+              "href": "https://dlhd.dad/watch.php?id=626",
+              "channelId": 626
+            }
+          ],
+          "isLive": false,
+          "dataTime": "11:22"
+        },
+        {
+          "time": "06:20",
+          "title": "WRC Rally Saudi Arabia Stage 6",
+          "channels": [
+            {
+              "name": "Rally Tv",
+              "href": "https://dlhd.dad/watch.php?id=607",
+              "channelId": 607
+            },
+            {
+              "name": "TNT Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "TV4 Motor",
+              "href": "https://dlhd.dad/watch.php?id=702",
+              "channelId": 702
+            },
+            {
+              "name": "Motowizja Poland",
+              "href": "https://dlhd.dad/watch.php?id=563",
+              "channelId": 563
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Cosmote Sport 5 Greece",
+              "href": "https://dlhd.dad/watch.php?id=626",
+              "channelId": 626
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:20"
+        },
+        {
+          "time": "11:30",
+          "title": "WRC Rally Saudi Arabia Stage 8",
+          "channels": [
+            {
+              "name": "Rally Tv",
+              "href": "https://dlhd.dad/watch.php?id=607",
+              "channelId": 607
+            },
+            {
+              "name": "TNT Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "TV4 Motor",
+              "href": "https://dlhd.dad/watch.php?id=702",
+              "channelId": 702
+            },
+            {
+              "name": "Motowizja Poland",
+              "href": "https://dlhd.dad/watch.php?id=563",
+              "channelId": 563
+            },
+            {
+              "name": "Canal+ Sport360",
+              "href": "https://dlhd.dad/watch.php?id=464",
+              "channelId": 464
+            },
+            {
+              "name": "Cosmote Sport 5 Greece",
+              "href": "https://dlhd.dad/watch.php?id=626",
+              "channelId": 626
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:30"
+        },
+        {
+          "time": "15:45",
+          "title": "Supercars Championship : Grand Final Supports",
+          "channels": [
+            {
+              "name": "Sky Sport 1 NZ",
+              "href": "https://dlhd.dad/watch.php?id=588",
+              "channelId": 588
+            }
+          ],
+          "isLive": false,
+          "dataTime": "21:45"
+        },
+        {
+          "time": "17:00",
+          "title": "Supercars Championship, Adelaide, Grand Final Super2 Qualifying Race 11",
+          "channels": [
+            {
+              "name": "Sky Sport 1 NZ",
+              "href": "https://dlhd.dad/watch.php?id=588",
+              "channelId": 588
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:00"
+        },
+        {
+          "time": "17:45",
+          "title": "Supercars Championship : Grand Final Practice 2",
+          "channels": [
+            {
+              "name": "Sky Sport 1 NZ",
+              "href": "https://dlhd.dad/watch.php?id=588",
+              "channelId": 588
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:45"
+        },
+        {
+          "time": "19:35",
+          "title": "Supercars Championship, Adelaide, Grand Final Qualifying Race 32",
+          "channels": [
+            {
+              "name": "Sky Sport 1 NZ",
+              "href": "https://dlhd.dad/watch.php?id=588",
+              "channelId": 588
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:35"
+        }
+      ]
+    },
+    {
+      "name": "WWE (TNA)",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "19:00",
+          "title": "All Elite Wrestling: Collision Thanksgiving 2025",
+          "channels": [
+            {
+              "name": "TNT USA",
+              "href": "https://dlhd.dad/watch.php?id=338",
+              "channelId": 338
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "19:00",
+          "title": "TNA iMPACT!",
+          "channels": [
+            {
+              "name": "Sportsnet 360",
+              "href": "https://dlhd.dad/watch.php?id=409",
+              "channelId": 409
+            },
+            {
+              "name": "AXS TV USA",
+              "href": "https://dlhd.dad/watch.php?id=742",
+              "channelId": 742
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        }
+      ]
+    },
+    {
+      "name": "Combat Sports",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "07:00",
+          "title": "Judo: Abu Dhabi Grand Prix Day 1",
+          "channels": [
+            {
+              "name": "RMC Sport 1 France",
+              "href": "https://dlhd.dad/watch.php?id=119",
+              "channelId": 119
+            },
+            {
+              "name": "Sport TV2 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=74",
+              "channelId": 74
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        }
+      ]
+    },
+    {
+      "name": "Golf",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "20:30",
+          "title": "DP World Tour BMW Australian PGA Championship",
+          "channels": [
+            {
+              "name": "Sky Sports Golf UK",
+              "href": "https://dlhd.dad/watch.php?id=70",
+              "channelId": 70
+            },
+            {
+              "name": "Golf Channel USA",
+              "href": "https://dlhd.dad/watch.php?id=318",
+              "channelId": 318
+            },
+            {
+              "name": "Sky Sports Main Event",
+              "href": "https://dlhd.dad/watch.php?id=38",
+              "channelId": 38
+            },
+            {
+              "name": "Movistar Golf",
+              "href": "https://dlhd.dad/watch.php?id=528",
+              "channelId": 528
+            },
+            {
+              "name": "SuperSport Golf",
+              "href": "https://dlhd.dad/watch.php?id=422",
+              "channelId": 422
+            },
+            {
+              "name": "Sky Sport 3 NZ",
+              "href": "https://dlhd.dad/watch.php?id=590",
+              "channelId": 590
+            },
+            {
+              "name": "Sport KLUB Golf Croatia",
+              "href": "https://dlhd.dad/watch.php?id=710",
+              "channelId": 710
+            },
+            {
+              "name": "Sky Sports Golf DE",
+              "href": "https://dlhd.dad/watch.php?id=785",
+              "channelId": 785
+            },
+            {
+              "name": "Ziggo Sport 6 NL",
+              "href": "https://dlhd.dad/watch.php?id=901",
+              "channelId": 901
+            },
+            {
+              "name": "Sportklub HD Croatia",
+              "href": "https://dlhd.dad/watch.php?id=453",
+              "channelId": 453
+            }
+          ],
+          "isLive": false,
+          "dataTime": "02:30"
+        },
+        {
+          "time": "07:00",
+          "title": "Ladies European Tour Andalucia Costa Del Sol Open",
+          "channels": [
+            {
+              "name": "Sky Sports Golf UK",
+              "href": "https://dlhd.dad/watch.php?id=70",
+              "channelId": 70
+            },
+            {
+              "name": "Golf Channel USA",
+              "href": "https://dlhd.dad/watch.php?id=318",
+              "channelId": 318
+            },
+            {
+              "name": "Sky Sports Main Event",
+              "href": "https://dlhd.dad/watch.php?id=38",
+              "channelId": 38
+            },
+            {
+              "name": "Movistar Golf",
+              "href": "https://dlhd.dad/watch.php?id=528",
+              "channelId": 528
+            },
+            {
+              "name": "SuperSport Golf",
+              "href": "https://dlhd.dad/watch.php?id=422",
+              "channelId": 422
+            },
+            {
+              "name": "Sky Sport 3 NZ",
+              "href": "https://dlhd.dad/watch.php?id=590",
+              "channelId": 590
+            },
+            {
+              "name": "Sport KLUB Golf Croatia",
+              "href": "https://dlhd.dad/watch.php?id=710",
+              "channelId": 710
+            },
+            {
+              "name": "Sky Sports Golf DE",
+              "href": "https://dlhd.dad/watch.php?id=785",
+              "channelId": 785
+            },
+            {
+              "name": "Ziggo Sport 6 NL",
+              "href": "https://dlhd.dad/watch.php?id=901",
+              "channelId": 901
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        }
+      ]
+    },
+    {
+      "name": "Alpine Ski",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "11:45",
+          "title": "Copper Mountain: Men's Super G",
+          "channels": [
+            {
+              "name": "TNT Sports 4 UK",
+              "href": "https://dlhd.dad/watch.php?id=34",
+              "channelId": 34
+            },
+            {
+              "name": "Rai 2 Italy",
+              "href": "https://dlhd.dad/watch.php?id=851",
+              "channelId": 851
+            },
+            {
+              "name": "EuroSport 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=57",
+              "channelId": 57
+            },
+            {
+              "name": "EuroSport 1 Spain",
+              "href": "https://dlhd.dad/watch.php?id=524",
+              "channelId": 524
+            },
+            {
+              "name": "EuroSport 1 France",
+              "href": "https://dlhd.dad/watch.php?id=772",
+              "channelId": 772
+            },
+            {
+              "name": "Eurosport 1 SE",
+              "href": "https://dlhd.dad/watch.php?id=231",
+              "channelId": 231
+            },
+            {
+              "name": "EuroSport 1 Italy",
+              "href": "https://dlhd.dad/watch.php?id=878",
+              "channelId": 878
+            },
+            {
+              "name": "EuroSport 1 Greece",
+              "href": "https://dlhd.dad/watch.php?id=41",
+              "channelId": 41
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        }
+      ]
+    },
+    {
+      "name": "Am. Football (NFL)",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "18:30",
+          "title": "NCAA FBS : Navy vs Memphis",
+          "channels": [
+            {
+              "name": "ESPN USA",
+              "href": "https://dlhd.dad/watch.php?id=44",
+              "channelId": 44
+            },
+            {
+              "name": "TSN2",
+              "href": "https://dlhd.dad/watch.php?id=112",
+              "channelId": 112
+            },
+            {
+              "name": "Sportklub 1 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=101",
+              "channelId": 101
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:30"
+        },
+        {
+          "time": "12:00",
+          "title": "NFL : Detroit Lions vs Green Bay Packers",
+          "channels": [
+            {
+              "name": "NFL Sunday Ticket",
+              "href": "https://dlhd.dad/watch.php?id=1",
+              "channelId": 1
+            },
+            {
+              "name": "FOX USA",
+              "href": "https://dlhd.dad/watch.php?id=54",
+              "channelId": 54
+            },
+            {
+              "name": "FOXNY USA",
+              "href": "https://dlhd.dad/watch.php?id=768",
+              "channelId": 768
+            },
+            {
+              "name": "Sky Sports Main Event UK",
+              "href": "https://dlhd.dad/watch.php?id=38",
+              "channelId": 38
+            },
+            {
+              "name": "Sky Sports NFL UK",
+              "href": "https://dlhd.dad/watch.php?id=37",
+              "channelId": 37
+            },
+            {
+              "name": "Nova SPORT 1 CZ",
+              "href": "https://dlhd.dad/watch.php?id=1021",
+              "channelId": 1021
+            },
+            {
+              "name": "TSN1",
+              "href": "https://dlhd.dad/watch.php?id=111",
+              "channelId": 111
+            },
+            {
+              "name": "TSN4",
+              "href": "https://dlhd.dad/watch.php?id=114",
+              "channelId": 114
+            },
+            {
+              "name": "RDS CA",
+              "href": "https://dlhd.dad/watch.php?id=839",
+              "channelId": 839
+            },
+            {
+              "name": "Fox Deportes",
+              "href": "https://dlhd.dad/watch.php?id=643",
+              "channelId": 643
+            },
+            {
+              "name": "ESPN 3 NL",
+              "href": "https://dlhd.dad/watch.php?id=888",
+              "channelId": 888
+            },
+            {
+              "name": "beIN Sports 2 France",
+              "href": "https://dlhd.dad/watch.php?id=117",
+              "channelId": 117
+            },
+            {
+              "name": "TV2 Sport X Denmark",
+              "href": "https://dlhd.dad/watch.php?id=808",
+              "channelId": 808
+            },
+            {
+              "name": "beIN SPORTS MENA English 1",
+              "href": "https://dlhd.dad/watch.php?id=61",
+              "channelId": 61
+            },
+            {
+              "name": "5 Live Israel",
+              "href": "https://dlhd.dad/watch.php?id=146",
+              "channelId": 146
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "15:30",
+          "title": "NFL : Dallas Cowboys vs Kansas City Chiefs",
+          "channels": [
+            {
+              "name": "NFL Sunday Ticket",
+              "href": "https://dlhd.dad/watch.php?id=6",
+              "channelId": 6
+            },
+            {
+              "name": "CBS USA",
+              "href": "https://dlhd.dad/watch.php?id=52",
+              "channelId": 52
+            },
+            {
+              "name": "CBSNY USA",
+              "href": "https://dlhd.dad/watch.php?id=767",
+              "channelId": 767
+            },
+            {
+              "name": "Sky Sports Main Event UK",
+              "href": "https://dlhd.dad/watch.php?id=38",
+              "channelId": 38
+            },
+            {
+              "name": "Sky Sports NFL UK",
+              "href": "https://dlhd.dad/watch.php?id=37",
+              "channelId": 37
+            },
+            {
+              "name": "Nova SPORT 1 CZ",
+              "href": "https://dlhd.dad/watch.php?id=1021",
+              "channelId": 1021
+            },
+            {
+              "name": "TSN4",
+              "href": "https://dlhd.dad/watch.php?id=114",
+              "channelId": 114
+            },
+            {
+              "name": "TSN1",
+              "href": "https://dlhd.dad/watch.php?id=111",
+              "channelId": 111
+            },
+            {
+              "name": "RDS CA",
+              "href": "https://dlhd.dad/watch.php?id=839",
+              "channelId": 839
+            },
+            {
+              "name": "ESPN 3 NL",
+              "href": "https://dlhd.dad/watch.php?id=888",
+              "channelId": 888
+            },
+            {
+              "name": "Arena Sport 1 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=432",
+              "channelId": 432
+            },
+            {
+              "name": "beIN Sports 2 France",
+              "href": "https://dlhd.dad/watch.php?id=117",
+              "channelId": 117
+            },
+            {
+              "name": "TV2 Sport X Denmark",
+              "href": "https://dlhd.dad/watch.php?id=808",
+              "channelId": 808
+            },
+            {
+              "name": "Cosmote Sport 9 Greece",
+              "href": "https://dlhd.dad/watch.php?id=630",
+              "channelId": 630
+            },
+            {
+              "name": "beIN SPORTS MENA English 2",
+              "href": "https://dlhd.dad/watch.php?id=90",
+              "channelId": 90
+            },
+            {
+              "name": "5 Live Israel",
+              "href": "https://dlhd.dad/watch.php?id=146",
+              "channelId": 146
+            }
+          ],
+          "isLive": false,
+          "dataTime": "21:30"
+        },
+        {
+          "time": "19:20",
+          "title": "NFL : Baltimore Ravens vs Cincinnati Bengals",
+          "channels": [
+            {
+              "name": "NFL Sunday Ticket",
+              "href": "https://dlhd.dad/watch.php?id=2",
+              "channelId": 2
+            },
+            {
+              "name": "NBC USA",
+              "href": "https://dlhd.dad/watch.php?id=53",
+              "channelId": 53
+            },
+            {
+              "name": "NBCNY USA",
+              "href": "https://dlhd.dad/watch.php?id=769",
+              "channelId": 769
+            },
+            {
+              "name": "NBC Universo",
+              "href": "https://dlhd.dad/watch.php?id=845",
+              "channelId": 845
+            },
+            {
+              "name": "Sky Sports NFL UK",
+              "href": "https://dlhd.dad/watch.php?id=37",
+              "channelId": 37
+            },
+            {
+              "name": "Nova SPORT 1 CZ",
+              "href": "https://dlhd.dad/watch.php?id=1021",
+              "channelId": 1021
+            },
+            {
+              "name": "RDS CA",
+              "href": "https://dlhd.dad/watch.php?id=839",
+              "channelId": 839
+            },
+            {
+              "name": "TSN5",
+              "href": "https://dlhd.dad/watch.php?id=115",
+              "channelId": 115
+            },
+            {
+              "name": "TSN1",
+              "href": "https://dlhd.dad/watch.php?id=111",
+              "channelId": 111
+            },
+            {
+              "name": "TSN4",
+              "href": "https://dlhd.dad/watch.php?id=114",
+              "channelId": 114
+            },
+            {
+              "name": "TSN3",
+              "href": "https://dlhd.dad/watch.php?id=113",
+              "channelId": 113
+            },
+            {
+              "name": "ESPN 1 NL",
+              "href": "https://dlhd.dad/watch.php?id=379",
+              "channelId": 379
+            },
+            {
+              "name": "Telemundo",
+              "href": "https://dlhd.dad/watch.php?id=131",
+              "channelId": 131
+            },
+            {
+              "name": "DAZN Eleven 3 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=457",
+              "channelId": 457
+            },
+            {
+              "name": "Cosmote Sport 9 Greece",
+              "href": "https://dlhd.dad/watch.php?id=630",
+              "channelId": 630
+            },
+            {
+              "name": "beIN Sports 4 Max France",
+              "href": "https://dlhd.dad/watch.php?id=494",
+              "channelId": 494
+            },
+            {
+              "name": "beIN SPORTS MENA 8",
+              "href": "https://dlhd.dad/watch.php?id=98",
+              "channelId": 98
+            },
+            {
+              "name": "5 Live Israel",
+              "href": "https://dlhd.dad/watch.php?id=146",
+              "channelId": 146
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:20"
+        }
+      ]
+    },
+    {
+      "name": "Basketball",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "10:30",
+          "title": "Europe: World Cup - Qualification : Greece vs Romania",
+          "channels": [
+            {
+              "name": "ERT 2 Greece",
+              "href": "https://dlhd.dad/watch.php?id=155",
+              "channelId": 155
+            },
+            {
+              "name": "5Sport Israel",
+              "href": "https://dlhd.dad/watch.php?id=144",
+              "channelId": 144
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:30"
+        },
+        {
+          "time": "11:00",
+          "title": "Europe: World Cup - Qualification : Montenegro vs Portugal",
+          "channels": [
+            {
+              "name": "RTP 2 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=720",
+              "channelId": 720
+            },
+            {
+              "name": "Arena Sport 7 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=942",
+              "channelId": 942
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "12:00",
+          "title": "Europe: World Cup - Qualification : Turkey vs Bosnia &amp; Herzegovina",
+          "channels": [
+            {
+              "name": "Magenta Sport 318",
+              "href": "https://dlhd.dad/watch.php?id=156",
+              "channelId": 156
+            },
+            {
+              "name": "Arena Sport 8 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=943",
+              "channelId": 943
+            },
+            {
+              "name": "Arena Sport 4 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=580",
+              "channelId": 580
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "Europe: World Cup - Qualification : Serbia vs Switzerland",
+          "channels": [
+            {
+              "name": "RTS 1 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=152",
+              "channelId": 152
+            },
+            {
+              "name": "RSI La 2 CH",
+              "href": "https://dlhd.dad/watch.php?id=157",
+              "channelId": 157
+            },
+            {
+              "name": "Arena 2 Premium Serbia",
+              "href": "https://dlhd.dad/watch.php?id=135",
+              "channelId": 135
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "13:00",
+          "title": "Europe: World Cup - Qualification : Italy vs Iceland",
+          "channels": [
+            {
+              "name": "5Sport Israel",
+              "href": "https://dlhd.dad/watch.php?id=144",
+              "channelId": 144
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        }
+      ]
+    },
+    {
+      "name": "NCAA/NCAAW Basketball",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "10:00",
+          "title": "College Basketball : Richmond vs Furman",
+          "channels": [
+            {
+              "name": "ESPN2 USA",
+              "href": "https://dlhd.dad/watch.php?id=45",
+              "channelId": 45
+            },
+            {
+              "name": "TSN2",
+              "href": "https://dlhd.dad/watch.php?id=112",
+              "channelId": 112
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:00"
+        },
+        {
+          "time": "11:00",
+          "title": "College Basketball Battle 4 Atlantis, First Semifinal: Teams TBA",
+          "channels": [
+            {
+              "name": "ESPN USA",
+              "href": "https://dlhd.dad/watch.php?id=44",
+              "channelId": 44
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "11:00",
+          "title": "NCAA : East Carolina vs St. Bonaventure",
+          "channels": [
+            {
+              "name": "FOX Sports 1 USA",
+              "href": "https://dlhd.dad/watch.php?id=39",
+              "channelId": 39
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "12:30",
+          "title": "NCAA : Illinois State vs Charlotte",
+          "channels": [
+            {
+              "name": "ESPN2 USA",
+              "href": "https://dlhd.dad/watch.php?id=45",
+              "channelId": 45
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:30"
+        },
+        {
+          "time": "13:00",
+          "title": "NCAA : San Francisco vs Colorado",
+          "channels": [
+            {
+              "name": "CBS Sports Network USA",
+              "href": "https://dlhd.dad/watch.php?id=308",
+              "channelId": 308
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        },
+        {
+          "time": "13:00",
+          "title": "College Basketball Players Era Festival: Oregon vs. Creighton",
+          "channels": [
+            {
+              "name": "truTV USA",
+              "href": "https://dlhd.dad/watch.php?id=341",
+              "channelId": 341
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        },
+        {
+          "time": "13:30",
+          "title": "College Basketball Battle 4 Atlantis, First Consolation Semifinal: Teams TBA",
+          "channels": [
+            {
+              "name": "ESPN USA",
+              "href": "https://dlhd.dad/watch.php?id=44",
+              "channelId": 44
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:30"
+        },
+        {
+          "time": "14:00",
+          "title": "NCAA : Florida vs TCU",
+          "channels": [
+            {
+              "name": "FOX Sports 1 USA",
+              "href": "https://dlhd.dad/watch.php?id=39",
+              "channelId": 39
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "15:30",
+          "title": "NCAA : North Carolina vs Michigan State",
+          "channels": [
+            {
+              "name": "FOX USA",
+              "href": "https://dlhd.dad/watch.php?id=54",
+              "channelId": 54
+            },
+            {
+              "name": "FOXNY USA",
+              "href": "https://dlhd.dad/watch.php?id=768",
+              "channelId": 768
+            },
+            {
+              "name": "Fox Deportes USA",
+              "href": "https://dlhd.dad/watch.php?id=643",
+              "channelId": 643
+            }
+          ],
+          "isLive": false,
+          "dataTime": "21:30"
+        },
+        {
+          "time": "15:30",
+          "title": "NCAA : Washington vs Nevada",
+          "channels": [
+            {
+              "name": "CBS Sports Network USA",
+              "href": "https://dlhd.dad/watch.php?id=308",
+              "channelId": 308
+            }
+          ],
+          "isLive": false,
+          "dataTime": "21:30"
+        },
+        {
+          "time": "15:30",
+          "title": "College Basketball Players Era Festival: UNLV vs. Rutgers",
+          "channels": [
+            {
+              "name": "truTV USA",
+              "href": "https://dlhd.dad/watch.php?id=341",
+              "channelId": 341
+            }
+          ],
+          "isLive": false,
+          "dataTime": "21:30"
+        },
+        {
+          "time": "16:00",
+          "title": "NCAA : Miami RedHawksvs Brigham Young",
+          "channels": [
+            {
+              "name": "TSN2",
+              "href": "https://dlhd.dad/watch.php?id=112",
+              "channelId": 112
+            },
+            {
+              "name": "Sportklub 1 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=101",
+              "channelId": 101
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:00"
+        },
+        {
+          "time": "16:30",
+          "title": "College Basketball Battle 4 Atlantis, First Consolation Semifinal: Teams TBA",
+          "channels": [
+            {
+              "name": "ESPN2 USA",
+              "href": "https://dlhd.dad/watch.php?id=45",
+              "channelId": 45
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:30"
+        },
+        {
+          "time": "16:30",
+          "title": "NCAA : Providence vs Wisconsin",
+          "channels": [
+            {
+              "name": "FOX Sports 1 USA",
+              "href": "https://dlhd.dad/watch.php?id=39",
+              "channelId": 39
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:30"
+        },
+        {
+          "time": "18:00",
+          "title": "NCAA : Santa Clara vs St. Louis",
+          "channels": [
+            {
+              "name": "CBS Sports Network USA",
+              "href": "https://dlhd.dad/watch.php?id=308",
+              "channelId": 308
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:00"
+        },
+        {
+          "time": "18:30",
+          "title": "NCAA : Dayton vs Georgetown",
+          "channels": [
+            {
+              "name": "ESPN2 USA",
+              "href": "https://dlhd.dad/watch.php?id=45",
+              "channelId": 45
+            }
+          ],
+          "isLive": false,
+          "dataTime": "00:30"
+        },
+        {
+          "time": "19:00",
+          "title": "NCAA : Duke vs Arkansas",
+          "channels": [
+            {
+              "name": "CBS USA",
+              "href": "https://dlhd.dad/watch.php?id=52",
+              "channelId": 52
+            },
+            {
+              "name": "CBSNY USA",
+              "href": "https://dlhd.dad/watch.php?id=767",
+              "channelId": 767
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "19:00",
+          "title": "Women's College Basketball Players Era Festival, Championship Game: Teams TBA",
+          "channels": [
+            {
+              "name": "truTV USA",
+              "href": "https://dlhd.dad/watch.php?id=341",
+              "channelId": 341
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "19:00",
+          "title": "College Basketball Battle 4 Atlantis, First Consolation Semifinal: Teams TBA",
+          "channels": [
+            {
+              "name": "ESPNU USA",
+              "href": "https://dlhd.dad/watch.php?id=316",
+              "channelId": 316
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "20:30",
+          "title": "NCAA : Stanford vs Minnesota",
+          "channels": [
+            {
+              "name": "CBS Sports Network USA",
+              "href": "https://dlhd.dad/watch.php?id=308",
+              "channelId": 308
+            }
+          ],
+          "isLive": false,
+          "dataTime": "02:30"
+        },
+        {
+          "time": "21:30",
+          "title": "NCAA : Northwestern vs Oklahoma State",
+          "channels": [
+            {
+              "name": "BTN USA",
+              "href": "https://dlhd.dad/watch.php?id=397",
+              "channelId": 397
+            }
+          ],
+          "isLive": false,
+          "dataTime": "03:30"
+        },
+        {
+          "time": "21:30",
+          "title": "Women's College Basketball Players Era Festival, Third-Place Game: Teams TBA",
+          "channels": [
+            {
+              "name": "truTV USA",
+              "href": "https://dlhd.dad/watch.php?id=341",
+              "channelId": 341
+            }
+          ],
+          "isLive": false,
+          "dataTime": "03:30"
+        }
+      ]
+    },
+    {
+      "name": "Futsal",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "04:00",
+          "title": "World Cup Women : Poland W vs Morocco W",
+          "channels": [
+            {
+              "name": "TVP Sport Poland",
+              "href": "https://dlhd.dad/watch.php?id=128",
+              "channelId": 128
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        },
+        {
+          "time": "17:00",
+          "title": "LNF : Corinthians vs Campo Mourao",
+          "channels": [
+            {
+              "name": "BandSports Brasil",
+              "href": "https://dlhd.dad/watch.php?id=275",
+              "channelId": 275
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:00"
+        }
+      ]
+    },
+    {
+      "name": "Equestrian",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "08:30",
+          "title": "Dos Hermanas Racecourse. Seville (T2025)",
+          "channels": [
+            {
+              "name": "Movistar Deportes Spain",
+              "href": "https://dlhd.dad/watch.php?id=436",
+              "channelId": 436
+            }
+          ],
+          "isLive": false,
+          "dataTime": "14:30"
+        }
+      ]
+    },
+    {
+      "name": "Handball",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "11:00",
+          "title": "World Championship Women : Switzerland W vs Iran W",
+          "channels": [
+            {
+              "name": "SRF Zwei",
+              "href": "https://dlhd.dad/watch.php?id=153",
+              "channelId": 153
+            },
+            {
+              "name": "beIN Sports 4 Max France",
+              "href": "https://dlhd.dad/watch.php?id=494",
+              "channelId": 494
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "11:00",
+          "title": "World Championship Women : Romania W vs Croatia W",
+          "channels": [
+            {
+              "name": "beIN Sports 1 France",
+              "href": "https://dlhd.dad/watch.php?id=116",
+              "channelId": 116
+            },
+            {
+              "name": "TV2 Sport Denmark",
+              "href": "https://dlhd.dad/watch.php?id=810",
+              "channelId": 810
+            },
+            {
+              "name": "Arena Sport 6 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=941",
+              "channelId": 941
+            },
+            {
+              "name": "TV 10 Sweden",
+              "href": "https://dlhd.dad/watch.php?id=154",
+              "channelId": 154
+            },
+            {
+              "name": "Digi Sport 2 Romania",
+              "href": "https://dlhd.dad/watch.php?id=401",
+              "channelId": 401
+            },
+            {
+              "name": "Prima Sport 2 Romania",
+              "href": "https://dlhd.dad/watch.php?id=584",
+              "channelId": 584
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "11:00",
+          "title": "World Championship Women : Brazil W vs Cuba W",
+          "channels": [
+            {
+              "name": "beIN Sports 5 Max France",
+              "href": "https://dlhd.dad/watch.php?id=495",
+              "channelId": 495
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "11:00",
+          "title": "Champions League Women : Schweriner SC vs Paris St-Cloud",
+          "channels": [
+            {
+              "name": "beIN Sports 8 Max France",
+              "href": "https://dlhd.dad/watch.php?id=498",
+              "channelId": 498
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "11:00",
+          "title": "World Championship Women : Angola W vs Kazakhstan W",
+          "channels": [
+            {
+              "name": "TV3 Norge",
+              "href": "https://dlhd.dad/watch.php?id=181",
+              "channelId": 181
+            },
+            {
+              "name": "beIN Sports 6 Max France",
+              "href": "https://dlhd.dad/watch.php?id=496",
+              "channelId": 496
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "11:45",
+          "title": "Champions League : GOG Handbold vs. FC Barcelona",
+          "channels": [
+            {
+              "name": "DAZN 1 Spain",
+              "href": "https://dlhd.dad/watch.php?id=445",
+              "channelId": 445
+            },
+            {
+              "name": "DR 2 Denmark",
+              "href": "https://dlhd.dad/watch.php?id=802",
+              "channelId": 802
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Champions League : SC Szeged vs. RK PPD Zagreb",
+          "channels": [
+            {
+              "name": "Arena Sport 1 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=429",
+              "channelId": 429
+            },
+            {
+              "name": "Arena Sport 3 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=434",
+              "channelId": 434
+            },
+            {
+              "name": "Sport 1 Hungary",
+              "href": "https://dlhd.dad/watch.php?id=158",
+              "channelId": 158
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "13:30",
+          "title": "World Championship Women : Hungary W vs Senegal W",
+          "channels": [
+            {
+              "name": "beIN Sports 1 France",
+              "href": "https://dlhd.dad/watch.php?id=116",
+              "channelId": 116
+            },
+            {
+              "name": "Duna World Hungary",
+              "href": "https://dlhd.dad/watch.php?id=182",
+              "channelId": 182
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:30"
+        },
+        {
+          "time": "13:30",
+          "title": "World Championship Women : Denmark W vs Japan W",
+          "channels": [
+            {
+              "name": "Digi Sport 2 Romania",
+              "href": "https://dlhd.dad/watch.php?id=401",
+              "channelId": 401
+            },
+            {
+              "name": "TV2 Denmark",
+              "href": "https://dlhd.dad/watch.php?id=817",
+              "channelId": 817
+            },
+            {
+              "name": "beIN Sports 4 Max France",
+              "href": "https://dlhd.dad/watch.php?id=494",
+              "channelId": 494
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:30"
+        },
+        {
+          "time": "13:30",
+          "title": "World Championship Women : Sweden W vs Czech Republic W",
+          "channels": [
+            {
+              "name": "CT Sport Czech HD",
+              "href": "https://dlhd.dad/watch.php?id=1033",
+              "channelId": 1033
+            },
+            {
+              "name": "TV2 Sport Denmark",
+              "href": "https://dlhd.dad/watch.php?id=810",
+              "channelId": 810
+            },
+            {
+              "name": "Arena Sport 6 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=941",
+              "channelId": 941
+            },
+            {
+              "name": "beIN Sports 5 Max France",
+              "href": "https://dlhd.dad/watch.php?id=495",
+              "channelId": 495
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:30"
+        },
+        {
+          "time": "13:30",
+          "title": "World Championship Women : Norway W vs South Korea W",
+          "channels": [
+            {
+              "name": "TV3 Norge",
+              "href": "https://dlhd.dad/watch.php?id=181",
+              "channelId": 181
+            },
+            {
+              "name": "beIN Sports 6 Max France",
+              "href": "https://dlhd.dad/watch.php?id=496",
+              "channelId": 496
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:30"
+        },
+        {
+          "time": "13:45",
+          "title": "Champions League : Fuchse Berlin vs. Veszprem KC",
+          "channels": [
+            {
+              "name": "DAZN 1 DE",
+              "href": "https://dlhd.dad/watch.php?id=426",
+              "channelId": 426
+            },
+            {
+              "name": "Arena Sport 1 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=429",
+              "channelId": 429
+            },
+            {
+              "name": "Arena Sport 3 Croatia",
+              "href": "https://dlhd.dad/watch.php?id=434",
+              "channelId": 434
+            },
+            {
+              "name": "Sport TV3 Portugal",
+              "href": "https://dlhd.dad/watch.php?id=454",
+              "channelId": 454
+            },
+            {
+              "name": "Sport 1 Hungary",
+              "href": "https://dlhd.dad/watch.php?id=158",
+              "channelId": 158
+            },
+            {
+              "name": "Sport 3 Israel",
+              "href": "https://dlhd.dad/watch.php?id=142",
+              "channelId": 142
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:45"
+        },
+        {
+          "time": "13:45",
+          "title": "Champions League : Sporting Clube Portugal vs. Kolstad Handball",
+          "channels": [
+            {
+              "name": "Sporting TV",
+              "href": "https://dlhd.dad/watch.php?id=716",
+              "channelId": 716
+            },
+            {
+              "name": "TV2 Sport 2 Norway",
+              "href": "https://dlhd.dad/watch.php?id=159",
+              "channelId": 159
+            },
+            {
+              "name": "FOX Sports 2 Argentina",
+              "href": "https://dlhd.dad/watch.php?id=788",
+              "channelId": 788
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:45"
+        },
+        {
+          "time": "13:45",
+          "title": "Champions League : Paris SG vs Wisla Plock",
+          "channels": [
+            {
+              "name": "TV3 Sport Denmark HD",
+              "href": "https://dlhd.dad/watch.php?id=809",
+              "channelId": 809
+            },
+            {
+              "name": "EuroSport 2 France",
+              "href": "https://dlhd.dad/watch.php?id=773",
+              "channelId": 773
+            },
+            {
+              "name": "EuroSport 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=57",
+              "channelId": 57
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:45"
+        },
+        {
+          "time": "14:45",
+          "title": "Portugal, 1a Divisao : FC Porto vs. Arsenal Clube Da Devesa",
+          "channels": [
+            {
+              "name": "Porto Canal",
+              "href": "https://dlhd.dad/watch.php?id=718",
+              "channelId": 718
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:45"
+        }
+      ]
+    },
+    {
+      "name": "Horse Racing",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "06:00",
+          "title": "Live racing from Taunton, Chelmsford and Thurles",
+          "channels": [
+            {
+              "name": "Racing Tv UK",
+              "href": "https://dlhd.dad/watch.php?id=555",
+              "channelId": 555
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:00"
+        },
+        {
+          "time": "06:00",
+          "title": "Live racing from around the UK",
+          "channels": [
+            {
+              "name": "Sky Sports Racing UK",
+              "href": "https://dlhd.dad/watch.php?id=554",
+              "channelId": 554
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:00"
+        }
+      ]
+    },
+    {
+      "name": "Ice Hockey",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "08:00",
+          "title": "Russia KHL : Metallurg Magnitogorsk vs Avangard Omsk",
+          "channels": [
+            {
+              "name": "KHL Tv",
+              "href": "https://dlhd.dad/watch.php?id=109",
+              "channelId": 109
+            }
+          ],
+          "isLive": false,
+          "dataTime": "14:00"
+        },
+        {
+          "time": "10:30",
+          "title": "Russia KHL : CSKA Moscow vs Lada Togliatti",
+          "channels": [
+            {
+              "name": "KHL Tv",
+              "href": "https://dlhd.dad/watch.php?id=109",
+              "channelId": 109
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:30"
+        },
+        {
+          "time": "10:30",
+          "title": "Russia KHL : Spartak Moscow vs Avtomobilist Yekaterinburg",
+          "channels": [
+            {
+              "name": "KHL Prime",
+              "href": "https://dlhd.dad/watch.php?id=110",
+              "channelId": 110
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:30"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : Vaxjo vs Timra",
+          "channels": [
+            {
+              "name": "TV4 Fotball Sweden",
+              "href": "https://dlhd.dad/watch.php?id=747",
+              "channelId": 747
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : Skelleftea vs Frolunda",
+          "channels": [
+            {
+              "name": "TV4 Hockey Sweden",
+              "href": "https://dlhd.dad/watch.php?id=700",
+              "channelId": 700
+            },
+            {
+              "name": "Viaplay Sports 1 UK",
+              "href": "https://dlhd.dad/watch.php?id=451",
+              "channelId": 451
+            },
+            {
+              "name": "TV4 Hockey Sweden",
+              "href": "https://dlhd.dad/watch.php?id=700",
+              "channelId": 700
+            },
+            {
+              "name": "SPORT1+ DE",
+              "href": "https://dlhd.dad/watch.php?id=640",
+              "channelId": 640
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : Rogle vs Djurgardens",
+          "channels": [
+            {
+              "name": "TV12 Sweden",
+              "href": "https://dlhd.dad/watch.php?id=160",
+              "channelId": 160
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : Lulea vs Leksands",
+          "channels": [
+            {
+              "name": "TV4 Sport Live 1 Sweden",
+              "href": "https://dlhd.dad/watch.php?id=703",
+              "channelId": 703
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : Linkopings vs Brynas",
+          "channels": [
+            {
+              "name": "TV4 Sport Live 4 Sweden",
+              "href": "https://dlhd.dad/watch.php?id=706",
+              "channelId": 706
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : HV 71 vs Orebro",
+          "channels": [
+            {
+              "name": "TV4 Sport Live 2 Sweden",
+              "href": "https://dlhd.dad/watch.php?id=704",
+              "channelId": 704
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "SHL : Farjestad BK vs Malmo",
+          "channels": [
+            {
+              "name": "TV4 Sport Live 3 Sweden",
+              "href": "https://dlhd.dad/watch.php?id=705",
+              "channelId": 705
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:00",
+          "title": "Norway, Eliteserien : IHK Sparta Sarpsborg vs. Stavanger Oilers",
+          "channels": [
+            {
+              "name": "TV2 Sport 1 Norway HD",
+              "href": "https://dlhd.dad/watch.php?id=183",
+              "channelId": 183
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "12:30",
+          "title": "Alps Hockey League : Khl Sisak vs. HC Asiago",
+          "channels": [
+            {
+              "name": "SPTV Croatia",
+              "href": "https://dlhd.dad/watch.php?id=184",
+              "channelId": 184
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:30"
+        }
+      ]
+    },
+    {
+      "name": "Rugby League",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "14:00",
+          "title": "Fijian Cup Nines D1",
+          "channels": [
+            {
+              "name": "Sky Sport 3 NZ",
+              "href": "https://dlhd.dad/watch.php?id=590",
+              "channelId": 590
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "17:35",
+          "title": "NRL Touch: Queensland State Cup Day 1",
+          "channels": [
+            {
+              "name": "Sky Sport 7 NZ",
+              "href": "https://dlhd.dad/watch.php?id=594",
+              "channelId": 594
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:35"
+        }
+      ]
+    },
+    {
+      "name": "Rugby Union",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "14:00",
+          "title": "Pro D2 : Brive vs Colomiers",
+          "channels": [
+            {
+              "name": "Canal+ Sport France",
+              "href": "https://dlhd.dad/watch.php?id=122",
+              "channelId": 122
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        }
+      ]
+    },
+    {
+      "name": "Volleyball",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "10:00",
+          "title": "Champions League Women : Vakifbank W vs Le Cannet W",
+          "channels": [
+            {
+              "name": "Polsat Sport 3 Poland",
+              "href": "https://dlhd.dad/watch.php?id=129",
+              "channelId": 129
+            },
+            {
+              "name": "Arena Sport 8 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=943",
+              "channelId": 943
+            },
+            {
+              "name": "beIN Sports 7 Max France",
+              "href": "https://dlhd.dad/watch.php?id=497",
+              "channelId": 497
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:00"
+        },
+        {
+          "time": "11:00",
+          "title": "Champions League Women : Palmberg Schwerin W vs Paris W",
+          "channels": [
+            {
+              "name": "beIN Sports 8 Max France",
+              "href": "https://dlhd.dad/watch.php?id=498",
+              "channelId": 498
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "12:00",
+          "title": "CEV Champions League : ACH Volley Ljubljana vs OK Radnički Kragujevac",
+          "channels": [
+            {
+              "name": "Arena Sport 7 Serbia",
+              "href": "https://dlhd.dad/watch.php?id=942",
+              "channelId": 942
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:00"
+        },
+        {
+          "time": "13:00",
+          "title": "Champions League Women : Scandicci W vs Alba Blaj W",
+          "channels": [
+            {
+              "name": "Max Sport 2 Bulgaria",
+              "href": "https://dlhd.dad/watch.php?id=473",
+              "channelId": 473
+            },
+            {
+              "name": "Sky Sport Arena Italy",
+              "href": "https://dlhd.dad/watch.php?id=462",
+              "channelId": 462
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        },
+        {
+          "time": "13:00",
+          "title": "I. Liga : Mickiewicz Kluczbork vs Bielsko-Biala",
+          "channels": [
+            {
+              "name": "Polsat Sport 3 Poland",
+              "href": "https://dlhd.dad/watch.php?id=129",
+              "channelId": 129
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        },
+        {
+          "time": "13:00",
+          "title": "France Ligue A : Nice Volley Ball vs AS Cannes",
+          "channels": [
+            {
+              "name": "beIN Sports 3 France",
+              "href": "https://dlhd.dad/watch.php?id=118",
+              "channelId": 118
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:00"
+        }
+      ]
+    },
+    {
+      "name": "Squash",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "23:00",
+          "title": "Prime Minister Padel Mexico Major Padel",
+          "channels": [
+            {
+              "name": "Sport 3 Israel",
+              "href": "https://dlhd.dad/watch.php?id=142",
+              "channelId": 142
+            }
+          ],
+          "isLive": false,
+          "dataTime": "05:00"
+        }
+      ]
+    },
+    {
+      "name": "Winter Sports",
+      "icon": "fa-solid cat-icon fa-chevron-down",
+      "events": [
+        {
+          "time": "06:00",
+          "title": "Men | Round Robin | European Championships : Scotland vs Italy",
+          "channels": [
+            {
+              "name": "TNT Sports 2 UK",
+              "href": "https://dlhd.dad/watch.php?id=32",
+              "channelId": 32
+            },
+            {
+              "name": "EuroSport 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=57",
+              "channelId": 57
+            },
+            {
+              "name": "EuroSport 1 Spain",
+              "href": "https://dlhd.dad/watch.php?id=524",
+              "channelId": 524
+            },
+            {
+              "name": "EuroSport 1 France",
+              "href": "https://dlhd.dad/watch.php?id=772",
+              "channelId": 772
+            },
+            {
+              "name": "Eurosport 1 SE",
+              "href": "https://dlhd.dad/watch.php?id=231",
+              "channelId": 231
+            },
+            {
+              "name": "EuroSport 1 Italy",
+              "href": "https://dlhd.dad/watch.php?id=878",
+              "channelId": 878
+            },
+            {
+              "name": "EuroSport 1 Greece",
+              "href": "https://dlhd.dad/watch.php?id=41",
+              "channelId": 41
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:00"
+        },
+        {
+          "time": "06:00",
+          "title": "Men | Round Robin | European Championships : Germany vs. Poland",
+          "channels": [
+            {
+              "name": "Polsat Sport 1 Poland",
+              "href": "https://dlhd.dad/watch.php?id=47",
+              "channelId": 47
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:00"
+        },
+        {
+          "time": "06:00",
+          "title": "Men | Round Robin | European Championships : Austria vs. Sweden",
+          "channels": [
+            {
+              "name": "SVT 1 Sweden HD",
+              "href": "https://dlhd.dad/watch.php?id=3",
+              "channelId": 3
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:00"
+        },
+        {
+          "time": "11:00",
+          "title": "Milan Cortina Trials Curling, Women's Semifinal",
+          "channels": [
+            {
+              "name": "TSN5",
+              "href": "https://dlhd.dad/watch.php?id=115",
+              "channelId": 115
+            },
+            {
+              "name": "RDS 2",
+              "href": "https://dlhd.dad/watch.php?id=840",
+              "channelId": 840
+            },
+            {
+              "name": "EuroSport 2 Poland",
+              "href": "https://dlhd.dad/watch.php?id=58",
+              "channelId": 58
+            },
+            {
+              "name": "EuroSport 2 Spain",
+              "href": "https://dlhd.dad/watch.php?id=525",
+              "channelId": 525
+            },
+            {
+              "name": "EuroSport 2 France",
+              "href": "https://dlhd.dad/watch.php?id=773",
+              "channelId": 773
+            },
+            {
+              "name": "Eurosport 2 SE",
+              "href": "https://dlhd.dad/watch.php?id=232",
+              "channelId": 232
+            },
+            {
+              "name": "EuroSport 2 Italy",
+              "href": "https://dlhd.dad/watch.php?id=879",
+              "channelId": 879
+            },
+            {
+              "name": "EuroSport 2 Greece",
+              "href": "https://dlhd.dad/watch.php?id=42",
+              "channelId": 42
+            },
+            {
+              "name": "Eurosport 2 SE",
+              "href": "https://dlhd.dad/watch.php?id=232",
+              "channelId": 232
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:00"
+        },
+        {
+          "time": "17:00",
+          "title": "Milan Cortina Trials Curling, Men's Semifinal",
+          "channels": [
+            {
+              "name": "TSN5",
+              "href": "https://dlhd.dad/watch.php?id=115",
+              "channelId": 115
+            },
+            {
+              "name": "RDS Info",
+              "href": "https://dlhd.dad/watch.php?id=841",
+              "channelId": 841
+            }
+          ],
+          "isLive": false,
+          "dataTime": "23:00"
+        }
+      ]
+    },
+    {
+      "name": "Soccer",
+      "icon": "fa-solid fa-chevron-right cat-icon",
+      "events": [
+        {
+          "time": "04:00",
+          "title": "Soccer : Ulsan HD vs Buriram United",
+          "channels": [
+            {
+              "name": "Extra Stream CH-1",
+              "href": "https://dlhd.dad/watchextra.php?id=1",
+              "channelId": 1
+            },
+            {
+              "name": "Extra Stream CH-461",
+              "href": "https://dlhd.dad/watchextra.php?id=461",
+              "channelId": 461
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        },
+        {
+          "time": "06:15",
+          "title": "Soccer : Shanghai Shenhua vs Vissel Kobe",
+          "channels": [
+            {
+              "name": "Extra Stream CH-2",
+              "href": "https://dlhd.dad/watchextra.php?id=2",
+              "channelId": 2
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:15"
+        },
+        {
+          "time": "06:15",
+          "title": "Soccer : Bangkok United vs Selangor",
+          "channels": [
+            {
+              "name": "Extra Stream CH-3",
+              "href": "https://dlhd.dad/watchextra.php?id=3",
+              "channelId": 3
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:15"
+        },
+        {
+          "time": "06:15",
+          "title": "Soccer : Lion City Sailors vs Persib",
+          "channels": [
+            {
+              "name": "Extra Stream CH-4",
+              "href": "https://dlhd.dad/watchextra.php?id=4",
+              "channelId": 4
+            }
+          ],
+          "isLive": false,
+          "dataTime": "12:15"
+        },
+        {
+          "time": "07:00",
+          "title": "Soccer : Andijan vs Arkadag",
+          "channels": [
+            {
+              "name": "Extra Stream CH-5",
+              "href": "https://dlhd.dad/watchextra.php?id=5",
+              "channelId": 5
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "07:00",
+          "title": "Soccer : Istiklol vs Al Nassr",
+          "channels": [
+            {
+              "name": "Extra Stream CH-6",
+              "href": "https://dlhd.dad/watchextra.php?id=6",
+              "channelId": 6
+            },
+            {
+              "name": "Extra Stream CH-459",
+              "href": "https://dlhd.dad/watchextra.php?id=459",
+              "channelId": 459
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "07:00",
+          "title": "Soccer : Arsenal FC 19 vs Bayern Munich U19",
+          "channels": [
+            {
+              "name": "Extra Stream CH-7",
+              "href": "https://dlhd.dad/watchextra.php?id=7",
+              "channelId": 7
+            },
+            {
+              "name": "Extra Stream CH-451",
+              "href": "https://dlhd.dad/watchextra.php?id=451",
+              "channelId": 451
+            },
+            {
+              "name": "Extra Stream CH-474",
+              "href": "https://dlhd.dad/watchextra.php?id=474",
+              "channelId": 474
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "07:00",
+          "title": "Soccer : Sporting CP U19 vs Club Brugge U19",
+          "channels": [
+            {
+              "name": "Extra Stream CH-8",
+              "href": "https://dlhd.dad/watchextra.php?id=8",
+              "channelId": 8
+            },
+            {
+              "name": "Extra Stream CH-463",
+              "href": "https://dlhd.dad/watchextra.php?id=463",
+              "channelId": 463
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "07:00",
+          "title": "Soccer : Atletico Madrid U19 vs Inter U19",
+          "channels": [
+            {
+              "name": "Extra Stream CH-9",
+              "href": "https://dlhd.dad/watchextra.php?id=9",
+              "channelId": 9
+            },
+            {
+              "name": "Extra Stream CH-460",
+              "href": "https://dlhd.dad/watchextra.php?id=460",
+              "channelId": 460
+            },
+            {
+              "name": "Extra Stream CH-474",
+              "href": "https://dlhd.dad/watchextra.php?id=474",
+              "channelId": 474
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:00"
+        },
+        {
+          "time": "07:45",
+          "title": "Soccer : Esteghlal vs Al Wasl",
+          "channels": [
+            {
+              "name": "Extra Stream CH-10",
+              "href": "https://dlhd.dad/watchextra.php?id=10",
+              "channelId": 10
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:45"
+        },
+        {
+          "time": "07:45",
+          "title": "Soccer : Zawra vs FC Goa",
+          "channels": [
+            {
+              "name": "Extra Stream CH-11",
+              "href": "https://dlhd.dad/watchextra.php?id=11",
+              "channelId": 11
+            }
+          ],
+          "isLive": false,
+          "dataTime": "13:45"
+        },
+        {
+          "time": "08:00",
+          "title": "Soccer : Liverpool U19 vs PSV Eindhoven U19",
+          "channels": [
+            {
+              "name": "Extra Stream CH-12",
+              "href": "https://dlhd.dad/watchextra.php?id=12",
+              "channelId": 12
+            }
+          ],
+          "isLive": false,
+          "dataTime": "14:00"
+        },
+        {
+          "time": "09:00",
+          "title": "Soccer : Eintracht Frankfurt U19 vs Atalanta U19",
+          "channels": [
+            {
+              "name": "Extra Stream CH-13",
+              "href": "https://dlhd.dad/watchextra.php?id=13",
+              "channelId": 13
+            }
+          ],
+          "isLive": false,
+          "dataTime": "15:00"
+        },
+        {
+          "time": "09:00",
+          "title": "Soccer : Olympiakos Piraeus U19 vs Real Madrid U19",
+          "channels": [
+            {
+              "name": "Extra Stream CH-14",
+              "href": "https://dlhd.dad/watchextra.php?id=14",
+              "channelId": 14
+            }
+          ],
+          "isLive": false,
+          "dataTime": "15:00"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : F.C. Kobenhavn vs Kairat Almaty",
+          "channels": [
+            {
+              "name": "Extra Stream CH-15",
+              "href": "https://dlhd.dad/watchextra.php?id=15",
+              "channelId": 15
+            },
+            {
+              "name": "Extra Stream CH-461",
+              "href": "https://dlhd.dad/watchextra.php?id=461",
+              "channelId": 461
+            },
+            {
+              "name": "Extra Stream CH-474",
+              "href": "https://dlhd.dad/watchextra.php?id=474",
+              "channelId": 474
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Pafos vs AS Monaco",
+          "channels": [
+            {
+              "name": "Extra Stream CH-16",
+              "href": "https://dlhd.dad/watchextra.php?id=16",
+              "channelId": 16
+            },
+            {
+              "name": "Extra Stream CH-455",
+              "href": "https://dlhd.dad/watchextra.php?id=455",
+              "channelId": 455
+            },
+            {
+              "name": "Extra Stream CH-454",
+              "href": "https://dlhd.dad/watchextra.php?id=454",
+              "channelId": 454
+            },
+            {
+              "name": "Extra Stream CH-460",
+              "href": "https://dlhd.dad/watchextra.php?id=460",
+              "channelId": 460
+            },
+            {
+              "name": "Extra Stream CH-473",
+              "href": "https://dlhd.dad/watchextra.php?id=473",
+              "channelId": 473
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Champions League Konferenz",
+          "channels": [
+            {
+              "name": "Extra Stream CH-17",
+              "href": "https://dlhd.dad/watchextra.php?id=17",
+              "channelId": 17
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Arsenal vs Bayern Munich",
+          "channels": [
+            {
+              "name": "Extra Stream CH-18",
+              "href": "https://dlhd.dad/watchextra.php?id=18",
+              "channelId": 18
+            },
+            {
+              "name": "Extra Stream CH-451",
+              "href": "https://dlhd.dad/watchextra.php?id=451",
+              "channelId": 451
+            },
+            {
+              "name": "Extra Stream CH-453",
+              "href": "https://dlhd.dad/watchextra.php?id=453",
+              "channelId": 453
+            },
+            {
+              "name": "Extra Stream CH-473",
+              "href": "https://dlhd.dad/watchextra.php?id=473",
+              "channelId": 473
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Atletico Madrid vs Internazionale",
+          "channels": [
+            {
+              "name": "Extra Stream CH-19",
+              "href": "https://dlhd.dad/watchextra.php?id=19",
+              "channelId": 19
+            },
+            {
+              "name": "Extra Stream CH-459",
+              "href": "https://dlhd.dad/watchextra.php?id=459",
+              "channelId": 459
+            },
+            {
+              "name": "Extra Stream CH-457",
+              "href": "https://dlhd.dad/watchextra.php?id=457",
+              "channelId": 457
+            },
+            {
+              "name": "Extra Stream CH-460",
+              "href": "https://dlhd.dad/watchextra.php?id=460",
+              "channelId": 460
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Eintracht Frankfurt vs Atalanta",
+          "channels": [
+            {
+              "name": "Extra Stream CH-20",
+              "href": "https://dlhd.dad/watchextra.php?id=20",
+              "channelId": 20
+            },
+            {
+              "name": "Extra Stream CH-458",
+              "href": "https://dlhd.dad/watchextra.php?id=458",
+              "channelId": 458
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Liverpool vs PSV Eindhoven",
+          "channels": [
+            {
+              "name": "Extra Stream CH-21",
+              "href": "https://dlhd.dad/watchextra.php?id=21",
+              "channelId": 21
+            },
+            {
+              "name": "Extra Stream CH-452",
+              "href": "https://dlhd.dad/watchextra.php?id=452",
+              "channelId": 452
+            },
+            {
+              "name": "Extra Stream CH-475",
+              "href": "https://dlhd.dad/watchextra.php?id=475",
+              "channelId": 475
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Olympiacos vs Real Madrid",
+          "channels": [
+            {
+              "name": "Extra Stream CH-22",
+              "href": "https://dlhd.dad/watchextra.php?id=22",
+              "channelId": 22
+            },
+            {
+              "name": "Extra Stream CH-461",
+              "href": "https://dlhd.dad/watchextra.php?id=461",
+              "channelId": 461
+            },
+            {
+              "name": "Extra Stream CH-456",
+              "href": "https://dlhd.dad/watchextra.php?id=456",
+              "channelId": 456
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Paris Saint-Germain vs Tottenham Hotspur",
+          "channels": [
+            {
+              "name": "Extra Stream CH-23",
+              "href": "https://dlhd.dad/watchextra.php?id=23",
+              "channelId": 23
+            },
+            {
+              "name": "Extra Stream CH-455",
+              "href": "https://dlhd.dad/watchextra.php?id=455",
+              "channelId": 455
+            },
+            {
+              "name": "Extra Stream CH-454",
+              "href": "https://dlhd.dad/watchextra.php?id=454",
+              "channelId": 454
+            },
+            {
+              "name": "Extra Stream CH-474",
+              "href": "https://dlhd.dad/watchextra.php?id=474",
+              "channelId": 474
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Sporting CP vs Club Brugge",
+          "channels": [
+            {
+              "name": "Extra Stream CH-24",
+              "href": "https://dlhd.dad/watchextra.php?id=24",
+              "channelId": 24
+            },
+            {
+              "name": "Extra Stream CH-467",
+              "href": "https://dlhd.dad/watchextra.php?id=467",
+              "channelId": 467
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : West Bromwich Albion vs Birmingham City",
+          "channels": [
+            {
+              "name": "Extra Stream CH-25",
+              "href": "https://dlhd.dad/watchextra.php?id=25",
+              "channelId": 25
+            },
+            {
+              "name": "Extra Stream CH-463",
+              "href": "https://dlhd.dad/watchextra.php?id=463",
+              "channelId": 463
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : The Golazo Show",
+          "channels": [
+            {
+              "name": "Extra Stream CH-26",
+              "href": "https://dlhd.dad/watchextra.php?id=26",
+              "channelId": 26
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "16:00",
+          "title": "Soccer : Red Bull Bragantino vs Fortaleza",
+          "channels": [
+            {
+              "name": "Extra Stream CH-27",
+              "href": "https://dlhd.dad/watchextra.php?id=27",
+              "channelId": 27
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:00"
+        }
+      ]
+    },
+    {
+      "name": "WWE/MMA/BOXING",
+      "icon": "fa-solid fa-chevron-right cat-icon",
+      "events": [
+        {
+          "time": "19:00",
+          "title": "WWE NXT",
+          "channels": [
+            {
+              "name": "Extra Stream CH-28",
+              "href": "https://dlhd.dad/watchextra.php?id=28",
+              "channelId": 28
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        }
+      ]
+    },
+    {
+      "name": "Basketball",
+      "icon": "fa-solid fa-chevron-right cat-icon",
+      "events": [
+        {
+          "time": "12:30",
+          "title": "Crvena zvezda vs Olympiacos",
+          "channels": [
+            {
+              "name": "Extra Stream CH-29",
+              "href": "https://dlhd.dad/watchextra.php?id=29",
+              "channelId": 29
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:30"
+        },
+        {
+          "time": "12:30",
+          "title": "Monaco vs Anadolu Efes",
+          "channels": [
+            {
+              "name": "Extra Stream CH-30",
+              "href": "https://dlhd.dad/watchextra.php?id=30",
+              "channelId": 30
+            }
+          ],
+          "isLive": false,
+          "dataTime": "18:30"
+        },
+        {
+          "time": "13:05",
+          "title": "Maccabi Tel Aviv vs Olimpia Milano",
+          "channels": [
+            {
+              "name": "Extra Stream CH-31",
+              "href": "https://dlhd.dad/watchextra.php?id=31",
+              "channelId": 31
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:05"
+        },
+        {
+          "time": "13:30",
+          "title": "Barcelona vs Lyon-Villeurbanne",
+          "channels": [
+            {
+              "name": "Extra Stream CH-32",
+              "href": "https://dlhd.dad/watchextra.php?id=32",
+              "channelId": 32
+            }
+          ],
+          "isLive": false,
+          "dataTime": "19:30"
+        }
+      ]
+    },
+    {
+      "name": "Soccer",
+      "icon": "fa-solid fa-chevron-right cat-icon",
+      "events": [
+        {
+          "time": "01:45",
+          "title": "Soccer : Brazil U17 vs Italy U17",
+          "channels": [
+            {
+              "name": "Extra Stream CH-1",
+              "href": "https://dlhd.dad/watchextra.php?id=1",
+              "channelId": 1
+            }
+          ],
+          "isLive": false,
+          "dataTime": "07:45"
+        },
+        {
+          "time": "04:00",
+          "title": "Soccer : World Cup U17 Final: Portugal U17 vs Austria U17",
+          "channels": [
+            {
+              "name": "Extra Stream CH-2",
+              "href": "https://dlhd.dad/watchextra.php?id=2",
+              "channelId": 2
+            }
+          ],
+          "isLive": false,
+          "dataTime": "10:00"
+        },
+        {
+          "time": "11:30",
+          "title": "Soccer : The Golazo Show",
+          "channels": [
+            {
+              "name": "Extra Stream CH-3",
+              "href": "https://dlhd.dad/watchextra.php?id=3",
+              "channelId": 3
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:30"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : AS Roma vs FC Midtjylland",
+          "channels": [
+            {
+              "name": "Extra Stream CH-4",
+              "href": "https://dlhd.dad/watchextra.php?id=4",
+              "channelId": 4
+            },
+            {
+              "name": "Extra Stream CH-457",
+              "href": "https://dlhd.dad/watchextra.php?id=457",
+              "channelId": 457
+            },
+            {
+              "name": "Extra Stream CH-475",
+              "href": "https://dlhd.dad/watchextra.php?id=475",
+              "channelId": 475
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Aston Villa vs Young Boys",
+          "channels": [
+            {
+              "name": "Extra Stream CH-5",
+              "href": "https://dlhd.dad/watchextra.php?id=5",
+              "channelId": 5
+            },
+            {
+              "name": "Extra Stream CH-452",
+              "href": "https://dlhd.dad/watchextra.php?id=452",
+              "channelId": 452
+            },
+            {
+              "name": "Extra Stream CH-473",
+              "href": "https://dlhd.dad/watchextra.php?id=473",
+              "channelId": 473
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : FC Porto vs Nice",
+          "channels": [
+            {
+              "name": "Extra Stream CH-6",
+              "href": "https://dlhd.dad/watchextra.php?id=6",
+              "channelId": 6
+            },
+            {
+              "name": "Extra Stream CH-459",
+              "href": "https://dlhd.dad/watchextra.php?id=459",
+              "channelId": 459
+            },
+            {
+              "name": "Extra Stream CH-467",
+              "href": "https://dlhd.dad/watchextra.php?id=467",
+              "channelId": 467
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Fenerbahce vs Ferencvaros",
+          "channels": [
+            {
+              "name": "Extra Stream CH-7",
+              "href": "https://dlhd.dad/watchextra.php?id=7",
+              "channelId": 7
+            },
+            {
+              "name": "Extra Stream CH-461",
+              "href": "https://dlhd.dad/watchextra.php?id=461",
+              "channelId": 461
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Feyenoord Rotterdam vs Celtic",
+          "channels": [
+            {
+              "name": "Extra Stream CH-8",
+              "href": "https://dlhd.dad/watchextra.php?id=8",
+              "channelId": 8
+            },
+            {
+              "name": "Extra Stream CH-455",
+              "href": "https://dlhd.dad/watchextra.php?id=455",
+              "channelId": 455
+            },
+            {
+              "name": "Extra Stream CH-474",
+              "href": "https://dlhd.dad/watchextra.php?id=474",
+              "channelId": 474
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Lille vs Dinamo Zagreb",
+          "channels": [
+            {
+              "name": "Extra Stream CH-9",
+              "href": "https://dlhd.dad/watchextra.php?id=9",
+              "channelId": 9
+            },
+            {
+              "name": "Extra Stream CH-454",
+              "href": "https://dlhd.dad/watchextra.php?id=454",
+              "channelId": 454
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Ludogorets Razgrad vs Celta Vigo",
+          "channels": [
+            {
+              "name": "Extra Stream CH-10",
+              "href": "https://dlhd.dad/watchextra.php?id=10",
+              "channelId": 10
+            },
+            {
+              "name": "Extra Stream CH-456",
+              "href": "https://dlhd.dad/watchextra.php?id=456",
+              "channelId": 456
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : PAOK Salonika vs SK Brann",
+          "channels": [
+            {
+              "name": "Extra Stream CH-11",
+              "href": "https://dlhd.dad/watchextra.php?id=11",
+              "channelId": 11
+            },
+            {
+              "name": "Extra Stream CH-458",
+              "href": "https://dlhd.dad/watchextra.php?id=458",
+              "channelId": 458
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Viktoria Plzen vs SC Freiburg",
+          "channels": [
+            {
+              "name": "Extra Stream CH-12",
+              "href": "https://dlhd.dad/watchextra.php?id=12",
+              "channelId": 12
+            },
+            {
+              "name": "Extra Stream CH-453",
+              "href": "https://dlhd.dad/watchextra.php?id=453",
+              "channelId": 453
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : AZ Alkmaar vs Shelbourne",
+          "channels": [
+            {
+              "name": "Extra Stream CH-13",
+              "href": "https://dlhd.dad/watchextra.php?id=13",
+              "channelId": 13
+            },
+            {
+              "name": "Extra Stream CH-451",
+              "href": "https://dlhd.dad/watchextra.php?id=451",
+              "channelId": 451
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : CSU Craiova vs Mainz",
+          "channels": [
+            {
+              "name": "Extra Stream CH-14",
+              "href": "https://dlhd.dad/watchextra.php?id=14",
+              "channelId": 14
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Hamrun Spartans vs Lincoln Red Imps",
+          "channels": [
+            {
+              "name": "Extra Stream CH-15",
+              "href": "https://dlhd.dad/watchextra.php?id=15",
+              "channelId": 15
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Lech Poznan vs Lausanne Sports",
+          "channels": [
+            {
+              "name": "Extra Stream CH-16",
+              "href": "https://dlhd.dad/watchextra.php?id=16",
+              "channelId": 16
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Omonia Nicosia vs Dynamo Kyiv",
+          "channels": [
+            {
+              "name": "Extra Stream CH-17",
+              "href": "https://dlhd.dad/watchextra.php?id=17",
+              "channelId": 17
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Rakow Czestochowa vs Rapid Vienna",
+          "channels": [
+            {
+              "name": "Extra Stream CH-18",
+              "href": "https://dlhd.dad/watchextra.php?id=18",
+              "channelId": 18
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Sigma Olomouc vs NK Celje",
+          "channels": [
+            {
+              "name": "Extra Stream CH-19",
+              "href": "https://dlhd.dad/watchextra.php?id=19",
+              "channelId": 19
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Slovan Bratislava vs Rayo Vallecano",
+          "channels": [
+            {
+              "name": "Extra Stream CH-20",
+              "href": "https://dlhd.dad/watchextra.php?id=20",
+              "channelId": 20
+            },
+            {
+              "name": "Extra Stream CH-460",
+              "href": "https://dlhd.dad/watchextra.php?id=460",
+              "channelId": 460
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Zrinjski Mostar vs BK Hacken",
+          "channels": [
+            {
+              "name": "Extra Stream CH-21",
+              "href": "https://dlhd.dad/watchextra.php?id=21",
+              "channelId": 21
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "11:45",
+          "title": "Soccer : Europa League Konferenz",
+          "channels": [
+            {
+              "name": "Extra Stream CH-22",
+              "href": "https://dlhd.dad/watchextra.php?id=22",
+              "channelId": 22
+            }
+          ],
+          "isLive": false,
+          "dataTime": "17:45"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Bologna vs RB Salzburg",
+          "channels": [
+            {
+              "name": "Extra Stream CH-23",
+              "href": "https://dlhd.dad/watchextra.php?id=23",
+              "channelId": 23
+            },
+            {
+              "name": "Extra Stream CH-457",
+              "href": "https://dlhd.dad/watchextra.php?id=457",
+              "channelId": 457
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Go Ahead Eagles vs VfB Stuttgart",
+          "channels": [
+            {
+              "name": "Extra Stream CH-24",
+              "href": "https://dlhd.dad/watchextra.php?id=24",
+              "channelId": 24
+            },
+            {
+              "name": "Extra Stream CH-453",
+              "href": "https://dlhd.dad/watchextra.php?id=453",
+              "channelId": 453
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Maccabi Tel-Aviv vs Lyon",
+          "channels": [
+            {
+              "name": "Extra Stream CH-25",
+              "href": "https://dlhd.dad/watchextra.php?id=25",
+              "channelId": 25
+            },
+            {
+              "name": "Extra Stream CH-475",
+              "href": "https://dlhd.dad/watchextra.php?id=475",
+              "channelId": 475
+            },
+            {
+              "name": "Extra Stream CH-454",
+              "href": "https://dlhd.dad/watchextra.php?id=454",
+              "channelId": 454
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Nottingham Forest vs Malmo FF",
+          "channels": [
+            {
+              "name": "Extra Stream CH-26",
+              "href": "https://dlhd.dad/watchextra.php?id=26",
+              "channelId": 26
+            },
+            {
+              "name": "Extra Stream CH-451",
+              "href": "https://dlhd.dad/watchextra.php?id=451",
+              "channelId": 451
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Panathinaikos vs SK Sturm Graz",
+          "channels": [
+            {
+              "name": "Extra Stream CH-27",
+              "href": "https://dlhd.dad/watchextra.php?id=27",
+              "channelId": 27
+            },
+            {
+              "name": "Extra Stream CH-458",
+              "href": "https://dlhd.dad/watchextra.php?id=458",
+              "channelId": 458
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Racing Genk vs FC Basel",
+          "channels": [
+            {
+              "name": "Extra Stream CH-28",
+              "href": "https://dlhd.dad/watchextra.php?id=28",
+              "channelId": 28
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Rangers vs Braga",
+          "channels": [
+            {
+              "name": "Extra Stream CH-29",
+              "href": "https://dlhd.dad/watchextra.php?id=29",
+              "channelId": 29
+            },
+            {
+              "name": "Extra Stream CH-455",
+              "href": "https://dlhd.dad/watchextra.php?id=455",
+              "channelId": 455
+            },
+            {
+              "name": "Extra Stream CH-473",
+              "href": "https://dlhd.dad/watchextra.php?id=473",
+              "channelId": 473
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Real Betis vs FC Utrecht",
+          "channels": [
+            {
+              "name": "Extra Stream CH-30",
+              "href": "https://dlhd.dad/watchextra.php?id=30",
+              "channelId": 30
+            },
+            {
+              "name": "Extra Stream CH-456",
+              "href": "https://dlhd.dad/watchextra.php?id=456",
+              "channelId": 456
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Red Star Belgrade vs FCSB",
+          "channels": [
+            {
+              "name": "Extra Stream CH-31",
+              "href": "https://dlhd.dad/watchextra.php?id=31",
+              "channelId": 31
+            },
+            {
+              "name": "Extra Stream CH-461",
+              "href": "https://dlhd.dad/watchextra.php?id=461",
+              "channelId": 461
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Aberdeen vs FC Noah",
+          "channels": [
+            {
+              "name": "Extra Stream CH-32",
+              "href": "https://dlhd.dad/watchextra.php?id=32",
+              "channelId": 32
+            },
+            {
+              "name": "Extra Stream CH-460",
+              "href": "https://dlhd.dad/watchextra.php?id=460",
+              "channelId": 460
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Breidablik vs Samsunspor",
+          "channels": [
+            {
+              "name": "Extra Stream CH-33",
+              "href": "https://dlhd.dad/watchextra.php?id=33",
+              "channelId": 33
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Drita Gjilan vs KF Shkendija",
+          "channels": [
+            {
+              "name": "Extra Stream CH-34",
+              "href": "https://dlhd.dad/watchextra.php?id=34",
+              "channelId": 34
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Fiorentina vs AEK Athens",
+          "channels": [
+            {
+              "name": "Extra Stream CH-35",
+              "href": "https://dlhd.dad/watchextra.php?id=35",
+              "channelId": 35
+            },
+            {
+              "name": "Extra Stream CH-459",
+              "href": "https://dlhd.dad/watchextra.php?id=459",
+              "channelId": 459
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Jagiellonia Bialystok vs KuPS Kuopio",
+          "channels": [
+            {
+              "name": "Extra Stream CH-36",
+              "href": "https://dlhd.dad/watchextra.php?id=36",
+              "channelId": 36
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Legia Warsaw vs Sparta Prague",
+          "channels": [
+            {
+              "name": "Extra Stream CH-37",
+              "href": "https://dlhd.dad/watchextra.php?id=37",
+              "channelId": 37
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Rijeka vs AEK Larnaca",
+          "channels": [
+            {
+              "name": "Extra Stream CH-38",
+              "href": "https://dlhd.dad/watchextra.php?id=38",
+              "channelId": 38
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Shamrock Rovers vs Shakhtar Donetsk",
+          "channels": [
+            {
+              "name": "Extra Stream CH-39",
+              "href": "https://dlhd.dad/watchextra.php?id=39",
+              "channelId": 39
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Strasbourg vs Crystal Palace",
+          "channels": [
+            {
+              "name": "Extra Stream CH-40",
+              "href": "https://dlhd.dad/watchextra.php?id=40",
+              "channelId": 40
+            },
+            {
+              "name": "Extra Stream CH-452",
+              "href": "https://dlhd.dad/watchextra.php?id=452",
+              "channelId": 452
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        },
+        {
+          "time": "14:00",
+          "title": "Soccer : Grimsby Town vs Tranmere Rovers",
+          "channels": [
+            {
+              "name": "Extra Stream CH-41",
+              "href": "https://dlhd.dad/watchextra.php?id=41",
+              "channelId": 41
+            }
+          ],
+          "isLive": false,
+          "dataTime": "20:00"
+        }
+      ]
+    },
+    {
+      "name": "WWE",
+      "icon": "fa-solid fa-chevron-right cat-icon",
+      "events": [
+        {
+          "time": "19:00",
+          "title": "AEW Collision",
+          "channels": [
+            {
+              "name": "Extra Stream CH-42",
+              "href": "https://dlhd.dad/watchextra.php?id=42",
+              "channelId": 42
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        },
+        {
+          "time": "19:00",
+          "title": "IMPACT Wrestling",
+          "channels": [
+            {
+              "name": "Extra Stream CH-43",
+              "href": "https://dlhd.dad/watchextra.php?id=43",
+              "channelId": 43
+            }
+          ],
+          "isLive": false,
+          "dataTime": "01:00"
+        }
+      ]
+    },
+    {
+      "name": "Am. Football",
+      "icon": "fa-solid fa-chevron-right cat-icon",
+      "events": [
+        {
+          "time": "10:00",
+          "title": "NFL : Detroit Lions vs Green Bay Packers",
+          "channels": [
+            {
+              "name": "Extra Stream CH-45",
+              "href": "https://dlhd.dad/watchextra.php?id=45",
+              "channelId": 45
+            }
+          ],
+          "isLive": false,
+          "dataTime": "16:00"
+        },
+        {
+          "time": "16:00",
+          "title": "NFL : Dallas Cowboys vs Kansas City Chiefs",
+          "channels": [
+            {
+              "name": "Extra Stream CH-46",
+              "href": "https://dlhd.dad/watchextra.php?id=46",
+              "channelId": 46
+            }
+          ],
+          "isLive": false,
+          "dataTime": "22:00"
+        }
+      ]
+    }
+  ],
+  "totalEvents": 255,
+  "totalChannels": 767
+}

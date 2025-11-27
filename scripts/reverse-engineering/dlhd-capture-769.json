@@ -1,0 +1,144 @@
+{
+  "streamId": 769,
+  "timestamp": "2025-11-27T03:11:54.057Z",
+  "streamUrls": [
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/4k/segment_203.ts?token=ml63lzlvdj&ts=1764213100719",
+      "type": "segment",
+      "timestamp": 1764213101293
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/4k/segment_4484.ts?token=izp9z49m9li&ts=1764213101644",
+      "type": "segment",
+      "timestamp": 1764213101748
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/segment_953.ts?token=chy9qadb5ec&ts=1764213102658",
+      "type": "segment",
+      "timestamp": 1764213102786
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/playlist.m3u8?token=083on1x5gg3i",
+      "type": "response",
+      "timestamp": 1764213103742
+    },
+    {
+      "url": "https://zekonew.giokko.ru/zeko/premium769/mono.css",
+      "type": "response",
+      "timestamp": 1764213112950
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_3121.ts?token=jbe6vwumz6f&ts=1764213104656",
+      "type": "segment",
+      "timestamp": 1764213104816
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/720p/segment_3983.ts?token=lhix2iasijf&ts=1764213105653",
+      "type": "segment",
+      "timestamp": 1764213105733
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_2055.ts?token=fq4nzsply7e&ts=1764213106659",
+      "type": "segment",
+      "timestamp": 1764213106738
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/segment_960.ts?token=qy8lkwb9b3i&ts=1764213107651",
+      "type": "segment",
+      "timestamp": 1764213107734
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/720p/segment_4658.ts?token=h0iugkcaxxa&ts=1764213108646",
+      "type": "segment",
+      "timestamp": 1764213108741
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/segment_3374.ts?token=yk4516y9ekn&ts=1764213109647",
+      "type": "segment",
+      "timestamp": 1764213109787
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/4k/segment_3989.ts?token=i4u523yvd4&ts=1764213110649",
+      "type": "segment",
+      "timestamp": 1764213110734
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_3139.ts?token=w701rzx3mar&ts=1764213111646",
+      "type": "segment",
+      "timestamp": 1764213111736
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_2934.ts?token=hiffll6b6ho&ts=1764213112650",
+      "type": "segment",
+      "timestamp": 1764213112800
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_2452.ts?token=rjy9kf19cb&ts=1764213113647",
+      "type": "segment",
+      "timestamp": 1764213113751
+    }
+  ],
+  "vastResponses": [
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/4k/segment_203.ts?token=ml63lzlvdj&ts=1764213100719",
+      "status": 403
+    },
+    {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/2/21/Speaker_Icon.svg",
+      "status": 200
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/4k/segment_4484.ts?token=izp9z49m9li&ts=1764213101644",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/segment_953.ts?token=chy9qadb5ec&ts=1764213102658",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/playlist.m3u8?token=083on1x5gg3i",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_3121.ts?token=jbe6vwumz6f&ts=1764213104656",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/720p/segment_3983.ts?token=lhix2iasijf&ts=1764213105653",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_2055.ts?token=fq4nzsply7e&ts=1764213106659",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/segment_960.ts?token=qy8lkwb9b3i&ts=1764213107651",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/720p/segment_4658.ts?token=h0iugkcaxxa&ts=1764213108646",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/segment_3374.ts?token=yk4516y9ekn&ts=1764213109647",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/4k/segment_3989.ts?token=i4u523yvd4&ts=1764213110649",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_3139.ts?token=w701rzx3mar&ts=1764213111646",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_2934.ts?token=hiffll6b6ho&ts=1764213112650",
+      "status": 403
+    },
+    {
+      "url": "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/segment_2452.ts?token=rjy9kf19cb&ts=1764213113647",
+      "status": 403
+    }
+  ],
+  "totalRequests": 459
+}

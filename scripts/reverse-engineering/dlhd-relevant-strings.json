@@ -1,0 +1,204 @@
+{
+  "http": [
+    {
+      "index": "0x1c2",
+      "value": "HTTP error"
+    },
+    {
+      "index": "0x481",
+      "value": "=\"http://w"
+    },
+    {
+      "index": "0x6ae",
+      "value": "a http-equ"
+    },
+    {
+      "index": "0x87d",
+      "value": "XMLHttpReq"
+    },
+    {
+      "index": "0xc20",
+      "value": "https:"
+    },
+    {
+      "index": "0xc91",
+      "value": "http://"
+    },
+    {
+      "index": "0xdb2",
+      "value": "http://www"
+    },
+    {
+      "index": "0xf2c",
+      "value": "HTTP Error"
+    },
+    {
+      "index": "0x1387",
+      "value": "PS to HTTP"
+    },
+    {
+      "index": "0x15b4",
+      "value": "XMLHTTP"
+    }
+  ],
+  "player": [
+    {
+      "index": "0x461",
+      "value": "PLAYERSTAT"
+    },
+    {
+      "index": "0xddf",
+      "value": "playerColl"
+    },
+    {
+      "index": "0xe10",
+      "value": "playerExpa"
+    },
+    {
+      "index": "0xec8",
+      "value": "PLAYERCAPA"
+    },
+    {
+      "index": "0x1190",
+      "value": "PLAYERSIZE"
+    }
+  ],
+  "cdn": [
+    {
+      "index": "0x486",
+      "value": "&cbcdn="
+    },
+    {
+      "index": "0xc0b",
+      "value": "cdnDomain"
+    },
+    {
+      "index": "0xd00",
+      "value": "velocecdn."
+    },
+    {
+      "index": "0x1075",
+      "value": "getCdnDoma"
+    }
+  ],
+  "video": [
+    {
+      "index": "0x497",
+      "value": "divideonti"
+    },
+    {
+      "index": "0x73f",
+      "value": "/video/sli"
+    },
+    {
+      "index": "0x7ec",
+      "value": "video wait"
+    },
+    {
+      "index": "0x802",
+      "value": "dio/video "
+    },
+    {
+      "index": "0x9ba",
+      "value": "videoSlide"
+    },
+    {
+      "index": "0xb28",
+      "value": "VideoClick"
+    },
+    {
+      "index": "0xb32",
+      "value": "ioVideo"
+    },
+    {
+      "index": "0xb78",
+      "value": "video src"
+    },
+    {
+      "index": "0xc53",
+      "value": "clearVideo"
+    },
+    {
+      "index": "0xdae",
+      "value": "videoClick"
+    },
+    {
+      "index": "0xe45",
+      "value": "video"
+    },
+    {
+      "index": "0xf9c",
+      "value": "Video load"
+    },
+    {
+      "index": "0x1001",
+      "value": "video erro"
+    },
+    {
+      "index": "0x102f",
+      "value": "videoslide"
+    },
+    {
+      "index": "0x120d",
+      "value": "runVideoSl"
+    },
+    {
+      "index": "0x122a",
+      "value": "/video/sel"
+    },
+    {
+      "index": "0x1447",
+      "value": "VideoAdSer"
+    },
+    {
+      "index": "0x1448",
+      "value": "video ende"
+    },
+    {
+      "index": "0x1586",
+      "value": "videosToOv"
+    },
+    {
+      "index": "0x15ab",
+      "value": "VideoSlide"
+    },
+    {
+      "index": "0x15f0",
+      "value": "videoCusto"
+    },
+    {
+      "index": "0x1634",
+      "value": "VIDEO OVER"
+    },
+    {
+      "index": "0x1636",
+      "value": "video stal"
+    }
+  ],
+  "source": [
+    {
+      "index": "0x6c8",
+      "value": "source"
+    },
+    {
+      "index": "0x6d3",
+      "value": "c source"
+    },
+    {
+      "index": "0x8f3",
+      "value": "Resource"
+    },
+    {
+      "index": "0xa67",
+      "value": "source_zon"
+    },
+    {
+      "index": "0x1185",
+      "value": "eResources"
+    },
+    {
+      "index": "0x158e",
+      "value": "resource"
+    }
+  ]
+}

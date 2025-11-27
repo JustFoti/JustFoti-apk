@@ -1,0 +1,13 @@
+{
+  "streamId": 769,
+  "m3u8Urls": [
+    "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/480p/playlist.m3u8?token=nyaqewhcdxa",
+    "https://zekonew.giokko.ru/zeko/premium769/mono.css",
+    "https://s3.dualstack.us-east-2.amazonaws.com/cam.edu//hls/1080p/playlist.m3u8?token=nyaqewhcdxa"
+  ],
+  "keyUrls": [
+    "https://top2.giokko.ru/wmsxx.php?test=true&name=premium769&number=5880710"
+  ],
+  "timestamp": "2025-11-27T03:13:03.556Z",
+  "workingUrl": "https://zekonew.giokko.ru/zeko/premium769/mono.css"
+}
