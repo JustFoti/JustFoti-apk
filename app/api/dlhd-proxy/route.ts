@@ -106,22 +106,14 @@ function cacheM3U8(channelId: string, content: string, m3u8Url: string, playerDo
 
 
 async function fetchWithHeaders(url: string, headers: Record<string, string> = {}): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
-  
-  try {
-    return await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
-        ...headers,
-      },
-      signal: controller.signal,
-      cache: 'no-store',
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  return fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      ...headers,
+    },
+    cache: 'no-store',
+  });
 }
 
 async function getServerKey(channelKey: string): Promise<{ serverKey: string; playerDomain: string }> {
@@ -167,14 +159,20 @@ async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url:
   const { serverKey, playerDomain } = await getServerKey(channelKey);
   const m3u8Url = constructM3U8Url(serverKey, channelKey);
   
+  console.log(`[DLHD] Fetching M3U8: ${m3u8Url}`);
+  
   const response = await fetchWithHeaders(m3u8Url, {
     'Referer': `https://${playerDomain}/`,
     'Origin': `https://${playerDomain}`,
   });
 
+  console.log(`[DLHD] M3U8 response: ${response.status}`);
+
   if (!response.ok) throw new Error(`Failed to fetch M3U8: HTTP ${response.status}`);
 
   const content = await response.text();
+  console.log(`[DLHD] M3U8 content length: ${content.length}, valid: ${content.includes('#EXTM3U')}`);
+  
   if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
     throw new Error('Invalid M3U8 content received');
   }
@@ -252,6 +250,7 @@ export async function GET(request: NextRequest) {
       m3u8Url = result.m3u8Url;
       playerDomain = result.playerDomain;
     } catch (err) {
+      console.error(`[DLHD] fetchM3U8 failed for ${channel}:`, err);
       return NextResponse.json(
         { error: 'Channel unavailable', details: err instanceof Error ? err.message : String(err) },
         { status: 404 }
