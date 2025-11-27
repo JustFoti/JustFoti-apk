@@ -77,7 +77,7 @@ function getCachedM3U8(channelId: string): CachedM3U8 | null {
   return null;
 }
 
-export function invalidateKeyCache(channelId: string): void {
+function invalidateKeyCache(channelId: string): void {
   if (keyCache.has(channelId)) {
     console.log(`[DLHD] Invalidating key cache for ${channelId}`);
     keyCache.delete(channelId);
