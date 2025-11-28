@@ -514,17 +514,21 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
           liveSyncDurationCount: 5, // Sync 5 segments behind live edge
           liveMaxLatencyDurationCount: 15, // Allow up to 15 segments latency before seeking
           liveDurationInfinity: true, // Treat as infinite live stream
-          levelLoadingMaxRetry: 6, // Retry level loading
-          fragLoadingMaxRetry: 8, // Retry fragment loading more times
+          levelLoadingMaxRetry: 4, // Reduced retries - skip faster
+          fragLoadingMaxRetry: 2, // Only retry fragment twice then skip
           manifestLoadingMaxRetry: 6, // Retry manifest loading
-          levelLoadingRetryDelay: 2000, // Wait 2s between retries
-          fragLoadingRetryDelay: 2000,
+          levelLoadingRetryDelay: 1000, // Faster retry
+          fragLoadingRetryDelay: 500, // Fast retry for fragments
           manifestLoadingRetryDelay: 2000,
-          // CRITICAL: Reduce playlist refresh rate to minimize proxy requests
-          levelLoadingTimeOut: 20000, // 20s timeout for level loading
-          manifestLoadingTimeOut: 20000, // 20s timeout for manifest
+          // Timeouts - fail fast to skip problematic segments
+          levelLoadingTimeOut: 10000, // 10s timeout for level loading
+          manifestLoadingTimeOut: 15000, // 15s timeout for manifest
+          fragLoadingTimeOut: 8000, // 8s timeout for fragments - fail fast
           // These control how often HLS.js polls for new segments
           liveSyncOnStallIncrease: 1, // Only increment by 1 on stall
+          // Error handling - be more lenient
+          startFragPrefetch: true, // Prefetch next fragment
+          testBandwidth: false, // Don't test bandwidth, just play
         });
 
         hls.loadSource(streamUrl);
@@ -537,6 +541,33 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
+          console.log(`[LiveTV] HLS error: ${data.type} - ${data.details}`, data.fatal ? '(FATAL)' : '');
+          
+          // Handle fragment/segment loading errors - skip to next segment
+          if (data.details === 'fragLoadError' || data.details === 'fragLoadTimeOut') {
+            console.log('[LiveTV] Fragment load failed, skipping to next segment');
+            // Skip the problematic fragment by seeking forward slightly
+            if (videoRef.current && hls.media) {
+              const currentTime = videoRef.current.currentTime;
+              const buffered = videoRef.current.buffered;
+              // Find next buffered region or skip 2 seconds
+              let skipTo = currentTime + 2;
+              for (let i = 0; i < buffered.length; i++) {
+                if (buffered.start(i) > currentTime) {
+                  skipTo = buffered.start(i);
+                  break;
+                }
+              }
+              videoRef.current.currentTime = skipTo;
+              console.log(`[LiveTV] Skipped from ${currentTime.toFixed(1)}s to ${skipTo.toFixed(1)}s`);
+            }
+            // Don't treat as fatal - let HLS.js continue
+            if (data.fatal) {
+              hls.recoverMediaError();
+            }
+            return;
+          }
+          
           // Handle decryption errors by invalidating cache and retrying
           if (data.details === 'fragDecryptError' || data.details === 'keyLoadError') {
             console.log(`[LiveTV] Key error, retry ${decryptRetryCount.current + 1}/${MAX_DECRYPT_RETRIES}`);
@@ -547,7 +578,32 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
             }
           }
           
-          if (data.fatal) {
+          // Handle buffer stall - try to recover by seeking
+          if (data.details === 'bufferStalledError') {
+            console.log('[LiveTV] Buffer stalled, attempting recovery');
+            if (videoRef.current) {
+              // Seek forward slightly to get past the stall
+              videoRef.current.currentTime += 1;
+            }
+            return;
+          }
+          
+          // Handle media errors - try to recover
+          if (data.type === 'mediaError' && data.fatal) {
+            console.log('[LiveTV] Fatal media error, attempting recovery');
+            hls.recoverMediaError();
+            return;
+          }
+          
+          // Handle network errors - try to recover
+          if (data.type === 'networkError' && data.fatal) {
+            console.log('[LiveTV] Fatal network error, attempting recovery');
+            hls.startLoad();
+            return;
+          }
+          
+          // Only show error for truly fatal unrecoverable errors
+          if (data.fatal && data.type !== 'mediaError' && data.type !== 'networkError') {
             setError('Stream error - channel may be offline');
             setIsLoading(false);
           }
