@@ -53,7 +53,62 @@ setInterval(() => {
   }
 }, 300000);
 
+// Response cache for M3U8 files - reduces upstream requests dramatically
+const responseCache = new Map();
+const M3U8_CACHE_TTL = 15000; // 15 seconds for M3U8 files
+const KEY_CACHE_TTL = 3600000; // 1 hour for encryption keys
+
+function getCachedResponse(url) {
+  const cached = responseCache.get(url);
+  if (!cached) return null;
+  
+  const age = Date.now() - cached.timestamp;
+  const ttl = url.includes('.key') || url.includes('key.php') ? KEY_CACHE_TTL : M3U8_CACHE_TTL;
+  
+  if (age > ttl) {
+    responseCache.delete(url);
+    return null;
+  }
+  
+  console.log(`[Cache HIT] ${url.substring(0, 60)}... (age: ${Math.round(age/1000)}s)`);
+  return cached;
+}
+
+function cacheResponse(url, data, contentType) {
+  responseCache.set(url, {
+    data,
+    contentType,
+    timestamp: Date.now()
+  });
+  console.log(`[Cache SET] ${url.substring(0, 60)}...`);
+}
+
+// Clean up old cache entries every minute
+setInterval(() => {
+  const now = Date.now();
+  for (const [url, cached] of responseCache.entries()) {
+    const ttl = url.includes('.key') || url.includes('key.php') ? KEY_CACHE_TTL : M3U8_CACHE_TTL;
+    if (now - cached.timestamp > ttl) {
+      responseCache.delete(url);
+    }
+  }
+}, 60000);
+
 function proxyRequest(targetUrl, res) {
+  // Check cache first
+  const cached = getCachedResponse(targetUrl);
+  if (cached) {
+    res.writeHead(200, {
+      'Content-Type': cached.contentType,
+      'Content-Length': cached.data.length,
+      'Access-Control-Allow-Origin': '*',
+      'X-Proxied-By': 'rpi-proxy',
+      'X-Cache': 'HIT',
+    });
+    res.end(cached.data);
+    return;
+  }
+
   const url = new URL(targetUrl);
   const client = url.protocol === 'https:' ? https : http;
   
@@ -68,8 +123,6 @@ function proxyRequest(targetUrl, res) {
     'Origin': `https://${playerDomain}`,
   };
   
-  console.log(`[Proxy] Headers: Referer=${headers['Referer']}, Origin=${headers['Origin']}`)
-  
   const options = {
     hostname: url.hostname,
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
@@ -80,20 +133,28 @@ function proxyRequest(targetUrl, res) {
   };
 
   const proxyReq = client.request(options, (proxyRes) => {
-    // Forward status and safe headers
-    const headers = {
-      'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
-      'Access-Control-Allow-Origin': '*',
-      'X-Proxied-By': 'rpi-proxy',
-    };
+    const contentType = proxyRes.headers['content-type'] || 'application/octet-stream';
+    const chunks = [];
     
-    // Only add Content-Length if it exists
-    if (proxyRes.headers['content-length']) {
-      headers['Content-Length'] = proxyRes.headers['content-length'];
-    }
+    proxyRes.on('data', chunk => chunks.push(chunk));
     
-    res.writeHead(proxyRes.statusCode, headers);
-    proxyRes.pipe(res);
+    proxyRes.on('end', () => {
+      const data = Buffer.concat(chunks);
+      
+      // Cache successful responses for M3U8 and key files
+      if (proxyRes.statusCode === 200) {
+        cacheResponse(targetUrl, data, contentType);
+      }
+      
+      res.writeHead(proxyRes.statusCode, {
+        'Content-Type': contentType,
+        'Content-Length': data.length,
+        'Access-Control-Allow-Origin': '*',
+        'X-Proxied-By': 'rpi-proxy',
+        'X-Cache': 'MISS',
+      });
+      res.end(data);
+    });
   });
 
   proxyReq.on('error', (err) => {

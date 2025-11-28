@@ -508,17 +508,23 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false, // Disable low latency to reduce playlist fetches
-          backBufferLength: 60, // Keep more buffer behind playhead
-          maxBufferLength: 30, // Buffer up to 30 seconds ahead
-          maxMaxBufferLength: 60, // Allow up to 60 seconds in buffer
-          liveSyncDurationCount: 4, // Sync 4 segments behind live edge
-          liveMaxLatencyDurationCount: 10, // Allow up to 10 segments latency before seeking
+          backBufferLength: 90, // Keep 90s buffer behind playhead
+          maxBufferLength: 60, // Buffer up to 60 seconds ahead
+          maxMaxBufferLength: 120, // Allow up to 120 seconds in buffer
+          liveSyncDurationCount: 5, // Sync 5 segments behind live edge
+          liveMaxLatencyDurationCount: 15, // Allow up to 15 segments latency before seeking
           liveDurationInfinity: true, // Treat as infinite live stream
-          levelLoadingMaxRetry: 4, // Retry level loading
-          fragLoadingMaxRetry: 6, // Retry fragment loading more times
-          manifestLoadingMaxRetry: 4, // Retry manifest loading
-          levelLoadingRetryDelay: 1000, // Wait 1s between retries
-          fragLoadingRetryDelay: 1000,
+          levelLoadingMaxRetry: 6, // Retry level loading
+          fragLoadingMaxRetry: 8, // Retry fragment loading more times
+          manifestLoadingMaxRetry: 6, // Retry manifest loading
+          levelLoadingRetryDelay: 2000, // Wait 2s between retries
+          fragLoadingRetryDelay: 2000,
+          manifestLoadingRetryDelay: 2000,
+          // CRITICAL: Reduce playlist refresh rate to minimize proxy requests
+          levelLoadingTimeOut: 20000, // 20s timeout for level loading
+          manifestLoadingTimeOut: 20000, // 20s timeout for manifest
+          // These control how often HLS.js polls for new segments
+          liveSyncOnStallIncrease: 1, // Only increment by 1 on stall
         });
 
         hls.loadSource(streamUrl);
