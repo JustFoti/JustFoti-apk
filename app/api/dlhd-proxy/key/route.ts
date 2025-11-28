@@ -81,15 +81,33 @@ function cacheKey(channelId: string, keyBuffer: ArrayBuffer, keyUrl: string, pla
   return cached;
 }
 
-// Proxy services - allorigins primary, corsproxy backup
-const PROXIES = [
+// Raspberry Pi proxy (if configured) or public CORS proxies as fallback
+const RPI_PROXY_URL = process.env.RPI_PROXY_URL;
+const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;
+
+const PUBLIC_PROXIES = [
   (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
 ];
 
 async function fetchViaProxy(url: string): Promise<Response> {
+  // Try Raspberry Pi proxy first if configured
+  if (RPI_PROXY_URL && RPI_PROXY_KEY) {
+    try {
+      const proxyUrl = `${RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+      const response = await fetch(proxyUrl, {
+        headers: { 'X-API-Key': RPI_PROXY_KEY },
+        cache: 'no-store',
+      });
+      if (response.ok) return response;
+    } catch {
+      // Fall through to public proxies
+    }
+  }
+
+  // Fallback to public CORS proxies
   let lastError: Error | null = null;
-  for (const proxyFn of PROXIES) {
+  for (const proxyFn of PUBLIC_PROXIES) {
     try {
       const response = await fetch(proxyFn(url), { cache: 'no-store' });
       if (response.ok) return response;

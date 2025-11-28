@@ -1,0 +1,16 @@
+[Unit]
+Description=RPI CORS Proxy
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/rpi-proxy
+Environment=API_KEY=CHANGE_THIS_TO_YOUR_KEY
+Environment=PORT=3001
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
