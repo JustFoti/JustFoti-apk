@@ -56,6 +56,16 @@ function proxyRequest(targetUrl, res) {
   const url = new URL(targetUrl);
   const client = url.protocol === 'https:' ? https : http;
   
+  // Determine referer based on target domain
+  let referer = 'https://daddyhd.com/';
+  let origin = 'https://daddyhd.com';
+  
+  // For giokko.ru domains (key and m3u8 servers)
+  if (url.hostname.includes('giokko.ru')) {
+    referer = 'https://daddyhd.com/';
+    origin = 'https://daddyhd.com';
+  }
+  
   const options = {
     hostname: url.hostname,
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
@@ -66,18 +76,32 @@ function proxyRequest(targetUrl, res) {
       'Accept': '*/*',
       'Accept-Language': 'en-US,en;q=0.9',
       'Accept-Encoding': 'identity', // Don't compress - we're proxying
+      'Referer': referer,
+      'Origin': origin,
+      'Sec-Ch-Ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+      'Sec-Ch-Ua-Mobile': '?0',
+      'Sec-Ch-Ua-Platform': '"Windows"',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'cross-site',
     },
-    timeout: 15000,
+    timeout: 30000, // Increased timeout for key requests
   };
 
   const proxyReq = client.request(options, (proxyRes) => {
     // Forward status and safe headers
-    res.writeHead(proxyRes.statusCode, {
+    const headers = {
       'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
-      'Content-Length': proxyRes.headers['content-length'],
       'Access-Control-Allow-Origin': '*',
       'X-Proxied-By': 'rpi-proxy',
-    });
+    };
+    
+    // Only add Content-Length if it exists
+    if (proxyRes.headers['content-length']) {
+      headers['Content-Length'] = proxyRes.headers['content-length'];
+    }
+    
+    res.writeHead(proxyRes.statusCode, headers);
     proxyRes.pipe(res);
   });
 

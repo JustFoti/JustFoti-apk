@@ -167,24 +167,32 @@ const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;
 
 async function fetchViaProxy(url: string): Promise<Response> {
   console.log(`[DLHD] Fetching via RPI proxy: ${url}`);
+  console.log(`[DLHD] RPI_PROXY_URL: ${RPI_PROXY_URL}`);
   
   if (!RPI_PROXY_URL || !RPI_PROXY_KEY) {
     throw new Error('RPI_PROXY_URL and RPI_PROXY_KEY environment variables are required');
   }
 
   const proxyUrl = `${RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
-  const response = await fetch(proxyUrl, {
-    headers: { 'X-API-Key': RPI_PROXY_KEY },
-    cache: 'no-store',
-  });
+  console.log(`[DLHD] Full proxy URL: ${proxyUrl.substring(0, 100)}...`);
   
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new Error(`RPI proxy failed: ${response.status} - ${text}`);
+  try {
+    const response = await fetch(proxyUrl, {
+      headers: { 'X-API-Key': RPI_PROXY_KEY },
+      cache: 'no-store',
+    });
+    
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`RPI proxy failed: ${response.status} - ${text}`);
+    }
+    
+    console.log(`[DLHD] RPI proxy success`);
+    return response;
+  } catch (err) {
+    console.error(`[DLHD] RPI proxy fetch error:`, err);
+    throw err;
   }
-  
-  console.log(`[DLHD] RPI proxy success`);
-  return response;
 }
 
 async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url: string; playerDomain: string }> {
