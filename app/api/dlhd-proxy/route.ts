@@ -34,10 +34,9 @@ const CDN_PATTERNS = {
 // The in-memory cache only helps within a single warm instance
 // 
 // CRITICAL FOR LIVE STREAMS: M3U8 playlists are "sliding windows" that update
-// with new segments every few seconds. Caching too aggressively causes playback
-// to stop after the initial segments are exhausted!
-const M3U8_CACHE_TTL_MS = 2000; // 2 seconds - live streams need fresh playlists
-const M3U8_HTTP_CACHE_SECONDS = 2; // HTTP cache-control max-age - must be short for live
+// with new segments every few seconds. DO NOT CACHE M3U8 for live streams!
+// Caching causes the same segments to play repeatedly.
+const M3U8_CACHE_TTL_MS = 0; // NO caching - always fetch fresh for live streams
 
 interface CachedKey {
   keyBuffer: ArrayBuffer;
@@ -89,6 +88,8 @@ function isKeyCacheValid(cached: CachedKey | undefined): cached is CachedKey {
 }
 
 function isM3U8CacheValid(cached: CachedM3U8 | undefined): cached is CachedM3U8 {
+  // No caching for live streams - always return false
+  if (M3U8_CACHE_TTL_MS === 0) return false;
   if (!cached) return false;
   return (Date.now() - cached.fetchedAt) < M3U8_CACHE_TTL_MS;
 }
@@ -254,9 +255,13 @@ async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url:
   const { serverKey, playerDomain } = await getServerKey(channelKey);
   const m3u8Url = constructM3U8Url(serverKey, channelKey);
   
+  // Add cache-busting timestamp to force fresh playlist from upstream
+  // This prevents CDN/intermediate caches from serving stale M3U8
+  const cacheBustUrl = `${m3u8Url}?_t=${Date.now()}`;
+  
   console.log(`[DLHD] Fetching M3U8 via proxy: ${m3u8Url}`);
   
-  const response = await fetchViaProxy(m3u8Url);
+  const response = await fetchViaProxy(cacheBustUrl);
   const content = await response.text();
   
   if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
@@ -400,9 +405,11 @@ export async function GET(request: NextRequest) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Range, Content-Type',
-        // Use HTTP caching - but keep it SHORT for live streams!
-        // stale-while-revalidate must also be short to avoid serving stale playlists
-        'Cache-Control': `public, max-age=${M3U8_HTTP_CACHE_SECONDS}, s-maxage=${M3U8_HTTP_CACHE_SECONDS}, stale-while-revalidate=2`,
+        // NO CACHING for live streams - must be fresh every request
+        // Any caching causes repeated segments
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
         'X-DLHD-Key': keyHex || '',
         'X-DLHD-IV': iv || '',
         'X-DLHD-Channel': channel,

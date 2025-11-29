@@ -54,24 +54,32 @@ setInterval(() => {
 }, 300000);
 
 // Response cache - reduces upstream requests dramatically
+// CRITICAL: M3U8 playlists for live streams are "sliding windows" that update
+// every few seconds with new segments. Caching too long causes playback to stop!
 const responseCache = new Map();
-const M3U8_CACHE_TTL = 15000; // 15 seconds for M3U8 files
+const M3U8_CACHE_TTL = 2000; // 2 seconds for M3U8 files - MUST be short for live streams!
 const KEY_CACHE_TTL = 3600000; // 1 hour for encryption keys
 const SEGMENT_CACHE_TTL = 300000; // 5 minutes for video segments (they don't change)
 
 function getCacheTTL(url) {
   if (url.includes('.key') || url.includes('key.php')) return KEY_CACHE_TTL;
   // .css is used for segments on giokko.ru, whalesignal.ai uses encoded paths
-  if (url.includes('.ts') || url.endsWith('.css') || url.includes('whalesignal.ai/')) return SEGMENT_CACHE_TTL;
+  if (url.includes('.ts') || url.includes('whalesignal.ai/')) return SEGMENT_CACHE_TTL;
+  // M3U8 playlists (mono.css on giokko.ru) - DON'T cache, need fresh every time
+  if (url.includes('mono.css') || url.includes('.m3u8')) return 0; // No caching for live playlists
   return M3U8_CACHE_TTL;
 }
 
 function getCachedResponse(url) {
+  const ttl = getCacheTTL(url);
+  
+  // TTL of 0 means no caching - always fetch fresh
+  if (ttl === 0) return null;
+  
   const cached = responseCache.get(url);
   if (!cached) return null;
   
   const age = Date.now() - cached.timestamp;
-  const ttl = getCacheTTL(url);
   
   if (age > ttl) {
     responseCache.delete(url);
@@ -79,20 +87,25 @@ function getCachedResponse(url) {
   }
   
   // Don't log segment cache hits to reduce noise (includes whalesignal.ai segments)
-  if (!url.includes('.ts') && !url.endsWith('.css') && !url.includes('whalesignal.ai/')) {
+  if (!url.includes('.ts') && !url.includes('whalesignal.ai/')) {
     console.log(`[Cache HIT] ${url.substring(0, 60)}... (age: ${Math.round(age/1000)}s)`);
   }
   return cached;
 }
 
 function cacheResponse(url, data, contentType) {
+  const ttl = getCacheTTL(url);
+  
+  // Don't cache if TTL is 0 (live M3U8 playlists)
+  if (ttl === 0) return;
+  
   responseCache.set(url, {
     data,
     contentType,
     timestamp: Date.now()
   });
-  // Don't log segment caches to reduce noise (includes whalesignal.ai segments)
-  if (!url.includes('.ts') && !url.endsWith('.css') && !url.includes('whalesignal.ai/')) {
+  // Don't log segment caches to reduce noise
+  if (!url.includes('.ts') && !url.includes('whalesignal.ai/')) {
     console.log(`[Cache SET] ${url.substring(0, 60)}...`);
   }
 }
