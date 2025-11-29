@@ -62,7 +62,9 @@ const KEY_CACHE_TTL = 3600000; // 1 hour for encryption keys
 const SEGMENT_CACHE_TTL = 300000; // 5 minutes for video segments (they don't change)
 
 function getCacheTTL(url) {
-  if (url.includes('.key') || url.includes('key.php')) return KEY_CACHE_TTL;
+  // Encryption keys - cache for 1 hour (but each unique URL with different 'number' param is separate)
+  if (url.includes('.key') || url.includes('key.php') || url.includes('wmsxx.php')) return KEY_CACHE_TTL;
+  // Video segments - cache for 5 minutes (they don't change once created)
   // .css is used for segments on giokko.ru, whalesignal.ai uses encoded paths
   if (url.includes('.ts') || url.includes('whalesignal.ai/')) return SEGMENT_CACHE_TTL;
   // M3U8 playlists (mono.css on giokko.ru) - DON'T cache, need fresh every time

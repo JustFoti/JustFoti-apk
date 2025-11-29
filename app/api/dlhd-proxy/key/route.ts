@@ -53,6 +53,8 @@ function isKeyCacheValid(cached: CachedKey | undefined): cached is CachedKey {
 
 /**
  * Get cached key for a channel
+ * NOTE: For live streams, keys rotate frequently (the 'number' parameter in the key URL changes).
+ * We should NOT cache keys aggressively - only use cache if the key URL matches.
  */
 function getCachedKey(channelId: string): CachedKey | null {
   const cached = keyCache.get(channelId);

@@ -1,14 +1,18 @@
 /**
  * DLHD Stream Proxy API
  * 
- * Proxies DLHD.dad streams with automatic server lookup and key fetching.
+ * Proxies DLHD.dad live streams with automatic server lookup.
  * 
- * Caching Strategy:
- *   - Keys are cached per-hour (keys rotate every 3-4 hours)
- *   - Cache refreshes automatically when the UTC hour changes
- *   - M3U8 content is cached for 2 seconds (live stream refresh rate)
- *   - Cache is invalidated when key fails to decrypt
- *   - Segment URLs point directly to CDN (not proxied)
+ * Live Stream Strategy:
+ *   - M3U8 playlists are fetched fresh every request (no caching)
+ *   - Key URLs are proxied through /api/dlhd-proxy/key so HLS.js can fetch fresh keys
+ *   - Segment URLs are proxied through /api/livetv/segment
+ *   - Server keys (for CDN lookup) are cached for 30 minutes
+ * 
+ * Key Rotation:
+ *   - The key URL contains a 'number' parameter that changes as the stream progresses
+ *   - We DON'T embed keys - HLS.js fetches them through the key proxy
+ *   - This allows HLS.js to get fresh keys when they rotate
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -28,38 +32,7 @@ const CDN_PATTERNS = {
     `https://top1.giokko.ru/top1/cdn/${channelKey}/mono.css`,
 };
 
-// Cache configuration
-// IMPORTANT: Vercel serverless functions don't share memory between instances!
-// We need to rely on HTTP caching headers instead of in-memory cache for M3U8
-// The in-memory cache only helps within a single warm instance
-// 
-// CRITICAL FOR LIVE STREAMS: M3U8 playlists are "sliding windows" that update
-// with new segments every few seconds. DO NOT CACHE M3U8 for live streams!
-// Caching causes the same segments to play repeatedly.
-const M3U8_CACHE_TTL_MS = 0; // NO caching - always fetch fresh for live streams
-
-interface CachedKey {
-  keyBuffer: ArrayBuffer;
-  keyBase64: string;
-  keyHex: string;
-  keyUrl: string;
-  fetchedAt: number;
-  fetchedHour: number; // Hour when key was fetched (0-23)
-  playerDomain: string;
-}
-
-interface CachedM3U8 {
-  content: string;
-  m3u8Url: string;
-  playerDomain: string;
-  fetchedAt: number;
-}
-
-// In-memory caches
-const keyCache = new Map<string, CachedKey>();
-const m3u8Cache = new Map<string, CachedM3U8>();
-
-// Server key cache - server keys rarely change
+// Server key cache - server keys (for CDN lookup) rarely change
 interface CachedServerKey {
   serverKey: string;
   playerDomain: string;
@@ -68,78 +41,7 @@ interface CachedServerKey {
 const serverKeyCache = new Map<string, CachedServerKey>();
 const SERVER_KEY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes - server keys are very stable
 
-/**
- * Get current hour (0-23) - keys typically rotate every 3-4 hours
- * We refresh when the hour changes to catch any key rotations
- */
-function getCurrentHour(): number {
-  return new Date().getUTCHours();
-}
 
-/**
- * Check if cached key is still valid
- * Keys are valid as long as we're in the same hour they were fetched
- */
-function isKeyCacheValid(cached: CachedKey | undefined): cached is CachedKey {
-  if (!cached) return false;
-  const currentHour = getCurrentHour();
-  // Key is valid if fetched in the same hour
-  return cached.fetchedHour === currentHour;
-}
-
-function isM3U8CacheValid(cached: CachedM3U8 | undefined): cached is CachedM3U8 {
-  // No caching for live streams - always return false
-  if (M3U8_CACHE_TTL_MS === 0) return false;
-  if (!cached) return false;
-  return (Date.now() - cached.fetchedAt) < M3U8_CACHE_TTL_MS;
-}
-
-function getCachedKey(channelId: string): CachedKey | null {
-  const cached = keyCache.get(channelId);
-  if (isKeyCacheValid(cached)) {
-    console.log(`[DLHD] Key cache hit for ${channelId} (age: ${Math.round((Date.now() - cached.fetchedAt) / 1000)}s)`);
-    return cached;
-  }
-  return null;
-}
-
-function getCachedM3U8(channelId: string): CachedM3U8 | null {
-  const cached = m3u8Cache.get(channelId);
-  if (isM3U8CacheValid(cached)) {
-    console.log(`[DLHD] M3U8 cache hit for ${channelId} (age: ${Date.now() - cached.fetchedAt}ms)`);
-    return cached;
-  }
-  return null;
-}
-
-function invalidateKeyCache(channelId: string): void {
-  if (keyCache.has(channelId)) {
-    console.log(`[DLHD] Invalidating key cache for ${channelId}`);
-    keyCache.delete(channelId);
-  }
-}
-
-function cacheKey(channelId: string, keyBuffer: ArrayBuffer, keyUrl: string, playerDomain: string): CachedKey {
-  const currentHour = getCurrentHour();
-  const cached: CachedKey = {
-    keyBuffer,
-    keyBase64: Buffer.from(keyBuffer).toString('base64'),
-    keyHex: Buffer.from(keyBuffer).toString('hex'),
-    keyUrl,
-    fetchedAt: Date.now(),
-    fetchedHour: currentHour,
-    playerDomain,
-  };
-  keyCache.set(channelId, cached);
-  console.log(`[DLHD] Cached key for ${channelId} (hour: ${currentHour})`);
-  return cached;
-}
-
-function cacheM3U8(channelId: string, content: string, m3u8Url: string, playerDomain: string): CachedM3U8 {
-  const cached: CachedM3U8 = { content, m3u8Url, playerDomain, fetchedAt: Date.now() };
-  m3u8Cache.set(channelId, cached);
-  return cached;
-}
 
 
 async function fetchWithHeaders(url: string, headers: Record<string, string> = {}): Promise<Response> {
@@ -244,15 +146,9 @@ async function fetchViaProxy(url: string): Promise<Response> {
   }
 }
 
-async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url: string; playerDomain: string }> {
-  // Check M3U8 cache first
-  const cachedM3U8 = getCachedM3U8(channelId);
-  if (cachedM3U8) {
-    return { content: cachedM3U8.content, m3u8Url: cachedM3U8.m3u8Url, playerDomain: cachedM3U8.playerDomain };
-  }
-
+async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url: string }> {
   const channelKey = `premium${channelId}`;
-  const { serverKey, playerDomain } = await getServerKey(channelKey);
+  const { serverKey } = await getServerKey(channelKey);
   const m3u8Url = constructM3U8Url(serverKey, channelKey);
   
   // Add cache-busting timestamp to force fresh playlist from upstream
@@ -268,17 +164,8 @@ async function fetchM3U8(channelId: string): Promise<{ content: string; m3u8Url:
     throw new Error('Invalid M3U8 content received');
   }
   
-  cacheM3U8(channelId, content, m3u8Url, playerDomain);
   console.log(`[DLHD] M3U8 fetched for ${channelId}, length: ${content.length}`);
-  return { content, m3u8Url, playerDomain };
-}
-
-async function fetchKey(keyUrl: string): Promise<ArrayBuffer> {
-  console.log(`[DLHD] Fetching key via proxy`);
-  const response = await fetchViaProxy(keyUrl);
-  const buffer = await response.arrayBuffer();
-  if (buffer.byteLength !== 16) throw new Error(`Invalid key length: ${buffer.byteLength}`);
-  return buffer;
+  return { content, m3u8Url };
 }
 
 
@@ -288,9 +175,16 @@ function parseM3U8(content: string): { keyUrl: string | null; iv: string | null 
   return { keyUrl: keyMatch?.[1] || null, iv: ivMatch?.[1] || null };
 }
 
-function generateProxiedM3U8(originalM3U8: string, keyBase64: string, baseUrl: string, proxySegments: boolean): string {
-  const keyDataUri = `data:application/octet-stream;base64,${keyBase64}`;
-  let modified = originalM3U8.replace(/URI="[^"]+"/, `URI="${keyDataUri}"`);
+function generateProxiedM3U8(originalM3U8: string, keyProxyUrl: string, baseUrl: string, proxySegments: boolean): string {
+  let modified = originalM3U8;
+  
+  // IMPORTANT: For live streams, DON'T embed the key as a data URI!
+  // The key URL contains a 'number' parameter that changes as the stream progresses.
+  // If we embed the key, HLS.js won't fetch new keys when they rotate, causing decryption failures.
+  // Instead, proxy the key URL so HLS.js can fetch fresh keys when needed.
+  if (keyProxyUrl) {
+    modified = modified.replace(/URI="[^"]+"/, `URI="${keyProxyUrl}"`);
+  }
   
   // IMPORTANT: Do NOT modify target duration for live streams!
   // HLS.js uses targetDuration to determine playlist refresh interval.
@@ -322,7 +216,6 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const channel = searchParams.get('channel');
-    const invalidate = searchParams.get('invalidate') === 'true';
     const baseProxyUrl = `${request.nextUrl.origin}/api/dlhd-proxy`;
 
     if (!channel) {
@@ -333,19 +226,15 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    console.log(`[DLHD] Request for channel ${channel}${invalidate ? ' (invalidate)' : ''}`);
-    
-    if (invalidate) invalidateKeyCache(channel);
+    console.log(`[DLHD] Request for channel ${channel}`);
     
     let m3u8Content: string;
     let m3u8Url: string;
-    let playerDomain: string;
     
     try {
       const result = await fetchM3U8(channel);
       m3u8Content = result.content;
       m3u8Url = result.m3u8Url;
-      playerDomain = result.playerDomain;
     } catch (err) {
       console.error(`[DLHD] fetchM3U8 failed for ${channel}:`, err);
       return NextResponse.json(
@@ -355,48 +244,21 @@ export async function GET(request: NextRequest) {
     }
     
     const { keyUrl, iv } = parseM3U8(m3u8Content);
-    let keyBase64: string | null = null;
-    let keyHex: string | null = null;
-    let keyFromCache = false;
 
-    
-    if (keyUrl) {
-      const cachedKey = getCachedKey(channel);
-      
-      if (cachedKey) {
-        keyBase64 = cachedKey.keyBase64;
-        keyHex = cachedKey.keyHex;
-        keyFromCache = true;
-      } else {
-        try {
-          const keyBuffer = await fetchKey(keyUrl);
-          const cached = cacheKey(channel, keyBuffer, keyUrl, playerDomain);
-          keyBase64 = cached.keyBase64;
-          keyHex = cached.keyHex;
-        } catch (err) {
-          console.warn(`[DLHD] Key fetch failed:`, err);
-        }
-      }
-    }
-
-    // Generate M3U8 with embedded key and proxied segments
+    // Generate M3U8 with proxied key URL and proxied segments
     // Segments go through /api/livetv/segment to avoid CDN blocks
+    // Key goes through /api/dlhd-proxy/key so HLS.js can fetch fresh keys when they rotate
+    // NOTE: We don't fetch/embed the key here - HLS.js will fetch it through the proxy
     const segmentProxyBase = `${request.nextUrl.origin}/api/livetv`;
     let proxiedM3U8: string;
-    if (keyBase64 && keyUrl) {
-      proxiedM3U8 = generateProxiedM3U8(m3u8Content, keyBase64, segmentProxyBase, true);
-    } else if (keyUrl) {
-      // Fallback: proxy the key URL
+    if (keyUrl) {
+      // ALWAYS proxy the key URL for live streams - don't embed!
+      // The key URL's 'number' parameter changes, and HLS.js needs to fetch fresh keys
       const proxiedKeyUrl = `${baseProxyUrl}/key?url=${encodeURIComponent(keyUrl)}`;
-      proxiedM3U8 = m3u8Content.replace(/URI="[^"]+"/, `URI="${proxiedKeyUrl}"`);
+      proxiedM3U8 = generateProxiedM3U8(m3u8Content, proxiedKeyUrl, segmentProxyBase, true);
     } else {
-      proxiedM3U8 = m3u8Content;
+      proxiedM3U8 = generateProxiedM3U8(m3u8Content, '', segmentProxyBase, true);
     }
-
-    const cachedKeyInfo = keyCache.get(channel);
-    const cacheAge = cachedKeyInfo ? Math.round((Date.now() - cachedKeyInfo.fetchedAt) / 1000) : 0;
-    const minutesUntilNextHour = 60 - new Date().getUTCMinutes();
-    const cacheTTL = cachedKeyInfo ? minutesUntilNextHour * 60 : 0; // Seconds until next hour
 
     return new NextResponse(proxiedM3U8, {
       status: 200,
@@ -410,13 +272,10 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',
         'Expires': '0',
-        'X-DLHD-Key': keyHex || '',
         'X-DLHD-IV': iv || '',
         'X-DLHD-Channel': channel,
         'X-DLHD-M3U8-URL': m3u8Url,
-        'X-DLHD-Key-Cached': keyFromCache ? 'true' : 'false',
-        'X-DLHD-Key-Cache-Age': cacheAge.toString(),
-        'X-DLHD-Key-Cache-TTL': cacheTTL.toString(),
+        'X-DLHD-Key-URL': keyUrl || '',
       },
     });
 
