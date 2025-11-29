@@ -14,8 +14,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
-// Allow caching at the edge - don't force dynamic
-export const revalidate = 10; // Revalidate every 10 seconds
+// CRITICAL: Live streams need fresh data - disable ISR caching
+export const dynamic = 'force-dynamic'; // Don't cache at build time
+export const revalidate = 0; // Always revalidate
 export const maxDuration = 30;
 
 const PLAYER_DOMAINS = ['epicplayplay.cfd', 'daddyhd.com'];
@@ -31,8 +32,12 @@ const CDN_PATTERNS = {
 // IMPORTANT: Vercel serverless functions don't share memory between instances!
 // We need to rely on HTTP caching headers instead of in-memory cache for M3U8
 // The in-memory cache only helps within a single warm instance
-const M3U8_CACHE_TTL_MS = 30000; // 30 seconds - aggressive caching to reduce proxy load
-const M3U8_HTTP_CACHE_SECONDS = 10; // HTTP cache-control max-age
+// 
+// CRITICAL FOR LIVE STREAMS: M3U8 playlists are "sliding windows" that update
+// with new segments every few seconds. Caching too aggressively causes playback
+// to stop after the initial segments are exhausted!
+const M3U8_CACHE_TTL_MS = 2000; // 2 seconds - live streams need fresh playlists
+const M3U8_HTTP_CACHE_SECONDS = 2; // HTTP cache-control max-age - must be short for live
 
 interface CachedKey {
   keyBuffer: ArrayBuffer;
@@ -282,15 +287,15 @@ function generateProxiedM3U8(originalM3U8: string, keyBase64: string, baseUrl: s
   const keyDataUri = `data:application/octet-stream;base64,${keyBase64}`;
   let modified = originalM3U8.replace(/URI="[^"]+"/, `URI="${keyDataUri}"`);
   
-  // Increase target duration to reduce HLS.js polling frequency
-  // HLS.js polls at roughly targetDuration interval
-  modified = modified.replace(
-    /#EXT-X-TARGETDURATION:(\d+)/,
-    (_, duration) => {
-      const newDuration = Math.max(parseInt(duration), 10); // At least 10 seconds
-      return `#EXT-X-TARGETDURATION:${newDuration}`;
-    }
-  );
+  // IMPORTANT: Do NOT modify target duration for live streams!
+  // HLS.js uses targetDuration to determine playlist refresh interval.
+  // Increasing it causes the player to poll less frequently, leading to
+  // playback stopping when the initial segments are exhausted.
+  // Keep the original target duration from the source stream.
+  
+  // Remove any #EXT-X-ENDLIST tag if present - live streams should never have this
+  // This tag tells the player the stream is over, which breaks live playback
+  modified = modified.replace(/\n?#EXT-X-ENDLIST\s*$/m, '');
   
   // Proxy segment URLs through our segment proxy to avoid CDN blocks
   if (proxySegments) {
@@ -395,8 +400,9 @@ export async function GET(request: NextRequest) {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Range, Content-Type',
-        // Use HTTP caching to reduce requests - Vercel edge will cache this
-        'Cache-Control': `public, max-age=${M3U8_HTTP_CACHE_SECONDS}, s-maxage=${M3U8_HTTP_CACHE_SECONDS}, stale-while-revalidate=30`,
+        // Use HTTP caching - but keep it SHORT for live streams!
+        // stale-while-revalidate must also be short to avoid serving stale playlists
+        'Cache-Control': `public, max-age=${M3U8_HTTP_CACHE_SECONDS}, s-maxage=${M3U8_HTTP_CACHE_SECONDS}, stale-while-revalidate=2`,
         'X-DLHD-Key': keyHex || '',
         'X-DLHD-IV': iv || '',
         'X-DLHD-Channel': channel,

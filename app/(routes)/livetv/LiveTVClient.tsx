@@ -519,24 +519,27 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
           maxMaxBufferLength: 30, // Cap at 30 seconds
           maxBufferSize: 60 * 1000 * 1000, // 60MB max buffer
           maxBufferHole: 0.5, // Allow small gaps
-          // Live stream settings
+          // Live stream settings - CRITICAL for continuous playback
           liveSyncDurationCount: 3, // 3 segments behind live edge
           liveMaxLatencyDurationCount: 6, // Max 6 segments latency before seeking
           liveDurationInfinity: true,
           liveBackBufferLength: 30,
+          // Playlist refresh - MUST refresh frequently for live streams!
+          // Without this, playback stops after initial segments are exhausted
+          levelLoadingMaxRetry: 6,
+          levelLoadingRetryDelay: 500,
+          levelLoadingTimeOut: 10000,
+          // Manifest/playlist refresh settings
+          manifestLoadingMaxRetry: 6,
+          manifestLoadingRetryDelay: 500,
+          manifestLoadingTimeOut: 10000,
+          // Fragment loading
+          fragLoadingMaxRetry: 4,
+          fragLoadingRetryDelay: 500,
+          fragLoadingTimeOut: 20000, // Give segments more time to load
           // Loading behavior
           startFragPrefetch: false,
           testBandwidth: false,
-          // Retries - be patient
-          levelLoadingMaxRetry: 4,
-          fragLoadingMaxRetry: 3,
-          manifestLoadingMaxRetry: 4,
-          levelLoadingRetryDelay: 1000,
-          fragLoadingRetryDelay: 1000,
-          manifestLoadingRetryDelay: 1000,
-          levelLoadingTimeOut: 15000,
-          manifestLoadingTimeOut: 15000,
-          fragLoadingTimeOut: 20000, // Give segments more time to load
         });
 
         hls.loadSource(streamUrl);
@@ -546,12 +549,40 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
           setIsLoading(false);
           setBufferingStatus(null);
           decryptRetryCount.current = 0;
+          console.log('[LiveTV] Manifest parsed, starting playback');
           videoRef.current?.play().catch(() => {});
         });
 
+        // Monitor level/playlist loading for live stream health
+        hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+          const details = data.details;
+          // Log live stream status
+          if (details.live) {
+            console.log(`[LiveTV] Live playlist loaded: ${details.fragments?.length || 0} segments, target duration: ${details.targetduration}s`);
+          }
+          // If we're running low on segments, HLS.js should auto-refresh
+          // but log it for debugging
+          if (details.fragments && details.fragments.length < 3) {
+            console.log('[LiveTV] Warning: Low segment count, waiting for playlist refresh');
+          }
+        });
+
         // Clear buffering status when fragment loads successfully
-        hls.on(Hls.Events.FRAG_LOADED, () => {
+        hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
           setBufferingStatus(null);
+          // Log fragment loading for debugging live stream continuity
+          if (data.frag) {
+            console.log(`[LiveTV] Fragment loaded: sn=${data.frag.sn}, duration=${data.frag.duration?.toFixed(1)}s`);
+          }
+        });
+
+        // Handle buffer running dry - critical for live streams
+        hls.on(Hls.Events.BUFFER_EOS, () => {
+          console.log('[LiveTV] Buffer EOS - end of stream signal received');
+          // For live streams, this shouldn't happen - try to recover
+          setBufferingStatus('Refreshing stream...');
+          // Force reload the playlist
+          hls.startLoad(-1);
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -665,14 +696,53 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
       setIsMuted(video.muted);
     };
     
+    // Handle video waiting for data - common in live streams
+    const onWaiting = () => {
+      console.log('[LiveTV] Video waiting for data');
+      setBufferingStatus('Buffering...');
+    };
+    
+    // Handle video stalled - no data available
+    const onStalled = () => {
+      console.log('[LiveTV] Video stalled - no data');
+      setBufferingStatus('Loading...');
+      // Try to kick HLS.js to fetch more data
+      if (hlsRef.current) {
+        hlsRef.current.startLoad(-1);
+      }
+    };
+    
+    // Handle video ended - shouldn't happen for live streams
+    const onEnded = () => {
+      console.log('[LiveTV] Video ended - attempting to resume live stream');
+      setBufferingStatus('Reconnecting...');
+      // For live streams, try to reload
+      if (hlsRef.current) {
+        hlsRef.current.startLoad(-1);
+      }
+    };
+    
+    // Clear buffering status when playing resumes
+    const onPlaying = () => {
+      setBufferingStatus(null);
+    };
+    
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
     video.addEventListener('volumechange', onVolumeChange);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('stalled', onStalled);
+    video.addEventListener('ended', onEnded);
+    video.addEventListener('playing', onPlaying);
     
     return () => {
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('volumechange', onVolumeChange);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('stalled', onStalled);
+      video.removeEventListener('ended', onEnded);
+      video.removeEventListener('playing', onPlaying);
     };
   }, []);
 
