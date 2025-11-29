@@ -294,9 +294,11 @@ function generateProxiedM3U8(originalM3U8: string, keyBase64: string, baseUrl: s
   
   // Proxy segment URLs through our segment proxy to avoid CDN blocks
   if (proxySegments) {
-    // Replace segment URLs (lines that end with .ts or .css and start with http)
+    // Replace segment URLs:
+    // 1. URLs ending with .ts or .css (standard HLS segments)
+    // 2. whalesignal.ai URLs (encoded segment paths without extensions)
     modified = modified.replace(
-      /^(https?:\/\/[^\s]+\.(ts|css))$/gm,
+      /^(https?:\/\/(?:[^\s]+\.(ts|css)|whalesignal\.ai\/[^\s]+))$/gm,
       (segmentUrl) => {
         return `${baseUrl}/segment?url=${encodeURIComponent(segmentUrl)}`;
       }

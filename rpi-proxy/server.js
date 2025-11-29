@@ -61,7 +61,8 @@ const SEGMENT_CACHE_TTL = 300000; // 5 minutes for video segments (they don't ch
 
 function getCacheTTL(url) {
   if (url.includes('.key') || url.includes('key.php')) return KEY_CACHE_TTL;
-  if (url.includes('.ts') || url.endsWith('.css')) return SEGMENT_CACHE_TTL; // .css is used for segments
+  // .css is used for segments on giokko.ru, whalesignal.ai uses encoded paths
+  if (url.includes('.ts') || url.endsWith('.css') || url.includes('whalesignal.ai/')) return SEGMENT_CACHE_TTL;
   return M3U8_CACHE_TTL;
 }
 
@@ -77,8 +78,8 @@ function getCachedResponse(url) {
     return null;
   }
   
-  // Don't log segment cache hits to reduce noise
-  if (!url.includes('.ts') && !url.endsWith('.css')) {
+  // Don't log segment cache hits to reduce noise (includes whalesignal.ai segments)
+  if (!url.includes('.ts') && !url.endsWith('.css') && !url.includes('whalesignal.ai/')) {
     console.log(`[Cache HIT] ${url.substring(0, 60)}... (age: ${Math.round(age/1000)}s)`);
   }
   return cached;
@@ -90,8 +91,8 @@ function cacheResponse(url, data, contentType) {
     contentType,
     timestamp: Date.now()
   });
-  // Don't log segment caches to reduce noise
-  if (!url.includes('.ts') && !url.endsWith('.css')) {
+  // Don't log segment caches to reduce noise (includes whalesignal.ai segments)
+  if (!url.includes('.ts') && !url.endsWith('.css') && !url.includes('whalesignal.ai/')) {
     console.log(`[Cache SET] ${url.substring(0, 60)}...`);
   }
 }
