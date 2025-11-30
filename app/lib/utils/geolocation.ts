@@ -1,43 +1,63 @@
 /**
  * Geolocation Utility
- * Get location from IP address using various methods
+ * Get location from IP address using Vercel/Cloudflare headers
  */
 
-interface LocationData {
+export interface LocationData {
   country: string;
-  region?: string;
-  city?: string;
+  countryCode: string;
+  region: string;
+  city: string;
+  latitude?: string;
+  longitude?: string;
 }
 
 /**
  * Get location from request headers (Vercel/Cloudflare)
+ * Vercel automatically provides geo headers on Edge/Serverless functions
  */
 export function getLocationFromHeaders(request: Request): LocationData {
-  // Try Vercel headers first
-  const country = request.headers.get('x-vercel-ip-country');
-  const city = request.headers.get('x-vercel-ip-city');
-  const region = request.headers.get('x-vercel-ip-country-region');
+  // Try Vercel headers first (automatically set by Vercel Edge Network)
+  const vercelCountry = request.headers.get('x-vercel-ip-country');
+  const vercelRegion = request.headers.get('x-vercel-ip-country-region');
+  const vercelCity = request.headers.get('x-vercel-ip-city');
+  const vercelLatitude = request.headers.get('x-vercel-ip-latitude');
+  const vercelLongitude = request.headers.get('x-vercel-ip-longitude');
   
-  if (country) {
+  if (vercelCountry && vercelCountry !== 'XX') {
     return {
-      country: decodeHeader(country),
-      region: region ? decodeHeader(region) : undefined,
-      city: city ? decodeHeader(city) : undefined,
+      country: getCountryName(vercelCountry),
+      countryCode: vercelCountry,
+      region: vercelRegion ? decodeHeader(vercelRegion) : 'Unknown',
+      city: vercelCity ? decodeHeader(vercelCity) : 'Unknown',
+      latitude: vercelLatitude || undefined,
+      longitude: vercelLongitude || undefined,
     };
   }
   
   // Try Cloudflare headers
   const cfCountry = request.headers.get('cf-ipcountry');
+  const cfCity = request.headers.get('cf-ipcity');
+  const cfRegion = request.headers.get('cf-region');
+  const cfLatitude = request.headers.get('cf-iplatitude');
+  const cfLongitude = request.headers.get('cf-iplongitude');
+  
   if (cfCountry && cfCountry !== 'XX') {
     return {
-      country: cfCountry,
+      country: getCountryName(cfCountry),
+      countryCode: cfCountry,
+      region: cfRegion ? decodeHeader(cfRegion) : 'Unknown',
+      city: cfCity ? decodeHeader(cfCity) : 'Unknown',
+      latitude: cfLatitude || undefined,
+      longitude: cfLongitude || undefined,
     };
   }
   
   // Development fallback
   if (process.env.NODE_ENV === 'development') {
     return {
-      country: 'Local',
+      country: 'Local Development',
+      countryCode: 'Local',
       region: 'Development',
       city: 'Localhost',
     };
@@ -45,6 +65,9 @@ export function getLocationFromHeaders(request: Request): LocationData {
   
   return {
     country: 'Unknown',
+    countryCode: 'Unknown',
+    region: 'Unknown',
+    city: 'Unknown',
   };
 }
 

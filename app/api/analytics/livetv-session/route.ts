@@ -54,13 +54,25 @@ export async function POST(request: NextRequest) {
       channelId,
       channelName,
       category,
-      country,
+      country: bodyCountry,
       action,
       watchDuration = 0,
       bufferCount = 0,
       errorMessage,
       quality,
     } = body;
+
+    // Get country from Vercel/Cloudflare headers (more reliable than client-sent)
+    const country = request.headers.get('x-vercel-ip-country') || 
+                    request.headers.get('cf-ipcountry') || 
+                    bodyCountry ||
+                    (process.env.NODE_ENV === 'development' ? 'Local' : 'Unknown');
+
+    // Get additional geo info
+    const city = request.headers.get('x-vercel-ip-city') || 
+                 request.headers.get('cf-ipcity') || 
+                 'Unknown';
+    const region = request.headers.get('x-vercel-ip-country-region') || 'Unknown';
 
     if (!channelId || !action) {
       return NextResponse.json(
@@ -80,7 +92,7 @@ export async function POST(request: NextRequest) {
         channelId,
         channelName: channelName || 'Unknown Channel',
         category,
-        country,
+        country: country !== 'XX' ? country : 'Unknown',
         action,
         watchDuration: 0,
         bufferCount: 0,
@@ -93,6 +105,9 @@ export async function POST(request: NextRequest) {
       console.log('[LiveTV Analytics] Session started:', {
         channelName,
         category,
+        country,
+        city,
+        region,
         userId: userId?.substring(0, 8),
       });
     } else if (action === 'heartbeat') {

@@ -94,24 +94,28 @@ function getSessionId(request: NextRequest): string {
 }
 
 // Get geolocation from request headers (Vercel/Cloudflare provide this)
-function getLocationFromRequest(request: NextRequest): { country?: string; region?: string } {
+function getLocationFromRequest(request: NextRequest): { country?: string; region?: string; city?: string } {
   // Try Vercel headers first (automatically set by Vercel Edge Network)
   const vercelCountry = request.headers.get('x-vercel-ip-country');
   const vercelRegion = request.headers.get('x-vercel-ip-country-region');
+  const vercelCity = request.headers.get('x-vercel-ip-city');
   
   if (vercelCountry && vercelCountry !== 'XX') {
     return {
       country: vercelCountry,
       region: vercelRegion || 'Unknown',
+      city: vercelCity ? decodeURIComponent(vercelCity) : 'Unknown',
     };
   }
   
   // Try Cloudflare headers
   const cfCountry = request.headers.get('cf-ipcountry');
+  const cfCity = request.headers.get('cf-ipcity');
   if (cfCountry && cfCountry !== 'XX') {
     return {
       country: cfCountry,
       region: 'Unknown',
+      city: cfCity ? decodeURIComponent(cfCity) : 'Unknown',
     };
   }
   
@@ -120,12 +124,14 @@ function getLocationFromRequest(request: NextRequest): { country?: string; regio
     return {
       country: 'Local',
       region: 'Development',
+      city: 'Localhost',
     };
   }
   
   return {
     country: 'Unknown',
     region: 'Unknown',
+    city: 'Unknown',
   };
 }
 
@@ -274,12 +280,13 @@ export async function POST(request: NextRequest) {
           deviceId: event.deviceId?.substring(0, 8) + '...'
         });
         
-        // Enhance metadata with server-side information
+        // Enhance metadata with server-side information including geo data
         const enhancedMetadata = {
           ...event.metadata,
           ...event.data,
           country: location.country,
           region: location.region,
+          city: location.city,
           user_agent: userAgent,
           referrer: referrer,
           ip_hash: hashIP(clientIP),

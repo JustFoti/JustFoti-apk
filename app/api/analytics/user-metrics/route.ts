@@ -108,17 +108,17 @@ export async function POST(request: NextRequest) {
       const userAgent = request.headers.get('user-agent') || '';
       const deviceType = getDeviceType(userAgent);
       
-      // Get country from headers (set by Vercel/Cloudflare)
+      // Get geo data from headers (set by Vercel/Cloudflare)
       const country = request.headers.get('x-vercel-ip-country') || 
                       request.headers.get('cf-ipcountry') || 
-                      'Unknown';
+                      (process.env.NODE_ENV === 'development' ? 'Local' : 'Unknown');
 
       await db.upsertUserActivity({
         userId: data.userId,
         sessionId: data.sessionId,
         deviceType,
         userAgent,
-        country,
+        country: country !== 'XX' ? country : 'Unknown',
         watchTime: data.watchTime || 0,
       });
 
