@@ -45,10 +45,10 @@ export default function AdminGeographicPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const geoData = data.data.geographic || [];
+        const geoData = data.data?.geographic || [];
         setGeographic(geoData);
         
-        // Calculate metrics
+        // Calculate metrics - always set metrics even if empty
         if (geoData.length > 0) {
           const total = geoData.reduce((sum: number, g: GeoStat) => sum + g.count, 0);
           const topCountry = geoData[0];
@@ -71,7 +71,26 @@ export default function AdminGeographicPage() {
             internationalPercentage: total > 0 ? Math.round(((total - (geoData[0]?.count || 0)) / total) * 100) : 0,
             regionBreakdown,
           });
+        } else {
+          // Set empty metrics so UI still renders
+          setMetrics({
+            totalCountries: 0,
+            topCountry: 'N/A',
+            topCountryPercentage: 0,
+            internationalPercentage: 0,
+            regionBreakdown: [],
+          });
         }
+      } else {
+        console.error('Failed to fetch geographic data:', response.status);
+        // Set empty metrics on error
+        setMetrics({
+          totalCountries: 0,
+          topCountry: 'N/A',
+          topCountryPercentage: 0,
+          internationalPercentage: 0,
+          regionBreakdown: [],
+        });
       }
     } catch (err) {
       console.error('Failed to fetch geographic data:', err);
@@ -237,36 +256,44 @@ export default function AdminGeographicPage() {
           padding: '24px'
         }}>
           <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '18px' }}>Regional Distribution</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {metrics?.regionBreakdown.map((region) => {
-              const total = metrics.regionBreakdown.reduce((sum, r) => sum + r.count, 0);
-              const percentage = total > 0 ? (region.count / total) * 100 : 0;
-              return (
-                <div key={region.region} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px'
-                }}>
-                  <div style={{ width: '140px', color: '#f8fafc', fontWeight: '500' }}>{region.region}</div>
-                  <div style={{ flex: 1, height: '24px', background: 'rgba(255,255,255,0.1)', borderRadius: '12px', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${percentage}%`,
-                      background: 'linear-gradient(90deg, #7877c6, #ff77c6)',
-                      borderRadius: '12px',
-                      transition: 'width 0.3s'
-                    }} />
+          {metrics?.regionBreakdown && metrics.regionBreakdown.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {metrics.regionBreakdown.map((region) => {
+                const total = metrics.regionBreakdown.reduce((sum, r) => sum + r.count, 0);
+                const percentage = total > 0 ? (region.count / total) * 100 : 0;
+                return (
+                  <div key={region.region} style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px'
+                  }}>
+                    <div style={{ width: '140px', color: '#f8fafc', fontWeight: '500' }}>{region.region}</div>
+                    <div style={{ flex: 1, height: '24px', background: 'rgba(255,255,255,0.1)', borderRadius: '12px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${percentage}%`,
+                        background: 'linear-gradient(90deg, #7877c6, #ff77c6)',
+                        borderRadius: '12px',
+                        transition: 'width 0.3s'
+                      }} />
+                    </div>
+                    <div style={{ width: '80px', textAlign: 'right', color: '#f8fafc', fontWeight: '600' }}>
+                      {region.count}
+                    </div>
+                    <div style={{ width: '50px', textAlign: 'right', color: '#64748b', fontSize: '14px' }}>
+                      {Math.round(percentage)}%
+                    </div>
                   </div>
-                  <div style={{ width: '80px', textAlign: 'right', color: '#f8fafc', fontWeight: '600' }}>
-                    {region.count}
-                  </div>
-                  <div style={{ width: '50px', textAlign: 'right', color: '#64748b', fontSize: '14px' }}>
-                    {Math.round(percentage)}%
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺️</div>
+              <p style={{ margin: 0 }}>No regional data available yet</p>
+              <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>Geographic data will appear as users watch content</p>
+            </div>
+          )}
         </div>
       )}
     </div>
