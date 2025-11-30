@@ -150,170 +150,298 @@ export async function GET(request: NextRequest) {
       [startTimestamp, endTimestamp]
     );
 
-    // 4. User Stats (New)
-    const usersStatsRaw = await adapter.query(
-      isNeon
-        ? `
-          SELECT 
-            ws.user_id as "userId",
-            MAX(u.username) as username,
-            MAX(u.email) as email,
-            MAX(u.image) as image,
-            COUNT(DISTINCT ws.session_id) as "totalSessions",
-            COALESCE(SUM(ws.total_watch_time), 0) / 60 as "totalWatchTime",
-            MAX(ws.started_at) as "lastActive",
-            MAX(ua.country) as country
-          FROM watch_sessions ws
-          LEFT JOIN users u ON ws.user_id = u.id
-          LEFT JOIN user_activity ua ON ws.session_id = ua.session_id
-          WHERE ws.started_at BETWEEN $1 AND $2
-          GROUP BY ws.user_id
-          ORDER BY "lastActive" DESC
-          LIMIT 50
-        `
-        : `
-          SELECT 
-            ws.user_id as userId,
-            MAX(u.username) as username,
-            MAX(u.email) as email,
-            MAX(u.image) as image,
-            COUNT(DISTINCT ws.session_id) as totalSessions,
-            COALESCE(SUM(ws.total_watch_time), 0) / 60 as totalWatchTime,
-            MAX(ws.started_at) as lastActive,
-            MAX(ua.country) as country
-          FROM watch_sessions ws
-          LEFT JOIN users u ON ws.user_id = u.id
-          LEFT JOIN user_activity ua ON ws.session_id = ua.session_id
-          WHERE ws.started_at BETWEEN ? AND ?
-          GROUP BY ws.user_id
-          ORDER BY lastActive DESC
-          LIMIT 50
-        `,
-      [startTimestamp, endTimestamp]
-    );
+    // 4. User Stats (Enhanced - combines watch_sessions and user_activity)
+    let usersStatsRaw: any[] = [];
+    try {
+      // First get from user_activity which has the most complete user data
+      const userActivityStats = await adapter.query(
+        isNeon
+          ? `
+            SELECT 
+              ua.user_id as "userId",
+              MAX(u.username) as username,
+              MAX(u.email) as email,
+              MAX(u.image) as image,
+              MAX(ua.total_sessions) as "totalSessions",
+              COALESCE(MAX(ua.total_watch_time), 0) / 60 as "totalWatchTime",
+              MAX(ua.last_seen) as "lastActive",
+              MAX(ua.country) as country,
+              MAX(ua.city) as city,
+              MAX(ua.device_type) as "deviceType"
+            FROM user_activity ua
+            LEFT JOIN users u ON ua.user_id = u.id
+            WHERE ua.last_seen BETWEEN $1 AND $2
+            GROUP BY ua.user_id
+            ORDER BY "lastActive" DESC
+            LIMIT 100
+          `
+          : `
+            SELECT 
+              ua.user_id as userId,
+              MAX(u.username) as username,
+              MAX(u.email) as email,
+              MAX(u.image) as image,
+              MAX(ua.total_sessions) as totalSessions,
+              COALESCE(MAX(ua.total_watch_time), 0) / 60 as totalWatchTime,
+              MAX(ua.last_seen) as lastActive,
+              MAX(ua.country) as country,
+              MAX(ua.city) as city,
+              MAX(ua.device_type) as deviceType
+            FROM user_activity ua
+            LEFT JOIN users u ON ua.user_id = u.id
+            WHERE ua.last_seen BETWEEN ? AND ?
+            GROUP BY ua.user_id
+            ORDER BY lastActive DESC
+            LIMIT 100
+          `,
+        [startTimestamp, endTimestamp]
+      );
+      
+      // Also get watch session data to supplement
+      const watchSessionStats = await adapter.query(
+        isNeon
+          ? `
+            SELECT 
+              ws.user_id as "userId",
+              COUNT(DISTINCT ws.session_id) as "sessionCount",
+              COALESCE(SUM(ws.total_watch_time), 0) / 60 as "watchTime",
+              MAX(ws.started_at) as "lastWatched"
+            FROM watch_sessions ws
+            WHERE ws.started_at BETWEEN $1 AND $2
+            GROUP BY ws.user_id
+          `
+          : `
+            SELECT 
+              ws.user_id as userId,
+              COUNT(DISTINCT ws.session_id) as sessionCount,
+              COALESCE(SUM(ws.total_watch_time), 0) / 60 as watchTime,
+              MAX(ws.started_at) as lastWatched
+            FROM watch_sessions ws
+            WHERE ws.started_at BETWEEN ? AND ?
+            GROUP BY ws.user_id
+          `,
+        [startTimestamp, endTimestamp]
+      );
+      
+      // Create a map of watch session data
+      const watchMap = new Map();
+      for (const ws of watchSessionStats) {
+        watchMap.set(ws.userId, {
+          sessionCount: parseInt(ws.sessionCount) || 0,
+          watchTime: parseFloat(ws.watchTime) || 0,
+          lastWatched: parseInt(ws.lastWatched) || 0
+        });
+      }
+      
+      // Merge data - prefer user_activity but supplement with watch_sessions
+      usersStatsRaw = userActivityStats.map((ua: any) => {
+        const wsData = watchMap.get(ua.userId) || {};
+        return {
+          ...ua,
+          totalSessions: Math.max(parseInt(ua.totalSessions) || 0, wsData.sessionCount || 0),
+          totalWatchTime: Math.max(parseFloat(ua.totalWatchTime) || 0, wsData.watchTime || 0),
+          lastActive: Math.max(parseInt(ua.lastActive) || 0, wsData.lastWatched || 0)
+        };
+      });
+      
+      // Add any users from watch_sessions not in user_activity
+      watchMap.forEach((wsData, userId) => {
+        if (!usersStatsRaw.find((u: any) => u.userId === userId)) {
+          usersStatsRaw.push({
+            userId,
+            username: null,
+            email: null,
+            image: null,
+            totalSessions: wsData.sessionCount,
+            totalWatchTime: wsData.watchTime,
+            lastActive: wsData.lastWatched,
+            country: 'Unknown',
+            city: null,
+            deviceType: null
+          });
+        }
+      });
+      
+      // Sort by lastActive
+      usersStatsRaw.sort((a: any, b: any) => (b.lastActive || 0) - (a.lastActive || 0));
+      usersStatsRaw = usersStatsRaw.slice(0, 100);
+      
+    } catch (userStatsError) {
+      console.error('User stats query error:', userStatsError);
+      usersStatsRaw = [];
+    }
 
     // 5. Geographic Heatmap (Enhanced - combines data from multiple sources)
     // Try multiple sources: user_activity, live_activity, and analytics_events metadata
     let geographicRaw: any[] = [];
     
     try {
-      // First try to get from user_activity (most reliable)
-      const userActivityGeo = await adapter.query(
-        isNeon
-          ? `
-            SELECT 
-              COALESCE(country, 'Unknown') as country,
-              COUNT(DISTINCT session_id) as count,
-              COUNT(DISTINCT user_id) as unique_users
-            FROM user_activity
-            WHERE last_seen BETWEEN $1 AND $2
-            AND country IS NOT NULL
-            AND country != ''
-            AND country != 'Unknown'
-            GROUP BY country
-          `
-          : `
-            SELECT 
-              COALESCE(country, 'Unknown') as country,
-              COUNT(DISTINCT session_id) as count,
-              COUNT(DISTINCT user_id) as unique_users
-            FROM user_activity
-            WHERE last_seen BETWEEN ? AND ?
-            AND country IS NOT NULL
-            AND country != ''
-            AND country != 'Unknown'
-            GROUP BY country
-          `,
-        [startTimestamp, endTimestamp]
-      );
+      // Combine data from all sources for comprehensive geographic coverage
+      const geoMap = new Map<string, { count: number; uniqueUsers: number; sessions: number }>();
       
-      // Also get from analytics_events metadata
-      const analyticsGeo = await adapter.query(
-        isNeon
-          ? `
-            SELECT 
-              COALESCE(metadata->>'country', 'Unknown') as country,
-              COUNT(DISTINCT session_id) as count,
-              COUNT(DISTINCT COALESCE(metadata->>'userId', 'unknown')) as unique_users
-            FROM analytics_events
-            WHERE timestamp BETWEEN $1 AND $2
-            AND metadata->>'country' IS NOT NULL
-            AND metadata->>'country' != ''
-            AND metadata->>'country' != 'Unknown'
-            GROUP BY metadata->>'country'
-          `
-          : `
-            SELECT 
-              COALESCE(json_extract(metadata, '$.country'), 'Unknown') as country,
-              COUNT(DISTINCT session_id) as count,
-              COUNT(DISTINCT COALESCE(json_extract(metadata, '$.userId'), 'unknown')) as unique_users
-            FROM analytics_events
-            WHERE timestamp BETWEEN ? AND ?
-            AND json_extract(metadata, '$.country') IS NOT NULL
-            AND json_extract(metadata, '$.country') != ''
-            AND json_extract(metadata, '$.country') != 'Unknown'
-            GROUP BY json_extract(metadata, '$.country')
-          `,
-        [startTimestamp, endTimestamp]
-      );
-      
-      // Merge the results - combine counts for same countries
-      const geoMap = new Map<string, { count: number; uniqueUsers: number }>();
-      
-      for (const row of userActivityGeo) {
-        const country = row.country || 'Unknown';
-        const existing = geoMap.get(country) || { count: 0, uniqueUsers: 0 };
-        geoMap.set(country, {
-          count: existing.count + (parseInt(row.count) || 0),
-          uniqueUsers: existing.uniqueUsers + (parseInt(row.unique_users) || 0)
-        });
-      }
-      
-      for (const row of analyticsGeo) {
-        const country = row.country || 'Unknown';
-        const existing = geoMap.get(country) || { count: 0, uniqueUsers: 0 };
-        // Only add if not already counted from user_activity
-        if (!userActivityGeo.find((u: any) => u.country === country)) {
-          geoMap.set(country, {
-            count: existing.count + (parseInt(row.count) || 0),
-            uniqueUsers: existing.uniqueUsers + (parseInt(row.unique_users) || 0)
-          });
+      // Source 1: user_activity table (most reliable for historical data)
+      try {
+        const userActivityGeo = await adapter.query(
+          isNeon
+            ? `
+              SELECT 
+                COALESCE(country, 'Unknown') as country,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(DISTINCT user_id) as unique_users
+              FROM user_activity
+              WHERE last_seen BETWEEN $1 AND $2
+              AND country IS NOT NULL
+              AND country != ''
+              AND country != 'Unknown'
+              AND country != 'Local'
+              GROUP BY country
+            `
+            : `
+              SELECT 
+                COALESCE(country, 'Unknown') as country,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(DISTINCT user_id) as unique_users
+              FROM user_activity
+              WHERE last_seen BETWEEN ? AND ?
+              AND country IS NOT NULL
+              AND country != ''
+              AND country != 'Unknown'
+              AND country != 'Local'
+              GROUP BY country
+            `,
+          [startTimestamp, endTimestamp]
+        );
+        
+        for (const row of userActivityGeo) {
+          const country = row.country;
+          if (country && country !== 'Unknown' && country !== 'Local') {
+            const existing = geoMap.get(country) || { count: 0, uniqueUsers: 0, sessions: 0 };
+            geoMap.set(country, {
+              count: existing.count + (parseInt(row.sessions) || 0),
+              uniqueUsers: Math.max(existing.uniqueUsers, parseInt(row.unique_users) || 0),
+              sessions: existing.sessions + (parseInt(row.sessions) || 0)
+            });
+          }
         }
+      } catch (e) {
+        console.warn('user_activity geo query failed:', e);
       }
       
+      // Source 2: live_activity table (for recent/real-time data)
+      try {
+        const liveActivityGeo = await adapter.query(
+          isNeon
+            ? `
+              SELECT 
+                COALESCE(country, 'Unknown') as country,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(DISTINCT user_id) as unique_users
+              FROM live_activity
+              WHERE last_heartbeat BETWEEN $1 AND $2
+              AND country IS NOT NULL
+              AND country != ''
+              AND country != 'Unknown'
+              AND country != 'Local'
+              GROUP BY country
+            `
+            : `
+              SELECT 
+                COALESCE(country, 'Unknown') as country,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(DISTINCT user_id) as unique_users
+              FROM live_activity
+              WHERE last_heartbeat BETWEEN ? AND ?
+              AND country IS NOT NULL
+              AND country != ''
+              AND country != 'Unknown'
+              AND country != 'Local'
+              GROUP BY country
+            `,
+          [startTimestamp, endTimestamp]
+        );
+        
+        for (const row of liveActivityGeo) {
+          const country = row.country;
+          if (country && country !== 'Unknown' && country !== 'Local') {
+            const existing = geoMap.get(country) || { count: 0, uniqueUsers: 0, sessions: 0 };
+            // Add sessions but take max of unique users to avoid double counting
+            geoMap.set(country, {
+              count: existing.count + (parseInt(row.sessions) || 0),
+              uniqueUsers: Math.max(existing.uniqueUsers, parseInt(row.unique_users) || 0),
+              sessions: existing.sessions + (parseInt(row.sessions) || 0)
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('live_activity geo query failed:', e);
+      }
+      
+      // Source 3: analytics_events metadata (fallback/additional data)
+      try {
+        const analyticsGeo = await adapter.query(
+          isNeon
+            ? `
+              SELECT 
+                COALESCE(metadata->>'country', 'Unknown') as country,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(DISTINCT COALESCE(metadata->>'userId', session_id)) as unique_users
+              FROM analytics_events
+              WHERE timestamp BETWEEN $1 AND $2
+              AND metadata->>'country' IS NOT NULL
+              AND metadata->>'country' != ''
+              AND metadata->>'country' != 'Unknown'
+              AND metadata->>'country' != 'Local'
+              GROUP BY metadata->>'country'
+            `
+            : `
+              SELECT 
+                COALESCE(json_extract(metadata, '$.country'), 'Unknown') as country,
+                COUNT(DISTINCT session_id) as sessions,
+                COUNT(DISTINCT COALESCE(json_extract(metadata, '$.userId'), session_id)) as unique_users
+              FROM analytics_events
+              WHERE timestamp BETWEEN ? AND ?
+              AND json_extract(metadata, '$.country') IS NOT NULL
+              AND json_extract(metadata, '$.country') != ''
+              AND json_extract(metadata, '$.country') != 'Unknown'
+              AND json_extract(metadata, '$.country') != 'Local'
+              GROUP BY json_extract(metadata, '$.country')
+            `,
+          [startTimestamp, endTimestamp]
+        );
+        
+        for (const row of analyticsGeo) {
+          const country = row.country;
+          if (country && country !== 'Unknown' && country !== 'Local') {
+            // Only add if not already in map (avoid double counting)
+            if (!geoMap.has(country)) {
+              geoMap.set(country, {
+                count: parseInt(row.sessions) || 0,
+                uniqueUsers: parseInt(row.unique_users) || 0,
+                sessions: parseInt(row.sessions) || 0
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('analytics_events geo query failed:', e);
+      }
+      
+      // Convert map to array and sort by count
       geographicRaw = Array.from(geoMap.entries())
-        .map(([country, data]) => ({ country, count: data.count, unique_users: data.uniqueUsers }))
+        .map(([country, data]) => ({ 
+          country, 
+          count: data.count, 
+          unique_users: data.uniqueUsers,
+          sessions: data.sessions
+        }))
+        .filter(g => g.country && g.country !== 'Unknown' && g.country !== 'Local')
         .sort((a, b) => b.count - a.count);
+        
+      console.log(`Geographic data: Found ${geographicRaw.length} countries with data`);
         
     } catch (geoError) {
       console.error('Geographic query error:', geoError);
-      // Fallback to simple analytics_events query
-      geographicRaw = await adapter.query(
-        isNeon
-          ? `
-            SELECT 
-              COALESCE(metadata->>'country', 'Unknown') as country,
-              COUNT(DISTINCT session_id) as count,
-              0 as unique_users
-            FROM analytics_events
-            WHERE timestamp BETWEEN $1 AND $2
-            AND metadata->>'country' IS NOT NULL
-            GROUP BY metadata->>'country'
-            ORDER BY count DESC
-          `
-          : `
-            SELECT 
-              COALESCE(json_extract(metadata, '$.country'), 'Unknown') as country,
-              COUNT(DISTINCT session_id) as count,
-              0 as unique_users
-            FROM analytics_events
-            WHERE timestamp BETWEEN ? AND ?
-            AND json_extract(metadata, '$.country') IS NOT NULL
-            GROUP BY json_extract(metadata, '$.country')
-            ORDER BY count DESC
-          `,
-        [startTimestamp, endTimestamp]
-      );
+      geographicRaw = [];
     }
 
     // 6. Device Breakdown
@@ -418,13 +546,16 @@ export async function GET(request: NextRequest) {
       totalSessions: parseInt(row.totalSessions) || 0,
       totalWatchTime: Math.round(parseFloat(row.totalWatchTime) || 0),
       lastActive: parseInt(row.lastActive) || 0,
-      country: row.country || 'Unknown'
+      country: row.country || 'Unknown',
+      city: row.city || null,
+      deviceType: row.deviceType || 'unknown'
     }));
 
     const geographic = geographicRaw.map((row: any) => ({
       country: row.country || 'Unknown',
       count: parseInt(row.count) || 0,
-      uniqueUsers: parseInt(row.unique_users) || 0
+      uniqueUsers: parseInt(row.unique_users) || 0,
+      sessions: parseInt(row.sessions) || parseInt(row.count) || 0
     }));
 
     const deviceBreakdown = deviceBreakdownRaw.map((row: any) => ({

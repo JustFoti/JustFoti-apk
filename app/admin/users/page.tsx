@@ -3,6 +3,22 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../context/AdminContext';
 
+// Helper function to get country flag emoji
+function getCountryFlag(countryCode: string): string {
+  if (!countryCode || countryCode === 'Unknown' || countryCode === 'Local') return '🌍';
+  if (countryCode.length !== 2) return '📍';
+  
+  try {
+    const codePoints = countryCode
+      .toUpperCase()
+      .split('')
+      .map(char => 127397 + char.charCodeAt(0));
+    return String.fromCodePoint(...codePoints);
+  } catch {
+    return '🌍';
+  }
+}
+
 interface UserStat {
   userId: string;
   username: string;
@@ -217,7 +233,11 @@ export default function AdminUsersPage() {
                     </td>
                     <td style={tdStyle}><span style={{ color: '#f8fafc', fontWeight: '500' }}>{formatDuration(user.totalWatchTime)}</span></td>
                     <td style={tdStyle}><span style={{ color: '#f8fafc', fontWeight: '500' }}>{user.totalSessions}</span></td>
-                    <td style={tdStyle}><span style={{ color: '#f8fafc' }}>{user.country === 'Unknown' ? 'N/A' : user.country}</span></td>
+                    <td style={tdStyle}>
+                      <span style={{ color: '#f8fafc' }}>
+                        {user.country === 'Unknown' || !user.country ? '🌍 N/A' : `${getCountryFlag(user.country)} ${user.country}`}
+                      </span>
+                    </td>
                   </tr>
                 ))
               )}

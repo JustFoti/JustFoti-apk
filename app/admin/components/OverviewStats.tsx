@@ -38,11 +38,33 @@ export default function OverviewStats() {
   const [liveTVStats, setLiveTVStats] = useState<LiveTVStats | null>(null);
   const [liveUserCount, setLiveUserCount] = useState(0);
   const [error, setError] = useState('');
+  const [userMetrics, setUserMetrics] = useState<{
+    dau: number;
+    wau: number;
+    mau: number;
+    newUsers: number;
+    returningUsers: number;
+    totalActiveUsers: number;
+    retentionRate: number;
+  } | null>(null);
+
+  const fetchUserMetrics = async () => {
+    try {
+      const response = await fetch('/api/analytics/user-metrics?days=30');
+      if (response.ok) {
+        const data = await response.json();
+        setUserMetrics(data.metrics);
+      }
+    } catch (err) {
+      console.error('Failed to fetch user metrics:', err);
+    }
+  };
 
   useEffect(() => {
     fetchStats();
     fetchLiveStats();
     fetchLiveTVStats();
+    fetchUserMetrics();
     
     // Refresh live stats every 30 seconds
     const interval = setInterval(() => {
@@ -207,16 +229,47 @@ export default function OverviewStats() {
           pulse={(liveTVStats?.currentViewers || 0) > 0}
         />
         <LiveStatCard
-          title="Bounce Rate"
-          value={`${fullAnalytics?.advancedMetrics?.bounceRate || 0}%`}
-          icon="↩️"
+          title="Daily Active Users"
+          value={userMetrics?.dau || 0}
+          icon="📊"
         />
         <LiveStatCard
-          title="Unique Viewers"
-          value={fullAnalytics?.advancedMetrics?.uniqueViewers || 0}
-          icon="👤"
+          title="Weekly Active Users"
+          value={userMetrics?.wau || 0}
+          icon="📈"
         />
       </div>
+
+      {/* User Metrics Row */}
+      {userMetrics && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: '16px',
+          marginBottom: '24px'
+        }}>
+          <LiveStatCard
+            title="Monthly Active Users"
+            value={userMetrics.mau}
+            icon="📅"
+          />
+          <LiveStatCard
+            title="New Users"
+            value={userMetrics.newUsers}
+            icon="🆕"
+          />
+          <LiveStatCard
+            title="Returning Users"
+            value={userMetrics.returningUsers}
+            icon="🔄"
+          />
+          <LiveStatCard
+            title="Retention Rate"
+            value={`${userMetrics.retentionRate}%`}
+            icon="💪"
+          />
+        </div>
+      )}
 
       {/* Device & Peak Hours */}
       {fullAnalytics && (
