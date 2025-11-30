@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import styles from './about.module.css';
 
@@ -8,6 +8,13 @@ export default function AboutPage() {
   const [activeSection, setActiveSection] = useState('abstract');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [isNavCollapsed, setIsNavCollapsed] = useState(false);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const sectionIds = [
+    'abstract', 'introduction', 'literature', 'methodology', 'architecture',
+    'implementation', 'evaluation', 'discussion', 'reverse-engineering',
+    'future', 'conclusion', 'legal', 'references'
+  ];
 
   useEffect(() => {
     const handleScroll = () => {
@@ -20,19 +27,50 @@ export default function AboutPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Intersection Observer to track which section is currently visible
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setActiveSection(entry.target.id);
+          }
+        });
+      },
+      {
+        rootMargin: '-20% 0px -70% 0px', // Trigger when section is in top 30% of viewport
+        threshold: 0
+      }
+    );
+
+    // Observe all sections
+    sectionIds.forEach((id) => {
+      const element = document.getElementById(id);
+      if (element && observerRef.current) {
+        observerRef.current.observe(element);
+      }
+    });
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, []);
+
   const tableOfContents = [
     { id: 'abstract', label: 'Abstract', number: 'I' },
     { id: 'introduction', label: 'Introduction', number: 'II' },
-    { id: 'literature', label: 'Literature Review', number: 'III' },
-    { id: 'methodology', label: 'Methodology', number: 'IV' },
-    { id: 'architecture', label: 'System Architecture', number: 'V' },
+    { id: 'literature', label: 'Know Your Enemy', number: 'III' },
+    { id: 'methodology', label: 'How I Built This', number: 'IV' },
+    { id: 'architecture', label: 'The Tech Stack', number: 'V' },
     { id: 'implementation', label: 'Implementation', number: 'VI' },
-    { id: 'evaluation', label: 'Evaluation & Results', number: 'VII' },
-    { id: 'discussion', label: 'Discussion', number: 'VIII' },
-    { id: 'reverse-engineering', label: 'Reverse Engineering', number: 'IX' },
-    { id: 'future', label: 'Future Work', number: 'X' },
-    { id: 'conclusion', label: 'Conclusion', number: 'XI' },
-    { id: 'legal', label: 'Legal Framework', number: 'XII' },
+    { id: 'evaluation', label: 'Results', number: 'VII' },
+    { id: 'discussion', label: 'What I Proved', number: 'VIII' },
+    { id: 'reverse-engineering', label: 'The Heist', number: 'IX' },
+    { id: 'future', label: 'What\'s Next', number: 'X' },
+    { id: 'conclusion', label: 'The Point', number: 'XI' },
+    { id: 'legal', label: 'Legal Stuff', number: 'XII' },
     { id: 'references', label: 'References', number: 'XIII' },
   ];
 
@@ -148,23 +186,18 @@ export default function AboutPage() {
             </div>
             <div className={styles.abstractBox}>
               <p>
-                This paper presents Flyx, a fully-functional video streaming platform developed to prove 
-                a critical hypothesis: that free streaming services do not require malicious advertising, 
-                invasive tracking, cryptocurrency miners, or deceptive user interfaces to operate. The 
-                pirate streaming ecosystem has long been plagued by platforms that exploit users through 
-                aggressive pop-ups, malware distribution, fingerprinting, and dark patterns—treating 
-                viewers as products rather than people. Flyx demonstrates that an alternative model is 
-                not only possible but practically achievable by a single developer.
+                Let me tell you about the time I decided to build a streaming platform that doesn't 
+                treat its users like garbage. Every pirate streaming site on the internet has the same 
+                business model: bombard visitors with pop-ups, mine crypto on their CPUs, track them 
+                across the web, and serve malware disguised as "HD Player Download" buttons. Users 
+                have accepted this as the price of free content. I wanted to prove them wrong.
               </p>
               <p>
-                The platform provides video-on-demand streaming with adaptive bitrate delivery, live 
-                television integration, and a clean, ad-free user experience—all without collecting 
-                personally identifiable information, deploying tracking cookies, or subjecting users 
-                to malicious advertisements. Through systematic documentation of the development process, 
-                we provide empirical evidence that ethical streaming platforms can exist, challenging 
-                the prevailing assumption that free content must come at the cost of user safety and 
-                privacy. This work serves as both a technical reference and a statement that users 
-                deserve better than the exploitative status quo.
+                Flyx is a fully-functional streaming platform—movies, TV shows, live television—built 
+                by one person, running on free infrastructure, with zero ads, zero tracking, and zero 
+                bullshit. No pop-ups. No crypto miners. No fingerprinting. No dark patterns. Just 
+                content, delivered cleanly, the way it should be. This document tells the story of 
+                how it was built, the technical challenges overcome, and why it matters that it exists.
               </p>
               <div className={styles.keywordsSection}>
                 <div className={styles.keywordsHeader}>
@@ -172,14 +205,14 @@ export default function AboutPage() {
                   <span className={styles.keywordLabel}>Keywords</span>
                 </div>
                 <div className={styles.keywordsList}>
-                  <span className={styles.keyword}>Web Development</span>
-                  <span className={styles.keyword}>Streaming Architecture</span>
-                  <span className={styles.keyword}>Solo Development</span>
+                  <span className={styles.keyword}>Reverse Engineering</span>
+                  <span className={styles.keyword}>Stream Extraction</span>
+                  <span className={styles.keyword}>Anti-Exploitation</span>
                   <span className={styles.keyword}>Next.js</span>
-                  <span className={styles.keyword}>Serverless Computing</span>
-                  <span className={styles.keyword}>HLS Protocol</span>
-                  <span className={styles.keyword}>Case Study</span>
-                  <span className={styles.keyword}>Software Engineering</span>
+                  <span className={styles.keyword}>Serverless</span>
+                  <span className={styles.keyword}>HLS Streaming</span>
+                  <span className={styles.keyword}>Solo Dev</span>
+                  <span className={styles.keyword}>Ethical Piracy</span>
                 </div>
               </div>
             </div>
@@ -192,79 +225,79 @@ export default function AboutPage() {
               <h2>Introduction</h2>
             </div>
             
-            <h3 className={styles.subsectionTitle}>2.1 The Problem: Exploitation in Pirate Streaming</h3>
+            <h3 className={styles.subsectionTitle}>2.1 The Hellscape of Free Streaming</h3>
             <p className={styles.leadParagraph}>
-              The pirate streaming ecosystem represents one of the most hostile environments on the modern 
-              web. Users seeking free access to movies and television are routinely subjected to an arsenal 
-              of exploitative practices: pop-up advertisements that spawn endlessly, fake "close" buttons 
-              that trigger additional ads, cryptocurrency miners running silently in the background, 
-              browser fingerprinting for cross-site tracking, malware distribution disguised as video 
-              players, and dark patterns designed to trick users into clicking malicious links.
+              Try to watch a movie for free on the internet. Go ahead. Click on any of the top results. 
+              Within seconds, you'll experience: a pop-up ad. Then another. A fake "close" button that 
+              opens three more tabs. A notification asking if you want to allow push notifications 
+              (you don't). A video player that requires you to "disable your ad blocker" (it's lying). 
+              And somewhere in the background, your CPU is now mining Monero for someone in Eastern Europe.
             </p>
             <p>
-              These practices are not incidental—they are the business model. Pirate streaming sites 
-              generate revenue by treating users as products, selling their attention, computing resources, 
-              and personal data to the highest bidder. The implicit assumption underlying this ecosystem 
-              is that free content cannot exist without exploitation: if you're not paying with money, 
-              you must pay with your security, privacy, and sanity.
+              This isn't an accident. This is the business model. These sites make money by treating 
+              you as the product. Your attention gets sold to advertisers. Your computing power gets 
+              stolen for crypto mining. Your browser fingerprint gets sold to data brokers. Your 
+              clicks on fake buttons generate affiliate revenue. You wanted to watch a movie; they 
+              wanted to extract every possible cent from your visit.
             </p>
             <p>
-              Flyx was created to challenge this assumption directly. The project asks a simple but 
+              The implicit message is clear: free content requires exploitation. If you're not paying 
               important question: can a streaming platform provide free access to content while treating 
               users with respect? Can we build something that doesn't assault visitors with ads, doesn't 
               track their behavior across the web, doesn't mine cryptocurrency on their devices, and 
               doesn't employ deceptive interfaces designed to generate accidental clicks?
             </p>
 
+            <p>
+              with money, you pay with your security, your privacy, your sanity. That's the deal. 
+              Take it or leave it.
+            </p>
+            <p>
+              I decided to leave it. And then build something better.
+            </p>
+
             <div className={styles.highlightBox}>
-              <div className={styles.highlightIcon}>💡</div>
+              <div className={styles.highlightIcon}>🎯</div>
               <div className={styles.highlightContent}>
-                <h4>Core Thesis</h4>
+                <h4>The Mission</h4>
                 <p>
-                  Free streaming platforms do not require malicious advertising, invasive tracking, or 
-                  exploitative practices to function. The prevalence of such practices in the pirate 
-                  streaming ecosystem reflects a choice to prioritize profit over users, not a technical 
-                  or economic necessity.
+                  Prove that free streaming doesn't require exploitation. Build a platform that treats 
+                  users like humans instead of revenue sources. Show that the malware, the pop-ups, 
+                  the crypto miners—they're not necessary. They're a choice. A greedy, shitty choice.
                 </p>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>2.2 The Vision: Ethical Streaming</h3>
+            <h3 className={styles.subsectionTitle}>2.2 The Rules I Set</h3>
             <p>
-              Flyx was built on a set of principles that stand in direct opposition to the norms of 
-              pirate streaming. No advertisements—not even "acceptable" ones. No tracking cookies or 
-              cross-site identifiers. No cryptocurrency mining. No pop-ups, pop-unders, or redirect 
-              chains. No fake buttons or deceptive UI elements. No collection of personally identifiable 
-              information. No selling of user data to third parties.
+              Before writing a single line of code, I established the rules. Non-negotiable. The 
+              platform would have: zero advertisements (not even "tasteful" ones), zero tracking 
+              cookies, zero fingerprinting, zero crypto mining, zero pop-ups, zero fake buttons, 
+              zero dark patterns, zero collection of personal information, zero selling of user data.
             </p>
             <p>
-              The goal was not merely to build a streaming platform, but to prove that such a platform 
-              could exist without the exploitative practices that users have come to accept as inevitable. 
-              If a single developer, working part-time with no budget, can create a functional streaming 
-              service that respects its users, then the malicious practices of existing platforms are 
-              revealed as choices rather than necessities.
+              If I couldn't build it without breaking these rules, I wouldn't build it at all. The 
+              whole point was to prove it could be done ethically. Compromising on ethics would 
+              defeat the purpose entirely.
             </p>
 
-            <h3 className={styles.subsectionTitle}>2.3 Contributions</h3>
-            <p>
-              This paper makes the following contributions:
-            </p>
+            <h3 className={styles.subsectionTitle}>2.3 What This Document Covers</h3>
             <ul className={styles.contributionList}>
               <li>
-                <strong>Proof of Concept:</strong> Demonstrating that free streaming can exist without 
-                malicious ads, tracking, or exploitation—challenging the assumed economics of pirate platforms.
+                <strong>The Technical Journey:</strong> How I built a production streaming platform 
+                from scratch, alone, with no budget, in my spare time.
               </li>
               <li>
-                <strong>Ethical Architecture:</strong> A reference implementation for privacy-respecting 
-                streaming applications that collect only anonymized, aggregate analytics.
+                <strong>The Reverse Engineering:</strong> How I cracked the obfuscation and security 
+                of pirate streaming providers to extract clean streams without their malware.
               </li>
               <li>
-                <strong>User-First Design:</strong> Documentation of design decisions that prioritize 
-                user experience and safety over monetization opportunities.
+                <strong>The Architecture:</strong> The technical decisions that make it all work—
+                serverless, edge computing, proxy layers, and more.
               </li>
               <li>
-                <strong>Technical Feasibility:</strong> Evidence that modern tools enable individuals to 
-                build sophisticated applications without compromising on ethics.
+                <strong>The Proof:</strong> Evidence that ethical streaming is possible, and that 
+                the exploitation is a choice, not a necessity.
               </li>
             </ul>
           </section>
@@ -273,66 +306,74 @@ export default function AboutPage() {
           <section id="literature" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>III</span>
-              <h2>Literature Review</h2>
+              <h2>Know Your Enemy</h2>
             </div>
 
-            <h3 className={styles.subsectionTitle}>3.1 The Exploitation Economy of Pirate Streaming</h3>
+            <h3 className={styles.subsectionTitle}>3.1 How Pirate Sites Actually Make Money</h3>
             <p>
-              Pirate streaming sites operate within what researchers have termed the "exploitation economy"—
-              a business model predicated on extracting maximum value from users through any means available. 
-              Studies have documented the prevalence of malvertising (malicious advertising) on these 
-              platforms, with some sites serving malware to over 50% of visitors (Rafique et al., 2016). 
-              The advertising networks serving these sites often have minimal content policies, enabling 
-              the distribution of scams, malware, and deceptive content.
+              Let's talk about the enemy. Pirate streaming sites aren't charities—they're businesses. 
+              Very profitable businesses. And their product is you. Here's how the money flows:
             </p>
             <p>
-              Beyond advertising, pirate streaming sites frequently deploy cryptocurrency miners that 
-              hijack visitors' CPU resources (Konoth et al., 2018). Browser fingerprinting techniques 
-              enable cross-site tracking even when users clear cookies or use private browsing modes 
-              (Laperdrix et al., 2020). Dark patterns—deceptive UI designs that trick users into 
-              unintended actions—are endemic, with fake close buttons, hidden redirects, and misleading 
-              download links appearing on virtually every major pirate platform.
+              <strong>Malvertising:</strong> Those pop-ups aren't just annoying—they're malicious. 
+              Studies show over 50% of visitors to major pirate sites get served actual malware. 
+              The ad networks that work with these sites have zero standards. Scams, ransomware, 
+              phishing—it all pays the same.
+            </p>
+            <p>
+              <strong>Crypto Mining:</strong> While you're watching a movie, your CPU is mining 
+              cryptocurrency for someone else. Your electricity bill goes up. Your laptop fans 
+              spin. Your battery drains. They profit.
+            </p>
+            <p>
+              <strong>Data Harvesting:</strong> Browser fingerprinting, tracking cookies, cross-site 
+              identifiers—your browsing habits get packaged and sold to data brokers. Even in 
+              "private" mode, they know who you are.
             </p>
 
             <div className={styles.citationBox}>
               <div className={styles.citationMark}>"</div>
               <blockquote>
-                The user is not the customer on these platforms—they are the product. Every click, 
-                every second of attention, every CPU cycle is monetized without consent or compensation.
+                You're not the customer. You're not even the user. You're the ore being mined. 
+                Every click, every second of attention, every CPU cycle—extracted and monetized 
+                without your consent.
               </blockquote>
-              <cite>— Analysis of Pirate Streaming Economics</cite>
+              <cite>— The reality of "free" streaming</cite>
             </div>
 
-            <h3 className={styles.subsectionTitle}>3.2 The False Necessity Argument</h3>
+            <h3 className={styles.subsectionTitle}>3.2 The "We Have No Choice" Lie</h3>
             <p>
-              Defenders of exploitative practices often argue that they are economically necessary—that 
-              free content cannot exist without aggressive monetization. This argument deserves scrutiny. 
-              The costs of operating a streaming aggregator (as opposed to a content host) are remarkably 
-              low: domain registration, basic hosting, and API access to metadata services. Modern 
-              serverless platforms offer generous free tiers that can support substantial traffic without 
-              cost (Vercel, Netlify, Cloudflare).
+              Site operators love to claim they need aggressive monetization to survive. "Servers 
+              cost money," they say. "We have to pay for bandwidth somehow."
             </p>
             <p>
-              The reality is that exploitative practices are not necessary—they are simply more profitable 
-              than ethical alternatives. Site operators choose to deploy malware, mine cryptocurrency, 
-              and track users because these practices generate revenue, not because the sites couldn't 
-              function without them. Flyx exists to demonstrate this distinction empirically.
+              Bullshit.
+            </p>
+            <p>
+              These sites don't host content—they aggregate it. They're glorified link directories 
+              with embedded players. The actual video streams come from third-party providers. The 
+              bandwidth costs are minimal. Modern serverless platforms (Vercel, Cloudflare, Netlify) 
+              offer generous free tiers that can handle substantial traffic at zero cost.
+            </p>
+            <p>
+              The exploitation isn't necessary. It's just more profitable. They could run clean 
+              sites. They choose not to because malware pays better than dignity.
             </p>
 
-            <h3 className={styles.subsectionTitle}>3.3 Privacy-Respecting Alternatives</h3>
+            <h3 className={styles.subsectionTitle}>3.3 Why Nobody's Fixed This</h3>
             <p>
-              The broader web has seen growing interest in privacy-respecting alternatives to surveillance-
-              based services. Projects like DuckDuckGo (search), Signal (messaging), and ProtonMail (email) 
-              have demonstrated that privacy and functionality are not mutually exclusive. However, the 
-              streaming space has seen limited progress in this direction, partly due to the technical 
-              complexity involved and partly due to the legal ambiguity surrounding content aggregation.
+              Privacy-respecting alternatives exist in other spaces. DuckDuckGo for search. Signal 
+              for messaging. ProtonMail for email. But streaming? Nothing. Why?
             </p>
             <p>
-              Flyx draws inspiration from these privacy-focused projects while addressing the unique 
-              challenges of streaming. The goal is not to create a commercial competitor to existing 
-              services, but to prove that the technical and economic barriers to ethical streaming are 
-              lower than commonly assumed.
+              Partly it's technical complexity—streaming is harder than search. Partly it's legal 
+              ambiguity—nobody wants to be the face of a piracy platform. But mostly? Nobody cared 
+              enough to try. The people capable of building something better were busy with 
+              legitimate projects. The people running pirate sites were too busy counting their 
+              malware revenue.
             </p>
+            <p>
+              I decided to care.</p>
 
             <div className={styles.literatureTable}>
               <h4>Table 1: Exploitative Practices in Pirate Streaming Sites</h4>
@@ -393,31 +434,55 @@ export default function AboutPage() {
           <section id="methodology" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>IV</span>
-              <h2>Methodology</h2>
+              <h2>How I Built This Thing</h2>
             </div>
 
-            <h3 className={styles.subsectionTitle}>4.1 Research Design</h3>
+            <h3 className={styles.subsectionTitle}>4.1 The Ground Rules</h3>
             <p>
-              This study employs a constructive research methodology, wherein the primary research 
-              artifact—the Flyx streaming platform—serves as both the subject of investigation and 
-              the vehicle for generating insights. Constructive research is particularly appropriate 
-              for software engineering studies where the goal is to demonstrate feasibility and 
-              document practical implementation approaches (Crnkovic, 2010).
+              Before I started, I set some constraints. Partly to prove a point, partly because 
+              I'm stubborn. If I was going to claim that ethical streaming is achievable by anyone, 
+              I needed to build it under realistic conditions:
             </p>
+
+            <div className={styles.constraintGrid}>
+              <div className={styles.constraintCard}>
+                <div className={styles.constraintIcon}>👤</div>
+                <h4>Just Me</h4>
+                <p>No team. No contractors. No "my friend helped with the design." Every line of 
+                code, every pixel, every decision—mine alone.</p>
+              </div>
+              <div className={styles.constraintCard}>
+                <div className={styles.constraintIcon}>💸</div>
+                <h4>Zero Dollars</h4>
+                <p>Free tiers only. If a service wanted my credit card, I found an alternative. 
+                The whole point is proving you don't need money to do this right.</p>
+              </div>
+              <div className={styles.constraintCard}>
+                <div className={styles.constraintIcon}>🌙</div>
+                <h4>Nights & Weekends</h4>
+                <p>I have a day job. This was built in stolen hours—15-20 per week, fueled by 
+                coffee and spite. Three months total.</p>
+              </div>
+              <div className={styles.constraintCard}>
+                <div className={styles.constraintIcon}>📖</div>
+                <h4>Public Knowledge Only</h4>
+                <p>No insider information. No proprietary tools. Everything I learned came from 
+                documentation, Stack Overflow, and staring at obfuscated JavaScript until it made sense.</p>
+              </div>
+            </div>
+
+            <h3 className={styles.subsectionTitle}>4.2 The Timeline</h3>
             <p>
-              The research proceeded through four distinct phases: (1) requirements analysis and 
-              technology selection, (2) iterative development with continuous documentation, 
-              (3) deployment and operational observation, and (4) retrospective analysis and 
-              synthesis. Throughout all phases, detailed logs were maintained capturing time 
-              allocation, technical decisions, challenges encountered, and solutions implemented.
+              Three months. That's how long it took from "I should build this" to "holy shit, it 
+              actually works." Here's how it broke down:
             </p>
 
             <div className={styles.methodologyDiagram}>
               <div className={styles.methodPhase}>
                 <div className={styles.phaseNumber}>01</div>
                 <div className={styles.phaseContent}>
-                  <h4>Requirements Analysis</h4>
-                  <p>Feature prioritization, technology evaluation, architecture planning</p>
+                  <h4>Planning & Panic</h4>
+                  <p>Figuring out what to build, what tools to use, and whether I was insane</p>
                   <span className={styles.phaseDuration}>2 weeks</span>
                 </div>
               </div>
@@ -428,8 +493,8 @@ export default function AboutPage() {
               <div className={styles.methodPhase}>
                 <div className={styles.phaseNumber}>02</div>
                 <div className={styles.phaseContent}>
-                  <h4>Iterative Development</h4>
-                  <p>Core features, streaming pipeline, analytics system</p>
+                  <h4>The Grind</h4>
+                  <p>Building the core platform, cracking stream providers, endless debugging</p>
                   <span className={styles.phaseDuration}>8 weeks</span>
                 </div>
               </div>
@@ -440,8 +505,8 @@ export default function AboutPage() {
               <div className={styles.methodPhase}>
                 <div className={styles.phaseNumber}>03</div>
                 <div className={styles.phaseContent}>
-                  <h4>Deployment & Testing</h4>
-                  <p>Production deployment, performance optimization, bug fixes</p>
+                  <h4>Ship It</h4>
+                  <p>Deployment, optimization, fixing everything that broke in production</p>
                   <span className={styles.phaseDuration}>2 weeks</span>
                 </div>
               </div>
@@ -452,50 +517,18 @@ export default function AboutPage() {
               <div className={styles.methodPhase}>
                 <div className={styles.phaseNumber}>04</div>
                 <div className={styles.phaseContent}>
-                  <h4>Analysis & Documentation</h4>
-                  <p>Retrospective analysis, paper writing, code documentation</p>
+                  <h4>Write It Up</h4>
+                  <p>This document. Explaining what I did and why it matters.</p>
                   <span className={styles.phaseDuration}>2 weeks</span>
                 </div>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>4.2 Development Constraints</h3>
+            <h3 className={styles.subsectionTitle}>4.3 Picking the Tools</h3>
             <p>
-              To ensure the validity of our findings regarding solo development feasibility, the 
-              following constraints were strictly observed throughout the project:
-            </p>
-            
-            <div className={styles.constraintGrid}>
-              <div className={styles.constraintCard}>
-                <div className={styles.constraintIcon}>👤</div>
-                <h4>Single Developer</h4>
-                <p>All code, design, and documentation produced by one individual. No contractors, 
-                collaborators, or outsourced work.</p>
-              </div>
-              <div className={styles.constraintCard}>
-                <div className={styles.constraintIcon}>💰</div>
-                <h4>Zero Budget</h4>
-                <p>Only free tiers of services utilized. No paid tools, infrastructure, or 
-                subscriptions beyond existing personal accounts.</p>
-              </div>
-              <div className={styles.constraintCard}>
-                <div className={styles.constraintIcon}>⏰</div>
-                <h4>Part-Time Effort</h4>
-                <p>Development conducted during evenings and weekends only, averaging 15-20 hours 
-                per week over three months.</p>
-              </div>
-              <div className={styles.constraintCard}>
-                <div className={styles.constraintIcon}>📚</div>
-                <h4>Public Resources Only</h4>
-                <p>All learning materials, documentation, and references publicly available. 
-                No proprietary training or insider knowledge.</p>
-              </div>
-            </div>
-
-            <h3 className={styles.subsectionTitle}>4.3 Technology Selection Criteria</h3>
-            <p>
-              Technology choices were evaluated against five criteria, weighted by importance to 
-              solo development success:
+              When you're building alone with no budget, tool selection is everything. Pick wrong 
+              and you waste weeks fighting your framework. Pick right and the code almost writes 
+              itself. Here's what mattered to me:
             </p>
             
             <div className={styles.criteriaList}>
@@ -551,16 +584,15 @@ export default function AboutPage() {
           <section id="architecture" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>V</span>
-              <h2>System Architecture</h2>
+              <h2>The Tech Stack</h2>
             </div>
 
-            <h3 className={styles.subsectionTitle}>5.1 Architectural Overview</h3>
+            <h3 className={styles.subsectionTitle}>5.1 The Big Picture</h3>
             <p>
-              Flyx employs a modern, cloud-native architecture optimized for developer productivity 
-              and operational simplicity. The system follows a serverless-first approach, leveraging 
-              edge computing for performance-critical paths while maintaining the flexibility of 
-              traditional server-side rendering where appropriate. This architectural philosophy 
-              prioritizes minimizing operational burden over theoretical performance optimization.
+              Here's how all the pieces fit together. The architecture is designed for one thing: 
+              letting me build fast and deploy for free. Serverless everything. Edge computing where 
+              it matters. No servers to babysit, no infrastructure to maintain. Just code that runs 
+              when users need it and costs nothing when they don't.
             </p>
 
             <div className={styles.architectureDiagram}>
@@ -1135,146 +1167,142 @@ async function getPlayableStream(
           <section id="discussion" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>VIII</span>
-              <h2>Discussion</h2>
+              <h2>What I Proved</h2>
             </div>
 
-            <h3 className={styles.subsectionTitle}>8.1 Key Findings</h3>
+            <h3 className={styles.subsectionTitle}>8.1 The Verdict</h3>
             <p className={styles.leadParagraph}>
-              The Flyx project provides empirical evidence supporting the core thesis: ethical streaming 
-              is not only possible but practically achievable. The findings challenge the assumed 
-              necessity of exploitative practices in free streaming platforms.
+              So did it work? Can you actually build an ethical streaming platform? The answer is 
+              yes—with caveats. Here's what I learned:
             </p>
 
             <div className={styles.findingsGrid}>
               <div className={styles.findingCard}>
                 <div className={styles.findingNumber}>1</div>
                 <div className={styles.findingContent}>
-                  <h4>Exploitation is a Choice, Not a Necessity</h4>
+                  <h4>The Exploitation is Optional</h4>
                   <p>
-                    Flyx operates without ads, tracking, or malware while providing functional streaming. 
-                    This proves that exploitative practices on pirate sites are profit-maximizing choices, 
-                    not technical or economic requirements.
+                    Flyx works. No ads, no tracking, no malware. Streams play. Users watch movies. 
+                    The sky didn't fall. Every pirate site that serves pop-ups is making a choice—
+                    they could do better. They just don't want to.
                   </p>
                 </div>
               </div>
               <div className={styles.findingCard}>
                 <div className={styles.findingNumber}>2</div>
                 <div className={styles.findingContent}>
-                  <h4>Zero-Cost Operation is Achievable</h4>
+                  <h4>Free Infrastructure Exists</h4>
                   <p>
-                    Modern serverless platforms enable production deployment at zero cost. The "we need 
-                    aggressive ads to pay for servers" argument is demonstrably false for aggregator-style 
-                    platforms that don't host content directly.
+                    I spent $0. Zero dollars. Vercel's free tier handles the traffic. Neon's free 
+                    tier handles the database. The "we need ad revenue for servers" excuse is a lie. 
+                    Aggregators don't need money—they want it.
                   </p>
                 </div>
               </div>
               <div className={styles.findingCard}>
                 <div className={styles.findingNumber}>3</div>
                 <div className={styles.findingContent}>
-                  <h4>Privacy and Functionality Coexist</h4>
+                  <h4>Privacy Doesn't Kill Features</h4>
                   <p>
-                    Useful analytics can be collected without PII. Watch progress can sync without accounts. 
-                    Personalization can work without tracking. Privacy-respecting design doesn't require 
-                    sacrificing user experience.
+                    Watch progress syncs without accounts. Analytics work without fingerprinting. 
+                    Recommendations could work without tracking (I just haven't built them yet). 
+                    Privacy and functionality aren't enemies.
                   </p>
                 </div>
               </div>
               <div className={styles.findingCard}>
                 <div className={styles.findingNumber}>4</div>
                 <div className={styles.findingContent}>
-                  <h4>Users Deserve Better</h4>
+                  <h4>One Person Can Do This</h4>
                   <p>
-                    The existence of Flyx demonstrates that users don't have to accept malware, pop-ups, 
-                    and tracking as the price of free streaming. Alternatives can exist—the industry 
-                    simply chooses not to build them.
+                    No team. No funding. No special access. Just a developer with a laptop and too 
+                    much free time. If I can build this, the excuse that "it's too hard" doesn't hold.
                   </p>
                 </div>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>8.2 Challenges Encountered</h3>
+            <h3 className={styles.subsectionTitle}>8.2 The Hard Parts (Besides Reverse Engineering)</h3>
             <p>
-              No project of this scope proceeds without significant obstacles. Documenting these 
-              challenges provides a realistic picture of solo development and may help future 
-              practitioners avoid similar pitfalls.
+              The reverse engineering gets its own section because it deserves it. But there were 
+              other challenges too:
             </p>
 
             <div className={styles.challengesList}>
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>🔄</span>
-                  <h4>Stream Source Reliability</h4>
+                  <span className={styles.challengeIcon}>💀</span>
+                  <h4>Streams Die Constantly</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Third-party stream sources are inherently unreliable. URLs expire, servers go 
-                    offline, and quality varies dramatically. Early versions suffered from frequent 
-                    playback failures that degraded user experience significantly.
+                    Third-party streams are unreliable as hell. URLs expire. Servers go down. Quality 
+                    fluctuates. One day everything works; the next day half your content is broken. 
+                    Early versions of Flyx were a buffering nightmare.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Solution:</strong> Implemented a multi-source fallback system with automatic 
-                    retry logic. The player maintains a ranked list of available sources and seamlessly 
-                    switches to alternatives when the primary source fails.
+                    <strong>The Fix:</strong> Multi-source fallback. The player tries multiple providers 
+                    for each piece of content, automatically switching when one fails. Redundancy is 
+                    survival in this game.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>⚡</span>
-                  <h4>Initial Load Performance</h4>
+                  <span className={styles.challengeIcon}>🐌</span>
+                  <h4>JavaScript Bloat</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    The rich feature set resulted in large JavaScript bundles that impacted initial 
-                    page load times. Users on slower connections experienced noticeable delays before 
-                    the application became interactive.
+                    Features add up. The video player, the UI components, the analytics, the admin 
+                    dashboard—suddenly you're shipping megabytes of JavaScript and users on slow 
+                    connections are staring at loading spinners.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Solution:</strong> Aggressive code splitting using Next.js dynamic imports, 
-                    lazy loading of non-critical components, and strategic use of React Suspense 
-                    boundaries. Reduced initial bundle size by 60%.
+                    <strong>The Fix:</strong> Aggressive code splitting. Lazy load everything that 
+                    isn't immediately visible. Use React Suspense to show content progressively. 
+                    Cut the initial bundle by 60%.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>🔒</span>
-                  <h4>CORS and Security Restrictions</h4>
+                  <span className={styles.challengeIcon}>🚧</span>
+                  <h4>CORS Hell</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Many stream sources implement CORS restrictions that prevent direct browser access. 
-                    Additionally, some sources require specific headers or referrers that browsers 
-                    cannot provide from cross-origin contexts.
+                    Browsers are paranoid about cross-origin requests. Stream providers set headers 
+                    that block direct access. You can't just fetch a video URL and play it—the 
+                    browser will refuse.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Solution:</strong> Developed a proxy layer using Next.js API routes that 
-                    handles header manipulation and CORS negotiation transparently while maintaining 
-                    stream integrity and performance.
+                    <strong>The Fix:</strong> Proxy everything. API routes that fetch streams server-side 
+                    and relay them to the browser. The browser thinks it's talking to my server; my 
+                    server handles the cross-origin dance.
                   </div>
                 </div>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>8.3 Lessons Learned</h3>
+            <h3 className={styles.subsectionTitle}>8.3 What I'd Do Differently</h3>
             <div className={styles.lessonsBox}>
               <div className={styles.lessonItem}>
                 <span className={styles.lessonNumber}>01</span>
                 <div className={styles.lessonContent}>
-                  <h4>Start with the Hard Parts</h4>
+                  <h4>Start with Streaming</h4>
                   <p>
-                    Tackling video streaming first revealed constraints that shaped the entire 
-                    architecture. Easier features built naturally on this foundation. Delaying 
-                    difficult problems only compounds them.
+                    I wasted time on UI polish before the core streaming worked. Should have built 
+                    the hard part first. Everything else is just decoration.
                   </p>
                 </div>
               </div>
               <div className={styles.lessonItem}>
                 <span className={styles.lessonNumber}>02</span>
                 <div className={styles.lessonContent}>
-                  <h4>Embrace Constraints</h4>
+                  <h4>Constraints Are Friends</h4>
                   <p>
                     Limited time forced ruthless prioritization. Features were evaluated by 
                     impact-to-effort ratio, not technical interest. Constraints breed creativity 
@@ -1756,53 +1784,50 @@ async function extractStream(tmdbId: string): Promise<Stream> {
           <section id="future" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>X</span>
-              <h2>Future Work</h2>
+              <h2>What's Next</h2>
             </div>
             <p>
-              While Flyx achieves its primary goal of demonstrating solo development capability, 
-              several areas warrant future exploration. These directions represent both technical 
-              enhancements and research opportunities:
+              Flyx isn't done. It works, but "works" is a low bar. Here's what I want to build next, 
+              when I find more stolen hours:
             </p>
 
             <div className={styles.futureGrid}>
               <div className={styles.futureCard}>
-                <div className={styles.futureIcon}>🤖</div>
-                <h4>Machine Learning Integration</h4>
+                <div className={styles.futureIcon}>🧠</div>
+                <h4>Smart Recommendations</h4>
                 <p>
-                  Implementing recommendation algorithms using collaborative filtering or 
-                  content-based approaches. Exploring edge-deployed ML models for real-time 
-                  personalization without server round-trips.
+                  Right now, recommendations are basic. I want to build something that actually 
+                  learns what you like—without tracking you. Local-first ML, maybe. Privacy-preserving 
+                  personalization. It's possible; I just haven't done it yet.
                 </p>
-                <span className={styles.futureComplexity}>Complexity: High</span>
+                <span className={styles.futureComplexity}>Difficulty: Hard</span>
               </div>
               <div className={styles.futureCard}>
-                <div className={styles.futureIcon}>📱</div>
-                <h4>Progressive Web App</h4>
+                <div className={styles.futureIcon}>📲</div>
+                <h4>Install It Like an App</h4>
                 <p>
-                  Adding offline capability and app-like experience through service workers 
-                  and manifest configuration. Enabling installation on mobile devices without 
-                  app store distribution.
+                  PWA support. Add to home screen. Offline capability for your watchlist. Make it 
+                  feel native without going through app stores that would definitely reject it.
                 </p>
-                <span className={styles.futureComplexity}>Complexity: Medium</span>
+                <span className={styles.futureComplexity}>Difficulty: Medium</span>
               </div>
               <div className={styles.futureCard}>
-                <div className={styles.futureIcon}>🌐</div>
-                <h4>Internationalization</h4>
+                <div className={styles.futureIcon}>🌍</div>
+                <h4>More Languages</h4>
                 <p>
-                  Supporting multiple languages and regional content preferences. Implementing 
-                  RTL layout support and locale-aware formatting throughout the application.
+                  The interface is English-only. That's lazy. I want to support multiple languages, 
+                  RTL layouts, regional content preferences. Make it accessible to everyone.
                 </p>
-                <span className={styles.futureComplexity}>Complexity: Medium</span>
+                <span className={styles.futureComplexity}>Difficulty: Medium</span>
               </div>
               <div className={styles.futureCard}>
-                <div className={styles.futureIcon}>♿</div>
-                <h4>Accessibility Audit</h4>
+                <div className={styles.futureIcon}>🔊</div>
+                <h4>Better Accessibility</h4>
                 <p>
-                  Comprehensive WCAG 2.1 AA compliance review and implementation. Adding 
-                  screen reader support, keyboard navigation improvements, and reduced 
-                  motion alternatives.
+                  Screen reader support. Keyboard navigation everywhere. Reduced motion options. 
+                  If I'm building something ethical, it should be usable by everyone.
                 </p>
-                <span className={styles.futureComplexity}>Complexity: Medium</span>
+                <span className={styles.futureComplexity}>Difficulty: Medium</span>
               </div>
             </div>
           </section>
@@ -1811,28 +1836,24 @@ async function extractStream(tmdbId: string): Promise<Stream> {
           <section id="conclusion" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>XI</span>
-              <h2>Conclusion</h2>
+              <h2>The Point of All This</h2>
             </div>
             <p className={styles.leadParagraph}>
-              This paper has presented Flyx, a streaming platform built to prove a simple but important 
-              point: free streaming does not require exploiting users. The malicious advertising, 
-              invasive tracking, cryptocurrency mining, and dark patterns endemic to pirate streaming 
-              sites are not technical necessities—they are choices made by operators who prioritize 
-              profit over people.
+              So here we are. I built a streaming platform. It works. It doesn't assault you with 
+              pop-ups. It doesn't mine crypto on your CPU. It doesn't track you across the web. It 
+              doesn't have fake close buttons or dark patterns or any of the other bullshit that 
+              pirate streaming sites have normalized.
             </p>
             <p>
-              Flyx demonstrates that an alternative is possible. A single developer, working part-time 
-              with no budget, can create a functional streaming platform that respects its users. No 
-              pop-ups. No tracking. No malware. No deception. If this is achievable under such 
-              constraints, then the exploitative practices of existing platforms are revealed for 
-              what they are: greed, not necessity.
+              And I did it alone. Part-time. With no money. Using free tools and stolen hours and 
+              way too much coffee.
             </p>
             <p>
-              The broader implication is that users don't have to accept the status quo. They deserve 
-              platforms that treat them as people rather than products. They deserve interfaces designed 
-              to help them find content, not trick them into clicking ads. They deserve to watch a 
-              movie without their browser being hijacked, their CPU being mined, or their behavior 
-              being tracked across the web.
+              That's the point. Not that I'm special—I'm not. The point is that if one person can 
+              do this under these constraints, then every pirate streaming site that serves malware 
+              is making a choice. They could do better. They could treat users like humans instead 
+              of revenue sources. They choose not to because exploitation is more profitable than 
+              ethics.
             </p>
 
             <div className={styles.conclusionQuote}>
@@ -1840,17 +1861,30 @@ async function extractStream(tmdbId: string): Promise<Stream> {
                 <span>"</span>
               </div>
               <blockquote>
-                The measure of a platform is not how much value it extracts from users, but how much 
-                value it provides to them. Flyx exists to prove that free doesn't have to mean exploited.
+                The pop-ups aren't necessary. The crypto miners aren't necessary. The tracking isn't 
+                necessary. They're choices. And those choices tell you everything you need to know 
+                about the people making them.
               </blockquote>
               <cite>— Vynx</cite>
             </div>
 
             <p>
-              For users, the message is: you deserve better, and better is possible. For developers, 
-              the challenge is: if one person can build this, what's stopping you from building 
-              something ethical too? And for the operators of exploitative platforms: your practices 
-              are a choice, and that choice says everything about your values.
+              To the users: you deserve better. You don't have to accept malware as the price of 
+              free content. Alternatives can exist.
+            </p>
+            <p>
+              To the developers: if you have the skills to build something, build something good. 
+              The world has enough exploitative garbage. Be better.
+            </p>
+            <p>
+              To the operators of pirate streaming sites: I see you. I know what you're doing. And 
+              I built this specifically to prove that you don't have to do it. Your greed is a 
+              choice, and that choice defines you.
+            </p>
+            <p>
+              Flyx exists because I got tired of watching the internet get worse. It's a small 
+              thing—one platform, one developer, one statement. But it's proof that better is 
+              possible. And sometimes, proof is enough.
             </p>
           </section>
 

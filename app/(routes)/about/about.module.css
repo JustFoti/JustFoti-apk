@@ -241,6 +241,8 @@
    ============================================ */
 .sidebar {
   position: relative;
+  align-self: start;
+  height: fit-content;
 }
 
 .sidebarCollapsed .tocContainer {
