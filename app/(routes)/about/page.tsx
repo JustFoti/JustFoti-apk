@@ -1311,223 +1311,246 @@ async function getPlayableStream(
           <section id="reverse-engineering" className={styles.section}>
             <div className={styles.sectionHeader}>
               <span className={styles.sectionNumber}>IX</span>
-              <h2>Reverse Engineering: Cracking Third-Party Stream Protection</h2>
+              <h2>The Heist: Stealing from the Thieves</h2>
             </div>
 
             <p className={styles.leadParagraph}>
-              Perhaps the most technically demanding aspect of Flyx was reverse engineering the 
-              security measures and obfuscation techniques employed by third-party streaming providers. 
-              These providers implement sophisticated anti-extraction mechanisms designed to prevent 
-              exactly what we needed to accomplish. This section documents the challenges encountered 
-              and the techniques developed to overcome them.
+              Here's the delicious irony at the heart of this project: the streaming providers I 
+              needed to crack aren't legitimate businesses. They're pirates themselves—profiting 
+              from content they don't own by wrapping it in malware, pop-ups, and crypto miners. 
+              My job was to break into their systems and steal what they'd already stolen, then 
+              serve it without the exploitation. Robbing the robbers. And they did not make it easy.
             </p>
 
-            <div className={styles.highlightBox}>
-              <div className={styles.highlightIcon}>⚠️</div>
-              <div className={styles.highlightContent}>
-                <h4>Technical Documentation Notice</h4>
-                <p>
-                  The following section describes reverse engineering work performed for educational 
-                  and research purposes. The techniques documented here demonstrate the complexity 
-                  of modern web security and the ingenuity required to build aggregation platforms.
-                </p>
-              </div>
+            <div className={styles.citationBox}>
+              <div className={styles.citationMark}>"</div>
+              <blockquote>
+                These sites make millions from ads and malware while hiding behind layers of 
+                obfuscation that would make nation-state hackers proud. They're not protecting 
+                intellectual property—they're protecting their revenue stream from people like me 
+                who want to give users the content without the cancer.
+              </blockquote>
+              <cite>— 3 AM, staring at minified JavaScript</cite>
             </div>
 
-            <h3 className={styles.subsectionTitle}>9.1 The Obfuscation Landscape</h3>
+            <h3 className={styles.subsectionTitle}>9.1 The Battlefield</h3>
             <p>
-              Third-party streaming providers employ multiple layers of protection to prevent 
-              automated extraction of their stream URLs. Understanding these defenses was essential 
-              before any extraction could be attempted.
+              Picture this: you find a pirate streaming site. It works. Videos play. But when you 
+              try to extract the actual stream URL to use in your own player—to strip away the 
+              pop-ups and malware—you hit a wall. Not just one wall. A fortress of walls, each 
+              more devious than the last. These criminals have invested serious engineering talent 
+              into making sure nobody can do what I was trying to do.
             </p>
 
             <div className={styles.challengesList}>
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
                   <span className={styles.challengeIcon}>🔐</span>
-                  <h4>JavaScript Obfuscation & Packing</h4>
+                  <h4>The Code Spaghetti Monster</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Stream providers heavily obfuscate their JavaScript using tools like JavaScript 
-                    Obfuscator, UglifyJS with mangling, and custom packing algorithms. Variable names 
-                    are replaced with meaningless identifiers, control flow is flattened, and string 
-                    literals are encoded or split across multiple operations. Some providers use 
-                    eval-based unpacking that generates code at runtime, making static analysis nearly 
-                    impossible.
+                    Open DevTools on any pirate site and look at their JavaScript. It's not code—it's 
+                    a war crime. Variable names like <code>_0x4a3f</code> and <code>_0xb7c2</code>. 
+                    Strings split into arrays of character codes, reassembled through twelve layers 
+                    of function calls. Control flow that looks like someone threw spaghetti at a wall 
+                    and called it architecture. And the crown jewel: <code>eval()</code> statements 
+                    that generate MORE obfuscated code at runtime. You can't even read what you're 
+                    trying to crack.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Approach:</strong> Developed custom deobfuscation scripts that intercept 
-                    eval calls, reconstruct string concatenations, and trace execution flow through 
-                    browser DevTools. Created AST-based transformers to rename variables based on 
-                    usage patterns and inline constant expressions.
+                    <strong>The Break-In:</strong> I built a deobfuscation pipeline. Intercept every 
+                    <code>eval()</code>, log what it produces. Trace string operations backwards. 
+                    Write AST transformers that rename variables based on how they're used. Slowly, 
+                    painfully, the gibberish becomes readable. Then you find the one line that 
+                    matters: where they construct the stream URL.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>🎭</span>
-                  <h4>Dynamic Token Generation</h4>
+                  <span className={styles.challengeIcon}>⏱️</span>
+                  <h4>The Ticking Clock</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Many providers generate time-sensitive tokens that must accompany stream requests. 
-                    These tokens are computed client-side using algorithms that combine timestamps, 
-                    content IDs, and secret keys embedded in obfuscated code. Tokens typically expire 
-                    within minutes, preventing simple URL copying.
+                    Found the stream URL? Great. It expires in 90 seconds. Every request needs a 
+                    fresh token computed from the current timestamp, the content ID, and a secret 
+                    key buried somewhere in 50,000 lines of obfuscated JavaScript. Copy-paste the 
+                    URL? Dead on arrival. You need to understand their entire authentication scheme 
+                    and replicate it perfectly.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Approach:</strong> Reverse engineered token generation algorithms by 
-                    tracing JavaScript execution. Identified the cryptographic primitives used 
-                    (typically HMAC-SHA256 or custom hash functions) and extracted the embedded 
-                    keys. Reimplemented token generation server-side to produce valid tokens on demand.
+                    <strong>The Break-In:</strong> Hours of stepping through minified code in the 
+                    debugger, watching variables change, mapping the flow of data. Eventually you 
+                    find it: they're using HMAC-SHA256 with a hardcoded key hidden in a fake jQuery 
+                    plugin. Extract the key, reimplement the algorithm server-side, generate tokens 
+                    on demand. Their 90-second window becomes irrelevant.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>🕵️</span>
-                  <h4>Bot Detection & Fingerprinting</h4>
+                  <span className={styles.challengeIcon}>🤖</span>
+                  <h4>The Bot Hunters</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Providers deploy sophisticated bot detection that analyzes browser fingerprints, 
-                    mouse movements, timing patterns, and JavaScript environment characteristics. 
-                    Headless browsers are detected through missing APIs, inconsistent navigator 
-                    properties, and WebGL fingerprint anomalies. Failed checks result in fake 
-                    streams, CAPTCHAs, or IP bans.
+                    These sites HATE automation. They check if you're running headless Chrome. They 
+                    analyze your mouse movements for human-like patterns. They fingerprint your 
+                    WebGL renderer, your canvas, your audio context. Fail any check and you get a 
+                    fake stream that plays for 30 seconds then dies—or worse, an IP ban. They've 
+                    seen every trick in the book.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Approach:</strong> Used Puppeteer with stealth plugins that patch 
-                    detectable properties. Implemented realistic mouse movement simulation and 
-                    randomized timing delays. For particularly aggressive detection, switched to 
-                    HTTP-based extraction that bypasses JavaScript entirely by analyzing network 
-                    requests.
+                    <strong>The Break-In:</strong> Puppeteer with stealth plugins. Fake mouse 
+                    movements with Bézier curves. Randomized timing that mimics human hesitation. 
+                    But the real victory? Realizing I could skip their JavaScript entirely. Their 
+                    bot detection runs client-side—if I never execute their code, I never trigger 
+                    their checks. Pure HTTP requests, carefully crafted headers, surgical extraction.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>🔄</span>
-                  <h4>Multi-Layer Iframe Nesting</h4>
+                  <span className={styles.challengeIcon}>🪆</span>
+                  <h4>The Russian Nesting Dolls</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Stream players are often embedded through multiple layers of iframes, each 
-                    hosted on different domains. This creates a maze of cross-origin restrictions 
-                    where the actual video player might be 3-4 iframes deep. Each layer may perform 
-                    its own validation, referrer checking, and token verification.
+                    Click play on a pirate site. The video loads in an iframe. That iframe loads 
+                    another iframe from a different domain. Which loads ANOTHER iframe. The actual 
+                    player is four layers deep, each layer on a different domain with different 
+                    CORS policies, each performing its own validation. It's like trying to break 
+                    into a bank vault that's inside another bank vault that's inside a third bank.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Approach:</strong> Built recursive iframe traversal that follows the 
-                    embedding chain, extracting and validating URLs at each level. Implemented 
-                    referrer spoofing through proxy routes that set appropriate headers. Created 
-                    a domain mapping system to track which providers use which embed hierarchies.
+                    <strong>The Break-In:</strong> Map the entire chain. Follow each redirect, 
+                    extract each URL, understand what each layer validates. Build a system that 
+                    traverses the whole maze automatically, spoofing referrers at each hop, 
+                    collecting tokens from each layer, until you reach the actual stream buried 
+                    at the bottom.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>📡</span>
-                  <h4>Encrypted HLS Manifests</h4>
+                  <span className={styles.challengeIcon}>🔒</span>
+                  <h4>The Encrypted Treasure Map</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Some providers encrypt their HLS manifests or use custom playlist formats that 
-                    standard players cannot parse. The encryption keys are derived from session 
-                    tokens or embedded in obfuscated JavaScript. Additionally, segment URLs may 
-                    be relative to dynamically generated base paths.
+                    HLS streams use manifest files—playlists that tell the player where to find 
+                    each video segment. Some providers encrypt these manifests. Others use custom 
+                    formats that no standard player understands. The decryption key? Hidden in 
+                    obfuscated JavaScript, derived from session tokens, or fetched from a separate 
+                    API that requires its own authentication dance.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Approach:</strong> Intercepted network requests to capture decrypted 
-                    manifests after client-side processing. For custom formats, wrote parsers that 
-                    transform proprietary playlist structures into standard M3U8. Implemented 
-                    manifest rewriting to convert relative URLs to absolute paths through our proxy.
+                    <strong>The Break-In:</strong> Network interception. Let their own code do the 
+                    decryption, then capture the result. For custom formats, reverse engineer the 
+                    structure and write parsers that transform their proprietary garbage into 
+                    standard M3U8. Rewrite all the URLs to route through my proxy. Their encryption 
+                    becomes a minor inconvenience.
                   </div>
                 </div>
               </div>
 
               <div className={styles.challengeItem}>
                 <div className={styles.challengeHeader}>
-                  <span className={styles.challengeIcon}>🛡️</span>
-                  <h4>Referrer & Origin Validation</h4>
+                  <span className={styles.challengeIcon}>🚪</span>
+                  <h4>The Bouncer at Every Door</h4>
                 </div>
                 <div className={styles.challengeBody}>
                   <p>
-                    Stream servers validate the Referer and Origin headers on every request, 
-                    rejecting any that don't match expected patterns. This prevents embedding 
-                    streams on unauthorized domains and blocks direct access to stream URLs. 
-                    Some providers also check the Sec-Fetch-* headers introduced in modern browsers.
+                    Every request to their servers gets interrogated. Wrong Referer header? Blocked. 
+                    Wrong Origin? Blocked. Missing their custom headers? Blocked. Coming from a 
+                    domain they don't recognize? Believe it or not, blocked. They've essentially 
+                    built a nightclub where the bouncer checks your ID, your outfit, your shoes, 
+                    and whether you know the secret handshake.
                   </p>
                   <div className={styles.solutionBox}>
-                    <strong>Approach:</strong> Developed a sophisticated proxy layer that intercepts 
-                    all stream requests and rewrites headers to match expected values. The proxy 
-                    maintains a mapping of which headers each provider expects and dynamically 
-                    adjusts based on the target domain.
+                    <strong>The Break-In:</strong> A proxy layer that lies professionally. Every 
+                    request gets its headers rewritten to match exactly what their servers expect. 
+                    I maintain a database of which provider wants which headers. My server pretends 
+                    to be their server talking to their player. They never know the difference.
                   </div>
                 </div>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>9.2 Provider-Specific Challenges</h3>
+            <h3 className={styles.subsectionTitle}>9.2 War Stories: The Big Scores</h3>
             <p>
-              Each streaming provider presented unique challenges requiring tailored solutions. 
-              The following documents the most significant reverse engineering efforts:
+              Every provider was a different puzzle. Different obfuscation, different tricks, 
+              different ways to make my life hell. Here are the ones that nearly broke me—and 
+              how I broke them instead.
             </p>
 
             <div className={styles.techAnalysis}>
               <div className={styles.techCard}>
                 <div className={styles.techHeader}>
-                  <div className={styles.techLogo}>🎬</div>
+                  <div className={styles.techLogo}>🎯</div>
                   <div className={styles.techInfo}>
-                    <h4>2Embed / VidSrc Ecosystem</h4>
-                    <span className={styles.techCategory}>Primary Provider</span>
+                    <h4>The 2Embed Labyrinth</h4>
+                    <span className={styles.techCategory}>3 weeks to crack</span>
                   </div>
                 </div>
                 <div className={styles.techBody}>
                   <p>
-                    The 2Embed network uses a complex chain of redirects through multiple domains 
-                    (streamsrcs, embedsrcs, vidsrc variants). Each hop performs validation and 
-                    generates new tokens. The final player uses packed JavaScript with custom 
-                    string encoding where characters are split and reassembled through array 
-                    operations. Stream URLs are constructed dynamically from multiple encrypted 
-                    fragments.
+                    2Embed was my white whale. A hydra of domains—streamsrcs, embedsrcs, vidsrc, 
+                    2embed itself—each redirecting to the next, each generating new tokens, each 
+                    running its own obfuscated validation. The final player used a packing algorithm 
+                    I'd never seen before: strings weren't just encoded, they were shattered into 
+                    individual characters stored in arrays, then reassembled through a maze of 
+                    function calls that referenced other arrays by computed indices.
                   </p>
                   <p>
-                    <strong>Key Breakthrough:</strong> Discovered that the packing algorithm uses 
-                    a predictable seed based on content ID. By reverse engineering the unpacking 
-                    function, we could extract stream URLs without executing the obfuscated code. 
-                    This reduced extraction time from 5+ seconds (with browser automation) to 
-                    under 200ms (pure HTTP).
+                    I spent two weeks just understanding how their packer worked. Filled notebooks 
+                    with diagrams. Wrote a custom unpacker. Then discovered they had THREE different 
+                    packing schemes that rotated based on content ID. Back to the drawing board.
+                  </p>
+                  <p>
+                    <strong>The Moment of Victory:</strong> 3 AM on a Tuesday. I noticed the packing 
+                    seed was derived from the TMDB ID in a predictable way. If I knew the content, 
+                    I could predict which unpacker to use. Suddenly, extraction dropped from 5+ 
+                    seconds with full browser automation to 180ms with pure HTTP requests. I literally 
+                    punched the air.
                   </p>
                 </div>
               </div>
 
               <div className={styles.techCard}>
                 <div className={styles.techHeader}>
-                  <div className={styles.techLogo}>📺</div>
+                  <div className={styles.techLogo}>🎭</div>
                   <div className={styles.techInfo}>
-                    <h4>SuperEmbed / RCP Network</h4>
-                    <span className={styles.techCategory}>Fallback Provider</span>
+                    <h4>SuperEmbed's Decoy Trap</h4>
+                    <span className={styles.techCategory}>The one that fought back</span>
                   </div>
                 </div>
                 <div className={styles.techBody}>
                   <p>
-                    SuperEmbed employs aggressive bot detection including canvas fingerprinting, 
-                    WebGL renderer checks, and timing analysis. The player loads through a 
-                    "prorcp" intermediary that validates browser environment before revealing 
-                    the actual stream endpoint. Failed validation returns decoy streams that 
-                    play for 30 seconds before cutting off.
+                    SuperEmbed was paranoid. Canvas fingerprinting. WebGL checks. They analyzed 
+                    how fast your mouse moved to the play button. But their cruelest trick? Decoy 
+                    streams. Fail their bot detection and they don't block you—they give you a 
+                    stream that works perfectly for exactly 30 seconds, then dies. You think you've 
+                    won. You deploy your code. Users start complaining. You realize you've been 
+                    played.
                   </p>
                   <p>
-                    <strong>Key Breakthrough:</strong> Identified that the validation could be 
-                    bypassed by directly accessing the "srcrcp" endpoint with properly formatted 
-                    parameters extracted from the initial page load. This skips the JavaScript 
-                    validation entirely while still receiving valid stream URLs.
+                    I burned a week on stealth techniques. Puppeteer plugins. Fake mouse movements. 
+                    Randomized timing. Nothing worked consistently. Their detection was too good.
+                  </p>
+                  <p>
+                    <strong>The Moment of Victory:</strong> I stopped trying to fool their JavaScript 
+                    and started ignoring it entirely. Their validation happened client-side—in the 
+                    browser. But the actual stream endpoint? It just needed the right parameters. 
+                    I traced the network requests, found the "srcrcp" endpoint, figured out what 
+                    parameters it expected, and called it directly. No browser. No JavaScript. No 
+                    bot detection. Just a clean HTTP request that returned the real stream every time.
                   </p>
                 </div>
               </div>
@@ -1536,74 +1559,79 @@ async function getPlayableStream(
                 <div className={styles.techHeader}>
                   <div className={styles.techLogo}>📡</div>
                   <div className={styles.techInfo}>
-                    <h4>DLHD Live TV Streams</h4>
-                    <span className={styles.techCategory}>Live Content</span>
+                    <h4>DLHD: The Moving Target</h4>
+                    <span className={styles.techCategory}>Live TV nightmare</span>
                   </div>
                 </div>
                 <div className={styles.techBody}>
                   <p>
-                    Live TV streams presented unique challenges: URLs change frequently, 
-                    authentication tokens expire rapidly, and geographic restrictions are 
-                    enforced at the CDN level. The provider uses a custom player that 
-                    communicates with a WebSocket backend for real-time URL updates and 
-                    implements DRM-like protections on the stream segments themselves.
+                    Live TV was a different beast entirely. VOD streams have stable URLs—extract 
+                    once, play forever (or until the token expires). Live streams? The URL changes 
+                    every few minutes. Miss a rotation and your stream dies mid-broadcast. DLHD 
+                    made this worse with WebSocket-based URL updates, geographic restrictions at 
+                    the CDN level, and segment-level authentication that required fresh tokens for 
+                    every 10-second chunk of video.
                   </p>
                   <p>
-                    <strong>Key Breakthrough:</strong> Reverse engineered the WebSocket protocol 
-                    to understand the URL refresh mechanism. Implemented a proxy that maintains 
-                    persistent connections and transparently handles URL rotation, presenting 
-                    a stable endpoint to our player while managing the complexity behind the scenes.
+                    My first approach—re-extracting URLs periodically—was too slow. By the time I 
+                    got a new URL, it was already stale. Users saw constant buffering.
+                  </p>
+                  <p>
+                    <strong>The Moment of Victory:</strong> I reverse engineered their WebSocket 
+                    protocol. Turns out the player maintains a persistent connection that receives 
+                    URL updates in real-time. I built a proxy that does the same thing—maintains 
+                    its own WebSocket connection, receives the updates, and transparently rewrites 
+                    URLs for my player. From the user's perspective, it's one stable stream. Behind 
+                    the scenes, it's a constant dance of URL rotation that my proxy handles invisibly.
                   </p>
                 </div>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>9.3 Tools & Techniques Developed</h3>
+            <h3 className={styles.subsectionTitle}>9.3 The Arsenal</h3>
             <p>
-              The reverse engineering effort produced several reusable tools and techniques:
+              You don't win a war with bare hands. Over months of reverse engineering, I built 
+              a toolkit specifically designed for cracking streaming providers:
             </p>
 
             <div className={styles.codeBlock}>
               <div className={styles.codeHeader}>
                 <span className={styles.codeLanguage}>TypeScript</span>
-                <span className={styles.codeTitle}>Listing 2: Simplified Deobfuscation Pipeline</span>
+                <span className={styles.codeTitle}>The Extraction Engine (Simplified)</span>
               </div>
-              <pre className={styles.code}>{`interface DeobfuscationResult {
-  extractedUrls: string[];
-  tokens: Record<string, string>;
-  confidence: number;
-}
+              <pre className={styles.code}>{`// This is what months of reverse engineering looks like
+// when distilled into clean code
 
-async function deobfuscateProvider(
-  html: string,
-  provider: 'vidsrc' | 'superembed' | 'dlhd'
-): Promise<DeobfuscationResult> {
-  // 1. Extract all script tags and inline JS
-  const scripts = extractScripts(html);
-  
-  // 2. Identify and unpack obfuscated segments
-  const unpacked = scripts.map(script => {
-    if (isPacked(script)) {
-      return unpackScript(script);
+async function extractStream(tmdbId: string): Promise<Stream> {
+  // Try each provider until one works
+  for (const provider of PROVIDER_PRIORITY) {
+    try {
+      // 1. Fetch the embed page
+      const embedHtml = await fetchWithSpoofedHeaders(
+        provider.getEmbedUrl(tmdbId)
+      );
+      
+      // 2. Run provider-specific deobfuscation
+      const deobfuscated = provider.deobfuscate(embedHtml);
+      
+      // 3. Extract and validate the stream URL
+      const streamUrl = provider.extractStreamUrl(deobfuscated);
+      
+      // 4. Generate fresh auth tokens if needed
+      const authedUrl = provider.needsAuth 
+        ? provider.addAuthTokens(streamUrl)
+        : streamUrl;
+      
+      // 5. Verify the stream actually works
+      if (await verifyStream(authedUrl)) {
+        return { url: authedUrl, provider: provider.name };
+      }
+    } catch (e) {
+      // This provider failed, try the next one
+      continue;
     }
-    return script;
-  });
-  
-  // 3. Apply provider-specific decoders
-  const decoder = getDecoder(provider);
-  const decoded = decoder.process(unpacked.join('\\n'));
-  
-  // 4. Extract stream URLs using pattern matching
-  const urls = extractStreamUrls(decoded);
-  
-  // 5. Extract authentication tokens
-  const tokens = extractTokens(decoded);
-  
-  return {
-    extractedUrls: urls,
-    tokens,
-    confidence: calculateConfidence(urls, tokens)
-  };
+  }
+  throw new Error('All providers failed');
 }`}</pre>
             </div>
 
@@ -1611,78 +1639,82 @@ async function deobfuscateProvider(
               <div className={styles.statCard}>
                 <div className={styles.statIcon}>🔓</div>
                 <div className={styles.statValue}>15+</div>
-                <div className={styles.statLabel}>Obfuscation Patterns</div>
-                <div className={styles.statDetail}>Identified & decoded</div>
+                <div className={styles.statLabel}>Obfuscation Schemes</div>
+                <div className={styles.statDetail}>Cracked & documented</div>
               </div>
               <div className={styles.statCard}>
                 <div className={styles.statIcon}>⚡</div>
-                <div className={styles.statValue}>200ms</div>
-                <div className={styles.statLabel}>Avg Extraction Time</div>
+                <div className={styles.statValue}>180ms</div>
+                <div className={styles.statLabel}>Extraction Time</div>
                 <div className={styles.statDetail}>Down from 5+ seconds</div>
               </div>
               <div className={styles.statCard}>
                 <div className={styles.statIcon}>🎯</div>
                 <div className={styles.statValue}>95%+</div>
                 <div className={styles.statLabel}>Success Rate</div>
-                <div className={styles.statDetail}>Stream extraction</div>
+                <div className={styles.statDetail}>First-try extraction</div>
               </div>
               <div className={styles.statCard}>
-                <div className={styles.statIcon}>🔄</div>
-                <div className={styles.statValue}>8</div>
-                <div className={styles.statLabel}>Provider Adapters</div>
-                <div className={styles.statDetail}>Active integrations</div>
+                <div className={styles.statIcon}>☕</div>
+                <div className={styles.statValue}>∞</div>
+                <div className={styles.statLabel}>Coffee Consumed</div>
+                <div className={styles.statDetail}>During 3 AM sessions</div>
               </div>
             </div>
 
-            <h3 className={styles.subsectionTitle}>9.4 The Cat-and-Mouse Reality</h3>
+            <h3 className={styles.subsectionTitle}>9.4 The Never-Ending War</h3>
             <p>
-              Reverse engineering streaming providers is an ongoing battle. Providers regularly 
-              update their obfuscation, change their API endpoints, and implement new detection 
-              mechanisms. What works today may fail tomorrow.
+              Here's the thing about stealing from thieves: they notice. And they fight back.
+            </p>
+            <p>
+              Every few weeks, something breaks. A provider updates their obfuscation. A domain 
+              gets rotated. A new bot detection check gets added. The extraction that worked 
+              yesterday returns garbage today. It's a constant arms race, and the moment you 
+              stop paying attention, you lose.
             </p>
 
             <div className={styles.lessonsBox}>
               <div className={styles.lessonItem}>
                 <span className={styles.lessonNumber}>01</span>
                 <div className={styles.lessonContent}>
-                  <h4>Build for Change</h4>
+                  <h4>Expect Everything to Break</h4>
                   <p>
-                    The extraction system is architected with provider-specific adapters that can 
-                    be updated independently. When a provider changes their protection, only that 
-                    adapter needs modification—the rest of the system continues functioning.
+                    The system is built with the assumption that any provider can fail at any 
+                    moment. Multiple fallbacks for every piece of content. Automatic failover. 
+                    Graceful degradation. Paranoia as architecture.
                   </p>
                 </div>
               </div>
               <div className={styles.lessonItem}>
                 <span className={styles.lessonNumber}>02</span>
                 <div className={styles.lessonContent}>
-                  <h4>Multiple Fallbacks</h4>
+                  <h4>Monitor Like Your Life Depends On It</h4>
                   <p>
-                    Never rely on a single provider. The system maintains multiple extraction 
-                    paths for each piece of content, automatically falling back when primary 
-                    sources fail. Redundancy is survival.
+                    Automated health checks hit every provider every hour. Success rates are 
+                    tracked. The moment extraction starts failing, I know about it—usually 
+                    before users notice. Early warning is everything.
                   </p>
                 </div>
               </div>
               <div className={styles.lessonItem}>
                 <span className={styles.lessonNumber}>03</span>
                 <div className={styles.lessonContent}>
-                  <h4>Monitor Continuously</h4>
+                  <h4>Document the Patterns</h4>
                   <p>
-                    Automated health checks run continuously, testing extraction against known 
-                    content. When success rates drop, alerts trigger investigation before users 
-                    notice widespread failures.
+                    Every obfuscation technique, every bypass, every quirk goes in the notes. 
+                    Providers recycle tricks. That weird encoding scheme from six months ago? 
+                    It'll show up again. The documentation is a weapon.
                   </p>
                 </div>
               </div>
               <div className={styles.lessonItem}>
                 <span className={styles.lessonNumber}>04</span>
                 <div className={styles.lessonContent}>
-                  <h4>Document Everything</h4>
+                  <h4>Stay Humble</h4>
                   <p>
-                    Every obfuscation pattern, every bypass technique, every provider quirk is 
-                    documented. When patterns resurface months later, the documentation enables 
-                    rapid response rather than starting from scratch.
+                    The providers have more resources than I do. They can hire teams. I'm one 
+                    person with a laptop and too much caffeine. But I only need to find one 
+                    hole in their defenses. They need to plug all of them. Advantage: me.
                   </p>
                 </div>
               </div>
@@ -1691,13 +1723,33 @@ async function deobfuscateProvider(
             <div className={styles.citationBox}>
               <div className={styles.citationMark}>"</div>
               <blockquote>
-                The complexity of modern stream protection is a testament to the value of the 
-                content being protected. Cracking these systems required hundreds of hours of 
-                analysis, experimentation, and iteration. This work represents the invisible 
-                foundation upon which the entire platform stands.
+                There's a certain poetry to it. These sites built fortresses to protect their 
+                ability to profit from stolen content. I broke into those fortresses to give 
+                users the content without the exploitation. We're all criminals here—I just 
+                have better ethics about it.
               </blockquote>
-              <cite>— Reflections on the Reverse Engineering Process</cite>
+              <cite>— Vynx, probably sleep-deprived</cite>
             </div>
+
+            <h3 className={styles.subsectionTitle}>9.5 Why This Matters</h3>
+            <p>
+              This isn't just a technical flex. The reverse engineering work is the entire reason 
+              Flyx can exist as an ethical alternative. Without cracking these providers, I'd have 
+              two choices: host content myself (illegal and expensive) or embed their players 
+              directly (bringing all their malware and pop-ups with them).
+            </p>
+            <p>
+              By extracting just the stream URLs and serving them through my own clean player, I 
+              can offer users the content they want without the exploitation they've learned to 
+              accept as inevitable. The hundreds of hours spent staring at obfuscated JavaScript 
+              weren't just an intellectual exercise—they were the foundation of everything.
+            </p>
+            <p>
+              Every time a user watches a movie on Flyx without getting a pop-up, without having 
+              their CPU hijacked for crypto mining, without being tracked across the web—that's 
+              the reverse engineering paying off. That's what all those 3 AM debugging sessions 
+              were for.
+            </p>
           </section>
 
           {/* Future Work */}
