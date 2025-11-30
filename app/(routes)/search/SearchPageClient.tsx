@@ -311,11 +311,15 @@ export default function SearchPageClient({
                         className="group cursor-pointer relative aspect-[2/3] bg-gray-900 rounded-xl overflow-hidden border border-white/5 hover:border-purple-500/50 transition-all duration-300"
                       >
                         <img
-                          src={item.poster_path || item.profile_path
+                          src={item.posterPath || (item.poster_path || item.profile_path
                             ? `https://image.tmdb.org/t/p/w500${item.poster_path || item.profile_path}`
-                            : '/placeholder-poster.png'}
+                            : '/imgs/TBA.webp')}
                           alt={item.title || item.name}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/imgs/TBA.webp';
+                          }}
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                           <div className="absolute bottom-0 left-0 right-0 p-4">

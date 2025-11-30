@@ -36,7 +36,12 @@ function WatchContent() {
   const episodeId = episode ? parseInt(episode) : undefined;
 
   const handleBack = () => {
-    router.back();
+    // Navigate back to details page with the current season preserved
+    if (mediaType === 'tv' && seasonId) {
+      router.push(`/details/${contentId}?type=tv&season=${seasonId}`);
+    } else {
+      router.push(`/details/${contentId}?type=${mediaType}`);
+    }
   };
 
   if (!contentId || !mediaType) {
@@ -87,13 +92,24 @@ function WatchContent() {
           } : null}
           onNextEpisode={() => {
             if (mediaType === 'tv' && seasonId && episodeId) {
-              const params = new URLSearchParams({
-                type: 'tv',
-                season: seasonId.toString(),
-                episode: (episodeId + 1).toString(),
-                title: title
-              });
-              router.push(`/watch/${contentId}?${params.toString()}`);
+              const navigateToNextEpisode = () => {
+                const nextEp = episodeId + 1;
+                const url = `/watch/${contentId}?type=tv&season=${seasonId}&episode=${nextEp}&title=${encodeURIComponent(title)}`;
+                // Use window.location for more reliable navigation
+                window.location.href = url;
+              };
+              
+              // Exit fullscreen first if in fullscreen mode
+              if (document.fullscreenElement) {
+                document.exitFullscreen().then(() => {
+                  navigateToNextEpisode();
+                }).catch(() => {
+                  // If exitFullscreen fails, navigate anyway
+                  navigateToNextEpisode();
+                });
+              } else {
+                navigateToNextEpisode();
+              }
             }
           }}
         />

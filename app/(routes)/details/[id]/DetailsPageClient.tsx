@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MediaItem, Season } from '@/types/media';
 import { ParallaxContainer } from '@/components/ui/ParallaxContainer';
@@ -36,18 +36,58 @@ export default function DetailsPageClient({
   error,
 }: DetailsPageClientProps) {
   const router = useRouter();
-  const [selectedSeason, setSelectedSeason] = useState<number>(1);
+  const searchParams = useSearchParams();
+  
+  // Get season from URL params (for returning from watch page)
+  const seasonFromUrl = searchParams.get('season');
+  const initialSeason = seasonFromUrl ? parseInt(seasonFromUrl) : 1;
+  
+  const [selectedSeason, setSelectedSeason] = useState<number>(initialSeason);
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
+  const [episodeProgress, setEpisodeProgress] = useState<Record<number, number>>({});
 
   // Load episodes when season changes for TV shows
   useEffect(() => {
     if (content?.mediaType === 'tv' && content.seasons && content.seasons.length > 0) {
       loadSeasonEpisodes(selectedSeason);
+      loadEpisodeProgress(selectedSeason);
     }
   }, [selectedSeason, content]);
 
-  // Removed prefetch - SimpleVideoPlayer handles extraction on demand
+  // Load episode watch progress from localStorage
+  const loadEpisodeProgress = (seasonNumber: number) => {
+    if (!content) return;
+    
+    try {
+      // User tracking stores preferences in 'flyx_user_preferences'
+      const storageKey = 'flyx_user_preferences';
+      const stored = localStorage.getItem(storageKey);
+      if (!stored) return;
+      
+      const preferences = JSON.parse(stored);
+      const watchProgress = preferences.watchProgress || {};
+      const progressMap: Record<number, number> = {};
+      
+      // Look for progress entries for this show and season
+      // Key format: contentId_s{season}_e{episode}
+      Object.entries(watchProgress).forEach(([key, value]: [string, any]) => {
+        const pattern = `${content.id}_s${seasonNumber}_e`;
+        if (key.startsWith(pattern)) {
+          const episodeNum = parseInt(key.replace(pattern, ''));
+          if (!isNaN(episodeNum) && value.currentTime && value.duration) {
+            // Calculate progress percentage
+            const progress = (value.currentTime / value.duration) * 100;
+            progressMap[episodeNum] = progress;
+          }
+        }
+      });
+      
+      setEpisodeProgress(progressMap);
+    } catch (err) {
+      console.error('Error loading episode progress:', err);
+    }
+  };
 
   const loadSeasonEpisodes = async (seasonNumber: number) => {
     if (!content) return;
@@ -280,6 +320,7 @@ export default function DetailsPageClient({
               <EpisodeList
                 episodes={seasonData.episodes}
                 onEpisodeSelect={handleEpisodeSelect}
+                episodeProgress={episodeProgress}
               />
             ) : null}
           </GlassPanel>

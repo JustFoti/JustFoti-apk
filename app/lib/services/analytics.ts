@@ -53,6 +53,8 @@ class AnalyticsService {
   private flushTimeout: NodeJS.Timeout | null = null;
   private isInitialized = false;
   private liveActivityInterval: NodeJS.Timeout | null = null;
+  private watchTimeSyncInterval: NodeJS.Timeout | null = null;
+  private liveTVSessionInterval: NodeJS.Timeout | null = null;
   private currentActivity: {
     type: string;
     contentId?: string;
@@ -62,6 +64,39 @@ class AnalyticsService {
     episodeNumber?: number;
     currentPosition?: number;
     duration?: number;
+    quality?: string;
+    channelId?: string;
+    channelName?: string;
+    category?: string;
+  } | null = null;
+  
+  // Watch time tracking
+  private watchTimeAccumulator: Map<string, {
+    contentId: string;
+    contentType: string;
+    contentTitle?: string;
+    seasonNumber?: number;
+    episodeNumber?: number;
+    totalWatchTime: number;
+    lastPosition: number;
+    duration: number;
+    startedAt: number;
+    lastSyncedAt: number;
+    pauseCount: number;
+    seekCount: number;
+    quality?: string;
+  }> = new Map();
+  
+  // Live TV session tracking
+  private liveTVSession: {
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    startedAt: number;
+    lastHeartbeat: number;
+    totalWatchTime: number;
+    bufferCount: number;
     quality?: string;
   } | null = null;
 
@@ -92,6 +127,7 @@ class AnalyticsService {
     // Start live activity heartbeat only for non-admin pages
     if (this.shouldTrackPage()) {
       this.startLiveActivityHeartbeat();
+      this.startWatchTimeSyncInterval();
     } else {
       console.log('[Analytics] Skipping live activity for admin page');
     }
@@ -100,16 +136,21 @@ class AnalyticsService {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         this.flushEvents();
+        this.syncAllWatchTime();
         this.stopLiveActivity();
+        this.endLiveTVSession();
       } else {
         this.startLiveActivityHeartbeat();
+        this.startWatchTimeSyncInterval();
       }
     });
     
     // Track before page unload
     window.addEventListener('beforeunload', () => {
       this.flushEvents();
+      this.syncAllWatchTime();
       this.stopLiveActivity();
+      this.endLiveTVSession();
     });
   }
 
@@ -444,7 +485,7 @@ class AnalyticsService {
    * Update current activity
    */
   updateActivity(activity: {
-    type: 'browsing' | 'watching';
+    type: 'browsing' | 'watching' | 'livetv';
     contentId?: string;
     contentTitle?: string;
     contentType?: string;
@@ -453,6 +494,9 @@ class AnalyticsService {
     currentPosition?: number;
     duration?: number;
     quality?: string;
+    channelId?: string;
+    channelName?: string;
+    category?: string;
   }): void {
     this.currentActivity = activity;
     this.sendLiveActivityHeartbeat();
@@ -531,6 +575,10 @@ class AnalyticsService {
           currentPosition: this.currentActivity.currentPosition,
           duration: this.currentActivity.duration,
           quality: this.currentActivity.quality,
+          // Include Live TV specific data
+          channelId: this.currentActivity.channelId,
+          channelName: this.currentActivity.channelName,
+          category: this.currentActivity.category,
         }),
       });
 
@@ -542,6 +590,300 @@ class AnalyticsService {
     } catch (error) {
       console.error('[Analytics] Failed to send live activity heartbeat:', error);
     }
+  }
+
+  /**
+   * Start watch time sync interval
+   */
+  private startWatchTimeSyncInterval(): void {
+    if (this.watchTimeSyncInterval) return;
+    
+    // Sync watch time every 15 seconds
+    this.watchTimeSyncInterval = setInterval(() => {
+      this.syncAllWatchTime();
+    }, 15000);
+  }
+
+  /**
+   * Stop watch time sync interval
+   */
+  stopWatchTimeSyncInterval(): void {
+    if (this.watchTimeSyncInterval) {
+      clearInterval(this.watchTimeSyncInterval);
+      this.watchTimeSyncInterval = null;
+    }
+  }
+
+  /**
+   * Update watch time for content
+   */
+  updateWatchTime(data: {
+    contentId: string;
+    contentType: 'movie' | 'tv';
+    contentTitle?: string;
+    seasonNumber?: number;
+    episodeNumber?: number;
+    currentPosition: number;
+    duration: number;
+    quality?: string;
+    isPlaying: boolean;
+  }): void {
+    const key = `${data.contentId}_${data.seasonNumber || 0}_${data.episodeNumber || 0}`;
+    const now = Date.now();
+    
+    let session = this.watchTimeAccumulator.get(key);
+    
+    if (!session) {
+      session = {
+        contentId: data.contentId,
+        contentType: data.contentType,
+        contentTitle: data.contentTitle,
+        seasonNumber: data.seasonNumber,
+        episodeNumber: data.episodeNumber,
+        totalWatchTime: 0,
+        lastPosition: data.currentPosition,
+        duration: data.duration,
+        startedAt: now,
+        lastSyncedAt: now,
+        pauseCount: 0,
+        seekCount: 0,
+        quality: data.quality,
+      };
+      this.watchTimeAccumulator.set(key, session);
+    }
+    
+    // Calculate time delta (only if playing)
+    if (data.isPlaying) {
+      const timeDelta = (now - session.lastSyncedAt) / 1000;
+      // Only add if reasonable (less than 5 seconds to avoid counting pauses)
+      if (timeDelta > 0 && timeDelta < 5) {
+        session.totalWatchTime += timeDelta;
+      }
+    }
+    
+    // Detect seek
+    const positionDelta = Math.abs(data.currentPosition - session.lastPosition);
+    if (positionDelta > 5) {
+      session.seekCount++;
+    }
+    
+    session.lastPosition = data.currentPosition;
+    session.lastSyncedAt = now;
+    session.duration = data.duration;
+    if (data.quality) session.quality = data.quality;
+  }
+
+  /**
+   * Record pause event
+   */
+  recordPause(contentId: string, seasonNumber?: number, episodeNumber?: number): void {
+    const key = `${contentId}_${seasonNumber || 0}_${episodeNumber || 0}`;
+    const session = this.watchTimeAccumulator.get(key);
+    if (session) {
+      session.pauseCount++;
+    }
+  }
+
+  /**
+   * Sync all accumulated watch time to server
+   */
+  private async syncAllWatchTime(): Promise<void> {
+    if (this.watchTimeAccumulator.size === 0) return;
+    
+    const sessions = Array.from(this.watchTimeAccumulator.entries());
+    
+    for (const [key, session] of sessions) {
+      // Only sync if there's meaningful watch time (at least 5 seconds)
+      if (session.totalWatchTime < 5) continue;
+      
+      try {
+        const completionPercentage = session.duration > 0 
+          ? Math.round((session.lastPosition / session.duration) * 100) 
+          : 0;
+
+        await fetch('/api/analytics/watch-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: `ws_${this.userSession?.userId}_${key}_${session.startedAt}`,
+            sessionId: this.userSession?.sessionId,
+            userId: this.userSession?.userId,
+            contentId: session.contentId,
+            contentType: session.contentType,
+            contentTitle: session.contentTitle,
+            seasonNumber: session.seasonNumber,
+            episodeNumber: session.episodeNumber,
+            startedAt: session.startedAt,
+            totalWatchTime: Math.round(session.totalWatchTime),
+            lastPosition: Math.round(session.lastPosition),
+            duration: Math.round(session.duration),
+            completionPercentage,
+            quality: session.quality,
+            isCompleted: completionPercentage >= 90,
+            pauseCount: session.pauseCount,
+            seekCount: session.seekCount,
+          }),
+        });
+        
+        console.log('[Analytics] Synced watch time:', {
+          contentId: session.contentId,
+          watchTime: Math.round(session.totalWatchTime),
+          completion: completionPercentage,
+        });
+      } catch (error) {
+        console.error('[Analytics] Failed to sync watch time:', error);
+      }
+    }
+  }
+
+  /**
+   * Clear watch time for content (on completion or navigation away)
+   */
+  clearWatchTime(contentId: string, seasonNumber?: number, episodeNumber?: number): void {
+    const key = `${contentId}_${seasonNumber || 0}_${episodeNumber || 0}`;
+    this.watchTimeAccumulator.delete(key);
+  }
+
+  /**
+   * Start Live TV session
+   */
+  startLiveTVSession(data: {
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    quality?: string;
+  }): void {
+    const now = Date.now();
+    
+    // End any existing session first
+    if (this.liveTVSession) {
+      this.endLiveTVSession();
+    }
+    
+    this.liveTVSession = {
+      channelId: data.channelId,
+      channelName: data.channelName,
+      category: data.category,
+      country: data.country,
+      startedAt: now,
+      lastHeartbeat: now,
+      totalWatchTime: 0,
+      bufferCount: 0,
+      quality: data.quality,
+    };
+    
+    // Send start event
+    this.sendLiveTVSessionUpdate('start');
+    
+    // Start heartbeat interval for Live TV
+    if (this.liveTVSessionInterval) {
+      clearInterval(this.liveTVSessionInterval);
+    }
+    this.liveTVSessionInterval = setInterval(() => {
+      this.updateLiveTVWatchTime();
+      this.sendLiveTVSessionUpdate('heartbeat');
+    }, 30000); // Every 30 seconds
+    
+    console.log('[Analytics] Started Live TV session:', data.channelName);
+  }
+
+  /**
+   * Update Live TV watch time
+   */
+  private updateLiveTVWatchTime(): void {
+    if (!this.liveTVSession) return;
+    
+    const now = Date.now();
+    const timeDelta = (now - this.liveTVSession.lastHeartbeat) / 1000;
+    
+    // Only add if reasonable (less than 60 seconds to handle tab switches)
+    if (timeDelta > 0 && timeDelta < 60) {
+      this.liveTVSession.totalWatchTime += timeDelta;
+    }
+    
+    this.liveTVSession.lastHeartbeat = now;
+  }
+
+  /**
+   * Record Live TV buffer event
+   */
+  recordLiveTVBuffer(): void {
+    if (this.liveTVSession) {
+      this.liveTVSession.bufferCount++;
+    }
+  }
+
+  /**
+   * Update Live TV quality
+   */
+  updateLiveTVQuality(quality: string): void {
+    if (this.liveTVSession) {
+      this.liveTVSession.quality = quality;
+    }
+  }
+
+  /**
+   * End Live TV session
+   */
+  endLiveTVSession(): void {
+    if (!this.liveTVSession) return;
+    
+    // Update final watch time
+    this.updateLiveTVWatchTime();
+    
+    // Send stop event
+    this.sendLiveTVSessionUpdate('stop');
+    
+    console.log('[Analytics] Ended Live TV session:', {
+      channel: this.liveTVSession.channelName,
+      watchTime: Math.round(this.liveTVSession.totalWatchTime),
+      buffers: this.liveTVSession.bufferCount,
+    });
+    
+    // Clear interval
+    if (this.liveTVSessionInterval) {
+      clearInterval(this.liveTVSessionInterval);
+      this.liveTVSessionInterval = null;
+    }
+    
+    this.liveTVSession = null;
+  }
+
+  /**
+   * Send Live TV session update to server
+   */
+  private async sendLiveTVSessionUpdate(action: 'start' | 'stop' | 'heartbeat'): Promise<void> {
+    if (!this.liveTVSession || !this.userSession) return;
+    
+    try {
+      await fetch('/api/analytics/livetv-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: this.userSession.sessionId,
+          userId: this.userSession.userId,
+          channelId: this.liveTVSession.channelId,
+          channelName: this.liveTVSession.channelName,
+          category: this.liveTVSession.category,
+          country: this.liveTVSession.country,
+          action,
+          watchDuration: Math.round(this.liveTVSession.totalWatchTime),
+          quality: this.liveTVSession.quality,
+          bufferCount: this.liveTVSession.bufferCount,
+        }),
+        keepalive: action === 'stop', // Use keepalive for stop to ensure it sends on page unload
+      });
+    } catch (error) {
+      console.error('[Analytics] Failed to send Live TV session update:', error);
+    }
+  }
+
+  /**
+   * Get current Live TV session info
+   */
+  getLiveTVSession(): typeof this.liveTVSession {
+    return this.liveTVSession;
   }
 }
 

@@ -95,7 +95,17 @@ interface ScheduleResponse {
 type BrowseMode = 'events' | 'channels';
 
 export default function LiveTVClient() {
-  const { trackEvent, trackPageView } = useAnalytics();
+  const { 
+    trackEvent, 
+    trackPageView, 
+    trackLiveTVEvent, 
+    updateActivity, 
+    trackInteraction,
+    startLiveTVSession,
+    endLiveTVSession,
+    recordLiveTVBuffer,
+    updateLiveTVQuality,
+  } = useAnalytics();
   
   const [browseMode, setBrowseMode] = useState<BrowseMode>('events');
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -182,8 +192,24 @@ export default function LiveTVClient() {
 
   const handleChannelSelect = useCallback((channel: Channel) => {
     setSelectedChannel(channel);
-    trackEvent('livetv_channel_selected', { channelId: channel.id, channelName: channel.name });
-  }, [trackEvent]);
+    trackLiveTVEvent({
+      action: 'channel_select',
+      channelId: channel.streamId,
+      channelName: channel.name,
+      category: channel.categoryInfo.name,
+      country: channel.countryInfo.name,
+    });
+    trackInteraction({
+      element: 'livetv_channel_card',
+      action: 'click',
+      context: {
+        channelId: channel.streamId,
+        channelName: channel.name,
+        category: channel.category,
+        isHD: channel.isHD,
+      },
+    });
+  }, [trackLiveTVEvent, trackInteraction]);
 
   const handleEventChannelSelect = useCallback((channelId: string, channelName: string) => {
     const channel: Channel = {
@@ -198,6 +224,12 @@ export default function LiveTVClient() {
       countryInfo: { name: 'International', flag: '🌐' },
     };
     setSelectedChannel(channel);
+    trackLiveTVEvent({
+      action: 'channel_select',
+      channelId: channelId,
+      channelName: channelName,
+      category: 'Sports',
+    });
     trackEvent('livetv_event_channel_selected', { channelId, channelName });
   }, [trackEvent]);
 
@@ -444,7 +476,16 @@ export default function LiveTVClient() {
 
       {/* Player Modal */}
       {selectedChannel && (
-        <LiveTVPlayer channel={selectedChannel} onClose={() => setSelectedChannel(null)} />
+        <LiveTVPlayer 
+          channel={selectedChannel} 
+          onClose={() => setSelectedChannel(null)}
+          trackLiveTVEvent={trackLiveTVEvent}
+          updateActivity={updateActivity}
+          startLiveTVSession={startLiveTVSession}
+          endLiveTVSession={endLiveTVSession}
+          recordLiveTVBuffer={recordLiveTVBuffer}
+          updateLiveTVQuality={updateLiveTVQuality}
+        />
       )}
 
       <Footer />
@@ -458,14 +499,45 @@ export default function LiveTVClient() {
 interface LiveTVPlayerProps {
   channel: Channel;
   onClose: () => void;
+  trackLiveTVEvent: (event: {
+    action: 'channel_select' | 'play_start' | 'play_stop' | 'error' | 'buffer' | 'quality_change';
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    watchDuration?: number;
+    errorMessage?: string;
+    quality?: string;
+  }) => void;
+  updateActivity: (activity: any) => void;
+  startLiveTVSession: (data: {
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    quality?: string;
+  }) => void;
+  endLiveTVSession: () => void;
+  recordLiveTVBuffer: () => void;
+  updateLiveTVQuality: (quality: string) => void;
 }
 
-function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
+function LiveTVPlayer({ 
+  channel, 
+  onClose, 
+  trackLiveTVEvent, 
+  updateActivity,
+  startLiveTVSession,
+  endLiveTVSession,
+  recordLiveTVBuffer,
+  updateLiveTVQuality: _updateLiveTVQuality, // Available for future quality tracking
+}: LiveTVPlayerProps) {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const hlsRef = React.useRef<any>(null);
   const controlsTimeoutRef = React.useRef<NodeJS.Timeout>();
   const decryptRetryCount = React.useRef(0);
+  const watchStartTimeRef = React.useRef<number>(0);
   const MAX_DECRYPT_RETRIES = 2;
   const CONTROLS_HIDE_DELAY = 3000; // 3 seconds
   
@@ -480,8 +552,23 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
 
   useEffect(() => {
     decryptRetryCount.current = 0;
+    watchStartTimeRef.current = 0;
     loadStream(false);
     return () => {
+      // Track total watch duration on cleanup
+      if (watchStartTimeRef.current > 0) {
+        const watchDuration = Math.round((Date.now() - watchStartTimeRef.current) / 1000);
+        trackLiveTVEvent({
+          action: 'play_stop',
+          channelId: channel.streamId,
+          channelName: channel.name,
+          category: channel.categoryInfo.name,
+          watchDuration,
+        });
+      }
+      // End the Live TV session
+      endLiveTVSession();
+      
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -489,6 +576,8 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
       if (controlsTimeoutRef.current) {
         clearTimeout(controlsTimeoutRef.current);
       }
+      // Clear live activity
+      updateActivity({ type: 'browsing' });
     };
   }, [channel.streamId]);
 
@@ -663,6 +752,13 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
             setBufferingStatus(null);
             setError('Stream error - channel may be offline');
             setIsLoading(false);
+            // Track error
+            trackLiveTVEvent({
+              action: 'error',
+              channelId: channel.streamId,
+              channelName: channel.name,
+              errorMessage: `${data.type}: ${data.details}`,
+            });
           }
         });
 
@@ -689,8 +785,53 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
     const video = videoRef.current;
     if (!video) return;
     
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
+    const onPlay = () => {
+      setIsPlaying(true);
+      // Track play start
+      if (watchStartTimeRef.current === 0) {
+        watchStartTimeRef.current = Date.now();
+        trackLiveTVEvent({
+          action: 'play_start',
+          channelId: channel.streamId,
+          channelName: channel.name,
+          category: channel.categoryInfo.name,
+          country: channel.countryInfo.name,
+        });
+        // Start Live TV session for proper tracking
+        startLiveTVSession({
+          channelId: channel.streamId,
+          channelName: channel.name,
+          category: channel.categoryInfo.name,
+          country: channel.countryInfo.name,
+        });
+        // Update live activity
+        updateActivity({
+          type: 'livetv',
+          contentId: channel.streamId,
+          contentTitle: channel.name,
+          contentType: 'livetv',
+          channelId: channel.streamId,
+          channelName: channel.name,
+          category: channel.categoryInfo.name,
+        });
+      }
+    };
+    
+    const onPause = () => {
+      setIsPlaying(false);
+      // Track watch duration on pause
+      if (watchStartTimeRef.current > 0) {
+        const watchDuration = Math.round((Date.now() - watchStartTimeRef.current) / 1000);
+        trackLiveTVEvent({
+          action: 'play_stop',
+          channelId: channel.streamId,
+          channelName: channel.name,
+          category: channel.categoryInfo.name,
+          watchDuration,
+        });
+      }
+    };
+    
     const onVolumeChange = () => {
       setVolume(video.volume);
       setIsMuted(video.muted);
@@ -700,6 +841,13 @@ function LiveTVPlayer({ channel, onClose }: LiveTVPlayerProps) {
     const onWaiting = () => {
       console.log('[LiveTV] Video waiting for data');
       setBufferingStatus('Buffering...');
+      // Record buffer event for analytics
+      recordLiveTVBuffer();
+      trackLiveTVEvent({
+        action: 'buffer',
+        channelId: channel.streamId,
+        channelName: channel.name,
+      });
     };
     
     // Handle video stalled - no data available

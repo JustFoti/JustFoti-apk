@@ -36,7 +36,8 @@ export function useWatchProgress(options: WatchProgressOptions) {
     trackWatchEvent,
     getWatchProgress,
     trackContentEngagement,
-    updateActivity
+    updateActivity,
+    updateWatchTime,
   } = useAnalytics();
 
   const lastSaveTimeRef = useRef<number>(0);
@@ -204,6 +205,18 @@ export function useWatchProgress(options: WatchProgressOptions) {
         episodeNumber,
         currentPosition: Math.round(currentTime),
         duration: Math.round(duration),
+      });
+
+      // Also update enhanced watch time tracking
+      updateWatchTime({
+        contentId,
+        contentType: mappedContentType,
+        contentTitle,
+        seasonNumber,
+        episodeNumber,
+        currentPosition: currentTime,
+        duration,
+        isPlaying: true,
       });
 
       lastSaveTimeRef.current = Date.now();

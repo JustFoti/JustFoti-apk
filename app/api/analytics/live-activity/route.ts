@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
       totalActive: activities.length,
       watching: activities.filter(a => a.activity_type === 'watching').length,
       browsing: activities.filter(a => a.activity_type === 'browsing').length,
+      livetv: activities.filter(a => a.activity_type === 'livetv').length,
       byDevice: activities.reduce((acc: any, a) => {
         const device = a.device_type || 'unknown';
         acc[device] = (acc[device] || 0) + 1;

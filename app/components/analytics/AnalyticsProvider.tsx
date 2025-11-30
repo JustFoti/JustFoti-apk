@@ -39,7 +39,7 @@ interface AnalyticsContextType {
 
   // Live activity
   updateActivity: (activity: {
-    type: 'browsing' | 'watching';
+    type: 'browsing' | 'watching' | 'livetv';
     contentId?: string;
     contentTitle?: string;
     contentType?: string;
@@ -48,7 +48,49 @@ interface AnalyticsContextType {
     currentPosition?: number;
     duration?: number;
     quality?: string;
+    channelId?: string;
+    channelName?: string;
+    category?: string;
   }) => void;
+
+  // Live TV tracking
+  trackLiveTVEvent: (event: {
+    action: 'channel_select' | 'play_start' | 'play_stop' | 'error' | 'buffer' | 'quality_change';
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    watchDuration?: number;
+    errorMessage?: string;
+    quality?: string;
+  }) => void;
+
+  // Enhanced watch time tracking
+  updateWatchTime: (data: {
+    contentId: string;
+    contentType: 'movie' | 'tv';
+    contentTitle?: string;
+    seasonNumber?: number;
+    episodeNumber?: number;
+    currentPosition: number;
+    duration: number;
+    quality?: string;
+    isPlaying: boolean;
+  }) => void;
+  recordPause: (contentId: string, seasonNumber?: number, episodeNumber?: number) => void;
+  clearWatchTime: (contentId: string, seasonNumber?: number, episodeNumber?: number) => void;
+
+  // Live TV session management
+  startLiveTVSession: (data: {
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    quality?: string;
+  }) => void;
+  endLiveTVSession: () => void;
+  recordLiveTVBuffer: () => void;
+  updateLiveTVQuality: (quality: string) => void;
 }
 
 const AnalyticsContext = createContext<AnalyticsContextType | null>(null);
@@ -153,7 +195,7 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
   }, []);
 
   const updateActivity = useCallback((activity: {
-    type: 'browsing' | 'watching';
+    type: 'browsing' | 'watching' | 'livetv';
     contentId?: string;
     contentTitle?: string;
     contentType?: string;
@@ -162,8 +204,85 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
     currentPosition?: number;
     duration?: number;
     quality?: string;
+    channelId?: string;
+    channelName?: string;
+    category?: string;
   }) => {
     analyticsService.updateActivity(activity);
+  }, []);
+
+  // Live TV tracking
+  const trackLiveTVEvent = useCallback((event: {
+    action: 'channel_select' | 'play_start' | 'play_stop' | 'error' | 'buffer' | 'quality_change';
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    watchDuration?: number;
+    errorMessage?: string;
+    quality?: string;
+  }) => {
+    analyticsService.track('livetv_event', {
+      ...event,
+      timestamp: Date.now(),
+    });
+    
+    // Also update live activity for real-time tracking
+    if (event.action === 'play_start') {
+      analyticsService.updateActivity({
+        type: 'livetv',
+        contentId: event.channelId,
+        contentTitle: event.channelName,
+        contentType: 'livetv',
+        quality: event.quality,
+      });
+    }
+  }, []);
+
+  // Enhanced watch time tracking
+  const updateWatchTime = useCallback((data: {
+    contentId: string;
+    contentType: 'movie' | 'tv';
+    contentTitle?: string;
+    seasonNumber?: number;
+    episodeNumber?: number;
+    currentPosition: number;
+    duration: number;
+    quality?: string;
+    isPlaying: boolean;
+  }) => {
+    analyticsService.updateWatchTime(data);
+  }, []);
+
+  const recordPause = useCallback((contentId: string, seasonNumber?: number, episodeNumber?: number) => {
+    analyticsService.recordPause(contentId, seasonNumber, episodeNumber);
+  }, []);
+
+  const clearWatchTime = useCallback((contentId: string, seasonNumber?: number, episodeNumber?: number) => {
+    analyticsService.clearWatchTime(contentId, seasonNumber, episodeNumber);
+  }, []);
+
+  // Live TV session management
+  const startLiveTVSession = useCallback((data: {
+    channelId: string;
+    channelName: string;
+    category?: string;
+    country?: string;
+    quality?: string;
+  }) => {
+    analyticsService.startLiveTVSession(data);
+  }, []);
+
+  const endLiveTVSession = useCallback(() => {
+    analyticsService.endLiveTVSession();
+  }, []);
+
+  const recordLiveTVBuffer = useCallback(() => {
+    analyticsService.recordLiveTVBuffer();
+  }, []);
+
+  const updateLiveTVQuality = useCallback((quality: string) => {
+    analyticsService.updateLiveTVQuality(quality);
   }, []);
 
   const value = {
@@ -182,6 +301,14 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
     getWatchProgress,
     getViewingHistory,
     updateActivity,
+    trackLiveTVEvent,
+    updateWatchTime,
+    recordPause,
+    clearWatchTime,
+    startLiveTVSession,
+    endLiveTVSession,
+    recordLiveTVBuffer,
+    updateLiveTVQuality,
   };
 
   return (

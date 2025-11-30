@@ -8,6 +8,7 @@ import styles from './EpisodeList.module.css';
 interface EpisodeListProps {
   episodes: Episode[];
   onEpisodeSelect: (episodeNumber: number) => void;
+  episodeProgress?: Record<number, number>; // episodeNumber -> progress percentage
 }
 
 /**
@@ -21,6 +22,7 @@ interface EpisodeListProps {
 export const EpisodeList: React.FC<EpisodeListProps> = ({
   episodes,
   onEpisodeSelect,
+  episodeProgress = {},
 }) => {
   if (episodes.length === 0) {
     return (
@@ -88,6 +90,16 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
               {episode.runtime > 0 && (
                 <div className={styles.runtimeBadge}>
                   {episode.runtime}m
+                </div>
+              )}
+              
+              {/* Progress bar */}
+              {episodeProgress[episode.episodeNumber] !== undefined && episodeProgress[episode.episodeNumber] > 0 && (
+                <div className={styles.progressBarContainer}>
+                  <div 
+                    className={styles.progressBar} 
+                    style={{ width: `${Math.min(episodeProgress[episode.episodeNumber], 100)}%` }}
+                  />
                 </div>
               )}
             </div>

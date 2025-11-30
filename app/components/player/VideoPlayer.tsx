@@ -33,7 +33,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const hasShownResumePromptRef = useRef(false);
 
   // Analytics and progress tracking
-  const { trackContentEngagement, trackInteraction } = useAnalytics();
+  const { trackContentEngagement, trackInteraction, updateWatchTime, recordPause, clearWatchTime } = useAnalytics();
   const contentType = mediaType === 'tv' ? 'episode' : 'movie';
   const {
     handleProgress,
@@ -429,6 +429,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     const handlePause = () => {
       setIsPlaying(false);
       handleWatchPause(video.currentTime, video.duration);
+      // Record pause for analytics
+      recordPause(tmdbId, season, episode);
       const progress = video.duration > 0 ? (video.currentTime / video.duration) * 100 : 0;
       trackWatchPause(tmdbId, title || 'Unknown Title', mediaType, progress, season, episode);
       trackInteraction({
@@ -463,6 +465,18 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         handleProgress(video.currentTime, video.duration);
         const progress = (video.currentTime / video.duration) * 100;
         const currentTimeRounded = Math.floor(video.currentTime);
+
+        // Enhanced watch time tracking - update every second when playing
+        updateWatchTime({
+          contentId: tmdbId,
+          contentType: mediaType,
+          contentTitle: title,
+          seasonNumber: season,
+          episodeNumber: episode,
+          currentPosition: video.currentTime,
+          duration: video.duration,
+          isPlaying: !video.paused,
+        });
 
         if (currentTimeRounded > 0 && currentTimeRounded % 30 === 0) {
           trackWatchProgress(tmdbId, title || 'Unknown Title', mediaType, progress, video.currentTime, season, episode);
@@ -540,8 +554,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('loadeddata', handleLoadedData);
       video.removeEventListener('ended', handleEnded);
+      // Clear watch time tracking on unmount (will sync before clearing)
+      clearWatchTime(tmdbId, season, episode);
     };
-  }, []);
+  }, [tmdbId, season, episode, clearWatchTime]);
 
   // Fullscreen handler
   useEffect(() => {
