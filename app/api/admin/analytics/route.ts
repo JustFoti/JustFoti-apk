@@ -277,119 +277,54 @@ export async function GET(request: NextRequest) {
     let geographicRaw: any[] = [];
     
     try {
-      // Map to aggregate data by VALID country codes only
-      const geoMap = new Map<string, { count: number; uniqueUsers: Set<string>; sessions: Set<string> }>();
+      // Use SQL aggregation for accurate counts - count unique users per country
+      // This avoids double-counting and gives accurate geographic distribution
       
-      // Helper function to normalize and validate country code
-      const normalizeCountryCode = (code: string | null | undefined): string | null => {
-        if (!code || code === 'Unknown' || code === 'Local' || code === '') return null;
-        const upperCode = code.toUpperCase().trim();
-        // Only accept valid 2-letter ISO country codes
-        if (upperCode.length !== 2) return null;
-        if (!isValidCountryCode(upperCode)) return null;
-        return upperCode;
-      };
+      const geoQuery = isNeon
+        ? `
+          SELECT 
+            UPPER(country) as country,
+            COUNT(DISTINCT user_id) as unique_users,
+            COUNT(DISTINCT session_id) as sessions
+          FROM user_activity
+          WHERE last_seen BETWEEN $1 AND $2
+          AND country IS NOT NULL
+          AND country != ''
+          AND LENGTH(country) = 2
+          GROUP BY UPPER(country)
+          ORDER BY unique_users DESC
+        `
+        : `
+          SELECT 
+            UPPER(country) as country,
+            COUNT(DISTINCT user_id) as unique_users,
+            COUNT(DISTINCT session_id) as sessions
+          FROM user_activity
+          WHERE last_seen BETWEEN ? AND ?
+          AND country IS NOT NULL
+          AND country != ''
+          AND LENGTH(country) = 2
+          GROUP BY UPPER(country)
+          ORDER BY unique_users DESC
+        `;
       
-      // Source 1: user_activity table (primary source)
-      try {
-        const userActivityGeo = await adapter.query(
-          isNeon
-            ? `
-              SELECT 
-                country,
-                session_id,
-                user_id
-              FROM user_activity
-              WHERE last_seen BETWEEN $1 AND $2
-              AND country IS NOT NULL
-              AND LENGTH(country) = 2
-            `
-            : `
-              SELECT 
-                country,
-                session_id,
-                user_id
-              FROM user_activity
-              WHERE last_seen BETWEEN ? AND ?
-              AND country IS NOT NULL
-              AND LENGTH(country) = 2
-            `,
-          [startTimestamp, endTimestamp]
-        );
-        
-        for (const row of userActivityGeo) {
-          const countryCode = normalizeCountryCode(row.country);
-          if (countryCode) {
-            if (!geoMap.has(countryCode)) {
-              geoMap.set(countryCode, { count: 0, uniqueUsers: new Set(), sessions: new Set() });
-            }
-            const data = geoMap.get(countryCode)!;
-            data.count++;
-            if (row.user_id) data.uniqueUsers.add(row.user_id);
-            if (row.session_id) data.sessions.add(row.session_id);
-          }
-        }
-      } catch (e) {
-        console.warn('user_activity geo query failed:', e);
-      }
+      const userActivityGeo = await adapter.query(geoQuery, [startTimestamp, endTimestamp]);
       
-      // Source 2: live_activity table (for real-time data)
-      try {
-        const liveActivityGeo = await adapter.query(
-          isNeon
-            ? `
-              SELECT 
-                country,
-                session_id,
-                user_id
-              FROM live_activity
-              WHERE last_heartbeat BETWEEN $1 AND $2
-              AND country IS NOT NULL
-              AND LENGTH(country) = 2
-            `
-            : `
-              SELECT 
-                country,
-                session_id,
-                user_id
-              FROM live_activity
-              WHERE last_heartbeat BETWEEN ? AND ?
-              AND country IS NOT NULL
-              AND LENGTH(country) = 2
-            `,
-          [startTimestamp, endTimestamp]
-        );
-        
-        for (const row of liveActivityGeo) {
-          const countryCode = normalizeCountryCode(row.country);
-          if (countryCode) {
-            if (!geoMap.has(countryCode)) {
-              geoMap.set(countryCode, { count: 0, uniqueUsers: new Set(), sessions: new Set() });
-            }
-            const data = geoMap.get(countryCode)!;
-            // Only count if not already counted (by session)
-            if (row.session_id && !data.sessions.has(row.session_id)) {
-              data.count++;
-              data.sessions.add(row.session_id);
-            }
-            if (row.user_id) data.uniqueUsers.add(row.user_id);
-          }
-        }
-      } catch (e) {
-        console.warn('live_activity geo query failed:', e);
-      }
-      
-      // Convert map to array with proper country names
-      geographicRaw = Array.from(geoMap.entries())
-        .map(([countryCode, data]) => ({ 
-          country: countryCode,
-          countryName: getCountryName(countryCode),
-          count: data.sessions.size || data.count,
-          unique_users: data.uniqueUsers.size,
-          sessions: data.sessions.size
+      // Filter to only valid ISO country codes and format the data
+      geographicRaw = userActivityGeo
+        .filter((row: any) => {
+          const code = row.country;
+          return code && code.length === 2 && isValidCountryCode(code);
+        })
+        .map((row: any) => ({
+          country: row.country,
+          countryName: getCountryName(row.country),
+          count: parseInt(row.unique_users) || 0, // Use unique users as the primary count
+          unique_users: parseInt(row.unique_users) || 0,
+          sessions: parseInt(row.sessions) || 0
         }))
-        .filter(g => g.count > 0)
-        .sort((a, b) => b.count - a.count);
+        .filter((g: any) => g.count > 0)
+        .sort((a: any, b: any) => b.count - a.count);
         
       console.log(`Geographic data: Found ${geographicRaw.length} valid countries with data`);
         

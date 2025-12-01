@@ -52,12 +52,13 @@ export async function GET(request: NextRequest) {
     const adapter = db.getAdapter();
     const isNeon = db.isUsingNeon();
 
-    // Get geographic data by country
+    // Get geographic data by country - use UPPER to normalize country codes
+    // and only include valid 2-letter ISO country codes
     const countryDataRaw = await adapter.query(
       isNeon
         ? `
           SELECT 
-            COALESCE(country, 'Unknown') as country,
+            UPPER(country) as country,
             COUNT(DISTINCT session_id) as sessions,
             COUNT(DISTINCT user_id) as unique_users,
             COALESCE(SUM(total_watch_time), 0) as total_watch_time
@@ -65,12 +66,13 @@ export async function GET(request: NextRequest) {
           WHERE last_seen BETWEEN $1 AND $2
           AND country IS NOT NULL
           AND country != ''
-          GROUP BY country
-          ORDER BY sessions DESC
+          AND LENGTH(country) = 2
+          GROUP BY UPPER(country)
+          ORDER BY unique_users DESC
         `
         : `
           SELECT 
-            COALESCE(country, 'Unknown') as country,
+            UPPER(country) as country,
             COUNT(DISTINCT session_id) as sessions,
             COUNT(DISTINCT user_id) as unique_users,
             COALESCE(SUM(total_watch_time), 0) as total_watch_time
@@ -78,8 +80,9 @@ export async function GET(request: NextRequest) {
           WHERE last_seen BETWEEN ? AND ?
           AND country IS NOT NULL
           AND country != ''
-          GROUP BY country
-          ORDER BY sessions DESC
+          AND LENGTH(country) = 2
+          GROUP BY UPPER(country)
+          ORDER BY unique_users DESC
         `,
       [startTimestamp, endTimestamp]
     );
@@ -91,69 +94,80 @@ export async function GET(request: NextRequest) {
         isNeon
           ? `
             SELECT 
-              COALESCE(country, 'Unknown') as country,
-              COALESCE(city, 'Unknown') as city,
+              UPPER(country) as country,
+              city,
               COUNT(DISTINCT session_id) as sessions,
               COUNT(DISTINCT user_id) as unique_users
             FROM user_activity
             WHERE last_seen BETWEEN $1 AND $2
+            AND country IS NOT NULL
+            AND LENGTH(country) = 2
             AND city IS NOT NULL
             AND city != ''
             AND city != 'Unknown'
-            GROUP BY country, city
-            ORDER BY sessions DESC
+            GROUP BY UPPER(country), city
+            ORDER BY unique_users DESC
             LIMIT 50
           `
           : `
             SELECT 
-              COALESCE(country, 'Unknown') as country,
-              COALESCE(city, 'Unknown') as city,
+              UPPER(country) as country,
+              city,
               COUNT(DISTINCT session_id) as sessions,
               COUNT(DISTINCT user_id) as unique_users
             FROM user_activity
             WHERE last_seen BETWEEN ? AND ?
+            AND country IS NOT NULL
+            AND LENGTH(country) = 2
             AND city IS NOT NULL
             AND city != ''
             AND city != 'Unknown'
-            GROUP BY country, city
-            ORDER BY sessions DESC
+            GROUP BY UPPER(country), city
+            ORDER BY unique_users DESC
             LIMIT 50
           `,
         [startTimestamp, endTimestamp]
       );
 
-      cityData = cityDataRaw.map((row: any) => ({
-        country: row.country,
-        countryName: getCountryName(row.country),
-        city: row.city,
-        sessions: parseInt(row.sessions) || 0,
-        uniqueUsers: parseInt(row.unique_users) || 0,
-      }));
+      cityData = cityDataRaw
+        .filter((row: any) => isValidCountryCode(row.country))
+        .map((row: any) => ({
+          country: row.country,
+          countryName: getCountryName(row.country),
+          city: row.city,
+          sessions: parseInt(row.sessions) || 0,
+          uniqueUsers: parseInt(row.unique_users) || 0,
+        }));
     }
 
     // Get live activity geographic data (real-time)
+    // Count distinct users per country/city to avoid duplicate counting
     const liveGeoRaw = await adapter.query(
       isNeon
         ? `
           SELECT 
-            COALESCE(country, 'Unknown') as country,
-            COALESCE(city, 'Unknown') as city,
-            COUNT(*) as active_users
+            UPPER(country) as country,
+            city,
+            COUNT(DISTINCT user_id) as active_users
           FROM live_activity
           WHERE is_active = TRUE
           AND last_heartbeat >= $1
-          GROUP BY country, city
+          AND country IS NOT NULL
+          AND LENGTH(country) = 2
+          GROUP BY UPPER(country), city
           ORDER BY active_users DESC
         `
         : `
           SELECT 
-            COALESCE(country, 'Unknown') as country,
-            COALESCE(city, 'Unknown') as city,
-            COUNT(*) as active_users
+            UPPER(country) as country,
+            city,
+            COUNT(DISTINCT user_id) as active_users
           FROM live_activity
           WHERE is_active = 1
           AND last_heartbeat >= ?
-          GROUP BY country, city
+          AND country IS NOT NULL
+          AND LENGTH(country) = 2
+          GROUP BY UPPER(country), city
           ORDER BY active_users DESC
         `,
       [Date.now() - 5 * 60 * 1000] // Last 5 minutes
@@ -187,7 +201,7 @@ export async function GET(request: NextRequest) {
         activeUsers: parseInt(row.active_users) || 0,
       }));
 
-    // Calculate totals
+    // Calculate totals - use unique users as the primary metric
     const totals = {
       totalSessions: countryData.reduce((sum: number, c: any) => sum + c.sessions, 0),
       totalUniqueUsers: countryData.reduce((sum: number, c: any) => sum + c.uniqueUsers, 0),
@@ -195,6 +209,8 @@ export async function GET(request: NextRequest) {
       totalCountries: countryData.length,
       currentlyActive: liveGeo.reduce((sum: number, l: any) => sum + l.activeUsers, 0),
     };
+    
+    console.log(`Geographic totals: ${totals.totalCountries} countries, ${totals.totalUniqueUsers} unique users, ${totals.totalSessions} sessions`);
 
     return NextResponse.json({
       success: true,

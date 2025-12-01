@@ -2,6 +2,7 @@ import crypto from 'crypto';
 
 interface StreamSource {
     quality: string;
+    title: string;
     url: string;
     type: 'hls';
     referer: string;
@@ -133,6 +134,7 @@ export async function extractMoviesApiStreams(
                 success: true,
                 sources: [{
                     quality: 'auto',
+                    title: 'MoviesAPI Vidora',
                     url: fileMatch[1],
                     type: 'hls',
                     referer: 'https://vidora.stream/',
@@ -240,6 +242,7 @@ export async function extractMoviesApiStreams(
                         seenUrls.add(videoUrl);
                         allSources.push({
                             quality: serverName,
+                            title: `MoviesAPI ${serverName}`,
                             url: videoUrl,
                             type: 'hls',
                             referer: streamReferer, // Use the specific referer from API

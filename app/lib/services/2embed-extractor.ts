@@ -121,51 +121,72 @@ function extractQualityOptions(html: string): QualityOption[] {
     'other': []
   };
 
+  // Counter for generating unique source names when title is missing
+  let sourceCounter = 1;
+
   for (const match of qualityMatches) {
     const url = match[1];
 
     // Extract title from URL - this is the cleaned source name
     const titleMatch = url.match(/tit=([^&]+)/);
-    let title = titleMatch ? decodeURIComponent(titleMatch[1].replace(/\+/g, ' ')) : '';
+    let rawTitle = titleMatch ? decodeURIComponent(titleMatch[1].replace(/\+/g, ' ')) : '';
 
-    // Clean up title - remove common junk patterns
-    title = title
-      .replace(/\s*\(.*?\)\s*/g, '') // Remove parenthetical content
+    // Clean up title - remove common junk patterns but preserve meaningful content
+    let title = rawTitle
       .replace(/\s*\[.*?\]\s*/g, '') // Remove bracket content
       .replace(/\s+/g, ' ') // Normalize spaces
       .trim();
 
-    // If title is empty after cleaning, use a generic name
-    if (!title) {
-      title = 'Source';
+    // Detect quality from URL or title
+    const urlLower = url.toLowerCase();
+    const titleLower = title.toLowerCase();
+    const rawTitleLower = rawTitle.toLowerCase();
+
+    let detectedQuality = 'other';
+    let qualityLabel = '';
+    
+    if (urlLower.includes('2160p') || urlLower.includes('4k') || urlLower.includes('uhd') ||
+      rawTitleLower.includes('2160p') || rawTitleLower.includes('4k') || rawTitleLower.includes('uhd')) {
+      detectedQuality = '2160p';
+      qualityLabel = '4K';
+    } else if (urlLower.includes('1080p') || rawTitleLower.includes('1080p')) {
+      detectedQuality = '1080p';
+      qualityLabel = '1080p';
+    } else if (urlLower.includes('720p') || rawTitleLower.includes('720p')) {
+      detectedQuality = '720p';
+      qualityLabel = '720p';
+    } else if (urlLower.includes('480p') || rawTitleLower.includes('480p')) {
+      detectedQuality = '480p';
+      qualityLabel = '480p';
+    } else if (urlLower.includes('360p') || rawTitleLower.includes('360p')) {
+      detectedQuality = '360p';
+      qualityLabel = '360p';
+    }
+
+    // Build a meaningful display title
+    // If we have a raw title, use it; otherwise generate one
+    if (!title || title === 'Source' || title.length < 3) {
+      // Generate a descriptive name based on quality and source number
+      if (qualityLabel) {
+        title = `2Embed ${qualityLabel} #${sourceCounter}`;
+      } else {
+        title = `2Embed Source #${sourceCounter}`;
+      }
+      sourceCounter++;
+    } else {
+      // We have a title - append quality if not already present and we detected one
+      if (qualityLabel && !titleLower.includes(qualityLabel.toLowerCase())) {
+        title = `${title} (${qualityLabel})`;
+      }
     }
 
     // Filter out non-English sources
-    if (!isEnglishSource(title)) {
+    if (!isEnglishSource(rawTitle)) {
       continue;
     }
 
-    const urlLower = url.toLowerCase();
-    const titleLower = title.toLowerCase();
-
-    // Try to detect quality from URL or title
-    let quality = 'other';
-    if (urlLower.includes('2160p') || urlLower.includes('4k') || urlLower.includes('uhd') ||
-      titleLower.includes('2160p') || titleLower.includes('4k') || titleLower.includes('uhd')) {
-      quality = '2160p';
-    } else if (urlLower.includes('1080p') || titleLower.includes('1080p')) {
-      quality = '1080p';
-    } else if (urlLower.includes('720p') || titleLower.includes('720p')) {
-      quality = '720p';
-    } else if (urlLower.includes('480p') || titleLower.includes('480p')) {
-      quality = '480p';
-    } else if (urlLower.includes('360p') || titleLower.includes('360p')) {
-      quality = '360p';
-    }
-
-    // Always use the cleaned title as the display name
-    // The quality is used for sorting/grouping, but title is what users see
-    qualities[quality].push({ quality: title, url, title });
+    // Store with the display title
+    qualities[detectedQuality].push({ quality: title, url, title });
   }
 
   // Return ALL sources, sorted by quality (highest first)
