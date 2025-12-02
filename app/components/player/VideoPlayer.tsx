@@ -113,15 +113,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
   }, []);
 
-  // Single tap handler for play/pause on mobile
+  // Single tap handler for mobile:
+  // - If paused and controls visible: unpause
+  // - If paused and controls hidden: show controls (don't unpause yet)
+  // - If playing: pause
   const handleSingleTap = useCallback(() => {
     if (!videoRef.current) return;
-    if (videoRef.current.paused) {
-      videoRef.current.play();
+    
+    const isPaused = videoRef.current.paused;
+    
+    if (isPaused) {
+      // Video is paused
+      if (showControls) {
+        // Controls are visible, so unpause
+        videoRef.current.play();
+      } else {
+        // Controls are hidden, just show them first
+        setShowControls(true);
+      }
     } else {
+      // Video is playing, pause it
       videoRef.current.pause();
     }
-  }, []);
+  }, [showControls]);
 
   const {
     scale: zoomScale,
