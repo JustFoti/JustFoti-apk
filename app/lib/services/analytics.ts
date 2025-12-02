@@ -163,6 +163,7 @@ class AnalyticsService {
         this.flushEvents();
         this.syncAllWatchTime();
         this.stopLiveActivity();
+        this.stopPageTracking();
         this.endLiveTVSession();
         this.syncCurrentPageView();
       } else {
@@ -178,6 +179,7 @@ class AnalyticsService {
       this.flushEvents();
       this.syncAllWatchTime();
       this.stopLiveActivity();
+      this.stopPageTracking();
       this.endLiveTVSession();
       this.syncCurrentPageView(true);
       this.syncUserEngagement();
