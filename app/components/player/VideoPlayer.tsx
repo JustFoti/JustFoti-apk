@@ -113,6 +113,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
   }, []);
 
+  // Single tap handler for play/pause on mobile
+  const handleSingleTap = useCallback(() => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+    } else {
+      videoRef.current.pause();
+    }
+  }, []);
+
   const {
     scale: zoomScale,
     isZoomed,
@@ -123,6 +133,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     minScale: 1,
     maxScale: 4,
     onZoomChange: handleZoomChange,
+    onSingleTap: handleSingleTap,
   });
 
   // Fetch sources for a specific provider
@@ -1022,8 +1033,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         </div>
       )}
 
-      {/* Reset zoom button */}
-      {isZoomed && (
+      {/* Reset zoom button - hides with controls */}
+      {isZoomed && (showControls || !isPlaying) && (
         <button
           className={styles.resetZoomButton}
           onClick={(e) => {

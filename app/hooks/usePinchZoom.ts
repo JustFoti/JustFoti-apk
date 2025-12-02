@@ -14,6 +14,7 @@ interface UsePinchZoomOptions {
   doubleTapScale?: number;
   onZoomChange?: (scale: number) => void;
   onDoubleTap?: () => void;
+  onSingleTap?: () => void;
 }
 
 interface UsePinchZoomReturn {
@@ -36,6 +37,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
     doubleTapScale = 2,
     onZoomChange,
     onDoubleTap,
+    onSingleTap,
   } = options;
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +68,12 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
     lastTapY: 0,
     // Prevent click after gesture
     gestureOccurred: false,
+    // Single tap tracking
+    touchStartTime: 0,
+    touchStartX: 0,
+    touchStartY: 0,
+    waitingForDoubleTap: false,
+    singleTapTimer: null as NodeJS.Timeout | null,
   });
 
   const getDistance = useCallback((t1: Touch, t2: Touch): number => {
@@ -161,6 +169,17 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
         const now = Date.now();
         const touch = touches[0];
         
+        // Clear any pending single tap timer
+        if (gesture.singleTapTimer) {
+          clearTimeout(gesture.singleTapTimer);
+          gesture.singleTapTimer = null;
+        }
+        
+        // Track touch start for single tap detection
+        gesture.touchStartTime = now;
+        gesture.touchStartX = touch.clientX;
+        gesture.touchStartY = touch.clientY;
+        
         // Check for double tap
         if (now - gesture.lastTapTime < 300 && 
             Math.abs(touch.clientX - gesture.lastTapX) < 30 &&
@@ -168,6 +187,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
           // Double tap detected
           e.preventDefault();
           gesture.gestureOccurred = true;
+          gesture.waitingForDoubleTap = false;
           
           if (currentScale > 1.1) {
             // Zoom out to 1x
@@ -198,6 +218,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
           gesture.lastTapTime = now;
           gesture.lastTapX = touch.clientX;
           gesture.lastTapY = touch.clientY;
+          gesture.waitingForDoubleTap = true;
           
           // Start pan if zoomed
           if (currentScale > 1) {
@@ -278,6 +299,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
     const handleTouchEnd = (e: TouchEvent) => {
       const touches = e.touches;
       const gesture = gestureRef.current;
+      const changedTouch = e.changedTouches[0];
 
       if (touches.length < 2) {
         gesture.isGesturing = false;
@@ -285,6 +307,25 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
 
       if (touches.length === 0) {
         gesture.isPanning = false;
+
+        // Check for single tap (quick tap without much movement)
+        const touchDuration = Date.now() - gesture.touchStartTime;
+        const touchDistance = changedTouch ? Math.hypot(
+          changedTouch.clientX - gesture.touchStartX,
+          changedTouch.clientY - gesture.touchStartY
+        ) : 0;
+        
+        const isTap = touchDuration < 200 && touchDistance < 10 && !gesture.gestureOccurred;
+        
+        if (isTap && gesture.waitingForDoubleTap) {
+          // Wait a bit to see if it's a double tap
+          gesture.singleTapTimer = setTimeout(() => {
+            if (gesture.waitingForDoubleTap) {
+              gesture.waitingForDoubleTap = false;
+              onSingleTap?.();
+            }
+          }, 300);
+        }
 
         // Snap back to 1x if close
         if (currentScale < 1.05 && currentScale !== 1) {
@@ -322,7 +363,7 @@ export function usePinchZoom(options: UsePinchZoomOptions = {}): UsePinchZoomRet
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('click', handleClick, { capture: true });
     };
-  }, [minScale, maxScale, doubleTapScale, getDistance, getMidpoint, clampTranslate, animateToScale, onDoubleTap]);
+  }, [minScale, maxScale, doubleTapScale, getDistance, getMidpoint, clampTranslate, animateToScale, onDoubleTap, onSingleTap]);
 
   // Sync state refs
   useEffect(() => {
