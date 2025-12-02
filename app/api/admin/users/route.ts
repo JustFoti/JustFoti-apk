@@ -45,21 +45,21 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper to validate timestamps
+// Helper to validate timestamps - must be after Jan 1, 2020 and not in the future
 function isValidTimestamp(ts: number): boolean {
-  if (!ts || ts <= 0) return false;
+  if (!ts || ts <= 0 || isNaN(ts)) return false;
   const now = Date.now();
-  const tenYearsAgo = now - (10 * 365 * 24 * 60 * 60 * 1000);
+  const minValidDate = new Date('2020-01-01').getTime(); // 1577836800000
   const oneHourFromNow = now + (60 * 60 * 1000);
-  return ts >= tenYearsAgo && ts <= oneHourFromNow;
+  return ts >= minValidDate && ts <= oneHourFromNow;
 }
 
 function normalizeTimestamp(ts: any): number {
   if (!ts) return 0;
-  const num = typeof ts === 'string' ? parseInt(ts, 10) : ts;
+  const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
   if (isNaN(num) || num <= 0) return 0;
-  // If timestamp is in seconds, convert to ms
-  if (num < 946684800000) return num * 1000;
+  // If timestamp looks like seconds (before year 2001 in ms), convert to ms
+  if (num < 1000000000000) return num * 1000;
   return num;
 }
 

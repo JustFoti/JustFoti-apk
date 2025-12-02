@@ -67,10 +67,13 @@ export async function GET(request: NextRequest) {
 
     // ============================================
     // 2. USER METRICS (from user_activity ONLY - single source)
+    // Only count users with valid timestamps (after Jan 1, 2020)
     // ============================================
+    const minValidTimestamp = new Date('2020-01-01').getTime(); // 1577836800000
     let users = { total: 0, dau: 0, wau: 0, mau: 0, newToday: 0, returning: 0 };
     try {
       // Get all metrics in a single query for consistency
+      // Filter out invalid timestamps (must be after 2020 and not in the future)
       const userMetricsQuery = isNeon
         ? `SELECT 
              COUNT(DISTINCT user_id) as total,
@@ -80,7 +83,7 @@ export async function GET(request: NextRequest) {
              COUNT(DISTINCT CASE WHEN first_seen >= $1 AND first_seen <= $5 THEN user_id END) as new_today,
              COUNT(DISTINCT CASE WHEN first_seen < $1 AND last_seen >= $4 AND last_seen <= $5 THEN user_id END) as returning
            FROM user_activity
-           WHERE first_seen > 0 AND last_seen > 0`
+           WHERE first_seen >= $6 AND last_seen >= $6 AND last_seen <= $5`
         : `SELECT 
              COUNT(DISTINCT user_id) as total,
              COUNT(DISTINCT CASE WHEN last_seen >= ? AND last_seen <= ? THEN user_id END) as dau,
@@ -89,11 +92,11 @@ export async function GET(request: NextRequest) {
              COUNT(DISTINCT CASE WHEN first_seen >= ? AND first_seen <= ? THEN user_id END) as new_today,
              COUNT(DISTINCT CASE WHEN first_seen < ? AND last_seen >= ? AND last_seen <= ? THEN user_id END) as returning
            FROM user_activity
-           WHERE first_seen > 0 AND last_seen > 0`;
+           WHERE first_seen >= ? AND last_seen >= ? AND last_seen <= ?`;
       
       const params = isNeon 
-        ? [oneDayAgo, oneWeekAgo, oneMonthAgo, oneDayAgo, now]
-        : [oneDayAgo, now, oneWeekAgo, now, oneMonthAgo, now, oneDayAgo, now, oneDayAgo, oneDayAgo, now];
+        ? [oneDayAgo, oneWeekAgo, oneMonthAgo, oneDayAgo, now, minValidTimestamp]
+        : [oneDayAgo, now, oneWeekAgo, now, oneMonthAgo, now, oneDayAgo, now, oneDayAgo, oneDayAgo, now, minValidTimestamp, minValidTimestamp, now];
       
       const userResult = await adapter.query(userMetricsQuery, params);
       

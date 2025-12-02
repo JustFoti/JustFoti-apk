@@ -137,38 +137,51 @@ export default function AdminSessionsPage() {
     return `${minutes}m`;
   };
 
+  // Validate timestamp is reasonable (must be after Jan 1, 2020 and not in the future)
+  const isValidTimestamp = (ts: number): boolean => {
+    if (!ts || ts <= 0 || isNaN(ts)) return false;
+    const now = Date.now();
+    const minValidDate = new Date('2020-01-01').getTime();
+    return ts >= minValidDate && ts <= now + 3600000;
+  };
+
   const normalizeTimestamp = (timestamp: number | string | undefined | null): number | null => {
     if (!timestamp) return null;
     
     // Handle string timestamps
-    const ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
+    const ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : Number(timestamp);
     
     // Check if it's a valid number
     if (isNaN(ts) || ts <= 0) return null;
     
     // Check if timestamp is in seconds (Unix) vs milliseconds
-    // If timestamp is less than year 2000 in ms, it's probably in seconds
-    return ts < 946684800000 ? ts * 1000 : ts;
+    // If timestamp looks like seconds (before year 2001 in ms), convert to ms
+    const normalized = ts < 1000000000000 ? ts * 1000 : ts;
+    
+    // Validate the normalized timestamp
+    return isValidTimestamp(normalized) ? normalized : null;
   };
 
   const formatDate = (timestamp: number | string | undefined | null) => {
     const normalizedTs = normalizeTimestamp(timestamp);
     if (!normalizedTs) return 'N/A';
     
-    const date = new Date(normalizedTs);
-    if (isNaN(date.getTime())) return 'N/A';
-    
-    return date.toLocaleString();
+    try {
+      return new Date(normalizedTs).toLocaleString();
+    } catch {
+      return 'N/A';
+    }
   };
 
   const formatTime = (timestamp: number | string | undefined | null) => {
     const normalizedTs = normalizeTimestamp(timestamp);
     if (!normalizedTs) return '--:--';
     
-    const date = new Date(normalizedTs);
-    if (isNaN(date.getTime())) return '--:--';
-    
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+      return new Date(normalizedTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '--:--';
+    }
   };
 
   const getCompletionColor = (percentage: number) => {

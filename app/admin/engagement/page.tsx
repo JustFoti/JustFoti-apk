@@ -113,16 +113,48 @@ export default function EngagementPage() {
     return `${secs}s`;
   };
 
+  // Validate timestamp is reasonable (not in the future, not too old)
+  const isValidTimestamp = (ts: number): boolean => {
+    if (!ts || ts <= 0 || isNaN(ts)) return false;
+    const now = Date.now();
+    // Must be after Jan 1, 2020 and not more than 1 hour in the future
+    const minValidDate = new Date('2020-01-01').getTime();
+    return ts >= minValidDate && ts <= now + 3600000;
+  };
+
+  // Normalize timestamp (handle seconds vs milliseconds)
+  const normalizeTimestamp = (ts: any): number => {
+    if (!ts) return 0;
+    const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
+    if (isNaN(num) || num <= 0) return 0;
+    // If timestamp looks like seconds (before year 2001 in ms), convert to ms
+    if (num < 1000000000000) return num * 1000;
+    return num;
+  };
+
   const formatTimeAgo = (timestamp: number) => {
-    if (!timestamp) return 'Never';
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    const ts = normalizeTimestamp(timestamp);
+    if (!ts || !isValidTimestamp(ts)) return 'N/A';
+    const seconds = Math.floor((Date.now() - ts) / 1000);
+    if (seconds < 0) return 'Just now';
     if (seconds < 60) return 'Just now';
     const minutes = Math.floor(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     const days = Math.floor(hours / 24);
+    if (days > 365) return `${Math.floor(days / 365)}y ago`;
     return `${days}d ago`;
+  };
+
+  const formatDate = (timestamp: number) => {
+    const ts = normalizeTimestamp(timestamp);
+    if (!ts || !isValidTimestamp(ts)) return 'N/A';
+    try {
+      return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return 'N/A';
+    }
   };
 
   const getEngagementColor = (score: number) => {
@@ -408,7 +440,12 @@ export default function EngagementPage() {
                     <tr><td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No user data yet</td></tr>
                   ) : (
                     filteredUsers.slice(0, 50).map((user) => (
-                      <tr key={user.user_id} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <tr 
+                        key={user.user_id} 
+                        style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', cursor: 'pointer' }}
+                        onClick={() => window.location.href = `/admin/users?userId=${encodeURIComponent(user.user_id)}`}
+                        title="Click to view user profile"
+                      >
                         <td style={tdStyle}>
                           <code style={{ fontSize: '12px', color: '#94a3b8' }}>{user.user_id.substring(0, 12)}...</code>
                         </td>
@@ -448,7 +485,7 @@ export default function EngagementPage() {
                           </div>
                         </td>
                         <td style={tdStyle}>{formatTimeAgo(user.last_visit)}</td>
-                        <td style={tdStyle}>{new Date(user.first_visit).toLocaleDateString()}</td>
+                        <td style={tdStyle}>{formatDate(user.first_visit)}</td>
                       </tr>
                     ))
                   )}

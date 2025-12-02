@@ -298,8 +298,32 @@ export default function AnalyticsPage() {
     return `${minutes}m`;
   };
 
+  // Validate timestamp is reasonable (must be after Jan 1, 2020 and not in the future)
+  const isValidTimestamp = (ts: number): boolean => {
+    if (!ts || ts <= 0 || isNaN(ts)) return false;
+    const now = Date.now();
+    const minValidDate = new Date('2020-01-01').getTime();
+    return ts >= minValidDate && ts <= now + 3600000;
+  };
+
+  // Normalize timestamp (handle seconds vs milliseconds)
+  const normalizeTimestamp = (ts: any): number => {
+    if (!ts) return 0;
+    const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
+    if (isNaN(num) || num <= 0) return 0;
+    // If timestamp looks like seconds (before year 2001 in ms), convert to ms
+    if (num < 1000000000000) return num * 1000;
+    return num;
+  };
+
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
+    const ts = normalizeTimestamp(timestamp);
+    if (!ts || !isValidTimestamp(ts)) return 'N/A';
+    try {
+      return new Date(ts).toLocaleString();
+    } catch {
+      return 'N/A';
+    }
   };
 
   const getCompletionColor = (percentage: number) => {

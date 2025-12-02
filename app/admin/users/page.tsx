@@ -114,7 +114,16 @@ export default function AdminUsersPage() {
     engagementRate: unifiedStats.totalUsers > 0 ? Math.round((unifiedStats.activeThisWeek / unifiedStats.totalUsers) * 100) : 0,
   };
 
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => { 
+    fetchUsers(); 
+    
+    // Check if userId is in URL params to auto-open profile
+    const urlParams = new URLSearchParams(window.location.search);
+    const userIdParam = urlParams.get('userId');
+    if (userIdParam) {
+      fetchUserProfile(userIdParam);
+    }
+  }, []);
 
   const fetchUsers = async () => {
     try {
@@ -165,15 +174,27 @@ export default function AdminUsersPage() {
 
   // Validate timestamp is reasonable (not in the future, not too old)
   const isValidTimestamp = (ts: number): boolean => {
-    if (!ts || ts <= 0) return false;
+    if (!ts || ts <= 0 || isNaN(ts)) return false;
     const now = Date.now();
-    const tenYearsAgo = now - (10 * 365 * 24 * 60 * 60 * 1000);
-    return ts >= tenYearsAgo && ts <= now + 60000; // Allow 1 min future for clock skew
+    // Must be after Jan 1, 2020 and not more than 1 hour in the future
+    const minValidDate = new Date('2020-01-01').getTime();
+    return ts >= minValidDate && ts <= now + 3600000;
+  };
+
+  // Normalize timestamp (handle seconds vs milliseconds)
+  const normalizeTimestamp = (ts: any): number => {
+    if (!ts) return 0;
+    const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
+    if (isNaN(num) || num <= 0) return 0;
+    // If timestamp looks like seconds (before year 2001 in ms), convert to ms
+    if (num < 1000000000000) return num * 1000;
+    return num;
   };
 
   const formatTimeAgo = (timestamp: number) => {
-    if (!timestamp || !isValidTimestamp(timestamp)) return 'N/A';
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    const ts = normalizeTimestamp(timestamp);
+    if (!ts || !isValidTimestamp(ts)) return 'N/A';
+    const seconds = Math.floor((Date.now() - ts) / 1000);
     if (seconds < 0) return 'Just now'; // Handle slight future timestamps
     if (seconds < 60) return 'Just now';
     const minutes = Math.floor(seconds / 60);
@@ -186,16 +207,17 @@ export default function AdminUsersPage() {
   };
 
   const formatDuration = (minutes: number) => {
-    if (!minutes || minutes < 0) return '0m';
+    if (!minutes || minutes < 0 || isNaN(minutes)) return '0m';
     const hours = Math.floor(minutes / 60);
     const mins = Math.round(minutes % 60);
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
 
   const formatDate = (timestamp: number) => {
-    if (!timestamp || !isValidTimestamp(timestamp)) return 'N/A';
+    const ts = normalizeTimestamp(timestamp);
+    if (!ts || !isValidTimestamp(ts)) return 'N/A';
     try {
-      return new Date(timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
       return 'N/A';
     }

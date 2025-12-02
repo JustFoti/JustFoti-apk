@@ -497,9 +497,45 @@ export async function GET(request: NextRequest) {
       `, [startTime]);
     }
 
+    // Helper to validate timestamps - must be after Jan 1, 2020 and not in the future
+    const isValidTimestamp = (ts: number): boolean => {
+      if (!ts || ts <= 0 || isNaN(ts)) return false;
+      const now = Date.now();
+      const minValidDate = new Date('2020-01-01').getTime(); // 1577836800000
+      return ts >= minValidDate && ts <= now + 3600000;
+    };
+
+    // Normalize timestamp (handle seconds vs milliseconds)
+    const normalizeTimestamp = (ts: any): number => {
+      if (!ts) return 0;
+      const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
+      if (isNaN(num) || num <= 0) return 0;
+      // If timestamp looks like seconds (before year 2001 in ms), convert to ms
+      if (num < 1000000000000) return num * 1000;
+      return num;
+    };
+
+    // Filter and validate user data
+    const validUsers = users
+      .map((u: any) => {
+        const firstVisit = normalizeTimestamp(u.first_visit);
+        const lastVisit = normalizeTimestamp(u.last_visit);
+        return {
+          ...u,
+          first_visit: isValidTimestamp(firstVisit) ? firstVisit : 0,
+          last_visit: isValidTimestamp(lastVisit) ? lastVisit : 0,
+          total_visits: Math.max(0, parseInt(u.total_visits) || 0),
+          total_page_views: Math.max(0, parseInt(u.total_page_views) || 0),
+          total_time_on_site: Math.max(0, parseInt(u.total_time_on_site) || 0),
+          avg_session_duration: Math.max(0, parseFloat(u.avg_session_duration) || 0),
+          engagement_score: Math.min(100, Math.max(0, parseInt(u.engagement_score) || 0)),
+        };
+      })
+      .filter((u: any) => u.user_id && (u.first_visit > 0 || u.last_visit > 0));
+
     return NextResponse.json({
       success: true,
-      users,
+      users: validUsers,
       aggregateStats: aggregateStats[0] || {},
       engagementDistribution,
       visitFrequency,
