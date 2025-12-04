@@ -107,10 +107,13 @@ function isEnglishSource(title: string): boolean {
 
 /**
  * Extract quality options from player4u HTML
+ * Extracts source names from the <li><a> elements in the HTML
  */
 function extractQualityOptions(html: string): QualityOption[] {
-  const qualityRegex = /go\('([^']+)'\)/g;
-  const qualityMatches = Array.from(html.matchAll(qualityRegex));
+  // Match the full <li><a> structure to get both URL and display name
+  // Pattern: onclick="go('/swp/?...')" ... > &nbsp; SOURCE NAME</a></li>
+  const sourceRegex = /<li><a[^>]*onclick="go\('([^']+)'\)"[^>]*>.*?&nbsp;\s*([^<]+)<\/a><\/li>/gi;
+  const sourceMatches = Array.from(html.matchAll(sourceRegex));
 
   const qualities: Record<string, QualityOption[]> = {
     '2160p': [],
@@ -124,14 +127,11 @@ function extractQualityOptions(html: string): QualityOption[] {
   // Counter for generating unique source names when title is missing
   let sourceCounter = 1;
 
-  for (const match of qualityMatches) {
+  for (const match of sourceMatches) {
     const url = match[1];
+    let title = match[2]?.trim() || '';
 
-    // Extract title from URL's tit parameter - this IS the filename/source name
-    const titleMatch = url.match(/tit=([^&]+)/);
-    let title = titleMatch ? decodeURIComponent(titleMatch[1].replace(/\+/g, ' ')) : '';
-
-    // Normalize spaces only, keep the full filename intact
+    // Clean up the title - remove extra whitespace
     title = title.replace(/\s+/g, ' ').trim();
 
     // Detect quality from URL or title
@@ -166,6 +166,50 @@ function extractQualityOptions(html: string): QualityOption[] {
 
     // Store with the full filename as the title
     qualities[detectedQuality].push({ quality: title, url, title });
+  }
+
+  // Fallback: if no sources found with the new regex, try the old method
+  if (Object.values(qualities).every(arr => arr.length === 0)) {
+    const fallbackRegex = /go\('([^']+)'\)/g;
+    const fallbackMatches = Array.from(html.matchAll(fallbackRegex));
+    
+    for (const match of fallbackMatches) {
+      const url = match[1];
+      
+      // Extract title from URL's tit parameter as fallback
+      const titleMatch = url.match(/tit=([^&]+)/);
+      let title = titleMatch ? decodeURIComponent(titleMatch[1].replace(/\+/g, ' ')) : '';
+      title = title.replace(/\s+/g, ' ').trim();
+
+      const urlLower = url.toLowerCase();
+      const titleLower = title.toLowerCase();
+
+      let detectedQuality = 'other';
+      
+      if (urlLower.includes('2160p') || urlLower.includes('4k') || urlLower.includes('uhd') ||
+        titleLower.includes('2160p') || titleLower.includes('4k') || titleLower.includes('uhd')) {
+        detectedQuality = '2160p';
+      } else if (urlLower.includes('1080p') || titleLower.includes('1080p')) {
+        detectedQuality = '1080p';
+      } else if (urlLower.includes('720p') || titleLower.includes('720p')) {
+        detectedQuality = '720p';
+      } else if (urlLower.includes('480p') || titleLower.includes('480p')) {
+        detectedQuality = '480p';
+      } else if (urlLower.includes('360p') || titleLower.includes('360p')) {
+        detectedQuality = '360p';
+      }
+
+      if (!title || title.length < 3) {
+        title = `2Embed Source #${sourceCounter}`;
+        sourceCounter++;
+      }
+
+      if (!isEnglishSource(title)) {
+        continue;
+      }
+
+      qualities[detectedQuality].push({ quality: title, url, title });
+    }
   }
 
   // Return ALL sources, sorted by quality (highest first)
@@ -229,55 +273,6 @@ function decodeJWPlayer(html: string): Record<string, string> | null {
 }
 
 /**
- * Extract domain name from URL for display
- * e.g., "54pkdcyxbsxbermn.premilkyway.com" -> "Premilkyway"
- * e.g., "54pkdcyxbsxbermn.aurorionproductions.cyou" -> "Aurorionproductions"
- */
-function extractSourceName(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    const hostname = urlObj.hostname;
-    
-    // Split by dots
-    const parts = hostname.split('.');
-    
-    // Find the main domain part (not the random subdomain, not the TLD)
-    // For "54pkdcyxbsxbermn.premilkyway.com" -> "premilkyway"
-    // For "yesmovies.baby" -> "yesmovies"
-    let mainPart = '';
-    
-    if (parts.length >= 3) {
-      // Has subdomain - take the second-to-last meaningful part
-      // e.g., ["54pkdcyxbsxbermn", "premilkyway", "com"] -> "premilkyway"
-      mainPart = parts[parts.length - 2];
-    } else if (parts.length === 2) {
-      // No subdomain - take the first part
-      // e.g., ["yesmovies", "baby"] -> "yesmovies"
-      mainPart = parts[0];
-    } else {
-      mainPart = hostname;
-    }
-    
-    // Skip if it looks like a random string (all lowercase letters/numbers, no vowels pattern)
-    // or if it's a common CDN/generic name
-    const genericNames = ['cdn', 'stream', 'video', 'hls', 'play', 'watch', 'embed'];
-    if (genericNames.includes(mainPart.toLowerCase())) {
-      // Try the subdomain instead
-      if (parts.length >= 3) {
-        mainPart = parts[0];
-      }
-    }
-    
-    // Capitalize first letter
-    mainPart = mainPart.charAt(0).toUpperCase() + mainPart.slice(1).toLowerCase();
-    
-    return mainPart;
-  } catch {
-    return 'Stream';
-  }
-}
-
-/**
  * Extract stream from a single quality option
  */
 async function extractStreamFromQuality(
@@ -320,26 +315,8 @@ async function extractStreamFromQuality(
     // Check availability
     const status = await checkStreamAvailability(finalUrl, referer);
 
-    // Extract source name from the final stream URL domain
-    const sourceName = extractSourceName(finalUrl);
-    
-    // Detect quality from URL if possible
-    const urlLower = finalUrl.toLowerCase();
-    let qualityLabel = '';
-    if (urlLower.includes('1080') || urlLower.includes('fhd')) {
-      qualityLabel = '1080p';
-    } else if (urlLower.includes('720') || urlLower.includes('hd')) {
-      qualityLabel = '720p';
-    } else if (urlLower.includes('480') || urlLower.includes('sd')) {
-      qualityLabel = '480p';
-    } else if (urlLower.includes('4k') || urlLower.includes('2160')) {
-      qualityLabel = '4K';
-    }
-
-    // Build the display title from the actual source domain
-    const displayTitle = qualityLabel 
-      ? `${sourceName} ${qualityLabel} #${sourceIndex}`
-      : `${sourceName} #${sourceIndex}`;
+    // Use the title extracted from the HTML (the actual source name from 2embed)
+    const displayTitle = qualityOption.title;
 
     return {
       quality: displayTitle,

@@ -1,6 +1,7 @@
 /**
  * MoviesAPI Extractor
  * Uses the moviesapi.to scrapify API with proper encryption
+ * Returns ALL available sources with their names
  */
 
 import CryptoJS from 'crypto-js';
@@ -12,6 +13,7 @@ interface StreamSource {
     type: 'hls';
     referer: string;
     requiresSegmentProxy: boolean;
+    status?: 'working' | 'down';
 }
 
 interface ExtractionResult {
@@ -26,13 +28,13 @@ const PLAYER_API_KEY = 'moviesapi-player-auth-key-2024-secure';
 const SCRAPIFY_URL = 'https://w1.moviesapi.to/api/scrapify';
 
 // Source configurations - ordered by reliability
-// Orion (m4uhd) is best for newer movies, Beta (fmovies) is good general fallback
+// Each source has a display name and technical config
 const SOURCES = [
-    { name: 'Orion', source: 'm4uhd', priority: 1 },       // Best for newer movies
-    { name: 'Beta', source: 'fmovies', priority: 2 },      // Good general fallback
-    { name: 'Apollo', source: 'sflix2', srv: '0', priority: 3 },
-    { name: 'Alpha', source: 'sflix2', srv: '1', priority: 4 },
-    { name: 'Nexon', source: 'bmovies', priority: 5 },
+    { name: 'Orion', source: 'm4uhd', priority: 1, description: 'Best for newer movies' },
+    { name: 'Beta', source: 'fmovies', priority: 2, description: 'Good general fallback' },
+    { name: 'Apollo', source: 'sflix2', srv: '0', priority: 3, description: 'Fast CDN' },
+    { name: 'Alpha', source: 'sflix2', srv: '1', priority: 4, description: 'Alternative CDN' },
+    { name: 'Nexon', source: 'bmovies', priority: 5, description: 'Backup source' },
 ];
 
 /**
@@ -70,7 +72,7 @@ async function fetchFromScrapify(
         ).toString();
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
         const response = await fetch(`${SCRAPIFY_URL}/v1/fetch`, {
             method: 'POST',
@@ -111,7 +113,6 @@ async function fetchFromScrapify(
 
         return { url: streamUrl, subtitles };
     } catch (error) {
-        console.error(`[MoviesApi] Scrapify fetch error:`, error);
         return null;
     }
 }
@@ -155,7 +156,51 @@ async function checkStreamAccessibility(url: string): Promise<boolean> {
 }
 
 /**
- * Main extraction function
+ * Try to extract from a single source
+ */
+async function trySource(
+    src: typeof SOURCES[0],
+    tmdbId: string,
+    type: 'movie' | 'tv',
+    season?: number,
+    episode?: number
+): Promise<StreamSource | null> {
+    try {
+        const result = await fetchFromScrapify(
+            tmdbId,
+            type,
+            season,
+            episode,
+            src.source,
+            src.srv
+        );
+
+        if (!result || !result.url) {
+            return null;
+        }
+
+        // Transform URL if needed
+        const streamUrl = transformUrl(result.url, src.name);
+
+        // Check if stream is accessible
+        const isAccessible = await checkStreamAccessibility(streamUrl);
+        
+        return {
+            quality: 'auto',
+            title: src.name,
+            url: streamUrl,
+            type: 'hls',
+            referer: 'https://w1.moviesapi.to/',
+            requiresSegmentProxy: true,
+            status: isAccessible ? 'working' : 'down'
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Main extraction function - returns ALL available sources
  */
 export async function extractMoviesApiStreams(
     tmdbId: string,
@@ -163,61 +208,65 @@ export async function extractMoviesApiStreams(
     season?: number,
     episode?: number
 ): Promise<ExtractionResult> {
-    console.log(`[MoviesApi] Extracting for ${type} ID ${tmdbId}...`);
+    console.log(`[MoviesApi] Extracting ALL sources for ${type} ID ${tmdbId}...`);
 
-    // Try sources in order of priority
-    for (const src of SOURCES) {
-        console.log(`[MoviesApi] Trying source: ${src.name} (${src.source})`);
-        
-        try {
-            const result = await fetchFromScrapify(
-                tmdbId,
-                type,
-                season,
-                episode,
-                src.source,
-                src.srv
-            );
+    // Try all sources in parallel for speed
+    const sourcePromises = SOURCES.map(src => 
+        trySource(src, tmdbId, type, season, episode)
+            .then(result => ({ src, result }))
+            .catch(() => ({ src, result: null }))
+    );
 
-            if (!result || !result.url) {
-                console.log(`[MoviesApi] ${src.name}: No URL returned`);
-                continue;
+    const results = await Promise.all(sourcePromises);
+    
+    // Collect all sources (both working and down)
+    const allSources: StreamSource[] = [];
+    const workingSources: StreamSource[] = [];
+    
+    for (const { src, result } of results) {
+        if (result) {
+            allSources.push(result);
+            if (result.status === 'working') {
+                workingSources.push(result);
+                console.log(`[MoviesApi] ✓ ${src.name} working`);
+            } else {
+                console.log(`[MoviesApi] ✗ ${src.name} down (403/blocked)`);
             }
-
-            // Transform URL if needed
-            const streamUrl = transformUrl(result.url, src.name);
-            console.log(`[MoviesApi] ${src.name}: Got URL, checking accessibility...`);
-
-            // Check if stream is accessible
-            const isAccessible = await checkStreamAccessibility(streamUrl);
-            
-            if (!isAccessible) {
-                console.log(`[MoviesApi] ${src.name}: Stream not accessible (403/blocked)`);
-                continue;
-            }
-
-            console.log(`[MoviesApi] ✓ ${src.name} working!`);
-            console.log(`[MoviesApi] Stream URL: ${streamUrl}`);
-
-            return {
-                success: true,
-                sources: [{
-                    quality: 'auto',
-                    title: `MoviesAPI - ${src.name}`,
-                    url: streamUrl,
-                    type: 'hls',
-                    referer: 'https://w1.moviesapi.to/',
-                    requiresSegmentProxy: true
-                }]
-            };
-        } catch (error) {
-            console.error(`[MoviesApi] ${src.name} error:`, error);
-            continue;
+        } else {
+            console.log(`[MoviesApi] ✗ ${src.name} no response`);
         }
     }
 
-    // If all sources failed, return error
-    console.error('[MoviesApi] All sources failed');
+    // Sort by priority (working sources first, then by original priority)
+    allSources.sort((a, b) => {
+        // Working sources come first
+        if (a.status === 'working' && b.status !== 'working') return -1;
+        if (a.status !== 'working' && b.status === 'working') return 1;
+        // Then sort by original priority
+        const aPriority = SOURCES.find(s => s.name === a.title)?.priority || 99;
+        const bPriority = SOURCES.find(s => s.name === b.title)?.priority || 99;
+        return aPriority - bPriority;
+    });
+
+    if (workingSources.length > 0) {
+        console.log(`[MoviesApi] Found ${workingSources.length} working sources out of ${allSources.length} total`);
+        return {
+            success: true,
+            sources: allSources // Return all sources so UI can show status
+        };
+    }
+
+    // If no working sources, still return what we found (marked as down)
+    if (allSources.length > 0) {
+        console.log(`[MoviesApi] Found ${allSources.length} sources but none accessible`);
+        return {
+            success: false,
+            sources: allSources,
+            error: 'All MoviesAPI sources currently blocked'
+        };
+    }
+
+    console.error('[MoviesApi] All sources failed to respond');
     return {
         success: false,
         sources: [],

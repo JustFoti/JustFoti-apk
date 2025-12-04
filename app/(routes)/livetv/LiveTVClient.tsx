@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { useCast, CastMedia } from '@/hooks/useCast';
 import styles from './LiveTV.module.css';
 
 /**
@@ -549,6 +550,58 @@ function LiveTVPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [bufferingStatus, setBufferingStatus] = useState<string | null>(null);
+  const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
+
+  // Cast to TV functionality
+  const cast = useCast({
+    onConnect: () => {
+      console.log('[LiveTV] Cast connected');
+    },
+    onDisconnect: () => {
+      console.log('[LiveTV] Cast disconnected');
+      setIsCastOverlayVisible(false);
+    },
+    onError: (error) => {
+      console.error('[LiveTV] Cast error:', error);
+    },
+  });
+
+  // Build cast media object for live TV
+  const getCastMedia = useCallback((): CastMedia => {
+    const streamUrl = `/api/dlhd-proxy?channel=${channel.streamId}`;
+    return {
+      url: `${window.location.origin}${streamUrl}`,
+      title: channel.name,
+      subtitle: `${channel.categoryInfo.icon} ${channel.categoryInfo.name}`,
+      contentType: 'application/x-mpegURL',
+      isLive: true,
+    };
+  }, [channel]);
+
+  // Handle cast button click
+  const handleCastClick = useCallback(async () => {
+    if (cast.isCasting) {
+      cast.stop();
+      setIsCastOverlayVisible(false);
+    } else if (cast.isConnected) {
+      const media = getCastMedia();
+      videoRef.current?.pause();
+      const success = await cast.loadMedia(media);
+      if (success) {
+        setIsCastOverlayVisible(true);
+      }
+    } else {
+      const connected = await cast.requestSession();
+      if (connected) {
+        const media = getCastMedia();
+        videoRef.current?.pause();
+        const success = await cast.loadMedia(media);
+        if (success) {
+          setIsCastOverlayVisible(true);
+        }
+      }
+    }
+  }, [cast, getCastMedia]);
 
   useEffect(() => {
     decryptRetryCount.current = 0;
@@ -1037,6 +1090,35 @@ function LiveTVPlayer({
             <span className={styles.liveDot} /> LIVE
           </div>
 
+          {/* Cast to TV */}
+          {cast.isAvailable && (
+            <button 
+              className={`${styles.controlBtn} ${cast.isCasting ? styles.castActive : ''}`} 
+              onClick={handleCastClick} 
+              type="button"
+              title={cast.isCasting ? 'Stop casting' : 'Cast to TV'}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                {cast.isCasting ? (
+                  <>
+                    <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                    <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                    <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                    <path d="M5 7v2h12v8h-4v2h6V7z" opacity="0.3" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                    <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                    <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                  </>
+                )}
+              </svg>
+            </button>
+          )}
+
           {/* Fullscreen */}
           <button className={styles.controlBtn} onClick={toggleFullscreen} type="button">
             {isFullscreen ? '⛶' : '⛶'}
@@ -1066,6 +1148,41 @@ function LiveTVPlayer({
             <div className={styles.errorActions}>
               <button onClick={() => { decryptRetryCount.current = 0; loadStream(true); }} className={styles.retryBtn}>Try Again</button>
               <button onClick={onClose} className={styles.closeErrorBtn}>Close</button>
+            </div>
+          </div>
+        )}
+
+        {/* Cast Overlay - shown when casting to TV */}
+        {isCastOverlayVisible && cast.isCasting && (
+          <div className={styles.castOverlay}>
+            <div className={styles.castOverlayContent}>
+              <div className={styles.castingTo}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                  <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                  <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                  <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                </svg>
+                <span>Casting to TV</span>
+              </div>
+              <h2 className={styles.castTitle}>{channel.name}</h2>
+              <p className={styles.castSubtitle}>{channel.categoryInfo.icon} {channel.categoryInfo.name} • {channel.countryInfo.flag} {channel.countryInfo.name}</p>
+              <div className={styles.castLiveIndicator}>
+                <span className={styles.liveDot} /> LIVE
+              </div>
+              <button 
+                className={styles.stopCastBtn}
+                onClick={() => {
+                  cast.stop();
+                  setIsCastOverlayVisible(false);
+                }}
+                type="button"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                </svg>
+                Stop Casting
+              </button>
             </div>
           </div>
         )}

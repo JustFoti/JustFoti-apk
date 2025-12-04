@@ -368,7 +368,7 @@ export async function GET(request: NextRequest) {
 
       const executionTime = Date.now() - startTime;
 
-      // Return multiple quality sources
+      // Return multiple quality sources with status
       const sources = cached.sources.map((source: any) => ({
         quality: source.quality,
         title: source.title || source.quality,
@@ -376,7 +376,8 @@ export async function GET(request: NextRequest) {
         directUrl: source.url,
         referer: source.referer,
         type: source.type,
-        requiresSegmentProxy: source.requiresSegmentProxy
+        requiresSegmentProxy: source.requiresSegmentProxy,
+        status: source.status || 'working'
       }));
 
       return NextResponse.json({
@@ -407,14 +408,15 @@ export async function GET(request: NextRequest) {
         directUrl: source.url,
         referer: source.referer,
         type: source.type,
-        requiresSegmentProxy: source.requiresSegmentProxy
+        requiresSegmentProxy: source.requiresSegmentProxy,
+        status: source.status || 'working'
       }));
 
       return NextResponse.json({
         success: true,
         sources: proxiedSources,
-        streamUrl: proxiedSources[0].url,
-        url: proxiedSources[0].url,
+        streamUrl: proxiedSources[0]?.url || '',
+        url: proxiedSources[0]?.url || '',
         provider: provider,
         requiresProxy: true,
         requiresSegmentProxy: true,
@@ -429,18 +431,45 @@ export async function GET(request: NextRequest) {
     const expectedRuntime = tmdbInfo.runtime;
     console.log(`[EXTRACT] Expected runtime from TMDB: ${expectedRuntime}min`);
 
-    // Create extraction with automatic fallback
-    // Primary: MoviesAPI, Fallback: 2Embed
+    // Create extraction based on provider preference
     const extractionPromise = (async () => {
-      // Try MoviesAPI first (primary)
+      // If explicitly requesting moviesapi, use it directly
+      if (provider === 'moviesapi') {
+        console.log('[EXTRACT] Using MoviesAPI (explicit request)...');
+        const moviesApiResult = await extractMoviesApiStreams(tmdbId, type, season, episode);
+        
+        // Return all sources (including those marked as down) so UI can show status
+        if (moviesApiResult.sources.length > 0) {
+          // Filter to only working sources for playback, but include status info
+          const workingSources = moviesApiResult.sources.filter(s => s.status === 'working');
+          
+          if (workingSources.length > 0) {
+            console.log(`[EXTRACT] ✓ MoviesAPI: ${workingSources.length} working, ${moviesApiResult.sources.length} total`);
+            return { sources: moviesApiResult.sources, provider: 'moviesapi' };
+          }
+        }
+        
+        // If no working sources, return what we have with status info
+        if (moviesApiResult.sources.length > 0) {
+          console.log(`[EXTRACT] MoviesAPI: ${moviesApiResult.sources.length} sources (none working)`);
+          return { sources: moviesApiResult.sources, provider: 'moviesapi' };
+        }
+        
+        throw new Error(moviesApiResult.error || 'MoviesAPI returned no sources');
+      }
+      
+      // Default behavior: Try MoviesAPI first, fallback to 2Embed
       console.log('[EXTRACT] Trying primary source: MoviesAPI...');
       try {
         const moviesApiResult = await extractMoviesApiStreams(tmdbId, type, season, episode);
         
-        if (moviesApiResult.success && moviesApiResult.sources.length > 0) {
+        // Check for working sources
+        const workingSources = moviesApiResult.sources.filter(s => s.status === 'working');
+        
+        if (workingSources.length > 0) {
           // Validate duration for moviesapi sources
           if (expectedRuntime && expectedRuntime > 0) {
-            const firstSource = moviesApiResult.sources[0];
+            const firstSource = workingSources[0];
             const streamDuration = await getStreamDuration(firstSource.url, firstSource.referer);
             
             if (streamDuration > 0) {
@@ -453,11 +482,11 @@ export async function GET(request: NextRequest) {
             }
           }
           
-          console.log(`[EXTRACT] ✓ MoviesAPI succeeded with ${moviesApiResult.sources.length} source(s)`);
+          console.log(`[EXTRACT] ✓ MoviesAPI succeeded with ${workingSources.length} working source(s)`);
           return { sources: moviesApiResult.sources, provider: 'moviesapi' };
         }
         
-        throw new Error(moviesApiResult.error || 'MoviesAPI returned no sources');
+        throw new Error(moviesApiResult.error || 'MoviesAPI returned no working sources');
       } catch (moviesApiError) {
         console.warn('[EXTRACT] MoviesAPI failed:', moviesApiError instanceof Error ? moviesApiError.message : moviesApiError);
         
@@ -500,7 +529,7 @@ export async function GET(request: NextRequest) {
       });
       console.log(`[EXTRACT] Success in ${executionTime}ms - ${sources.length} qualities via ${usedProvider}`);
 
-      // Return proxied URLs
+      // Return proxied URLs with status info
       const proxiedSources = sources.map((source: any) => ({
         quality: source.quality,
         title: source.title || source.quality,
@@ -508,7 +537,8 @@ export async function GET(request: NextRequest) {
         directUrl: source.url,
         referer: source.referer,
         type: source.type,
-        requiresSegmentProxy: source.requiresSegmentProxy
+        requiresSegmentProxy: source.requiresSegmentProxy,
+        status: source.status || 'working' // Include status for UI display
       }));
 
       return NextResponse.json({

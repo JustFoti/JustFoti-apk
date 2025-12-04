@@ -104,6 +104,12 @@ export default function AdminUsersPage() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'online' | 'offline'>('all');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const pageSize = 50;
 
 
   // Key metrics from unified stats - SINGLE SOURCE OF TRUTH
@@ -133,18 +139,41 @@ export default function AdminUsersPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (page: number = 1, append: boolean = false) => {
     try {
-      setLoading(true);
-      const response = await fetch('/api/admin/users?limit=200');
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
+      
+      const offset = (page - 1) * pageSize;
+      const response = await fetch(`/api/admin/users?limit=${pageSize}&offset=${offset}`);
+      
       if (response.ok) {
         const data = await response.json();
-        setUsers(data.users || []);
+        const newUsers = data.users || [];
+        
+        if (append) {
+          setUsers(prev => [...prev, ...newUsers]);
+        } else {
+          setUsers(newUsers);
+        }
+        
+        setTotalUsers(data.pagination?.total || newUsers.length);
+        setCurrentPage(page);
       }
     } catch (err) {
       console.error('Failed to fetch users:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+  
+  const loadMoreUsers = () => {
+    if (!loadingMore && users.length < totalUsers) {
+      fetchUsers(currentPage + 1, true);
     }
   };
 
@@ -282,8 +311,17 @@ export default function AdminUsersPage() {
 
       {/* Users Table */}
       <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.1)', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-          <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>Users ({filteredUsers.length})</h3>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>
+            Users ({filteredUsers.length}{totalUsers > users.length ? ` of ${totalUsers}` : ''})
+          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {totalUsers > 0 && (
+              <span style={{ color: '#64748b', fontSize: '13px' }}>
+                Showing {users.length} of {totalUsers} total users
+              </span>
+            )}
+          </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
@@ -343,8 +381,78 @@ export default function AdminUsersPage() {
             </tbody>
           </table>
         </div>
+        
+        {/* Pagination / Load More */}
+        {users.length < totalUsers && (
+          <div style={{ padding: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+            <button
+              onClick={loadMoreUsers}
+              disabled={loadingMore}
+              style={{
+                padding: '12px 32px',
+                background: loadingMore ? 'rgba(120, 119, 198, 0.1)' : 'rgba(120, 119, 198, 0.2)',
+                border: '1px solid rgba(120, 119, 198, 0.3)',
+                borderRadius: '8px',
+                color: '#a5b4fc',
+                cursor: loadingMore ? 'not-allowed' : 'pointer',
+                fontSize: '14px',
+                fontWeight: '500',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+              }}
+            >
+              {loadingMore ? (
+                <>
+                  <span style={{ display: 'inline-block', width: '14px', height: '14px', border: '2px solid rgba(165, 180, 252, 0.3)', borderTopColor: '#a5b4fc', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  Loading...
+                </>
+              ) : (
+                <>Load More Users ({totalUsers - users.length} remaining)</>
+              )}
+            </button>
+            <span style={{ color: '#64748b', fontSize: '13px' }}>
+              Page {currentPage} • {users.length} loaded
+            </span>
+          </div>
+        )}
+        
+        {/* Load All Button for convenience */}
+        {users.length < totalUsers && totalUsers <= 500 && (
+          <div style={{ padding: '0 20px 20px', display: 'flex', justifyContent: 'center' }}>
+            <button
+              onClick={async () => {
+                setLoadingMore(true);
+                try {
+                  const response = await fetch(`/api/admin/users?limit=${totalUsers}&offset=0`);
+                  if (response.ok) {
+                    const data = await response.json();
+                    setUsers(data.users || []);
+                  }
+                } catch (err) {
+                  console.error('Failed to load all users:', err);
+                } finally {
+                  setLoadingMore(false);
+                }
+              }}
+              disabled={loadingMore}
+              style={{
+                padding: '8px 20px',
+                background: 'transparent',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                color: '#64748b',
+                cursor: loadingMore ? 'not-allowed' : 'pointer',
+                fontSize: '12px',
+              }}
+            >
+              Load All {totalUsers} Users
+            </button>
+          </div>
+        )}
       </div>
 
+      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* User Profile Modal */}
       {(selectedUser || loadingProfile) && (
@@ -457,13 +565,20 @@ export default function AdminUsersPage() {
 
                 {/* Watch History */}
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-                  <h4 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '14px' }}>🎬 Watch History ({selectedUser.watchHistory.length})</h4>
-                  <div style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                  <h4 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '14px' }}>
+                    🎬 Watch History ({selectedUser.watchHistory.length})
+                    {selectedUser.watchHistory.length > 0 && (
+                      <span style={{ color: '#64748b', fontWeight: '400', marginLeft: '8px', fontSize: '12px' }}>
+                        Total: {formatDuration(selectedUser.watchHistory.reduce((sum, w) => sum + w.watchTime, 0))}
+                      </span>
+                    )}
+                  </h4>
+                  <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
                     {selectedUser.watchHistory.length === 0 ? (
                       <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No watch history</div>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {selectedUser.watchHistory.slice(0, 20).map((item, i) => (
+                        {selectedUser.watchHistory.slice(0, 50).map((item, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px' }}>
                             <span style={{ fontSize: '16px' }}>{item.contentType === 'movie' ? '🎬' : '📺'}</span>
                             <div style={{ flex: 1 }}>

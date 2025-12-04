@@ -8,6 +8,8 @@ import { streamRetryManager } from '@/lib/utils/stream-retry';
 import { trackWatchStart, trackWatchProgress, trackWatchPause, trackWatchComplete } from '@/lib/utils/live-activity';
 import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage, getSubtitleStyle, setSubtitleStyle, type SubtitleStyle } from '@/lib/utils/subtitle-preferences';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
+import { useCast, CastMedia } from '@/hooks/useCast';
+import { CastOverlay } from './CastButton';
 import styles from './VideoPlayer.module.css';
 
 interface VideoPlayerProps {
@@ -92,6 +94,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [sourcesCache, setSourcesCache] = useState<Record<string, any[]>>({});
   const [loadingProviders, setLoadingProviders] = useState<Record<string, boolean>>({});
+  const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout>();
   const lastFetchedKey = useRef('');
@@ -149,6 +152,70 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     onZoomChange: handleZoomChange,
     onSingleTap: handleSingleTap,
   });
+
+  // Cast to TV functionality
+  const cast = useCast({
+    onConnect: () => {
+      console.log('[VideoPlayer] Cast connected');
+    },
+    onDisconnect: () => {
+      console.log('[VideoPlayer] Cast disconnected');
+      setIsCastOverlayVisible(false);
+    },
+    onError: (error) => {
+      console.error('[VideoPlayer] Cast error:', error);
+    },
+  });
+
+  // Build cast media object
+  const getCastMedia = useCallback((): CastMedia | undefined => {
+    if (!streamUrl) return undefined;
+    
+    const episodeInfo = mediaType === 'tv' && season && episode 
+      ? `S${season}E${episode}` 
+      : undefined;
+    
+    return {
+      url: streamUrl.startsWith('/') ? `${window.location.origin}${streamUrl}` : streamUrl,
+      title: title || 'Unknown Title',
+      subtitle: episodeInfo,
+      contentType: 'application/x-mpegURL',
+      isLive: false,
+      startTime: currentTime > 0 ? currentTime : undefined,
+    };
+  }, [streamUrl, title, mediaType, season, episode, currentTime]);
+
+  // Handle cast button click
+  const handleCastClick = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (cast.isCasting) {
+      cast.stop();
+      setIsCastOverlayVisible(false);
+    } else if (cast.isConnected) {
+      const media = getCastMedia();
+      if (media) {
+        // Pause local playback
+        videoRef.current?.pause();
+        const success = await cast.loadMedia(media);
+        if (success) {
+          setIsCastOverlayVisible(true);
+        }
+      }
+    } else {
+      const connected = await cast.requestSession();
+      if (connected) {
+        const media = getCastMedia();
+        if (media) {
+          videoRef.current?.pause();
+          const success = await cast.loadMedia(media);
+          if (success) {
+            setIsCastOverlayVisible(true);
+          }
+        }
+      }
+    }
+  }, [cast, getCastMedia]);
 
   // Fetch sources for a specific provider
   const fetchSources = async (providerName: string, force: boolean = false): Promise<any[] | null> => {
@@ -1331,6 +1398,34 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               </div>
             )}
 
+            {/* Cast to TV button */}
+            {cast.isAvailable && (
+              <button 
+                onClick={handleCastClick} 
+                className={`${styles.btn} ${cast.isCasting ? styles.active : ''}`}
+                title={cast.isCasting ? 'Stop casting' : 'Cast to TV'}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  {cast.isCasting ? (
+                    <>
+                      <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                      <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                      <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                      <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                      <path d="M5 7v2h12v8h-4v2h6V7z" opacity="0.3" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                      <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                      <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                      <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                    </>
+                  )}
+                </svg>
+              </button>
+            )}
+
             <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className={styles.btn}>
               {isFullscreen ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -1502,6 +1597,23 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             </div>
           </div>
         </div>
+      )}
+
+      {/* Cast Overlay - shown when casting to TV */}
+      {isCastOverlayVisible && cast.isCasting && (
+        <CastOverlay
+          title={title || 'Unknown Title'}
+          subtitle={mediaType === 'tv' && season && episode ? `Season ${season} • Episode ${episode}` : undefined}
+          onStopCasting={() => {
+            cast.stop();
+            setIsCastOverlayVisible(false);
+          }}
+          currentTime={cast.currentTime}
+          duration={cast.duration}
+          isPlaying={cast.playerState === 'PLAYING'}
+          onPlayPause={cast.playOrPause}
+          onSeek={cast.seek}
+        />
       )}
     </div>
   );

@@ -72,40 +72,94 @@ async function getAllUsers(
   oneDayAgo: number,
   oneWeekAgo: number
 ) {
-  const now = Date.now();
-  
   // First, check what columns exist in user_activity table
   let users: any[] = [];
   
   try {
-    // Simple query without JOINs first to avoid column issues
+    // Query to get unique users with aggregated watch time from watch_sessions
+    // This ensures we get accurate total watch time per user
     const usersQuery = isNeon
-      ? `SELECT DISTINCT ON (user_id)
-           id, user_id, session_id, first_seen, last_seen,
-           total_sessions, total_watch_time, country, city, region,
-           device_type, user_agent
-         FROM user_activity
-         WHERE first_seen > 0 AND last_seen > 0 AND last_seen <= $3
-         ORDER BY user_id, last_seen DESC
+      ? `SELECT 
+           ua.user_id, 
+           ua.session_id, 
+           ua.first_seen, 
+           ua.last_seen,
+           ua.total_sessions, 
+           COALESCE(ws.actual_watch_time, ua.total_watch_time, 0) as total_watch_time,
+           ua.country, 
+           ua.city, 
+           ua.region,
+           ua.device_type, 
+           ua.user_agent
+         FROM (
+           SELECT DISTINCT ON (user_id)
+             id, user_id, session_id, first_seen, last_seen,
+             total_sessions, total_watch_time, country, city, region,
+             device_type, user_agent
+           FROM user_activity
+           WHERE first_seen > 0 AND last_seen > 0
+           ORDER BY user_id, last_seen DESC
+         ) ua
+         LEFT JOIN (
+           SELECT user_id, SUM(total_watch_time) as actual_watch_time
+           FROM watch_sessions
+           GROUP BY user_id
+         ) ws ON ua.user_id = ws.user_id
+         ORDER BY ua.last_seen DESC
          LIMIT $1 OFFSET $2`
       : `SELECT 
-           id, user_id, session_id, first_seen, last_seen,
-           total_sessions, total_watch_time, country, city, region,
-           device_type, user_agent
-         FROM user_activity
-         WHERE first_seen > 0 AND last_seen > 0 AND last_seen <= ?
-         GROUP BY user_id
-         ORDER BY last_seen DESC
+           ua.user_id, 
+           ua.session_id, 
+           ua.first_seen, 
+           ua.last_seen,
+           ua.total_sessions, 
+           COALESCE(ws.actual_watch_time, ua.total_watch_time, 0) as total_watch_time,
+           ua.country, 
+           ua.city, 
+           ua.region,
+           ua.device_type, 
+           ua.user_agent
+         FROM (
+           SELECT 
+             id, user_id, session_id, first_seen, last_seen,
+             total_sessions, total_watch_time, country, city, region,
+             device_type, user_agent
+           FROM user_activity
+           WHERE first_seen > 0 AND last_seen > 0
+           GROUP BY user_id
+           HAVING last_seen = MAX(last_seen)
+         ) ua
+         LEFT JOIN (
+           SELECT user_id, SUM(total_watch_time) as actual_watch_time
+           FROM watch_sessions
+           GROUP BY user_id
+         ) ws ON ua.user_id = ws.user_id
+         ORDER BY ua.last_seen DESC
          LIMIT ? OFFSET ?`;
 
-    users = await adapter.query(usersQuery, isNeon ? [limit, offset, now] : [now, limit, offset]);
+    users = await adapter.query(usersQuery, isNeon ? [limit, offset] : [limit, offset]);
   } catch (e) {
-    console.error('Error fetching users from user_activity:', e);
-    // Fallback: try without the timestamp filter
+    console.error('Error fetching users with watch time join:', e);
+    // Fallback: simpler query without the join
     try {
       const fallbackQuery = isNeon
-        ? `SELECT DISTINCT ON (user_id) * FROM user_activity ORDER BY user_id, last_seen DESC LIMIT $1 OFFSET $2`
-        : `SELECT * FROM user_activity GROUP BY user_id ORDER BY last_seen DESC LIMIT ? OFFSET ?`;
+        ? `SELECT DISTINCT ON (user_id)
+             id, user_id, session_id, first_seen, last_seen,
+             total_sessions, total_watch_time, country, city, region,
+             device_type, user_agent
+           FROM user_activity
+           WHERE first_seen > 0 AND last_seen > 0
+           ORDER BY user_id, last_seen DESC
+           LIMIT $1 OFFSET $2`
+        : `SELECT 
+             id, user_id, session_id, first_seen, last_seen,
+             total_sessions, total_watch_time, country, city, region,
+             device_type, user_agent
+           FROM user_activity
+           WHERE first_seen > 0 AND last_seen > 0
+           GROUP BY user_id
+           ORDER BY last_seen DESC
+           LIMIT ? OFFSET ?`;
       users = await adapter.query(fallbackQuery, isNeon ? [limit, offset] : [limit, offset]);
     } catch (e2) {
       console.error('Fallback query also failed:', e2);
@@ -221,7 +275,7 @@ async function getUserProfile(adapter: any, isNeon: boolean, userId: string, now
       console.error('Error fetching live activity:', e);
     }
 
-    // 3. Get watch history (last 50 sessions) - with error handling
+    // 3. Get watch history (last 100 sessions) - with error handling
     let watchHistory: any[] = [];
     try {
       const watchQuery = isNeon
@@ -234,7 +288,7 @@ async function getUserProfile(adapter: any, isNeon: boolean, userId: string, now
            FROM watch_sessions 
            WHERE user_id = $1 
            ORDER BY started_at DESC 
-           LIMIT 50`
+           LIMIT 100`
         : `SELECT 
              content_id, content_type, content_title, 
              season_number, episode_number,
@@ -244,7 +298,7 @@ async function getUserProfile(adapter: any, isNeon: boolean, userId: string, now
            FROM watch_sessions 
            WHERE user_id = ? 
            ORDER BY started_at DESC 
-           LIMIT 50`;
+           LIMIT 100`;
       watchHistory = await adapter.query(watchQuery, [userId]) || [];
     } catch (e) {
       console.error('Error fetching watch history:', e);
