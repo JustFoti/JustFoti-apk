@@ -458,7 +458,15 @@ export async function GET(request: NextRequest) {
         throw new Error(moviesApiResult.error || 'MoviesAPI returned no sources');
       }
       
-      // Default behavior: Try MoviesAPI first, fallback to 2Embed
+      // If explicitly requesting 2embed, use it directly
+      if (provider === '2embed') {
+        console.log('[EXTRACT] Using 2Embed (explicit request)...');
+        const sources = await extractWith2Embed(tmdbId, type, season, episode, expectedRuntime);
+        console.log(`[EXTRACT] ✓ 2Embed succeeded with ${sources.length} source(s)`);
+        return { sources, provider: '2embed' };
+      }
+      
+      // Default behavior (no specific provider): Try MoviesAPI first, fallback to 2Embed
       console.log('[EXTRACT] Trying primary source: MoviesAPI...');
       try {
         const moviesApiResult = await extractMoviesApiStreams(tmdbId, type, season, episode);
