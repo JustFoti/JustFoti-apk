@@ -1416,28 +1416,28 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               )}
             </div>
 
-            {(availableSources.length > 1 || hlsLevels.length > 0) && (
-              <div className={styles.settingsContainer}>
-                <button onClick={(e) => {
-                  e.stopPropagation();
-                  setShowSettings(!showSettings);
-                  setShowSubtitles(false);
-                  setShowServerMenu(false);
-                }} className={styles.btn} title="Quality">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-                  </svg>
-                </button>
+            {/* Resolution/Quality button - only for HLS quality levels */}
+            <div className={styles.settingsContainer}>
+              <button onClick={(e) => {
+                e.stopPropagation();
+                setShowSettings(!showSettings);
+                setShowSubtitles(false);
+                setShowServerMenu(false);
+              }} className={styles.btn} title="Resolution">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                </svg>
+              </button>
 
-                {showSettings && (
-                  <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
-                    {/* HLS Quality Levels (if available) */}
-                    {hlsLevels.length > 0 && (
-                      <div className={styles.settingsSection}>
-                        <div className={styles.settingsLabel}>
-                          Resolution {currentResolution && <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({currentResolution})</span>}
-                        </div>
-                        <div className={styles.sourcesList}>
+              {showSettings && (
+                <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
+                  <div className={styles.settingsSection}>
+                    <div className={styles.settingsLabel}>
+                      Resolution {currentResolution && <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({currentResolution})</span>}
+                    </div>
+                    <div className={styles.sourcesList}>
+                      {hlsLevels.length > 0 ? (
+                        <>
                           <button
                             className={`${styles.settingsOption} ${currentHlsLevel === -1 ? styles.active : ''}`}
                             onClick={() => changeHlsLevel(-1)}
@@ -1453,31 +1453,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                               {level.height}p
                             </button>
                           ))}
+                        </>
+                      ) : (
+                        <div className={styles.settingsOption} style={{ opacity: 0.6, cursor: 'default' }}>
+                          {currentResolution || 'Auto'}
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* Source Selection */}
-                    <div className={styles.settingsSection}>
-                      <div className={styles.settingsLabel}>
-                        Source {hlsLevels.length === 0 && currentResolution && <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({currentResolution})</span>}
-                      </div>
-                      <div className={styles.sourcesList}>
-                        {availableSources.map((source, index) => (
-                          <button
-                            key={index}
-                            className={`${styles.settingsOption} ${currentSourceIndex === index ? styles.active : ''}`}
-                            onClick={() => changeSource(source, index)}
-                          >
-                            {source.title || source.quality}
-                          </button>
-                        ))}
-                      </div>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             {/* Cast to TV button */}
             {cast.isAvailable && (
