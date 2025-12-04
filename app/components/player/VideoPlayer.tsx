@@ -286,16 +286,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       if (sources.length > 0) {
         console.log(`[VideoPlayer] Found ${sources.length} sources for ${providerName}`);
 
+        // ALWAYS cache the sources for this provider first
+        setSourcesCache(prev => ({
+          ...prev,
+          [providerName]: sources
+        }));
+
         // Check for 2embed fallback condition: all sources are generic "Source"
         if (providerName === '2embed' && sources.every((s: any) => s.quality === 'Source')) {
           console.log('[VideoPlayer] All 2embed sources are generic "Source". Attempting fallback to moviesapi.');
 
-          // Switch to moviesapi
+          // Switch to moviesapi for playback, but keep 2embed sources in cache
           setProvider('moviesapi');
           setMenuProvider('moviesapi');
 
           // Recursively fetch moviesapi sources
-          // We need to manually handle the result here because the state update for 'provider' won't be reflected yet
           try {
             const moviesApiSources = await fetchSources('moviesapi', true);
             if (moviesApiSources && moviesApiSources.length > 0) {
@@ -304,13 +309,9 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             }
           } catch (e) {
             console.warn('[VideoPlayer] Fallback to moviesapi failed, sticking with 2embed sources');
+            // Fall through to use 2embed sources
           }
         }
-
-        setSourcesCache(prev => ({
-          ...prev,
-          [providerName]: sources
-        }));
 
         // If this is the active provider, update available sources
         if (providerName === provider) {
