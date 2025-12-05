@@ -101,6 +101,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     moviesapi: true,
     '2embed': true,
   });
+  const [highlightServerButton, setHighlightServerButton] = useState(false);
 
   // HLS quality levels
   const [hlsLevels, setHlsLevels] = useState<{ height: number; bitrate: number; index: number }[]>([]);
@@ -380,6 +381,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     setLoadingProviders({});
     setIsLoading(true);
     setError(null);
+    setHighlightServerButton(false);
     setStreamUrl(null);
 
     // Direct fetch for initial sources (avoid closure issues with fetchSources)
@@ -432,6 +434,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         console.error('[VideoPlayer] Initial fetch error:', err);
         setError(err instanceof Error ? err.message : 'Failed to load video');
         setIsLoading(false);
+        setHighlightServerButton(true);
       });
   }, [tmdbId, mediaType, season, episode]);
 
@@ -547,9 +550,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                       setError(null);
                     } else {
                       setError('Failed to get fresh stream URLs');
+                      setHighlightServerButton(true);
                     }
                   } catch (retryError) {
                     setError('All sources unavailable, please try again later');
+                    setHighlightServerButton(true);
                   }
                 } else {
                   hls.startLoad();
@@ -560,6 +565,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 break;
               default:
                 setError('Fatal error loading video');
+                setHighlightServerButton(true);
                 break;
             }
           }
@@ -1168,6 +1174,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 Retry
               </button>
             </div>
+            <div className={styles.serverHint}>
+              <p>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17.5 19c0-3.037-2.463-5.5-5.5-5.5S6.5 15.963 6.5 19" />
+                  <path d="M17.5 19c2.485 0 4.5-2.015 4.5-4.5S19.985 10 17.5 10c-.163 0-.322.01-.48.028C16.54 6.608 13.567 4 10 4 5.582 4 2 7.582 2 12c0 3.657 2.475 6.72 5.91 7.68" />
+                </svg>
+                Try a different server using the cloud button in the top right
+              </p>
+            </div>
           </div>
         </div>
       )}
@@ -1576,12 +1591,13 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               setShowServerMenu(!showServerMenu);
               setShowSettings(false);
               setShowSubtitles(false);
+              setHighlightServerButton(false); // Clear highlight when clicked
               // Initialize menu provider to current provider when opening
               if (!showServerMenu) {
                 setMenuProvider(provider);
               }
             }}
-            className={styles.btn}
+            className={`${styles.btn} ${highlightServerButton ? styles.serverButtonHighlight : ''}`}
             style={{
               background: 'rgba(0,0,0,0.5)',
               backdropFilter: 'blur(4px)',

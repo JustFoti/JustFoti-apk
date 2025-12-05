@@ -129,6 +129,70 @@
   transform: translateY(0);
 }
 
+/* Server hint in error */
+.serverHint {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.serverHint p {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.serverHint svg {
+  color: #a855f7;
+}
+
+/* Rainbow glow animation for server button */
+@keyframes rainbowGlow {
+  0% {
+    box-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 30px #ff0000;
+  }
+  14% {
+    box-shadow: 0 0 10px #ff7f00, 0 0 20px #ff7f00, 0 0 30px #ff7f00;
+  }
+  28% {
+    box-shadow: 0 0 10px #ffff00, 0 0 20px #ffff00, 0 0 30px #ffff00;
+  }
+  42% {
+    box-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00, 0 0 30px #00ff00;
+  }
+  57% {
+    box-shadow: 0 0 10px #0000ff, 0 0 20px #0000ff, 0 0 30px #0000ff;
+  }
+  71% {
+    box-shadow: 0 0 10px #4b0082, 0 0 20px #4b0082, 0 0 30px #4b0082;
+  }
+  85% {
+    box-shadow: 0 0 10px #9400d3, 0 0 20px #9400d3, 0 0 30px #9400d3;
+  }
+  100% {
+    box-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 30px #ff0000;
+  }
+}
+
+@keyframes pulsate {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.serverButtonHighlight {
+  animation: rainbowGlow 2s linear infinite, pulsate 1s ease-in-out infinite;
+}
+
 /* Controls */
 .controls {
   position: absolute;
