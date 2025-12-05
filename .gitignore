@@ -30,3 +30,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 /data
+
+/cloudflare-proxy/node_modules
+/cloudflare-proxy/.wrangler

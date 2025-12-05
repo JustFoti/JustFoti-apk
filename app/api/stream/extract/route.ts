@@ -13,8 +13,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extract2EmbedStreams } from '@/app/lib/services/2embed-extractor';
 import { extractMoviesApiStreams } from '@/app/lib/services/moviesapi-extractor';
-import { extractVidSrcStreams } from '@/app/lib/services/vidsrc-extractor';
+import { extractVidSrcStreams, VIDSRC_ENABLED } from '@/app/lib/services/vidsrc-extractor';
 import { performanceMonitor } from '@/app/lib/utils/performance-monitor';
+import { getStreamProxyUrl } from '@/app/lib/proxy-config';
 
 // Node.js runtime (default) - required for fetch
 
@@ -415,7 +416,7 @@ export async function GET(request: NextRequest) {
       const sources = cached.sources.map((source: any) => ({
         quality: source.quality,
         title: source.title || source.quality,
-        url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=${provider}&referer=${encodeURIComponent(source.referer)}`,
+        url: getStreamProxyUrl(source.url, provider, source.referer),
         directUrl: source.url,
         referer: source.referer,
         type: source.type,
@@ -447,7 +448,7 @@ export async function GET(request: NextRequest) {
       const proxiedSources = sources.map((source: any) => ({
         quality: source.quality,
         title: source.title || source.quality,
-        url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=${provider}&referer=${encodeURIComponent(source.referer)}`,
+        url: getStreamProxyUrl(source.url, provider, source.referer),
         directUrl: source.url,
         referer: source.referer,
         type: source.type,
@@ -509,8 +510,25 @@ export async function GET(request: NextRequest) {
         return { sources, provider: '2embed' };
       }
       
-      // If explicitly requesting vidsrc, use it directly
+      // If explicitly requesting vidsrc, use it directly (if enabled)
       if (provider === 'vidsrc') {
+        // Check if VidSrc is disabled - fall back to MoviesAPI silently
+        if (!VIDSRC_ENABLED) {
+          console.log('[EXTRACT] VidSrc is DISABLED, falling back to MoviesAPI...');
+          const moviesApiResult = await extractMoviesApiStreams(tmdbId, type, season, episode);
+          const workingSources = moviesApiResult.sources.filter(s => s.status === 'working');
+          
+          if (workingSources.length > 0) {
+            console.log(`[EXTRACT] ✓ MoviesAPI (fallback): ${workingSources.length} working`);
+            return { sources: moviesApiResult.sources, provider: 'moviesapi' };
+          }
+          
+          // Try 2embed as last resort
+          console.log('[EXTRACT] MoviesAPI failed, trying 2Embed...');
+          const sources = await extractWith2Embed(tmdbId, type, season, episode, expectedRuntime);
+          return { sources, provider: '2embed' };
+        }
+        
         console.log('[EXTRACT] Using VidSrc (explicit request)...');
         const vidsrcResult = await extractVidSrcStreams(tmdbId, type, season, episode);
         
@@ -531,40 +549,46 @@ export async function GET(request: NextRequest) {
         throw new Error(vidsrcResult.error || 'VidSrc returned no sources');
       }
       
-      // Default behavior (no specific provider): Try VidSrc first, then MoviesAPI, then 2Embed
-      console.log('[EXTRACT] Trying primary source: VidSrc...');
-      try {
-        const vidsrcResult = await extractVidSrcStreams(tmdbId, type, season, episode);
-        const workingVidsrc = vidsrcResult.sources.filter(s => s.status === 'working');
-        
-        if (workingVidsrc.length > 0) {
-          console.log(`[EXTRACT] ✓ VidSrc succeeded with ${workingVidsrc.length} working source(s)`);
-          return { sources: vidsrcResult.sources, provider: 'vidsrc' };
-        }
-        throw new Error(vidsrcResult.error || 'VidSrc returned no working sources');
-      } catch (vidsrcError) {
-        console.warn('[EXTRACT] VidSrc failed:', vidsrcError instanceof Error ? vidsrcError.message : vidsrcError);
-        
-        // Fallback to MoviesAPI
-        console.log('[EXTRACT] Trying fallback source: MoviesAPI...');
+      // Default behavior (no specific provider): Try VidSrc first (if enabled), then MoviesAPI, then 2Embed
+      
+      // Only try VidSrc if it's enabled
+      if (VIDSRC_ENABLED) {
+        console.log('[EXTRACT] Trying primary source: VidSrc...');
         try {
-          const moviesApiResult = await extractMoviesApiStreams(tmdbId, type, season, episode);
-          const workingSources = moviesApiResult.sources.filter(s => s.status === 'working');
+          const vidsrcResult = await extractVidSrcStreams(tmdbId, type, season, episode);
+          const workingVidsrc = vidsrcResult.sources.filter(s => s.status === 'working');
           
-          if (workingSources.length > 0) {
-            console.log(`[EXTRACT] ✓ MoviesAPI succeeded with ${workingSources.length} working source(s)`);
-            return { sources: moviesApiResult.sources, provider: 'moviesapi' };
+          if (workingVidsrc.length > 0) {
+            console.log(`[EXTRACT] ✓ VidSrc succeeded with ${workingVidsrc.length} working source(s)`);
+            return { sources: vidsrcResult.sources, provider: 'vidsrc' };
           }
-          throw new Error(moviesApiResult.error || 'MoviesAPI returned no working sources');
-        } catch (moviesApiError) {
-          console.warn('[EXTRACT] MoviesAPI failed:', moviesApiError instanceof Error ? moviesApiError.message : moviesApiError);
-          
-          // Final fallback to 2Embed
-          console.log('[EXTRACT] Trying final fallback: 2Embed...');
-          const sources = await extractWith2Embed(tmdbId, type, season, episode, expectedRuntime);
-          console.log(`[EXTRACT] ✓ 2Embed succeeded with ${sources.length} source(s)`);
-          return { sources, provider: '2embed' };
+          throw new Error(vidsrcResult.error || 'VidSrc returned no working sources');
+        } catch (vidsrcError) {
+          console.warn('[EXTRACT] VidSrc failed:', vidsrcError instanceof Error ? vidsrcError.message : vidsrcError);
         }
+      } else {
+        console.log('[EXTRACT] VidSrc is DISABLED, skipping...');
+      }
+      
+      // Fallback to MoviesAPI
+      console.log('[EXTRACT] Trying source: MoviesAPI...');
+      try {
+        const moviesApiResult = await extractMoviesApiStreams(tmdbId, type, season, episode);
+        const workingSources = moviesApiResult.sources.filter(s => s.status === 'working');
+        
+        if (workingSources.length > 0) {
+          console.log(`[EXTRACT] ✓ MoviesAPI succeeded with ${workingSources.length} working source(s)`);
+          return { sources: moviesApiResult.sources, provider: 'moviesapi' };
+        }
+        throw new Error(moviesApiResult.error || 'MoviesAPI returned no working sources');
+      } catch (moviesApiError) {
+        console.warn('[EXTRACT] MoviesAPI failed:', moviesApiError instanceof Error ? moviesApiError.message : moviesApiError);
+        
+        // Final fallback to 2Embed
+        console.log('[EXTRACT] Trying final fallback: 2Embed...');
+        const sources = await extractWith2Embed(tmdbId, type, season, episode, expectedRuntime);
+        console.log(`[EXTRACT] ✓ 2Embed succeeded with ${sources.length} source(s)`);
+        return { sources, provider: '2embed' };
       }
     })();
 
@@ -602,7 +626,7 @@ export async function GET(request: NextRequest) {
       const proxiedSources = sources.map((source: any) => ({
         quality: source.quality,
         title: source.title || source.quality,
-        url: `/api/stream-proxy?url=${encodeURIComponent(source.url)}&source=${usedProvider}&referer=${encodeURIComponent(source.referer)}`,
+        url: getStreamProxyUrl(source.url, usedProvider, source.referer),
         directUrl: source.url,
         referer: source.referer,
         type: source.type,

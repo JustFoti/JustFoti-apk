@@ -60,14 +60,10 @@ class SQLiteAdapter implements DatabaseAdapter {
   private db: any;
 
   constructor(dbPath: string) {
-    // Dynamic import based on runtime
-    let Database: any;
-    if (typeof Bun !== 'undefined') {
-      const { Database: BunDatabase } = require('bun:sqlite');
-      Database = BunDatabase;
-    } else {
-      Database = require('better-sqlite3');
-    }
+    // Use better-sqlite3 for Node.js compatibility
+    // Note: bun:sqlite doesn't work with Webpack/Next.js, so we always use better-sqlite3
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Database = require('better-sqlite3');
 
     this.db = new Database(dbPath);
 

@@ -3,6 +3,9 @@
  * 
  * Proxies video segments from DLHD CDN through RPI proxy.
  * This is needed because the CDN blocks direct browser requests.
+ * 
+ * NOTE: For reduced bandwidth costs, consider using the Cloudflare Worker proxy instead.
+ * Set NEXT_PUBLIC_CF_TV_PROXY_URL to enable Cloudflare Workers.
  */
 
 import { NextRequest, NextResponse } from 'next/server';

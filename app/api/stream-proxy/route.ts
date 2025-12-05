@@ -6,9 +6,13 @@
  * on ALL requests (master.txt, playlists, and segments).
  * 
  * GET /api/stream-proxy?url=<encoded_url>&source=2embed&referer=<encoded_referer>
+ * 
+ * NOTE: For reduced bandwidth costs, consider using the Cloudflare Worker proxy instead.
+ * Set NEXT_PUBLIC_CF_STREAM_PROXY_URL to enable Cloudflare Workers.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getStreamProxyUrl } from '@/app/lib/proxy-config';
 
 export const runtime = 'nodejs';
 
@@ -199,7 +203,7 @@ function rewritePlaylistUrls(
       absoluteUrl = `${base.origin}${basePath}${url}`;
     }
     
-    return `/api/stream-proxy?url=${encodeURIComponent(absoluteUrl)}&source=${source}&referer=${encodeURIComponent(referer)}`;
+    return getStreamProxyUrl(absoluteUrl, source, referer);
   };
   
   for (const line of lines) {

@@ -1,0 +1,9 @@
+# Copy this to .dev.vars for local development
+# These are used by wrangler dev
+
+# Optional: RPI proxy for TV streams (if CDN blocks direct requests)
+RPI_PROXY_URL=https://your-rpi-proxy.com
+RPI_PROXY_KEY=your-api-key
+
+# Optional: API key to protect the proxy
+API_KEY=your-secret-key

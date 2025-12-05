@@ -10,6 +10,7 @@ import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage, getSu
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { CastOverlay } from './CastButton';
+import { getStreamProxyUrl } from '@/app/lib/proxy-config';
 import styles from './VideoPlayer.module.css';
 
 interface VideoPlayerProps {
@@ -89,12 +90,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
 
   const [showNextEpisodeButton, setShowNextEpisodeButton] = useState(false);
-  const [provider, setProvider] = useState('vidsrc');
-  const [menuProvider, setMenuProvider] = useState('vidsrc');
+  const [provider, setProvider] = useState('moviesapi'); // Default to moviesapi (always available)
+  const [menuProvider, setMenuProvider] = useState('moviesapi');
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [sourcesCache, setSourcesCache] = useState<Record<string, any[]>>({});
   const [loadingProviders, setLoadingProviders] = useState<Record<string, boolean>>({});
   const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
+  const [providerAvailability, setProviderAvailability] = useState<Record<string, boolean>>({
+    vidsrc: false, // Disabled by default until we check
+    moviesapi: true,
+    '2embed': true,
+  });
 
   // HLS quality levels
   const [hlsLevels, setHlsLevels] = useState<{ height: number; bitrate: number; index: number }[]>([]);
@@ -294,21 +300,23 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
         // Check for 2embed fallback condition: all sources are generic "Source"
         if (providerName === '2embed' && sources.every((s: any) => s.quality === 'Source')) {
-          console.log('[VideoPlayer] All 2embed sources are generic "Source". Attempting fallback to vidsrc.');
+          // Fallback to vidsrc if enabled, otherwise moviesapi
+          const fallbackProvider = providerAvailability.vidsrc ? 'vidsrc' : 'moviesapi';
+          console.log(`[VideoPlayer] All 2embed sources are generic "Source". Attempting fallback to ${fallbackProvider}.`);
 
-          // Switch to vidsrc for playback, but keep 2embed sources in cache
-          setProvider('vidsrc');
-          setMenuProvider('vidsrc');
+          // Switch to fallback provider for playback, but keep 2embed sources in cache
+          setProvider(fallbackProvider);
+          setMenuProvider(fallbackProvider);
 
-          // Recursively fetch vidsrc sources
+          // Recursively fetch fallback sources
           try {
-            const vidsrcSources = await fetchSources('vidsrc', true);
-            if (vidsrcSources && vidsrcSources.length > 0) {
-              setAvailableSources(vidsrcSources);
-              return vidsrcSources;
+            const fallbackSources = await fetchSources(fallbackProvider, true);
+            if (fallbackSources && fallbackSources.length > 0) {
+              setAvailableSources(fallbackSources);
+              return fallbackSources;
             }
           } catch (e) {
-            console.warn('[VideoPlayer] Fallback to vidsrc failed, sticking with 2embed sources');
+            console.warn(`[VideoPlayer] Fallback to ${fallbackProvider} failed, sticking with 2embed sources`);
             // Fall through to use 2embed sources
           }
         }
@@ -337,6 +345,22 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
   };
 
+  // Fetch provider availability on mount
+  useEffect(() => {
+    fetch('/api/providers')
+      .then(res => res.json())
+      .then(data => {
+        if (data.providers) {
+          setProviderAvailability({
+            vidsrc: data.providers.vidsrc?.enabled ?? false,
+            moviesapi: data.providers.moviesapi?.enabled ?? true,
+            '2embed': data.providers['2embed']?.enabled ?? true,
+          });
+        }
+      })
+      .catch(err => console.warn('[VideoPlayer] Failed to fetch provider availability:', err));
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     // Reset subtitle auto-load flag for new video
@@ -345,35 +369,70 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
     // Clear cache when content changes
     setSourcesCache({});
-    setMenuProvider('vidsrc');
-    setProvider('vidsrc');
+    
+    // Reset lastFetchedKey to allow fresh fetch
+    lastFetchedKey.current = '';
+    
+    // Use moviesapi as default (always available)
+    const defaultProvider = 'moviesapi';
+    setMenuProvider(defaultProvider);
+    setProvider(defaultProvider);
     setLoadingProviders({});
+    setIsLoading(true);
+    setError(null);
+    setStreamUrl(null);
 
-    // Fetch initial sources (VidSrc is primary)
-    fetchSources('vidsrc').then(sources => {
-      if (sources && sources.length > 0) {
+    // Direct fetch for initial sources (avoid closure issues with fetchSources)
+    const params = new URLSearchParams({
+      tmdbId,
+      type: mediaType,
+      provider: defaultProvider,
+    });
+
+    if (mediaType === 'tv' && season && episode) {
+      params.append('season', season.toString());
+      params.append('episode', episode.toString());
+    }
+
+    console.log(`[VideoPlayer] Initial fetch for ${defaultProvider}:`, `/api/stream/extract?${params}`);
+
+    fetch(`/api/stream/extract?${params}`, { priority: 'high' as RequestPriority })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.sources || data.sources.length === 0) {
+          throw new Error(data.error || 'No sources available');
+        }
+
+        const sources = data.sources;
+        console.log(`[VideoPlayer] Initial fetch got ${sources.length} sources`);
+
+        // Cache and set sources
+        setSourcesCache(prev => ({ ...prev, [defaultProvider]: sources }));
         setAvailableSources(sources);
         setCurrentSourceIndex(0);
+        lastFetchedKey.current = `${tmdbId}-${mediaType}-${season}-${episode}-${defaultProvider}`;
 
-        // Setup initial stream
+        // Setup initial stream URL
         const initialSource = sources[0];
         let finalUrl = initialSource.url;
 
         if (initialSource.requiresSegmentProxy) {
-          const isAlreadyProxied = finalUrl.includes('/api/stream-proxy');
+          const isAlreadyProxied = finalUrl.includes('/api/stream-proxy') || finalUrl.includes('/stream/?url=');
           if (!isAlreadyProxied) {
             const targetUrl = initialSource.directUrl || initialSource.url;
-            const proxyParams = new URLSearchParams({
-              url: targetUrl,
-              source: 'vidsrc',
-              referer: initialSource.referer || ''
-            });
-            finalUrl = `/api/stream-proxy?${proxyParams.toString()}`;
+            finalUrl = getStreamProxyUrl(targetUrl, defaultProvider, initialSource.referer || '');
           }
         }
+        
+        console.log('[VideoPlayer] Setting stream URL:', finalUrl);
         setStreamUrl(finalUrl);
-      }
-    });
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error('[VideoPlayer] Initial fetch error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load video');
+        setIsLoading(false);
+      });
   }, [tmdbId, mediaType, season, episode]);
 
   // Initialize HLS
@@ -999,15 +1058,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     setCurrentSourceIndex(index);
     let finalUrl = source.url;
     if (source.requiresSegmentProxy) {
-      const isAlreadyProxied = finalUrl.includes('/api/stream-proxy');
+      const isAlreadyProxied = finalUrl.includes('/api/stream-proxy') || finalUrl.includes('/stream/?url=');
       if (!isAlreadyProxied) {
         const targetUrl = source.directUrl || source.url;
-        const proxyParams = new URLSearchParams({
-          url: targetUrl,
-          source: provider, // Use current provider for proxy source
-          referer: source.referer || ''
-        });
-        finalUrl = `/api/stream-proxy?${proxyParams.toString()}`;
+        finalUrl = getStreamProxyUrl(targetUrl, provider, source.referer || '');
       }
     }
     setStreamUrl(finalUrl);
@@ -1548,15 +1602,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 <div className={styles.settingsLabel}>Server Selection</div>
 
                 <div className={styles.tabsContainer}>
-                  <button
-                    className={`${styles.tab} ${menuProvider === 'vidsrc' ? styles.active : ''}`}
-                    onClick={() => {
-                      setMenuProvider('vidsrc');
-                      fetchSources('vidsrc');
-                    }}
-                  >
-                    VidSrc
-                  </button>
+                  {providerAvailability.vidsrc && (
+                    <button
+                      className={`${styles.tab} ${menuProvider === 'vidsrc' ? styles.active : ''}`}
+                      onClick={() => {
+                        setMenuProvider('vidsrc');
+                        fetchSources('vidsrc');
+                      }}
+                    >
+                      VidSrc
+                    </button>
+                  )}
                   <button
                     className={`${styles.tab} ${menuProvider === 'moviesapi' ? styles.active : ''}`}
                     onClick={() => {

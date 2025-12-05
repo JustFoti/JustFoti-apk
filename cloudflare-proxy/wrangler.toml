@@ -1,0 +1,23 @@
+# Cloudflare Worker configuration
+name = "media-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Free tier: 100,000 requests/day
+# Workers Paid: $5/month for 10M requests, unlimited bandwidth (much cheaper than Vercel!)
+
+# Environment variables - set via wrangler secret or Cloudflare dashboard
+# wrangler secret put RPI_PROXY_URL
+# wrangler secret put RPI_PROXY_KEY
+[vars]
+# API_KEY = "your-secret-key"  # Optional: for protecting the proxy
+
+# Production environment
+[env.production]
+name = "media-proxy"
+# Uncomment and configure if you have a custom domain:
+# routes = [{ pattern = "proxy.yourdomain.com/*", zone_name = "yourdomain.com" }]
+
+# Development environment  
+[env.development]
+name = "media-proxy-dev"

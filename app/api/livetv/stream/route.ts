@@ -3,9 +3,13 @@
  * 
  * Redirects to the existing DLHD proxy which handles all the stream proxying.
  * This is a thin wrapper that maps stream IDs to the dlhd-proxy API.
+ * 
+ * NOTE: For reduced bandwidth costs, consider using the Cloudflare Worker proxy instead.
+ * Set NEXT_PUBLIC_CF_TV_PROXY_URL to enable Cloudflare Workers.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTvPlaylistUrl, getTvProxyBaseUrl } from '@/app/lib/proxy-config';
 
 export const runtime = 'nodejs';
 
@@ -21,7 +25,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Redirect to the existing working DLHD proxy
+    // Check if using Cloudflare Worker proxy
+    const cfProxyBase = getTvProxyBaseUrl();
+    
+    // If using Cloudflare Worker, redirect to it
+    if (cfProxyBase) {
+      const cfUrl = getTvPlaylistUrl(streamId);
+      return NextResponse.redirect(cfUrl);
+    }
+    
+    // Otherwise use the local DLHD proxy
     const proxyUrl = `${request.nextUrl.origin}/api/dlhd-proxy?channel=${streamId}`;
     
     // Fetch from the existing proxy

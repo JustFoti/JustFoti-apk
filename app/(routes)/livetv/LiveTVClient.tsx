@@ -5,6 +5,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { useCast, CastMedia } from '@/hooks/useCast';
+import { getTvPlaylistUrl } from '@/app/lib/proxy-config';
 import styles from './LiveTV.module.css';
 
 /**
@@ -568,9 +569,11 @@ function LiveTVPlayer({
 
   // Build cast media object for live TV
   const getCastMedia = useCallback((): CastMedia => {
-    const streamUrl = `/api/dlhd-proxy?channel=${channel.streamId}`;
+    const streamUrl = getTvPlaylistUrl(channel.streamId);
+    // If it's a relative URL, make it absolute
+    const absoluteUrl = streamUrl.startsWith('http') ? streamUrl : `${window.location.origin}${streamUrl}`;
     return {
-      url: `${window.location.origin}${streamUrl}`,
+      url: absoluteUrl,
       title: channel.name,
       subtitle: `${channel.categoryInfo.icon} ${channel.categoryInfo.name}`,
       contentType: 'application/x-mpegURL',
@@ -647,7 +650,11 @@ function LiveTVPlayer({
 
     try {
       // Use proxied M3U8 URL - key is embedded, segments fetch directly from CDN
-      const streamUrl = `/api/dlhd-proxy?channel=${channel.streamId}${invalidateCache ? '&invalidate=true' : ''}`;
+      // Uses Cloudflare Worker if configured, otherwise falls back to Vercel Edge
+      let streamUrl = getTvPlaylistUrl(channel.streamId);
+      if (invalidateCache) {
+        streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'invalidate=true';
+      }
 
       const Hls = (await import('hls.js')).default;
 

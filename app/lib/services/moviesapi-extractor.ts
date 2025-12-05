@@ -133,26 +133,13 @@ function transformUrl(url: string, sourceName: string): string {
 
 /**
  * Check if stream URL is accessible
+ * DISABLED: Pre-flight checks are unreliable (CDNs block HEAD/partial requests)
+ * Let the player try the stream directly - it handles errors gracefully
  */
-async function checkStreamAccessibility(url: string): Promise<boolean> {
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const response = await fetch(url, {
-            method: 'HEAD',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://w1.moviesapi.to/'
-            },
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        return response.ok;
-    } catch {
-        return false;
-    }
+async function checkStreamAccessibility(_url: string): Promise<boolean> {
+    // Always return true - let the player determine if the stream works
+    // This avoids false negatives from CDN blocking pre-flight requests
+    return true;
 }
 
 /**

@@ -13,9 +13,13 @@
  *   - The key URL contains a 'number' parameter that changes as the stream progresses
  *   - We DON'T embed keys - HLS.js fetches them through the key proxy
  *   - This allows HLS.js to get fresh keys when they rotate
+ * 
+ * NOTE: For reduced bandwidth costs, consider using the Cloudflare Worker proxy instead.
+ * Set NEXT_PUBLIC_CF_TV_PROXY_URL to enable Cloudflare Workers.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getTvKeyProxyUrl, getTvSegmentProxyUrl } from '@/app/lib/proxy-config';
 
 export const runtime = 'nodejs';
 // CRITICAL: Live streams need fresh data - disable ISR caching
@@ -175,7 +179,7 @@ function parseM3U8(content: string): { keyUrl: string | null; iv: string | null 
   return { keyUrl: keyMatch?.[1] || null, iv: ivMatch?.[1] || null };
 }
 
-function generateProxiedM3U8(originalM3U8: string, keyProxyUrl: string, baseUrl: string, proxySegments: boolean): string {
+function generateProxiedM3U8(originalM3U8: string, keyProxyUrl: string, proxySegments: boolean): string {
   let modified = originalM3U8;
   
   // IMPORTANT: For live streams, DON'T embed the key as a data URI!
@@ -204,7 +208,7 @@ function generateProxiedM3U8(originalM3U8: string, keyProxyUrl: string, baseUrl:
     modified = modified.replace(
       /^(https?:\/\/(?:[^\s]+\.(ts|css)|whalesignal\.ai\/[^\s]+))$/gm,
       (segmentUrl) => {
-        return `${baseUrl}/segment?url=${encodeURIComponent(segmentUrl)}`;
+        return getTvSegmentProxyUrl(segmentUrl);
       }
     );
   }
@@ -216,7 +220,6 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const channel = searchParams.get('channel');
-    const baseProxyUrl = `${request.nextUrl.origin}/api/dlhd-proxy`;
 
     if (!channel) {
       return NextResponse.json({
@@ -246,18 +249,17 @@ export async function GET(request: NextRequest) {
     const { keyUrl, iv } = parseM3U8(m3u8Content);
 
     // Generate M3U8 with proxied key URL and proxied segments
-    // Segments go through /api/livetv/segment to avoid CDN blocks
-    // Key goes through /api/dlhd-proxy/key so HLS.js can fetch fresh keys when they rotate
+    // Segments go through /api/livetv/segment (or Cloudflare Worker) to avoid CDN blocks
+    // Key goes through /api/dlhd-proxy/key (or Cloudflare Worker) so HLS.js can fetch fresh keys when they rotate
     // NOTE: We don't fetch/embed the key here - HLS.js will fetch it through the proxy
-    const segmentProxyBase = `${request.nextUrl.origin}/api/livetv`;
     let proxiedM3U8: string;
     if (keyUrl) {
       // ALWAYS proxy the key URL for live streams - don't embed!
       // The key URL's 'number' parameter changes, and HLS.js needs to fetch fresh keys
-      const proxiedKeyUrl = `${baseProxyUrl}/key?url=${encodeURIComponent(keyUrl)}`;
-      proxiedM3U8 = generateProxiedM3U8(m3u8Content, proxiedKeyUrl, segmentProxyBase, true);
+      const proxiedKeyUrl = getTvKeyProxyUrl(keyUrl);
+      proxiedM3U8 = generateProxiedM3U8(m3u8Content, proxiedKeyUrl, true);
     } else {
-      proxiedM3U8 = generateProxiedM3U8(m3u8Content, '', segmentProxyBase, true);
+      proxiedM3U8 = generateProxiedM3U8(m3u8Content, '', true);
     }
 
     return new NextResponse(proxiedM3U8, {
