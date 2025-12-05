@@ -48,6 +48,8 @@
     "node_modules",
     "server/**/*",
     "scripts/**/*",
+    "cloudflare-proxy/**/*",
+    "rpi-proxy/**/*",
     "**/__tests__/**/*",
     "**/*.test.ts",
     "**/*.test.tsx"
