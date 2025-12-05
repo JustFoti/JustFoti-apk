@@ -115,15 +115,17 @@ async function executeDecoder(
       }
     };
     
-    // Wrap the decoder script to inject our mocks
-    const wrappedScript = `
-      (function(window, document, atob, btoa) {
-        ${decoderScript}
-      })
-    `;
+    // Create the decoder function with injected globals
+    // The decoder script expects window, document, atob, btoa to be available
+    const decoderFn = new Function(
+      'window',
+      'document', 
+      'atob',
+      'btoa',
+      decoderScript
+    );
     
-    // Create and execute the function
-    const decoderFn = new Function('return ' + wrappedScript)();
+    // Execute the decoder
     decoderFn(mockWindow, mockDocument, customAtob, customBtoa);
     
     // Check for captured result - the decoder sets window[divId] = decodedUrl
