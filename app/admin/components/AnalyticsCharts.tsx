@@ -18,7 +18,7 @@ import {
   Line,
   ComposedChart
 } from 'recharts';
-import GeographicHeatmap from './GeographicHeatmap';
+import WorldMap from './WorldMap';
 
 interface DailyMetric {
   date: string;
@@ -330,7 +330,7 @@ export default function AnalyticsCharts() {
           overflow: 'hidden'
         }}>
           <h3 style={{ color: '#f8fafc', marginBottom: '16px', fontSize: '16px', fontWeight: '600' }}>🌍 Geographic Distribution</h3>
-          <GeographicHeatmap data={geographic} />
+          <WorldMap data={geographic} />
         </div>
 
         {/* Top Content */}
