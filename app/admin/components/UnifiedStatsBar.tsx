@@ -61,14 +61,14 @@ export default function UnifiedStatsBar() {
           color="#3b82f6"
         />
         
-        {/* Watch Time */}
+        {/* Watch Time - show in hours as float */}
         <StatItem
           icon="⏱️"
           label="Watch Time (24h)"
-          value={`${stats.totalWatchTime}m`}
+          value={`${(stats.totalWatchTime / 60).toFixed(1)}h`}
           loading={loading}
           color="#ec4899"
-          subtitle={stats.allTimeWatchTime > 0 ? `All time: ${Math.round(stats.allTimeWatchTime / 60)}h` : undefined}
+          subtitle={stats.allTimeWatchTime > 0 ? `All time: ${(stats.allTimeWatchTime / 60).toFixed(1)}h` : undefined}
         />
       </div>
 
