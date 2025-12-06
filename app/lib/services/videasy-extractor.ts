@@ -228,6 +228,45 @@ async function decryptVideasyResponse(encryptedText: string, tmdbId: string): Pr
 }
 
 /**
+ * Get the first episode number of a season from TMDB
+ * This is needed because some shows (like One Piece) have absolute episode numbers
+ * e.g., Season 2 starts at episode 62, not episode 1
+ */
+async function getSeasonFirstEpisode(tmdbId: string, seasonNumber: number): Promise<number> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+    if (!apiKey) return 1;
+
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${apiKey}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      next: { revalidate: 86400 },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return 1;
+
+    const data = await response.json();
+    
+    // Get the first episode's episode_number
+    if (data.episodes && data.episodes.length > 0) {
+      const firstEpNum = data.episodes[0].episode_number;
+      console.log(`[Videasy] Season ${seasonNumber} first episode number: ${firstEpNum}`);
+      return firstEpNum;
+    }
+    
+    return 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Get title and year from TMDB
  */
 async function getTmdbInfo(tmdbId: string, type: 'movie' | 'tv'): Promise<{ title: string; year: string } | null> {
@@ -416,6 +455,19 @@ export async function extractVideasyStreams(
 
   console.log(`[Videasy] Title: "${tmdbInfo.title}", Year: ${tmdbInfo.year}`);
 
+  // For TV shows, calculate the relative episode number within the season
+  // TMDB returns absolute episode numbers for some shows (e.g., One Piece S2E62)
+  // but Videasy expects relative episode numbers (e.g., S2E1)
+  let relativeEpisode = episode;
+  if (type === 'tv' && season !== undefined && episode !== undefined) {
+    const firstEpisodeOfSeason = await getSeasonFirstEpisode(tmdbId, season);
+    if (firstEpisodeOfSeason > 1) {
+      // This season uses absolute episode numbers, convert to relative
+      relativeEpisode = episode - firstEpisodeOfSeason + 1;
+      console.log(`[Videasy] Converting absolute episode ${episode} to relative episode ${relativeEpisode} (season starts at ${firstEpisodeOfSeason})`);
+    }
+  }
+
   // Filter sources based on type
   let sourcesToTry = SOURCES.filter(src => {
     // Skip movie-only sources for TV
@@ -436,7 +488,8 @@ export async function extractVideasyStreams(
   for (const src of sourcesToTry) {
     console.log(`[Videasy] Trying ${src.name} (${src.languageName})...`);
     
-    const result = await trySource(src, tmdbId, tmdbInfo.title, tmdbInfo.year, type, season, episode);
+    // Use relative episode number for the API call
+    const result = await trySource(src, tmdbId, tmdbInfo.title, tmdbInfo.year, type, season, relativeEpisode);
     
     if (result) {
       console.log(`[Videasy] ✓ ${src.name} (${src.languageName}) WORKS! Using this source.`);
@@ -519,8 +572,18 @@ export async function fetchVideasySourceByName(
     return null;
   }
 
-  // Try the source
-  const result = await trySource(srcConfig, tmdbId, tmdbInfo.title, tmdbInfo.year, type, season, episode);
+  // For TV shows, calculate the relative episode number within the season
+  let relativeEpisode = episode;
+  if (type === 'tv' && season !== undefined && episode !== undefined) {
+    const firstEpisodeOfSeason = await getSeasonFirstEpisode(tmdbId, season);
+    if (firstEpisodeOfSeason > 1) {
+      relativeEpisode = episode - firstEpisodeOfSeason + 1;
+      console.log(`[Videasy] Converting absolute episode ${episode} to relative episode ${relativeEpisode}`);
+    }
+  }
+
+  // Try the source with relative episode number
+  const result = await trySource(srcConfig, tmdbId, tmdbInfo.title, tmdbInfo.year, type, season, relativeEpisode);
   
   if (result) {
     console.log(`[Videasy] ✓ ${srcConfig.name} fetched successfully`);
