@@ -55,7 +55,7 @@ export default function UnifiedStatsBar() {
         {/* Sessions Today */}
         <StatItem
           icon="▶️"
-          label="Sessions"
+          label="Sessions (24h)"
           value={stats.totalSessions}
           loading={loading}
           color="#3b82f6"
@@ -64,10 +64,11 @@ export default function UnifiedStatsBar() {
         {/* Watch Time */}
         <StatItem
           icon="⏱️"
-          label="Watch Time"
+          label="Watch Time (24h)"
           value={`${stats.totalWatchTime}m`}
           loading={loading}
           color="#ec4899"
+          subtitle={stats.allTimeWatchTime > 0 ? `All time: ${Math.round(stats.allTimeWatchTime / 60)}h` : undefined}
         />
       </div>
 
@@ -126,7 +127,8 @@ function StatItem({
   value, 
   loading, 
   pulse = false,
-  color = '#94a3b8'
+  color = '#94a3b8',
+  subtitle
 }: { 
   icon: string; 
   label: string; 
@@ -134,6 +136,7 @@ function StatItem({
   loading: boolean;
   pulse?: boolean;
   color?: string;
+  subtitle?: string;
 }) {
   return (
     <div style={{ 
@@ -175,6 +178,11 @@ function StatItem({
         }}>
           {loading ? '...' : (typeof value === 'number' ? value.toLocaleString() : value)}
         </div>
+        {subtitle && (
+          <div style={{ color: '#475569', fontSize: '9px', marginTop: '1px' }}>
+            {subtitle}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -27,7 +27,8 @@ interface UnifiedStats {
   
   // Content metrics (watch_sessions table) - last 24h
   totalSessions: number;
-  totalWatchTime: number;   // in minutes
+  totalWatchTime: number;   // in minutes (last 24h)
+  allTimeWatchTime: number; // in minutes (all time)
   avgSessionDuration: number;
   completionRate: number;
   
@@ -79,6 +80,7 @@ const defaultStats: UnifiedStats = {
   returningUsers: 0,
   totalSessions: 0,
   totalWatchTime: 0,
+  allTimeWatchTime: 0,
   avgSessionDuration: 0,
   completionRate: 0,
   pageViews: 0,
@@ -150,6 +152,7 @@ export function StatsProvider({ children }: { children: ReactNode }) {
           // Content metrics (last 24h)
           totalSessions: data.content?.totalSessions || 0,
           totalWatchTime: data.content?.totalWatchTime || 0,
+          allTimeWatchTime: data.content?.allTimeWatchTime || 0,
           avgSessionDuration: data.content?.avgDuration || 0,
           completionRate: data.content?.completionRate || 0,
           

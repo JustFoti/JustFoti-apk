@@ -142,7 +142,7 @@ export async function GET(request: NextRequest) {
     // 3. CONTENT METRICS (from watch_sessions)
     // Use validated timestamps and reasonable bounds
     // ============================================
-    let content = { totalSessions: 0, totalWatchTime: 0, avgDuration: 0, completionRate: 0 };
+    let content = { totalSessions: 0, totalWatchTime: 0, avgDuration: 0, completionRate: 0, allTimeWatchTime: 0 };
     try {
       // Count sessions from last 24h with valid data
       const contentQuery = isNeon
@@ -169,6 +169,13 @@ export async function GET(request: NextRequest) {
         content.avgDuration = Math.round(parseFloat(contentResult[0].avg_duration) / 60) || 0; // Convert to minutes
         content.completionRate = Math.round(parseFloat(contentResult[0].avg_completion)) || 0;
       }
+      
+      // Also get all-time watch time for reference
+      const allTimeQuery = isNeon
+        ? `SELECT COALESCE(SUM(CASE WHEN total_watch_time > 0 AND total_watch_time < 86400 THEN total_watch_time ELSE 0 END), 0) as total FROM watch_sessions`
+        : `SELECT COALESCE(SUM(CASE WHEN total_watch_time > 0 AND total_watch_time < 86400 THEN total_watch_time ELSE 0 END), 0) as total FROM watch_sessions`;
+      const allTimeResult = await adapter.query(allTimeQuery);
+      content.allTimeWatchTime = Math.round(parseFloat(allTimeResult[0]?.total || 0) / 60) || 0; // Convert to minutes
     } catch (e) {
       console.error('Error fetching content stats:', e);
     }
@@ -236,19 +243,20 @@ export async function GET(request: NextRequest) {
 
     // ============================================
     // 6. PAGE VIEWS (from analytics_events)
+    // Note: user_id is stored in metadata JSON, not as a direct column
     // ============================================
     let pageViews = { total: 0, uniqueVisitors: 0 };
     try {
       const pageViewQuery = isNeon
         ? `SELECT 
              COUNT(*) as total,
-             COUNT(DISTINCT COALESCE(user_id, session_id)) as unique_visitors
+             COUNT(DISTINCT COALESCE(metadata->>'userId', session_id)) as unique_visitors
            FROM analytics_events 
            WHERE event_type = 'page_view' 
              AND timestamp >= $1 AND timestamp <= $2`
         : `SELECT 
              COUNT(*) as total,
-             COUNT(DISTINCT COALESCE(user_id, session_id)) as unique_visitors
+             COUNT(DISTINCT COALESCE(JSON_EXTRACT(metadata, '$.userId'), session_id)) as unique_visitors
            FROM analytics_events 
            WHERE event_type = 'page_view' 
              AND timestamp >= ? AND timestamp <= ?`;
