@@ -186,11 +186,24 @@ export default {
         const newUrl = new URL(request.url);
         newUrl.pathname = path.replace(/^\/tv/, '') || '/';
         const newRequest = new Request(newUrl.toString(), request);
+        logger.debug('TV proxy request', { newUrl: newUrl.toString() });
         return await tvProxy.fetch(newRequest, env);
       } catch (error) {
         metrics.errors++;
-        logger.error('TV proxy error', error as Error);
-        return errorResponse('TV proxy error', 500);
+        const err = error as Error;
+        logger.error('TV proxy error', err);
+        return new Response(JSON.stringify({
+          error: 'TV proxy error',
+          message: err.message,
+          stack: err.stack,
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
       }
     }
 
