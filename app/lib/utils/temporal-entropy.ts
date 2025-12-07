@@ -312,7 +312,7 @@ export class TemporalEntropyAnalyzer {
     }
     
     // If any single interval appears more than 30% of the time, suspicious
-    const maxCount = Math.max(...counts.values());
+    const maxCount = Math.max(...Array.from(counts.values()));
     if (maxCount / intervals.length > 0.3) {
       patternScore += 0.4;
     }
