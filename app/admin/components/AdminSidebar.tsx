@@ -13,7 +13,8 @@ import {
     History,
     BarChart3,
     MousePointerClick,
-    TrendingUp
+    TrendingUp,
+    MessageSquare
 } from 'lucide-react';
 
 export default function AdminSidebar() {
@@ -29,6 +30,7 @@ export default function AdminSidebar() {
         { icon: Map, label: 'Geographic', href: '/admin/geographic' },
         { icon: History, label: 'Sessions', href: '/admin/sessions' },
         { icon: Activity, label: 'Real-time', href: '/admin/live' },
+        { icon: MessageSquare, label: 'Feedback', href: '/admin/feedback' },
         { icon: Settings, label: 'Settings', href: '/admin/settings' },
     ];
 

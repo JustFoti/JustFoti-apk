@@ -18,6 +18,15 @@ export interface Env {
   LOG_LEVEL?: string;
 }
 
+// Allowed origins for anti-leech protection
+const ALLOWED_ORIGINS = [
+  'https://tv.vynx.cc',
+  'https://flyx.tv',
+  'https://www.flyx.tv',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
 const PLAYER_DOMAINS = ['epicplayplay.cfd', 'daddyhd.com'];
 
 const CDN_PATTERNS = {
@@ -36,18 +45,36 @@ export default {
     const logLevel = (env.LOG_LEVEL || 'debug') as LogLevel;
     const logger = createLogger(request, logLevel);
 
+    const requestOrigin = request.headers.get('origin');
+    const requestReferer = request.headers.get('referer');
+
     if (request.method === 'OPTIONS') {
       logger.info('CORS preflight');
-      return new Response(null, { status: 200, headers: corsHeaders() });
+      if (!isAllowedOrigin(requestOrigin, requestReferer)) {
+        return new Response(null, { status: 403 });
+      }
+      return new Response(null, { status: 200, headers: corsHeaders(requestOrigin) });
     }
 
     if (request.method !== 'GET') {
       logger.warn('Method not allowed', { method: request.method });
-      return jsonResponse({ error: 'Method not allowed' }, 405);
+      return jsonResponse({ error: 'Method not allowed' }, 405, requestOrigin);
     }
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // ANTI-LEECH: Block requests from unauthorized origins
+    if (!isAllowedOrigin(requestOrigin, requestReferer)) {
+      logger.warn('Blocked leecher request', { origin: requestOrigin, referer: requestReferer });
+      return new Response(JSON.stringify({
+        error: 'Access denied',
+        message: 'This proxy only serves requests from authorized domains',
+      }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     try {
       // Route: /key - Proxy encryption key
@@ -254,9 +281,35 @@ function constructM3U8Url(serverKey: string, channelKey: string): string {
 }
 
 async function fetchViaProxy(url: string, env: Env, logger: any): Promise<Response> {
+  // Try direct fetch first - giokko.ru doesn't block based on IP, only headers!
+  // This saves bandwidth and latency by not going through RPI proxy
+  logger.debug('Trying direct fetch', { url: url.substring(0, 100) });
+  
+  try {
+    const directResponse = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://epicplayplay.cfd/',
+        'Origin': 'https://epicplayplay.cfd',
+      },
+    });
+    
+    if (directResponse.ok) {
+      logger.info('Direct fetch succeeded');
+      return directResponse;
+    }
+    
+    logger.warn('Direct fetch failed, status:', { status: directResponse.status });
+  } catch (err) {
+    logger.warn('Direct fetch error:', { error: (err as Error).message });
+  }
+
+  // Fallback to RPI proxy if direct fetch fails
   if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
     const proxyUrl = `${env.RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
-    logger.debug('Using RPI proxy', { proxyUrl: proxyUrl.substring(0, 100) });
+    logger.debug('Falling back to RPI proxy', { proxyUrl: proxyUrl.substring(0, 100) });
     
     const response = await fetch(proxyUrl, {
       headers: { 'X-API-Key': env.RPI_PROXY_KEY },
@@ -269,15 +322,7 @@ async function fetchViaProxy(url: string, env: Env, logger: any): Promise<Respon
     return response;
   }
 
-  // Direct fetch fallback
-  logger.debug('Using direct fetch', { url: url.substring(0, 100) });
-  return fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Referer': 'https://epicplayplay.cfd/',
-      'Origin': 'https://epicplayplay.cfd',
-    },
-  });
+  throw new Error('Direct fetch failed and no RPI proxy configured');
 }
 
 function parseM3U8(content: string): { keyUrl: string | null; iv: string | null } {
@@ -307,17 +352,40 @@ function generateProxiedM3U8(originalM3U8: string, keyUrl: string | null, proxyO
   return modified;
 }
 
-function corsHeaders(): Record<string, string> {
+function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
+  const checkOrigin = (o: string): boolean => {
+    return ALLOWED_ORIGINS.some(allowed => {
+      if (allowed.includes('localhost')) return o.includes('localhost');
+      try {
+        const allowedHost = new URL(allowed).hostname;
+        const originHost = new URL(o).hostname;
+        return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+      } catch { return false; }
+    });
+  };
+
+  if (origin && checkOrigin(origin)) return true;
+  if (referer) {
+    try {
+      return checkOrigin(new URL(referer).origin);
+    } catch { return false; }
+  }
+  return false;
+}
+
+function corsHeaders(origin?: string | null): Record<string, string> {
+  const allowedOrigin = origin && isAllowedOrigin(origin, null) ? origin : 'null';
   return {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Range, Content-Type',
+    'Access-Control-Allow-Credentials': 'true',
   };
 }
 
-function jsonResponse(data: object, status: number): Response {
+function jsonResponse(data: object, status: number, origin?: string | null): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders() },
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
   });
 }

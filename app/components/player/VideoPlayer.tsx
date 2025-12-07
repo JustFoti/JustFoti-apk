@@ -5,6 +5,7 @@ import Hls from 'hls.js';
 import { useAnalytics } from '../analytics/AnalyticsProvider';
 import { useWatchProgress } from '@/lib/hooks/useWatchProgress';
 import { trackWatchStart, trackWatchProgress, trackWatchPause, trackWatchComplete } from '@/lib/utils/live-activity';
+import { usePresenceContext } from '../analytics/PresenceProvider';
 import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage, getSubtitleStyle, setSubtitleStyle, type SubtitleStyle } from '@/lib/utils/subtitle-preferences';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useCast, CastMedia } from '@/hooks/useCast';
@@ -38,6 +39,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
   // Analytics and progress tracking
   const { trackContentEngagement, trackInteraction, updateWatchTime, recordPause, clearWatchTime } = useAnalytics();
+  const presenceContext = usePresenceContext();
   const contentType = mediaType === 'tv' ? 'episode' : 'movie';
   const {
     handleProgress,
@@ -803,6 +805,14 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       } else {
         handleWatchResume(video.currentTime, video.duration);
       }
+      // Update presence to "watching"
+      presenceContext?.setActivityType('watching', {
+        contentId: tmdbId,
+        contentTitle: title,
+        contentType: mediaType,
+        seasonNumber: season,
+        episodeNumber: episode,
+      });
       trackInteraction({
         element: 'video_player',
         action: 'click',
@@ -825,6 +835,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       recordPause(tmdbId, season, episode);
       const progress = video.duration > 0 ? (video.currentTime / video.duration) * 100 : 0;
       trackWatchPause(tmdbId, title || 'Unknown Title', mediaType, progress, season, episode);
+      // Update presence back to "browsing" when paused
+      presenceContext?.setActivityType('browsing');
       trackInteraction({
         element: 'video_player',
         action: 'click',

@@ -1,6 +1,7 @@
 import './globals.css'
 import { Metadata, Viewport } from 'next'
 import AnalyticsProvider from './components/analytics/AnalyticsProvider'
+import PresenceProvider from './components/analytics/PresenceProvider'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -77,7 +78,9 @@ export default function RootLayout({
         <div id="sr-announcements" role="status" aria-live="polite" aria-atomic="true" className="sr-only"></div>
         
         <AnalyticsProvider>
-          {children}
+          <PresenceProvider>
+            {children}
+          </PresenceProvider>
         </AnalyticsProvider>
       </body>
     </html>

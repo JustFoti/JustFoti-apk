@@ -1,7 +1,7 @@
 # Cloudflare Worker configuration
 name = "media-proxy"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2025-12-07"
 
 # Free tier: 100,000 requests/day
 # Workers Paid: $5/month for 10M requests, unlimited bandwidth (much cheaper than Vercel!)
@@ -20,9 +20,58 @@ enabled = true
 # Environment variables - set via wrangler secret or Cloudflare dashboard
 # wrangler secret put RPI_PROXY_URL
 # wrangler secret put RPI_PROXY_KEY
+# wrangler secret put SIGNING_SECRET
 [vars]
 LOG_LEVEL = "debug"  # debug, info, warn, error
 # API_KEY = "your-secret-key"  # Optional: for protecting the proxy
+
+# =============================================================================
+# ANTI-LEECH PROTECTION SETTINGS
+# =============================================================================
+# Protection modes:
+#   "none"     - No protection (legacy, anyone can use proxy)
+#   "basic"    - Token + fingerprint binding (spoofable with effort)
+#   "fortress" - PoW + Session + Request chaining (very secure)
+#   "quantum"  - THE MOST PARANOID PROTECTION EVER CREATED
+#
+# QUANTUM MODE features:
+#   - Browser proofs (Canvas, Audio, WebGL fingerprints)
+#   - WASM challenges (can't run in Node.js easily)
+#   - Merkle tree request verification
+#   - Honeypot URLs that trap leechers
+#   - Invisible watermarks in video segments
+#   - Behavioral timing analysis
+#   - ASN/datacenter detection
+#   - 24-hour blacklisting for violators
+#   - Trust score system
+#
+PROTECTION_MODE = "quantum"
+
+# Legacy setting (use PROTECTION_MODE instead)
+# ENABLE_ANTI_LEECH = "false"
+
+# =============================================================================
+# SECRETS - Set via wrangler secret put <NAME>
+# =============================================================================
+# wrangler secret put SIGNING_SECRET      # Required for all modes except 'none'
+# wrangler secret put WATERMARK_SECRET    # Required for quantum mode (watermarks video)
+
+# =============================================================================
+# KV NAMESPACE BINDINGS
+# =============================================================================
+# Create namespaces:
+#   wrangler kv:namespace create "SESSION_KV"
+#   wrangler kv:namespace create "BLACKLIST_KV"
+#
+# Then uncomment and add the IDs:
+#
+# [[kv_namespaces]]
+# binding = "SESSION_KV"
+# id = "your-session-kv-id"
+#
+# [[kv_namespaces]]
+# binding = "BLACKLIST_KV"
+# id = "your-blacklist-kv-id"
 
 # Production environment
 [env.production]
@@ -37,5 +86,21 @@ enabled = true
 [env.development]
 name = "media-proxy-dev"
 
+[env.development.vars]
+LOG_LEVEL = "debug"
+PROTECTION_MODE = "quantum-v2"
+SIGNING_SECRET = "dev-signing-secret-change-in-prod"
+WATERMARK_SECRET = "dev-watermark-secret-change-in-prod"
+
 [env.development.observability]
 enabled = true
+
+# Local KV for development (persisted to .wrangler/state)
+# For local dev, wrangler creates these automatically
+[[env.development.kv_namespaces]]
+binding = "SESSION_KV"
+id = "0000000000000000000000000000000000000001"
+
+[[env.development.kv_namespaces]]
+binding = "BLACKLIST_KV"
+id = "0000000000000000000000000000000000000002"

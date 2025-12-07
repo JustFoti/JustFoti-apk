@@ -93,20 +93,43 @@ function cacheKey(channelId: string, keyBuffer: ArrayBuffer, keyUrl: string, pla
   return cached;
 }
 
-// Raspberry Pi proxy - REQUIRED for all external requests
+// Raspberry Pi proxy - fallback if direct fetch fails
 const RPI_PROXY_URL = process.env.RPI_PROXY_URL;
 const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;
 
 async function fetchViaProxy(url: string): Promise<Response> {
-  console.log(`[DLHD Key] Fetching via RPI proxy: ${url}`);
-  console.log(`[DLHD Key] RPI_PROXY_URL: ${RPI_PROXY_URL}`);
+  // Try direct fetch first - giokko.ru doesn't block based on IP, only headers!
+  console.log(`[DLHD Key] Trying direct fetch: ${url}`);
   
-  if (!RPI_PROXY_URL || !RPI_PROXY_KEY) {
-    throw new Error('RPI_PROXY_URL and RPI_PROXY_KEY environment variables are required');
+  try {
+    const directResponse = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://epicplayplay.cfd/',
+        'Origin': 'https://epicplayplay.cfd',
+      },
+      cache: 'no-store',
+    });
+    
+    if (directResponse.ok) {
+      console.log(`[DLHD Key] Direct fetch succeeded`);
+      return directResponse;
+    }
+    
+    console.log(`[DLHD Key] Direct fetch failed with status: ${directResponse.status}`);
+  } catch (err) {
+    console.log(`[DLHD Key] Direct fetch error:`, (err as Error).message);
   }
 
+  // Fallback to RPI proxy if direct fetch fails
+  if (!RPI_PROXY_URL || !RPI_PROXY_KEY) {
+    throw new Error('Direct fetch failed and RPI_PROXY_URL/RPI_PROXY_KEY not configured');
+  }
+
+  console.log(`[DLHD Key] Falling back to RPI proxy`);
   const proxyUrl = `${RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
-  console.log(`[DLHD Key] Full proxy URL: ${proxyUrl.substring(0, 100)}...`);
   
   try {
     const response = await fetch(proxyUrl, {

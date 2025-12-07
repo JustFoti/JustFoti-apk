@@ -13,6 +13,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 interface UnifiedStats {
   // Real-time (live_activity table) - unique users currently active
   liveUsers: number;
+  trulyActiveUsers: number; // Users with heartbeat in last 30 seconds (validated active)
   liveWatching: number;
   liveBrowsing: number;
   liveTVViewers: number;
@@ -69,6 +70,7 @@ interface StatsContextType {
 
 const defaultStats: UnifiedStats = {
   liveUsers: 0,
+  trulyActiveUsers: 0,
   liveWatching: 0,
   liveBrowsing: 0,
   liveTVViewers: 0,
@@ -137,6 +139,7 @@ export function StatsProvider({ children }: { children: ReactNode }) {
         setStats({
           // Real-time (unique users currently active)
           liveUsers: data.realtime?.totalActive || 0,
+          trulyActiveUsers: data.realtime?.trulyActive || 0,
           liveWatching: data.realtime?.watching || 0,
           liveBrowsing: data.realtime?.browsing || 0,
           liveTVViewers: data.realtime?.livetv || 0,

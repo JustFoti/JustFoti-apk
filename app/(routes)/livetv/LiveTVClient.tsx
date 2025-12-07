@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { getTvPlaylistUrl } from '@/app/lib/proxy-config';
 import styles from './LiveTV.module.css';
@@ -534,6 +535,7 @@ function LiveTVPlayer({
   recordLiveTVBuffer,
   updateLiveTVQuality: _updateLiveTVQuality, // Available for future quality tracking
 }: LiveTVPlayerProps) {
+  const presenceContext = usePresenceContext();
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const hlsRef = React.useRef<any>(null);
@@ -874,6 +876,11 @@ function LiveTVPlayer({
           channelName: channel.name,
           category: channel.categoryInfo.name,
         });
+        // Update presence to "livetv"
+        presenceContext?.setActivityType('livetv', {
+          contentId: channel.streamId,
+          contentTitle: channel.name,
+        });
       }
     };
     
@@ -890,6 +897,8 @@ function LiveTVPlayer({
           watchDuration,
         });
       }
+      // Update presence back to "browsing"
+      presenceContext?.setActivityType('browsing');
     };
     
     const onVolumeChange = () => {

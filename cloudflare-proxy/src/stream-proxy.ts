@@ -19,36 +19,64 @@ export default {
     const logLevel = (env.LOG_LEVEL || 'debug') as LogLevel;
     const logger = createLogger(request, logLevel);
 
+    const requestOrigin = request.headers.get('origin');
+    const requestReferer = request.headers.get('referer');
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       logger.info('CORS preflight request');
+      
+      // Only allow preflight for allowed origins
+      if (!isAllowedOrigin(requestOrigin, requestReferer)) {
+        return new Response(null, { status: 403 });
+      }
+      
       return new Response(null, {
         status: 200,
-        headers: corsHeaders(),
+        headers: corsHeaders(requestOrigin),
       });
     }
 
     if (request.method !== 'GET') {
       logger.warn('Method not allowed', { method: request.method });
-      return jsonResponse({ error: 'Method not allowed' }, 405, logger);
+      return jsonResponse({ error: 'Method not allowed' }, 405, logger, requestOrigin);
     }
 
     try {
       const url = new URL(request.url);
       const targetUrl = url.searchParams.get('url');
       const source = url.searchParams.get('source') || '2embed';
-      const referer = url.searchParams.get('referer') || 'https://www.2embed.cc';
+      const upstreamReferer = url.searchParams.get('referer') || 'https://www.2embed.cc';
 
       if (!targetUrl) {
         logger.warn('Missing url parameter');
-        return jsonResponse({ error: 'Missing url parameter' }, 400, logger);
+        return jsonResponse({ error: 'Missing url parameter' }, 400, logger, requestOrigin);
       }
 
       const decodedUrl = decodeURIComponent(targetUrl);
+      
+      // ANTI-LEECH: Check if request is from allowed origin
+      if (!isAllowedOrigin(requestOrigin, requestReferer)) {
+        logger.warn('Blocked leecher request', { origin: requestOrigin, referer: requestReferer });
+        
+        // Return the ORIGINAL URL - let them proxy it themselves
+        return new Response(JSON.stringify({
+          error: 'Access denied - use the original URL',
+          originalUrl: decodedUrl,
+          message: 'This proxy only serves requests from authorized domains',
+        }), {
+          status: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': 'null',
+          },
+        });
+      }
+      
       logger.info('Proxying request', { 
         targetUrl: decodedUrl.substring(0, 150),
         source,
-        referer: referer.substring(0, 100),
+        referer: upstreamReferer.substring(0, 100),
       });
 
       // Fetch with proper headers
@@ -56,8 +84,8 @@ export default {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': '*/*',
         'Accept-Encoding': 'identity',
-        'Referer': referer,
-        'Origin': new URL(referer).origin,
+        'Referer': upstreamReferer,
+        'Origin': new URL(upstreamReferer).origin,
       };
 
       const fetchStart = Date.now();
@@ -74,7 +102,7 @@ export default {
         return jsonResponse({ 
           error: 'Upstream fetch failed',
           details: fetchError instanceof Error ? fetchError.message : String(fetchError),
-        }, 502, logger);
+        }, 502, logger, requestOrigin);
       }
 
       logger.fetchEnd(decodedUrl, response.status, Date.now() - fetchStart);
@@ -93,15 +121,15 @@ export default {
             logger.fetchEnd(redirectUrl, response.status, Date.now() - redirectStart);
           } catch (redirectError) {
             logger.fetchError(redirectUrl, redirectError as Error);
-            return jsonResponse({ error: 'Redirect fetch failed' }, 502, logger);
+            return jsonResponse({ error: 'Redirect fetch failed' }, 502, logger, requestOrigin);
           }
           
           if (!response.ok) {
             logger.error('Redirect target error', { status: response.status });
-            return jsonResponse({ error: `Redirect target error: ${response.status}` }, response.status, logger);
+            return jsonResponse({ error: `Redirect target error: ${response.status}` }, response.status, logger, requestOrigin);
           }
           
-          return handleStreamResponse(response, decodedUrl, source, referer, url.origin, logger);
+          return handleStreamResponse(response, decodedUrl, source, upstreamReferer, url.origin, logger, requestOrigin);
         }
       }
 
@@ -111,17 +139,17 @@ export default {
           statusText: response.statusText,
           headers: Object.fromEntries(response.headers),
         });
-        return jsonResponse({ error: `Upstream error: ${response.status}` }, response.status, logger);
+        return jsonResponse({ error: `Upstream error: ${response.status}` }, response.status, logger, requestOrigin);
       }
 
-      return handleStreamResponse(response, decodedUrl, source, referer, url.origin, logger);
+      return handleStreamResponse(response, decodedUrl, source, upstreamReferer, url.origin, logger, requestOrigin);
 
     } catch (error) {
       logger.error('Proxy error', error as Error);
       return jsonResponse({
         error: 'Proxy error',
         details: error instanceof Error ? error.message : String(error),
-      }, 500, logger);
+      }, 500, logger, requestOrigin);
     }
   },
 };
@@ -132,7 +160,8 @@ async function handleStreamResponse(
   source: string,
   referer: string,
   proxyOrigin: string,
-  logger: Logger
+  logger: Logger,
+  requestOrigin?: string | null
 ): Promise<Response> {
   const contentType = response.headers.get('content-type') || '';
   
@@ -141,7 +170,7 @@ async function handleStreamResponse(
     arrayBuffer = await response.arrayBuffer();
   } catch (bufferError) {
     logger.error('Failed to read response body', bufferError as Error);
-    return jsonResponse({ error: 'Failed to read upstream response' }, 502, logger);
+    return jsonResponse({ error: 'Failed to read upstream response' }, 502, logger, requestOrigin);
   }
 
   logger.debug('Response body read', { 
@@ -182,7 +211,7 @@ async function handleStreamResponse(
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.apple.mpegurl',
-        ...corsHeaders(),
+        ...corsHeaders(requestOrigin),
         'Cache-Control': 'public, max-age=300',
       },
     });
@@ -205,7 +234,7 @@ async function handleStreamResponse(
     status: 200,
     headers: {
       'Content-Type': actualContentType,
-      ...corsHeaders(),
+      ...corsHeaders(requestOrigin),
       'Cache-Control': 'public, max-age=3600',
       'Content-Length': arrayBuffer.byteLength.toString(),
     },
@@ -287,21 +316,55 @@ function rewritePlaylistUrls(
   return rewritten.join('\n');
 }
 
-function corsHeaders(): Record<string, string> {
+// Allowed origins - requests from other origins get the original URL exposed
+const ALLOWED_ORIGINS = [
+  'https://tv.vynx.cc',
+  'https://flyx.tv',
+  'https://www.flyx.tv',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
+function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
+  const checkOrigin = (o: string): boolean => {
+    return ALLOWED_ORIGINS.some(allowed => {
+      if (allowed.includes('localhost')) return o.includes('localhost');
+      try {
+        const allowedHost = new URL(allowed).hostname;
+        const originHost = new URL(o).hostname;
+        return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+      } catch { return false; }
+    });
+  };
+
+  if (origin && checkOrigin(origin)) return true;
+  if (referer) {
+    try {
+      return checkOrigin(new URL(referer).origin);
+    } catch { return false; }
+  }
+  return false;
+}
+
+function corsHeaders(origin?: string | null): Record<string, string> {
+  // Only allow CORS for allowed origins
+  const allowedOrigin = origin && isAllowedOrigin(origin, null) ? origin : 'null';
+  
   return {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Range, Content-Type, X-Request-ID',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+    'Access-Control-Allow-Credentials': 'true',
   };
 }
 
-function jsonResponse(data: object, status: number, logger?: Logger): Response {
+function jsonResponse(data: object, status: number, logger?: Logger, origin?: string | null): Response {
   const res = new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...corsHeaders(),
+      ...corsHeaders(origin),
     },
   });
   

@@ -213,6 +213,123 @@
   outline-offset: 2px;
 }
 
+/* Feedback Button */
+.feedbackButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(244, 113, 181, 0.2));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.feedbackButton:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(244, 113, 181, 0.3));
+  border-color: rgba(139, 92, 246, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.feedbackButton:focus-visible {
+  outline: 2px solid var(--neon-purple);
+  outline-offset: 2px;
+}
+
+.feedbackButton svg {
+  flex-shrink: 0;
+}
+
+/* Mobile Feedback Button */
+.mobileFeedbackButton {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15), rgba(244, 113, 181, 0.15));
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 0.5rem;
+}
+
+.mobileFeedbackButton:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(244, 113, 181, 0.25));
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.mobileFeedbackButton svg {
+  flex-shrink: 0;
+}
+
+/* Monster Button - Buy me a Monster (Clean Red Theme) */
+.monsterButton {
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, rgba(255, 0, 0, 0.15) 0%, rgba(200, 0, 0, 0.2) 100%);
+  border: 1px solid rgba(255, 0, 0, 0.4);
+  border-radius: 10px;
+  color: #ff4444;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  letter-spacing: 0.02em;
+}
+
+.monsterButton:hover {
+  background: linear-gradient(135deg, rgba(255, 0, 0, 0.25) 0%, rgba(200, 0, 0, 0.3) 100%);
+  border-color: rgba(255, 68, 68, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(255, 0, 0, 0.25);
+  color: #ff6666;
+}
+
+.monsterButton:active {
+  transform: translateY(0);
+}
+
+.monsterButton:focus-visible {
+  outline: 2px solid rgba(255, 68, 68, 0.6);
+  outline-offset: 2px;
+}
+
+/* Mobile Monster Button */
+.mobileMonsterButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, rgba(255, 0, 0, 0.12) 0%, rgba(200, 0, 0, 0.18) 100%);
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  border-radius: 12px;
+  color: #ff4444;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 0.5rem;
+}
+
+.mobileMonsterButton:hover {
+  background: linear-gradient(135deg, rgba(255, 0, 0, 0.2) 0%, rgba(200, 0, 0, 0.25) 100%);
+  border-color: rgba(255, 68, 68, 0.5);
+  box-shadow: 0 4px 12px rgba(255, 0, 0, 0.2);
+}
+
 /* Search Container */
 .searchContainer {
   position: absolute;

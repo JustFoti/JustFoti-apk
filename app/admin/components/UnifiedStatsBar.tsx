@@ -24,14 +24,15 @@ export default function UnifiedStatsBar() {
     }}>
       {/* Left side - Key metrics */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-        {/* Live Users */}
+        {/* Live Users - shows truly active with total in subtitle */}
         <StatItem
           icon="🟢"
-          label="Live Now"
-          value={stats.liveUsers}
+          label="Active Now"
+          value={stats.trulyActiveUsers}
           loading={loading}
-          pulse={stats.liveUsers > 0}
+          pulse={stats.trulyActiveUsers > 0}
           color="#10b981"
+          subtitle={stats.liveUsers > stats.trulyActiveUsers ? `${stats.liveUsers} total online` : undefined}
         />
         
         {/* DAU */}

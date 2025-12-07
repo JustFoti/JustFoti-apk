@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useIsScrolled } from '@/app/lib/hooks/useScrollPosition';
 import { useIsMobile } from '@/app/lib/hooks/useMediaQuery';
 import styles from './Navigation.module.css';
+import FeedbackModal from '@/components/feedback/FeedbackModal';
 
 interface NavigationProps {
   transparent?: boolean;
@@ -76,6 +77,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -192,20 +194,41 @@ export const Navigation: React.FC<NavigationProps> = ({
             </div>
           )}
 
-          {/* Search and Mobile Menu Toggle */}
+          {/* Search, Feedback, Monster, and Mobile Menu Toggle */}
           <div className={styles.navActions}>
             {!isMobile && (
-              <button
-                className={styles.searchToggle}
-                onClick={toggleSearch}
-                aria-label="Toggle search"
-                aria-expanded={searchOpen}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
-                  <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
+              <>
+                <a
+                  href="https://buymeacoffee.com/vynxdev"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.monsterButton}
+                  aria-label="Buy me a Monster"
+                >
+                  Buy me a Monster
+                </a>
+                <button
+                  className={styles.feedbackButton}
+                  onClick={() => setFeedbackOpen(true)}
+                  aria-label="Submit feedback"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span>Feedback</span>
+                </button>
+                <button
+                  className={styles.searchToggle}
+                  onClick={toggleSearch}
+                  aria-label="Toggle search"
+                  aria-expanded={searchOpen}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                    <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </>
             )}
             
             {isMobile && (
@@ -273,9 +296,33 @@ export const Navigation: React.FC<NavigationProps> = ({
             >
               About
             </NavLink>
+            <button
+              className={styles.mobileFeedbackButton}
+              onClick={() => {
+                setFeedbackOpen(true);
+                setMobileMenuOpen(false);
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+              Submit Feedback
+            </button>
+            <a
+              href="https://buymeacoffee.com/vynxdev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.mobileMonsterButton}
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              Buy me a Monster
+            </a>
           </div>
         )}
       </nav>
+
+      {/* Feedback Modal */}
+      <FeedbackModal isOpen={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
 
       {/* Mobile Bottom Navigation */}
       {isMobile && (
