@@ -170,7 +170,7 @@ async function getChannels(portalUrl: string, macAddress: string, token: string,
 }
 
 // Get stream URL for a channel
-async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<string | null> {
+async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<{ streamUrl: string | null; rawResponse: any; requestUrl: string }> {
   const url = new URL('/portal.php', portalUrl);
   url.searchParams.set('type', 'itv');
   url.searchParams.set('action', 'create_link');
@@ -181,21 +181,46 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
   url.searchParams.set('download', '0');
   url.searchParams.set('JsHttpRequest', '1-xml');
 
+  const requestUrl = url.toString();
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { 
+    const response = await fetch(requestUrl, { 
       signal: controller.signal,
       headers: buildHeaders(macAddress, token),
     });
     clearTimeout(timeoutId);
     
-    const data = await response.json();
-    return data?.js?.cmd || null;
-  } catch {
+    const text = await response.text();
+    // Handle Stalker's secure JSON wrapper
+    const cleanText = text.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
+    
+    let data;
+    try {
+      data = JSON.parse(cleanText);
+    } catch {
+      return { streamUrl: null, rawResponse: { parseError: true, rawText: text.substring(0, 500) }, requestUrl };
+    }
+    
+    let streamUrl = data?.js?.cmd || null;
+    
+    // Extract actual URL from ffmpeg command format
+    if (streamUrl) {
+      // Remove "ffmpeg " prefix if present
+      if (streamUrl.startsWith('ffmpeg ')) {
+        streamUrl = streamUrl.replace('ffmpeg ', '');
+      }
+      // Remove "ffrt " prefix if present  
+      if (streamUrl.startsWith('ffrt ')) {
+        streamUrl = streamUrl.replace('ffrt ', '');
+      }
+    }
+    
+    return { streamUrl, rawResponse: data, requestUrl };
+  } catch (e) {
     clearTimeout(timeoutId);
-    return null;
+    return { streamUrl: null, rawResponse: { error: String(e) }, requestUrl };
   }
 }
 
@@ -274,6 +299,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Token required' }, { status: 400 });
         }
         const channels = await getChannels(normalizedUrl, macAddress, token, genre || '*', page || 0);
+        // Log first channel for debugging
+        if (channels.data && channels.data.length > 0) {
+          console.log('Sample channel data:', JSON.stringify(channels.data[0], null, 2));
+        }
         return NextResponse.json({ success: true, channels });
       }
 
@@ -281,8 +310,8 @@ export async function POST(request: NextRequest) {
         if (!token || !cmd) {
           return NextResponse.json({ error: 'Token and cmd required' }, { status: 400 });
         }
-        const streamUrl = await getStreamUrl(normalizedUrl, macAddress, token, cmd);
-        return NextResponse.json({ success: true, streamUrl });
+        const { streamUrl, rawResponse, requestUrl } = await getStreamUrl(normalizedUrl, macAddress, token, cmd);
+        return NextResponse.json({ success: true, streamUrl, rawResponse, cmd, requestUrl });
       }
 
       default:

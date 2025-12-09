@@ -11,9 +11,21 @@ import {
   CheckCircle,
   Loader2,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Upload,
+  Star,
+  Trash2
 } from 'lucide-react';
 import Hls from 'hls.js';
+
+interface SavedAccount {
+  portal: string;
+  mac: string;
+  channels: number;
+  status: number | string;
+  blocked: string | number;
+  addedAt: string;
+}
 
 interface TestResult {
   success: boolean;
@@ -53,8 +65,124 @@ export default function IPTVDebugPage() {
   const [loadingStream, setLoadingStream] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [rawStreamUrl, setRawStreamUrl] = useState<string | null>(null);
+  const [streamDebug, setStreamDebug] = useState<any>(null);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load saved accounts from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('iptv-debug-accounts');
+    if (saved) {
+      try {
+        setSavedAccounts(JSON.parse(saved));
+      } catch {}
+    }
+  }, []);
+
+  // Save accounts to localStorage when they change
+  useEffect(() => {
+    if (savedAccounts.length > 0) {
+      localStorage.setItem('iptv-debug-accounts', JSON.stringify(savedAccounts));
+    }
+  }, [savedAccounts]);
+
+  // Import accounts from JSON file
+  const handleFileImport = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        const accounts = data.accounts || data;
+        
+        // Filter for usable accounts - prioritize having channels over status
+        // Many open portals return status=0 but still work
+        const usable = accounts
+          .filter((acc: any) => {
+            const notBlocked = acc.profile?.blocked !== '1' && acc.profile?.blocked !== 1;
+            const hasChannels = (acc.content?.itv || 0) > 0;
+            // Account is usable if it has channels and isn't blocked
+            return acc.success && notBlocked && hasChannels;
+          })
+          .map((acc: any) => ({
+            portal: acc.portal,
+            mac: acc.mac,
+            channels: acc.content?.itv || 0,
+            status: acc.profile?.status,
+            blocked: acc.profile?.blocked,
+            addedAt: new Date().toISOString(),
+          }))
+          // Sort by channel count descending
+          .sort((a: SavedAccount, b: SavedAccount) => b.channels - a.channels);
+
+        if (usable.length > 0) {
+          setSavedAccounts(prev => {
+            // Merge, avoiding duplicates
+            const existing = new Set(prev.map(a => `${a.portal}|${a.mac}`));
+            const newAccounts = usable.filter((a: SavedAccount) => !existing.has(`${a.portal}|${a.mac}`));
+            return [...prev, ...newAccounts];
+          });
+          alert(`Imported ${usable.length} usable accounts (not blocked, with channels). Sorted by channel count.`);
+        } else {
+          alert('No usable accounts found in file. Accounts must not be blocked and have channels (itv > 0).');
+        }
+      } catch (err) {
+        alert('Failed to parse JSON file');
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, []);
+
+  // Load a saved account into the form
+  const loadAccount = useCallback((account: SavedAccount) => {
+    setPortalUrl(account.portal);
+    setMacAddress(account.mac);
+    // Reset state
+    setTestResult(null);
+    setGenres([]);
+    setChannels([]);
+    setStreamUrl(null);
+  }, []);
+
+  // Remove a saved account
+  const removeAccount = useCallback((portal: string, mac: string) => {
+    setSavedAccounts(prev => prev.filter(a => !(a.portal === portal && a.mac === mac)));
+  }, []);
+
+  // Save current account if it's usable
+  const saveCurrentAccount = useCallback(() => {
+    if (!testResult?.success || !portalUrl || !macAddress) return;
+    
+    const notBlocked = testResult.profile?.blocked !== '1' && testResult.profile?.blocked !== 1;
+    const hasChannels = (testResult.content?.itv || 0) > 0;
+    
+    // Only require not blocked and has channels - status doesn't matter for open portals
+    if (!notBlocked || !hasChannels) {
+      alert('Cannot save: Account must not be blocked and have channels');
+      return;
+    }
+
+    const newAccount: SavedAccount = {
+      portal: portalUrl,
+      mac: macAddress,
+      channels: testResult.content?.itv || 0,
+      status: testResult.profile?.status,
+      blocked: testResult.profile?.blocked,
+      addedAt: new Date().toISOString(),
+    };
+
+    setSavedAccounts(prev => {
+      const exists = prev.some(a => a.portal === portalUrl && a.mac === macAddress);
+      if (exists) return prev;
+      return [...prev, newAccount];
+    });
+  }, [testResult, portalUrl, macAddress]);
 
   // Setup HLS player when stream URL changes
   useEffect(() => {
@@ -197,6 +325,7 @@ export default function IPTVDebugPage() {
     setSelectedChannel(channel);
     setStreamUrl(null);
     setRawStreamUrl(null);
+    setStreamDebug(null);
     
     try {
       const response = await fetch('/api/admin/iptv-debug', {
@@ -212,12 +341,11 @@ export default function IPTVDebugPage() {
       });
       
       const data = await response.json();
+      // Include the channel cmd in debug info
+      setStreamDebug({ ...data, channelCmd: channel.cmd, channelName: channel.name });
+      
       if (data.success && data.streamUrl) {
-        // Extract URL from ffmpeg command format
-        let url = data.streamUrl;
-        if (url.startsWith('ffmpeg ')) {
-          url = url.replace('ffmpeg ', '');
-        }
+        const url = data.streamUrl;
         
         // Save raw URL for display/copy
         setRawStreamUrl(url);
@@ -228,6 +356,7 @@ export default function IPTVDebugPage() {
       }
     } catch (error) {
       console.error('Failed to get stream:', error);
+      setStreamDebug({ error: String(error) });
     } finally {
       setLoadingStream(false);
     }
@@ -343,6 +472,131 @@ export default function IPTVDebugPage() {
         </div>
       </div>
 
+      {/* Saved Accounts */}
+      <div style={{
+        background: 'rgba(30, 41, 59, 0.5)',
+        borderRadius: '16px',
+        padding: '24px',
+        marginBottom: '24px',
+        border: '1px solid rgba(255, 255, 255, 0.1)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Star size={18} />
+            Saved Accounts ({savedAccounts.length})
+          </h3>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleFileImport}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                padding: '8px 16px',
+                background: 'rgba(120, 119, 198, 0.2)',
+                border: '1px solid rgba(120, 119, 198, 0.3)',
+                borderRadius: '8px',
+                color: '#7877c6',
+                fontSize: '13px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Upload size={14} /> Import JSON
+            </button>
+            {testResult?.success && (testResult.content?.itv || 0) > 0 && (
+              <button
+                onClick={saveCurrentAccount}
+                style={{
+                  padding: '8px 16px',
+                  background: 'rgba(34, 197, 94, 0.2)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  borderRadius: '8px',
+                  color: '#22c55e',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Star size={14} /> Save Current
+              </button>
+            )}
+          </div>
+        </div>
+
+        {savedAccounts.length === 0 ? (
+          <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
+            No saved accounts. Import a results JSON file or save a working account.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+            {savedAccounts.map((account, idx) => (
+              <div
+                key={`${account.portal}-${account.mac}-${idx}`}
+                style={{
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '8px',
+                  padding: '12px 16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: '#f8fafc', fontSize: '13px', fontWeight: '500' }}>
+                    {account.mac}
+                  </div>
+                  <div style={{ color: '#64748b', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {account.portal} • {account.channels.toLocaleString()} channels
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    onClick={() => loadAccount(account)}
+                    style={{
+                      padding: '6px 12px',
+                      background: 'rgba(120, 119, 198, 0.2)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#7877c6',
+                      fontSize: '12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Load
+                  </button>
+                  <button
+                    onClick={() => removeAccount(account.portal, account.mac)}
+                    style={{
+                      padding: '6px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#ef4444',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Test Result */}
       {testResult && (
         <div style={{
@@ -382,11 +636,11 @@ export default function IPTVDebugPage() {
               }}>
                 <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Status</div>
                 <div style={{ 
-                  color: testResult.profile.status === 1 ? '#22c55e' : '#ef4444',
+                  color: (testResult.profile.status === 1 || testResult.profile.status === '1') ? '#22c55e' : '#ef4444',
                   fontSize: '16px',
                   fontWeight: '600'
                 }}>
-                  {testResult.profile.status === 1 ? 'Active' : 'Inactive'}
+                  {(testResult.profile.status === 1 || testResult.profile.status === '1') ? 'Active' : `Inactive (${testResult.profile.status})`}
                 </div>
               </div>
               
@@ -397,11 +651,11 @@ export default function IPTVDebugPage() {
               }}>
                 <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Blocked</div>
                 <div style={{ 
-                  color: testResult.profile.blocked === '1' ? '#ef4444' : '#22c55e',
+                  color: (testResult.profile.blocked === '1' || testResult.profile.blocked === 1) ? '#ef4444' : '#22c55e',
                   fontSize: '16px',
                   fontWeight: '600'
                 }}>
-                  {testResult.profile.blocked === '1' ? 'Yes' : 'No'}
+                  {(testResult.profile.blocked === '1' || testResult.profile.blocked === 1) ? 'Yes' : 'No'}
                 </div>
               </div>
 
@@ -707,6 +961,21 @@ export default function IPTVDebugPage() {
             {selectedChannel?.name || 'Stream'}
           </h3>
 
+          {/* Show channel cmd for debugging */}
+          {selectedChannel && (
+            <div style={{ 
+              background: 'rgba(15, 23, 42, 0.6)', 
+              padding: '12px 16px', 
+              borderRadius: '8px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Channel CMD:</div>
+              <code style={{ color: '#7877c6', fontSize: '11px', wordBreak: 'break-all' }}>
+                {selectedChannel.cmd || '(empty)'}
+              </code>
+            </div>
+          )}
+
           {loadingStream ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
               <Loader2 size={32} style={{ margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
@@ -790,9 +1059,46 @@ export default function IPTVDebugPage() {
                 </div>
               </div>
 
-              <p style={{ color: '#64748b', fontSize: '12px', marginTop: '12px' }}>
-                Note: Some streams may require an HLS-compatible player (like VLC) to play properly.
-              </p>
+              <div style={{ 
+                background: 'rgba(251, 191, 36, 0.1)', 
+                border: '1px solid rgba(251, 191, 36, 0.3)',
+                borderRadius: '8px',
+                padding: '12px 16px',
+                marginTop: '12px'
+              }}>
+                <p style={{ color: '#fbbf24', fontSize: '12px', margin: 0 }}>
+                  ⚠️ Note: Stream playback may fail with 444 error if the portal blocks requests from server IPs. 
+                  The raw URL can be copied and used in VLC or another player on your local machine.
+                </p>
+              </div>
+
+              {/* Stream Debug Info */}
+              {streamDebug && (
+                <details style={{ marginTop: '12px' }}>
+                  <summary style={{ 
+                    color: '#94a3b8', 
+                    cursor: 'pointer', 
+                    padding: '8px',
+                    background: 'rgba(30, 41, 59, 0.3)',
+                    borderRadius: '6px',
+                    fontSize: '12px'
+                  }}>
+                    View Stream API Response
+                  </summary>
+                  <pre style={{
+                    background: 'rgba(15, 23, 42, 0.6)',
+                    padding: '12px',
+                    borderRadius: '0 0 6px 6px',
+                    overflow: 'auto',
+                    maxHeight: '200px',
+                    color: '#94a3b8',
+                    fontSize: '11px',
+                    margin: 0
+                  }}>
+                    {JSON.stringify(streamDebug, null, 2)}
+                  </pre>
+                </details>
+              )}
             </>
           ) : null}
         </div>
