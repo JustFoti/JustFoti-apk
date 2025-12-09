@@ -3,6 +3,28 @@ import { cookies } from 'next/headers';
 
 const REQUEST_TIMEOUT = 15000;
 
+// STB Device Headers - Required for Stalker Portal authentication
+const STB_USER_AGENT = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
+
+function buildHeaders(macAddress: string, token?: string): Record<string, string> {
+  const encodedMac = encodeURIComponent(macAddress);
+  const headers: Record<string, string> = {
+    'User-Agent': STB_USER_AGENT,
+    'X-User-Agent': 'Model: MAG250; Link: WiFi',
+    'Accept': '*/*',
+    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Connection': 'keep-alive',
+    'Cookie': `mac=${encodedMac}; stb_lang=en; timezone=GMT`,
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return headers;
+}
+
 // Verify admin authentication
 async function verifyAdmin(): Promise<boolean> {
   const cookieStore = await cookies();
@@ -13,7 +35,6 @@ async function verifyAdmin(): Promise<boolean> {
 // Perform handshake to get authentication token
 async function performHandshake(portalUrl: string, macAddress: string): Promise<string> {
   const url = new URL('/portal.php', portalUrl);
-  url.searchParams.set('mac', macAddress);
   url.searchParams.set('type', 'stb');
   url.searchParams.set('action', 'handshake');
   url.searchParams.set('token', '');
@@ -23,7 +44,10 @@ async function performHandshake(portalUrl: string, macAddress: string): Promise<
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
+    const response = await fetch(url.toString(), { 
+      signal: controller.signal,
+      headers: buildHeaders(macAddress),
+    });
     clearTimeout(timeoutId);
     
     const data = await response.json();
@@ -43,17 +67,21 @@ async function performHandshake(portalUrl: string, macAddress: string): Promise<
 // Get account profile
 async function getProfile(portalUrl: string, macAddress: string, token: string): Promise<any> {
   const url = new URL('/portal.php', portalUrl);
-  url.searchParams.set('action', 'get_profile');
-  url.searchParams.set('token', token);
-  url.searchParams.set('mac', macAddress);
   url.searchParams.set('type', 'stb');
+  url.searchParams.set('action', 'get_profile');
+  url.searchParams.set('hd', '1');
+  url.searchParams.set('num_banks', '2');
+  url.searchParams.set('stb_type', 'MAG250');
   url.searchParams.set('JsHttpRequest', '1-xml');
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
+    const response = await fetch(url.toString(), { 
+      signal: controller.signal,
+      headers: buildHeaders(macAddress, token),
+    });
     clearTimeout(timeoutId);
     
     const data = await response.json();
@@ -73,19 +101,19 @@ async function getProfile(portalUrl: string, macAddress: string, token: string):
 // Get content count
 async function getContentCount(portalUrl: string, macAddress: string, token: string, contentType: string): Promise<number> {
   const url = new URL('/portal.php', portalUrl);
-  url.searchParams.set('action', 'get_ordered_list');
-  url.searchParams.set('token', token);
-  url.searchParams.set('mac', macAddress);
   url.searchParams.set('type', contentType);
-  url.searchParams.set('from', '0');
-  url.searchParams.set('to', '0');
+  url.searchParams.set('action', 'get_ordered_list');
+  url.searchParams.set('p', '0');
   url.searchParams.set('JsHttpRequest', '1-xml');
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
+    const response = await fetch(url.toString(), { 
+      signal: controller.signal,
+      headers: buildHeaders(macAddress, token),
+    });
     clearTimeout(timeoutId);
     
     const data = await response.json();
@@ -99,17 +127,18 @@ async function getContentCount(portalUrl: string, macAddress: string, token: str
 // Get genres/categories
 async function getGenres(portalUrl: string, macAddress: string, token: string, contentType: string): Promise<any[]> {
   const url = new URL('/portal.php', portalUrl);
-  url.searchParams.set('action', 'get_genres');
-  url.searchParams.set('token', token);
-  url.searchParams.set('mac', macAddress);
   url.searchParams.set('type', contentType);
+  url.searchParams.set('action', 'get_genres');
   url.searchParams.set('JsHttpRequest', '1-xml');
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
+    const response = await fetch(url.toString(), { 
+      signal: controller.signal,
+      headers: buildHeaders(macAddress, token),
+    });
     clearTimeout(timeoutId);
     
     const data = await response.json();
@@ -123,10 +152,8 @@ async function getGenres(portalUrl: string, macAddress: string, token: string, c
 // Get channels list
 async function getChannels(portalUrl: string, macAddress: string, token: string, genre: string = '*', page: number = 0): Promise<any> {
   const url = new URL('/portal.php', portalUrl);
-  url.searchParams.set('action', 'get_ordered_list');
-  url.searchParams.set('token', token);
-  url.searchParams.set('mac', macAddress);
   url.searchParams.set('type', 'itv');
+  url.searchParams.set('action', 'get_ordered_list');
   url.searchParams.set('genre', genre);
   url.searchParams.set('p', page.toString());
   url.searchParams.set('JsHttpRequest', '1-xml');
@@ -135,7 +162,10 @@ async function getChannels(portalUrl: string, macAddress: string, token: string,
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
+    const response = await fetch(url.toString(), { 
+      signal: controller.signal,
+      headers: buildHeaders(macAddress, token),
+    });
     clearTimeout(timeoutId);
     
     const data = await response.json();
@@ -149,18 +179,23 @@ async function getChannels(portalUrl: string, macAddress: string, token: string,
 // Get stream URL for a channel
 async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<string | null> {
   const url = new URL('/portal.php', portalUrl);
-  url.searchParams.set('action', 'create_link');
-  url.searchParams.set('token', token);
-  url.searchParams.set('mac', macAddress);
   url.searchParams.set('type', 'itv');
+  url.searchParams.set('action', 'create_link');
   url.searchParams.set('cmd', cmd);
+  url.searchParams.set('series', '');
+  url.searchParams.set('forced_storage', 'undefined');
+  url.searchParams.set('disable_ad', '0');
+  url.searchParams.set('download', '0');
   url.searchParams.set('JsHttpRequest', '1-xml');
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(url.toString(), { signal: controller.signal });
+    const response = await fetch(url.toString(), { 
+      signal: controller.signal,
+      headers: buildHeaders(macAddress, token),
+    });
     clearTimeout(timeoutId);
     
     const data = await response.json();
@@ -169,6 +204,31 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
     clearTimeout(timeoutId);
     return null;
   }
+}
+
+// Normalize portal URL to proper format
+function normalizePortalUrl(portalUrl: string): string {
+  let url = portalUrl.trim();
+  
+  // Add protocol if missing
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'http://' + url;
+  }
+  
+  // Remove trailing slash
+  url = url.replace(/\/+$/, '');
+  
+  // Handle different portal URL formats
+  // If it ends with /c, use the base for portal.php
+  if (url.endsWith('/c')) {
+    url = url.slice(0, -2);
+  } else if (url.endsWith('/portal.php')) {
+    url = url.slice(0, -11);
+  } else if (url.endsWith('/server/load.php')) {
+    url = url.slice(0, -16);
+  }
+  
+  return url;
 }
 
 export async function POST(request: NextRequest) {
@@ -185,14 +245,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Portal URL and MAC address are required' }, { status: 400 });
     }
 
-    // Normalize portal URL
-    let normalizedUrl = portalUrl.trim();
-    if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
-      normalizedUrl = 'http://' + normalizedUrl;
-    }
-    if (!normalizedUrl.endsWith('/c')) {
-      normalizedUrl = normalizedUrl.replace(/\/$/, '') + '/c';
-    }
+    const normalizedUrl = normalizePortalUrl(portalUrl);
 
     switch (action) {
       case 'test': {
@@ -203,7 +256,7 @@ export async function POST(request: NextRequest) {
         const [itvCount, radioCount, vodCount] = await Promise.all([
           getContentCount(normalizedUrl, macAddress, authToken, 'itv'),
           getContentCount(normalizedUrl, macAddress, authToken, 'radio'),
-          getContentCount(normalizedUrl, macAddress, authToken, 'series')
+          getContentCount(normalizedUrl, macAddress, authToken, 'vod')
         ]);
 
         return NextResponse.json({
