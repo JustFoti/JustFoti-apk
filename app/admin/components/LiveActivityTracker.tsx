@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useStats } from '../context/StatsContext';
 
 // Helper function to get country name from ISO code
 function getCountryNameFromCode(code: string): string {
@@ -72,6 +73,9 @@ interface LiveTVStats {
 }
 
 export default function LiveActivityTracker() {
+  // Use unified stats for consistent user counts across the admin panel
+  const { stats: unifiedStats } = useStats();
+  
   const [activities, setActivities] = useState<LiveActivity[]>([]);
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [liveTVStats, setLiveTVStats] = useState<LiveTVStats | null>(null);
@@ -217,8 +221,7 @@ export default function LiveActivityTracker() {
 
       {stats && (
         <>
-          {/* Summary Stats - Note: These are activity counts, not unique users */}
-          {/* For unique user counts, use the unified stats from StatsContext */}
+          {/* Summary Stats - Using unified stats for consistent unique user counts */}
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -237,9 +240,9 @@ export default function LiveActivityTracker() {
               <div style={{ fontSize: '1.75rem' }}>👥</div>
               <div>
                 <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#f8fafc' }}>
-                  {stats.totalActive}
+                  {unifiedStats.liveUsers}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Active Sessions</div>
+                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Active Users</div>
               </div>
             </div>
 
@@ -255,7 +258,7 @@ export default function LiveActivityTracker() {
               <div style={{ fontSize: '1.75rem' }}>▶️</div>
               <div>
                 <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#f8fafc' }}>
-                  {stats.watching}
+                  {unifiedStats.liveWatching}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Watching VOD</div>
               </div>
@@ -273,7 +276,7 @@ export default function LiveActivityTracker() {
               <div style={{ fontSize: '1.75rem' }}>📺</div>
               <div>
                 <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#f8fafc' }}>
-                  {stats.livetv || liveTVStats?.currentViewers || 0}
+                  {unifiedStats.liveTVViewers || liveTVStats?.currentViewers || 0}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Live TV</div>
               </div>
@@ -291,14 +294,14 @@ export default function LiveActivityTracker() {
               <div style={{ fontSize: '1.75rem' }}>🔍</div>
               <div>
                 <div style={{ fontSize: '1.75rem', fontWeight: '700', color: '#f8fafc' }}>
-                  {stats.browsing}
+                  {unifiedStats.liveBrowsing}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Browsing</div>
               </div>
             </div>
           </div>
 
-          {/* Activity Type Tabs */}
+          {/* Activity Type Tabs - Using unified stats for consistent counts */}
           <div style={{
             display: 'flex',
             gap: '0.5rem',
@@ -307,10 +310,10 @@ export default function LiveActivityTracker() {
             paddingBottom: '1rem'
           }}>
             {[
-              { id: 'all', label: 'All Activity', count: stats.totalActive },
-              { id: 'watching', label: 'Watching', count: stats.watching },
-              { id: 'livetv', label: 'Live TV', count: stats.livetv || liveTVStats?.currentViewers || 0 },
-              { id: 'browsing', label: 'Browsing', count: stats.browsing },
+              { id: 'all', label: 'All Activity', count: unifiedStats.liveUsers },
+              { id: 'watching', label: 'Watching', count: unifiedStats.liveWatching },
+              { id: 'livetv', label: 'Live TV', count: unifiedStats.liveTVViewers || liveTVStats?.currentViewers || 0 },
+              { id: 'browsing', label: 'Browsing', count: unifiedStats.liveBrowsing },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -438,7 +441,7 @@ export default function LiveActivityTracker() {
                       <div style={{
                         height: '100%',
                         background: 'linear-gradient(90deg, #7877c6, #ff77c6)',
-                        width: `${(count / stats.totalActive) * 100}%`,
+                        width: `${(count / (unifiedStats.liveUsers || 1)) * 100}%`,
                         transition: 'width 0.3s'
                       }} />
                     </div>
@@ -482,7 +485,7 @@ export default function LiveActivityTracker() {
                       <div style={{
                         height: '100%',
                         background: 'linear-gradient(90deg, #7877c6, #ff77c6)',
-                        width: `${(count / stats.totalActive) * 100}%`,
+                        width: `${(count / (unifiedStats.liveUsers || 1)) * 100}%`,
                         transition: 'width 0.3s'
                       }} />
                     </div>

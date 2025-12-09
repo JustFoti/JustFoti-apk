@@ -2,8 +2,8 @@
  * Stream Extract API - Multi-Provider Stream Extraction
  * 
  * Provider Priority:
- * 1. Videasy (videasy.net with external decryption) - PRIMARY (multi-language support)
- * 2. VidSrc (vidsrc-embed.ru → cloudnestra.com) - Fallback
+ * 1. VidSrc (vidsrc-embed.ru → cloudnestra.com) - PRIMARY
+ * 2. Videasy (videasy.net with external decryption) - Fallback (multi-language support)
  * 
  * GET /api/stream/extract?tmdbId=550&type=movie
  * GET /api/stream/extract?tmdbId=1396&type=tv&season=1&episode=1
@@ -272,26 +272,11 @@ export async function GET(request: NextRequest) {
         throw new Error(vidsrcResult.error || 'VidSrc returned no sources');
       }
       
-      // Default behavior: Videasy FIRST (primary, multi-language), then VidSrc as fallback
+      // Default behavior: VidSrc FIRST (primary), then Videasy as fallback (multi-language)
       
-      // Try Videasy first - it's the primary source with multi-language support
-      console.log('[EXTRACT] Trying PRIMARY source: Videasy (multi-language)...');
-      try {
-        const videasyResult = await extractVideasyStreams(tmdbId, type, season, episode, true);
-        const workingVideasy = videasyResult.sources.filter(s => s.status === 'working');
-        
-        if (workingVideasy.length > 0) {
-          console.log(`[EXTRACT] ✓ Videasy succeeded with ${workingVideasy.length} working source(s)`);
-          return { sources: videasyResult.sources, provider: 'videasy' };
-        }
-        throw new Error(videasyResult.error || 'Videasy returned no working sources');
-      } catch (videasyError) {
-        console.warn('[EXTRACT] Videasy failed:', videasyError instanceof Error ? videasyError.message : videasyError);
-      }
-      
-      // Fallback to VidSrc if enabled
+      // Try VidSrc first - it's the primary source
       if (VIDSRC_ENABLED) {
-        console.log('[EXTRACT] Trying fallback source: VidSrc...');
+        console.log('[EXTRACT] Trying PRIMARY source: VidSrc...');
         try {
           const vidsrcResult = await extractVidSrcStreams(tmdbId, type, season, episode);
           const workingVidsrc = vidsrcResult.sources.filter(s => s.status === 'working');
@@ -306,6 +291,21 @@ export async function GET(request: NextRequest) {
         }
       } else {
         console.log('[EXTRACT] VidSrc is DISABLED, skipping...');
+      }
+      
+      // Fallback to Videasy (multi-language support)
+      console.log('[EXTRACT] Trying fallback source: Videasy (multi-language)...');
+      try {
+        const videasyResult = await extractVideasyStreams(tmdbId, type, season, episode, true);
+        const workingVideasy = videasyResult.sources.filter(s => s.status === 'working');
+        
+        if (workingVideasy.length > 0) {
+          console.log(`[EXTRACT] ✓ Videasy succeeded with ${workingVideasy.length} working source(s)`);
+          return { sources: videasyResult.sources, provider: 'videasy' };
+        }
+        throw new Error(videasyResult.error || 'Videasy returned no working sources');
+      } catch (videasyError) {
+        console.warn('[EXTRACT] Videasy failed:', videasyError instanceof Error ? videasyError.message : videasyError);
       }
       
       // All providers failed

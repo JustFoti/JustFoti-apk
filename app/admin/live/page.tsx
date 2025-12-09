@@ -168,7 +168,7 @@ export default function AdminLivePage() {
         <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <span style={{ color: '#94a3b8', fontSize: '14px' }}>Activity Trend (Last 5 min)</span>
-            <span style={{ color: '#f8fafc', fontWeight: '600' }}>{stats?.totalActive || 0} active</span>
+            <span style={{ color: '#f8fafc', fontWeight: '600' }}>{unifiedStats.liveUsers || 0} active</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '60px' }}>
             {history.map((point, i) => {
@@ -273,13 +273,13 @@ export default function AdminLivePage() {
             )}
           </div>
 
-          {/* Activity Types */}
+          {/* Activity Types - Using unified stats for consistency */}
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
             <h3 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '16px' }}>📊 Activity Types</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <ActivityTypeBar label="Watching VOD" count={stats.watching} total={stats.totalActive} color="#7877c6" icon="▶️" />
-              <ActivityTypeBar label="Live TV" count={stats.livetv} total={stats.totalActive} color="#f59e0b" icon="📺" />
-              <ActivityTypeBar label="Browsing" count={stats.browsing} total={stats.totalActive} color="#3b82f6" icon="🔍" />
+              <ActivityTypeBar label="Watching VOD" count={unifiedStats.liveWatching} total={unifiedStats.liveUsers} color="#7877c6" icon="▶️" />
+              <ActivityTypeBar label="Live TV" count={unifiedStats.liveTVViewers} total={unifiedStats.liveUsers} color="#f59e0b" icon="📺" />
+              <ActivityTypeBar label="Browsing" count={unifiedStats.liveBrowsing} total={unifiedStats.liveUsers} color="#3b82f6" icon="🔍" />
             </div>
           </div>
         </div>

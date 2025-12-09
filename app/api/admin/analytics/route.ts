@@ -118,6 +118,8 @@ export async function GET(request: NextRequest) {
     );
 
     // 3. Content Performance (Enhanced)
+    // Use completion_percentage column which is correctly calculated as (last_position / duration) * 100
+    // This represents how far into the content the user watched, not total watch time
     const contentPerformanceRaw = await adapter.query(
       isNeon
         ? `
@@ -127,7 +129,7 @@ export async function GET(request: NextRequest) {
             MAX(content_type) as "contentType",
             COUNT(*) as views,
             COALESCE(SUM(total_watch_time), 0) / 60 as "totalWatchTime",
-            AVG(CASE WHEN duration > 0 THEN (total_watch_time::float / duration) * 100 ELSE 0 END) as "avgCompletion",
+            AVG(CASE WHEN completion_percentage >= 0 AND completion_percentage <= 100 THEN completion_percentage ELSE NULL END) as "avgCompletion",
             COUNT(DISTINCT user_id) as "uniqueViewers"
           FROM watch_sessions
           WHERE started_at BETWEEN $1 AND $2
@@ -142,7 +144,7 @@ export async function GET(request: NextRequest) {
             MAX(content_type) as contentType,
             COUNT(*) as views,
             COALESCE(SUM(total_watch_time), 0) / 60 as totalWatchTime,
-            AVG(CASE WHEN duration > 0 THEN (CAST(total_watch_time AS FLOAT) / duration) * 100 ELSE 0 END) as avgCompletion,
+            AVG(CASE WHEN completion_percentage >= 0 AND completion_percentage <= 100 THEN completion_percentage ELSE NULL END) as avgCompletion,
             COUNT(DISTINCT user_id) as uniqueViewers
           FROM watch_sessions
           WHERE started_at BETWEEN ? AND ?

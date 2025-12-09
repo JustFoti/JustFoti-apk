@@ -35,3 +35,6 @@ yarn-error.log*
 /cloudflare-proxy/.wrangler
 mac-scan-tested.json
 mac-scan-tested.json
+message.txt
+
+/private

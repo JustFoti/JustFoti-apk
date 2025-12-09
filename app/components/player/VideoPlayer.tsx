@@ -92,15 +92,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
 
   const [showNextEpisodeButton, setShowNextEpisodeButton] = useState(false);
-  const [provider, setProvider] = useState('videasy'); // Default to videasy (primary provider with multi-language)
-  const [menuProvider, setMenuProvider] = useState('videasy');
+  const [provider, setProvider] = useState('vidsrc'); // Default to vidsrc (primary provider)
+  const [menuProvider, setMenuProvider] = useState('vidsrc');
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [sourcesCache, setSourcesCache] = useState<Record<string, any[]>>({});
   const [loadingProviders, setLoadingProviders] = useState<Record<string, boolean>>({});
   const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
   const [providerAvailability, setProviderAvailability] = useState<Record<string, boolean>>({
-    videasy: true, // Primary provider - always enabled
-    vidsrc: false, // Disabled by default until we check
+    vidsrc: true, // Primary provider - enabled by default
+    videasy: true, // Fallback provider - always enabled
   });
   const [highlightServerButton, setHighlightServerButton] = useState(false);
 
@@ -378,8 +378,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     const initializePlayer = async () => {
       // First fetch provider availability
       let availability = {
-        videasy: true, // Primary provider - always enabled
-        vidsrc: false,
+        vidsrc: true, // Primary provider - enabled by default
+        videasy: true, // Fallback provider - always enabled
       };
 
       try {
@@ -394,10 +394,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         console.warn('[VideoPlayer] Failed to fetch provider availability:', err);
       }
 
-      // Build provider priority list - Videasy FIRST (primary with multi-language support)
+      // Build provider priority list - VidSrc FIRST (primary), Videasy as fallback
       const providerOrder: string[] = [];
-      providerOrder.push('videasy'); // Always try Videasy first
-      if (availability.vidsrc) providerOrder.push('vidsrc'); // VidSrc as fallback
+      if (availability.vidsrc) providerOrder.push('vidsrc'); // VidSrc as primary
+      providerOrder.push('videasy'); // Videasy as fallback (multi-language support)
 
       console.log(`[VideoPlayer] Provider order: ${providerOrder.join(' → ')}`);
 
