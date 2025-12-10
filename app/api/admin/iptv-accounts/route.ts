@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 import { getDB } from '@/app/lib/db/connection';
 import { v4 as uuidv4 } from 'uuid';
-import type { IPTVAccount } from '@/app/lib/db/iptv-schema';
 
 // Initialize IPTV tables if they don't exist
 async function ensureIPTVTables() {
