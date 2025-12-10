@@ -349,9 +349,17 @@ export default function IPTVDebugPage() {
     // Use rawStreamUrl for detection since streamUrl is the proxied URL
     const urlToCheck = rawStreamUrl || streamUrl;
     const isHLS = urlToCheck.includes('.m3u8') || urlToCheck.includes('m3u8');
-    const isTS = urlToCheck.includes('extension=ts') || urlToCheck.endsWith('.ts') || urlToCheck.includes('live.php') || urlToCheck.includes('/play/');
+    // Most IPTV Stalker streams are raw MPEG-TS, detect common patterns
+    const isTS = urlToCheck.includes('extension=ts') || 
+                 urlToCheck.endsWith('.ts') || 
+                 urlToCheck.includes('live.php') || 
+                 urlToCheck.includes('/play/') ||
+                 urlToCheck.includes('/live/') ||
+                 urlToCheck.includes('stream=') ||
+                 // If not HLS and has typical IPTV URL patterns, assume TS
+                 (!isHLS && (urlToCheck.includes('/c/') || urlToCheck.includes('token=')));
     
-    console.log('Stream type detection:', { isHLS, isTS, urlToCheck, streamUrl });
+    console.log('[IPTV Debug] Stream type detection:', { isHLS, isTS, urlToCheck: urlToCheck.substring(0, 100) });
 
     // Dynamic import and setup
     const setupPlayer = async () => {
@@ -361,11 +369,12 @@ export default function IPTVDebugPage() {
         const Hls = HlsModule.default;
         
         if (Hls.isSupported()) {
+          console.log('[IPTV Debug] Setting up HLS.js player with URL:', streamUrl.substring(0, 100));
           const hls = new Hls({
             enableWorker: true,
             lowLatencyMode: true,
             xhrSetup: (xhr) => {
-              xhr.withCredentials = true;
+              xhr.withCredentials = false; // Don't send credentials to avoid CORS issues
             },
           });
           
@@ -373,11 +382,12 @@ export default function IPTVDebugPage() {
           hls.attachMedia(video);
           
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play().catch(console.error);
+            console.log('[IPTV Debug] HLS manifest parsed, starting playback');
+            video.play().catch((e) => console.error('[IPTV Debug] Play failed:', e));
           });
           
           hls.on(Hls.Events.ERROR, (_event, data) => {
-            console.error('HLS error:', data);
+            console.error('[IPTV Debug] HLS error:', data.type, data.details, data);
             setPlayerError(`HLS Error: ${data.type} - ${data.details}`);
             if (data.fatal) {
               switch (data.type) {
@@ -545,9 +555,9 @@ export default function IPTVDebugPage() {
     };
 
     setupPlayer().catch((err) => {
-      console.error('Failed to setup player:', err);
-      setPlayerError(`Failed to load player: ${err.message}`);
-    })
+      console.error('[IPTV Debug] Failed to setup player:', err);
+      setPlayerError(`Failed to load player: ${err?.message || String(err)}`);
+    });
 
     return () => {
       if (hlsRef.current) {
@@ -674,10 +684,14 @@ export default function IPTVDebugPage() {
         
         // Create proxied URL through our API
         const proxiedUrl = `/api/admin/iptv-debug/stream?url=${encodeURIComponent(url)}&mac=${encodeURIComponent(macAddress)}&token=${encodeURIComponent(testResult.token)}`;
+        console.log('[IPTV Debug] Setting stream URL:', proxiedUrl.substring(0, 100));
         setStreamUrl(proxiedUrl);
+      } else {
+        console.error('[IPTV Debug] No stream URL returned:', data);
+        setStreamDebug({ ...data, error: data.error || 'No stream URL returned' });
       }
     } catch (error) {
-      console.error('Failed to get stream:', error);
+      console.error('[IPTV Debug] Failed to get stream:', error);
       setStreamDebug({ error: String(error) });
     } finally {
       setLoadingStream(false);
@@ -1519,19 +1533,22 @@ export default function IPTVDebugPage() {
             </div>
           ) : streamUrl ? (
             <>
-              <div style={{
-                background: '#000',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                marginBottom: '16px',
-                aspectRatio: '16/9',
-                position: 'relative'
-              }}>
+              <div 
+                style={{
+                  background: '#000',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  marginBottom: '16px',
+                  aspectRatio: '16/9',
+                  position: 'relative'
+                }}
+              >
                 <video
                   ref={videoRef}
                   controls
                   autoPlay
                   playsInline
+                  muted
                   style={{ width: '100%', height: '100%' }}
                 />
                 {playerError && (
