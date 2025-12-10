@@ -22,9 +22,12 @@ import {
 import type Hls from 'hls.js';
 import type mpegts from 'mpegts.js';
 
-// Cloudflare Worker proxy URL for IPTV streams
-// This bypasses CORS and SSL issues that browsers have with IPTV CDNs
-const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
+// Proxy URLs for IPTV streams
+// RPi proxy (residential IP) is preferred - bypasses datacenter IP blocking
+// CF proxy is fallback but often gets 403'd by IPTV providers
+const RPI_PROXY_URL = process.env.NEXT_PUBLIC_RPI_PROXY_URL;
+const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
+const RPI_PROXY_KEY = process.env.NEXT_PUBLIC_RPI_PROXY_KEY;
 
 interface SavedAccount {
   portal: string;
@@ -407,16 +410,25 @@ export default function IPTVDebugPage() {
         if (mpegtsLib.isSupported()) {
           console.log('Using mpegts.js for TS stream');
           
-          // Use Cloudflare Worker proxy to bypass CORS/SSL issues
+          // Use RPi proxy (residential IP) if available, otherwise fall back to CF proxy
+          // RPi proxy bypasses datacenter IP blocking that IPTV providers use
           const rawUrl = rawStreamUrl || streamUrl;
-          const cfProxyUrl = `${CF_PROXY_URL}/iptv/stream?url=${encodeURIComponent(rawUrl)}`;
+          let proxyUrl: string;
           
-          console.log('mpegts using CF proxy URL:', cfProxyUrl);
+          if (RPI_PROXY_URL) {
+            const params = new URLSearchParams({ url: rawUrl });
+            if (RPI_PROXY_KEY) params.set('key', RPI_PROXY_KEY);
+            proxyUrl = `${RPI_PROXY_URL}/iptv/stream?${params.toString()}`;
+            console.log('mpegts using RPi proxy (residential IP):', proxyUrl.substring(0, 100));
+          } else {
+            proxyUrl = `${CF_PROXY_URL}/iptv/stream?url=${encodeURIComponent(rawUrl)}`;
+            console.log('mpegts using CF proxy (may get 403):', proxyUrl.substring(0, 100));
+          }
           
           const player = mpegtsLib.createPlayer({
             type: 'mpegts',
             isLive: true,
-            url: cfProxyUrl,
+            url: proxyUrl,
           }, {
             enableWorker: false,
             enableStashBuffer: false,
@@ -432,7 +444,10 @@ export default function IPTVDebugPage() {
           player.on(mpegtsLib.Events.ERROR, (errorType: string, errorDetail: string) => {
             console.error('mpegts error:', errorType, errorDetail);
             if (errorDetail.includes('403') || errorDetail.includes('HttpStatusCodeInvalid')) {
-              setPlayerError(`Portal blocked cloud IP (403). IPTV providers block datacenter IPs. Use VLC with the URL below.`);
+              const hint = RPI_PROXY_URL 
+                ? 'Portal may have blocked this IP. Try VLC with the URL below.'
+                : 'Portal blocked datacenter IP (403). Configure RPI proxy or use VLC.';
+              setPlayerError(hint);
             } else if (errorDetail.includes('SSL') || errorDetail.includes('fetch') || errorDetail.includes('Network')) {
               setPlayerError(`Network Error: Stream may have expired. Click Refresh and try VLC.`);
             } else {
@@ -1420,10 +1435,23 @@ export default function IPTVDebugPage() {
           padding: '24px',
           border: '1px solid rgba(255, 255, 255, 0.1)'
         }}>
-          <h3 style={{ color: '#f8fafc', margin: '0 0 20px 0', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Play size={20} />
-            {selectedChannel?.name || 'Stream'}
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+            <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Play size={20} />
+              {selectedChannel?.name || 'Stream'}
+            </h3>
+            <div style={{
+              padding: '4px 10px',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontWeight: '500',
+              background: RPI_PROXY_URL ? 'rgba(34, 197, 94, 0.2)' : 'rgba(251, 191, 36, 0.2)',
+              color: RPI_PROXY_URL ? '#22c55e' : '#fbbf24',
+              border: `1px solid ${RPI_PROXY_URL ? 'rgba(34, 197, 94, 0.3)' : 'rgba(251, 191, 36, 0.3)'}`
+            }}>
+              {RPI_PROXY_URL ? '🏠 RPi Proxy (Residential)' : '☁️ CF Proxy (Datacenter)'}
+            </div>
+          </div>
 
           {/* Show channel cmd for debugging */}
           {selectedChannel && (

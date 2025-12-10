@@ -92,3 +92,35 @@ export function isCloudflareProxyConfigured(): {
     dlhd: useDlhdProxy(),
   };
 }
+
+// IPTV Stalker Portal proxy configuration
+// Uses RPi residential proxy to bypass datacenter IP blocking
+export function getIPTVProxyUrl(): string | null {
+  // Client-side: use public env var
+  if (typeof window !== 'undefined') {
+    return process.env.NEXT_PUBLIC_RPI_PROXY_URL || null;
+  }
+  // Server-side: use server env var
+  return process.env.RPI_PROXY_URL || null;
+}
+
+export function getIPTVProxyKey(): string | null {
+  // Only available server-side
+  return process.env.RPI_PROXY_KEY || null;
+}
+
+// Get IPTV stream URL through RPi proxy
+export function getIPTVStreamProxyUrl(
+  streamUrl: string,
+  mac?: string,
+  token?: string
+): string | null {
+  const proxyUrl = getIPTVProxyUrl();
+  if (!proxyUrl) return null;
+  
+  const params = new URLSearchParams({ url: streamUrl });
+  if (mac) params.set('mac', mac);
+  if (token) params.set('token', token);
+  
+  return `${proxyUrl}/iptv/stream?${params.toString()}`;
+}

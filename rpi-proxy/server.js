@@ -204,6 +204,92 @@ function proxyWithCurl(targetUrl, res) {
 }
 
 /**
+ * IPTV Stream proxy - streams raw MPEG-TS data with STB headers
+ * This is for Stalker portal streams that need residential IP
+ */
+function proxyIPTVStream(targetUrl, mac, token, res) {
+  const url = new URL(targetUrl);
+  const client = url.protocol === 'https:' ? https : http;
+  
+  // STB Device Headers - Required for Stalker Portal authentication
+  const encodedMac = mac ? encodeURIComponent(mac) : '';
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+    'X-User-Agent': 'Model: MAG250; Link: WiFi',
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Connection': 'keep-alive',
+    'Referer': `${url.protocol}//${url.host}/`,
+  };
+  
+  if (mac) {
+    headers['Cookie'] = `mac=${encodedMac}; stb_lang=en; timezone=GMT`;
+  }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'GET',
+    headers,
+    timeout: 30000,
+    rejectUnauthorized: false, // Some IPTV CDNs have bad certs
+  };
+
+  console.log(`[IPTV Stream] ${targetUrl.substring(0, 80)}...`);
+
+  const proxyReq = client.request(options, (proxyRes) => {
+    const contentType = proxyRes.headers['content-type'] || 'video/mp2t';
+    
+    console.log(`[IPTV Response] ${proxyRes.statusCode} - ${contentType}`);
+    
+    // Stream directly - don't buffer (these can be huge/infinite)
+    res.writeHead(proxyRes.statusCode, {
+      'Content-Type': contentType,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+      'Cache-Control': 'no-store',
+    });
+    
+    proxyRes.pipe(res);
+    
+    proxyRes.on('error', (err) => {
+      console.error(`[IPTV Stream Error] ${err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(502);
+      }
+      res.end();
+    });
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error(`[IPTV Error] ${err.message}`);
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'IPTV proxy error', details: err.message }));
+    }
+  });
+
+  proxyReq.on('timeout', () => {
+    proxyReq.destroy();
+    if (!res.headersSent) {
+      res.writeHead(504, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'IPTV stream timeout' }));
+    }
+  });
+
+  // Handle client disconnect (user closes player)
+  res.on('close', () => {
+    proxyReq.destroy();
+  });
+
+  proxyReq.end();
+}
+
+/**
  * Simple proxy - uses curl for key requests, Node https for others
  */
 function proxyRequest(targetUrl, res) {
@@ -307,8 +393,9 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ error: 'Method not allowed' }));
   }
 
-  // Check API key
-  const apiKey = req.headers['x-api-key'];
+  // Check API key (header or query param)
+  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
+  const apiKey = req.headers['x-api-key'] || reqUrl.searchParams.get('key');
   if (apiKey !== API_KEY) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Unauthorized' }));
@@ -320,8 +407,6 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ error: 'Rate limited' }));
   }
 
-  const reqUrl = new URL(req.url, `http://${req.headers.host}`);
-  
   // Health check
   if (reqUrl.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -330,6 +415,27 @@ const server = http.createServer((req, res) => {
       timestamp: Date.now(),
       cacheSize: cache.size 
     }));
+  }
+
+  // IPTV Stream endpoint - streams raw TS data
+  if (reqUrl.pathname === '/iptv/stream') {
+    const targetUrl = reqUrl.searchParams.get('url');
+    const mac = reqUrl.searchParams.get('mac');
+    const token = reqUrl.searchParams.get('token');
+    
+    if (!targetUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    }
+
+    try {
+      const decoded = decodeURIComponent(targetUrl);
+      proxyIPTVStream(decoded, mac, token, res);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid URL' }));
+    }
+    return;
   }
 
   // Proxy endpoint
@@ -368,6 +474,7 @@ server.listen(PORT, () => {
 ╠═══════════════════════════════════════════════════════════╣
 ║  Endpoints:                                               ║
 ║    GET /proxy?url=<encoded_url>  - Proxy a request        ║
+║    GET /iptv/stream?url=&mac=&token= - IPTV stream proxy  ║
 ║    GET /health                   - Health check           ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Expose with:                                             ║
