@@ -1,26 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 
-// RPi proxy configuration - REQUIRED for IPTV streams (datacenter IPs get blocked)
-const RPI_PROXY_URL = process.env.RPI_PROXY_URL;
-const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;
-
-// STB Device Headers (only used as fallback if no RPi proxy)
-const STB_USER_AGENT = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
-
-function buildStreamHeaders(macAddress: string, token: string, referer?: string): Record<string, string> {
-  const encodedMac = encodeURIComponent(macAddress);
-  return {
-    'User-Agent': STB_USER_AGENT,
-    'X-User-Agent': 'Model: MAG250; Link: WiFi',
-    'Accept': '*/*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Connection': 'keep-alive',
-    'Cookie': `mac=${encodedMac}; stb_lang=en; timezone=GMT`,
-    'Authorization': `Bearer ${token}`,
-    ...(referer ? { 'Referer': referer } : {}),
-  };
-}
+// CF proxy is now primary - handles direct/RPi/Hetzner fallback internally
+const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
 
 export async function GET(request: NextRequest) {
   // Verify admin authentication
@@ -41,34 +23,15 @@ export async function GET(request: NextRequest) {
   try {
     const decodedUrl = decodeURIComponent(streamUrl);
     
-    // Extract referer from stream URL
-    const urlObj = new URL(decodedUrl);
-    const referer = `${urlObj.protocol}//${urlObj.host}/`;
-
-    let response: Response;
-
-    // Use RPi proxy if available (REQUIRED for production - datacenter IPs get blocked)
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      console.log('[IPTV Stream] Using RPi proxy for residential IP');
-      const rpiParams = new URLSearchParams({
-        url: decodedUrl,
-        mac: mac,
-        token: token,
-        key: RPI_PROXY_KEY,
-      });
-      
-      response = await fetch(`${RPI_PROXY_URL}/iptv/stream?${rpiParams.toString()}`, {
-        headers: {
-          'X-API-Key': RPI_PROXY_KEY,
-        },
-      });
-    } else {
-      // Fallback to direct fetch (will likely fail in production due to IP blocking)
-      console.warn('[IPTV Stream] No RPi proxy configured - direct fetch may be blocked');
-      response = await fetch(decodedUrl, {
-        headers: buildStreamHeaders(mac, token, referer),
-      });
-    }
+    // Use CF proxy - it handles direct/RPi/Hetzner fallback internally
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    console.log('[IPTV Stream] Using CF proxy');
+    const cfParams = new URLSearchParams({
+      url: decodedUrl,
+      mac: mac,
+    });
+    
+    const response = await fetch(`${cfBaseUrl}/iptv/stream?${cfParams.toString()}`);
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');

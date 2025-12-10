@@ -96,6 +96,9 @@ export default function IPTVDebugPage() {
   const [testStreamDuringCycle, setTestStreamDuringCycle] = useState(false);
   const [debugSourcesResult, setDebugSourcesResult] = useState<any>(null);
   const [debugSourcesLoading, setDebugSourcesLoading] = useState(false);
+  const [dlhdChannels, setDlhdChannels] = useState<{ id: string; name: string }[]>([]);
+  const [filterByDlhd, setFilterByDlhd] = useState(false);
+  const [channelSearch, setChannelSearch] = useState('');
   const autoCycleAbortRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -110,6 +113,25 @@ export default function IPTVDebugPage() {
         setSavedAccounts(JSON.parse(saved));
       } catch {}
     }
+  }, []);
+
+  // Load DLHD channels for filtering
+  useEffect(() => {
+    const loadDlhdChannels = async () => {
+      try {
+        const res = await fetch('/api/livetv/channels?limit=1000');
+        const data = await res.json();
+        if (data.success && data.channels) {
+          setDlhdChannels(data.channels.map((ch: any) => ({ 
+            id: ch.streamId || ch.id, 
+            name: ch.name 
+          })));
+        }
+      } catch (err) {
+        console.error('Failed to load DLHD channels:', err);
+      }
+    };
+    loadDlhdChannels();
   }, []);
 
   // Save accounts to localStorage when they change
@@ -1785,6 +1807,37 @@ export default function IPTVDebugPage() {
             </div>
           </div>
 
+          {/* Channel Filters */}
+          <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="Search channels..."
+              value={channelSearch}
+              onChange={(e) => setChannelSearch(e.target.value)}
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                color: '#f8fafc',
+                fontSize: '13px',
+                width: '200px',
+                outline: 'none'
+              }}
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={filterByDlhd}
+                onChange={(e) => setFilterByDlhd(e.target.checked)}
+                style={{ cursor: 'pointer' }}
+              />
+              <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                Only show channels matching our Live TV ({dlhdChannels.length} channels)
+              </span>
+            </label>
+          </div>
+
           {/* Channels List */}
           {loadingChannels ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
@@ -1792,7 +1845,39 @@ export default function IPTVDebugPage() {
               Loading channels...
             </div>
           ) : channels.length > 0 ? (
+            (() => {
+              // Apply filters
+              let filteredChannels = channels;
+              
+              // Search filter
+              if (channelSearch) {
+                const searchLower = channelSearch.toLowerCase();
+                filteredChannels = filteredChannels.filter(ch => 
+                  ch.name.toLowerCase().includes(searchLower)
+                );
+              }
+              
+              // DLHD matching filter - fuzzy match channel names
+              if (filterByDlhd && dlhdChannels.length > 0) {
+                const dlhdNamesLower = dlhdChannels.map(ch => ch.name.toLowerCase());
+                filteredChannels = filteredChannels.filter(ch => {
+                  const chNameLower = ch.name.toLowerCase();
+                  // Check for exact match or partial match
+                  return dlhdNamesLower.some(dlhdName => 
+                    chNameLower.includes(dlhdName) || 
+                    dlhdName.includes(chNameLower) ||
+                    // Also check without common suffixes like HD, FHD, etc
+                    chNameLower.replace(/\s*(hd|fhd|uhd|4k|\+)$/i, '').trim() === dlhdName.replace(/\s*(hd|fhd|uhd|4k|\+)$/i, '').trim()
+                  );
+                });
+              }
+              
+              return (
             <>
+              <div style={{ marginBottom: '8px', color: '#64748b', fontSize: '12px' }}>
+                Showing {filteredChannels.length} of {channels.length} channels
+                {filterByDlhd && ` (filtered to match ${dlhdChannels.length} Live TV channels)`}
+              </div>
               <div style={{ 
                 display: 'grid', 
                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
@@ -1801,7 +1886,7 @@ export default function IPTVDebugPage() {
                 overflowY: 'auto',
                 padding: '4px'
               }}>
-                {channels.map((channel) => (
+                {filteredChannels.map((channel) => (
                   <div
                     key={channel.id}
                     style={{
@@ -1938,6 +2023,8 @@ export default function IPTVDebugPage() {
                 </div>
               )}
             </>
+              );
+            })()
           ) : (
             <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
               Select a category to browse channels

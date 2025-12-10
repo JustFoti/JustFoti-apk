@@ -4,6 +4,8 @@ import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 const REQUEST_TIMEOUT = 15000;
 
 // Proxy configurations
+// CF proxy is now primary - it tries direct first, then falls back to RPi/Hetzner
+const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
 const RPI_PROXY_URL = process.env.RPI_PROXY_URL;
 const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;
 const HETZNER_PROXY_URL = process.env.HETZNER_PROXY_URL;
@@ -32,7 +34,7 @@ function buildHeaders(macAddress: string, token?: string): Record<string, string
 }
 
 // Perform handshake to get authentication token
-// MUST use RPi proxy so token is bound to residential IP (same IP that will stream)
+// Uses CF proxy which tries direct first, then falls back to RPi/Hetzner
 async function performHandshake(portalUrl: string, macAddress: string): Promise<string> {
   const url = new URL('/portal.php', portalUrl);
   url.searchParams.set('type', 'stb');
@@ -47,32 +49,35 @@ async function performHandshake(portalUrl: string, macAddress: string): Promise<
   try {
     let response: Response;
     
-    // Use RPi proxy if available - CRITICAL for token to be bound to residential IP
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      console.log('[Handshake] Using RPi proxy for residential IP');
-      const rpiParams = new URLSearchParams({
-        url: requestUrl,
-        mac: macAddress,
-        key: RPI_PROXY_KEY,
-      });
-      
-      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
-        signal: controller.signal,
-      });
-    } else {
-      // Direct fetch (token will be bound to server IP - streaming may fail)
-      console.warn('[Handshake] No RPi proxy - token will be bound to datacenter IP');
-      response = await fetch(requestUrl, { 
-        signal: controller.signal,
-        headers: buildHeaders(macAddress),
-      });
-    }
+    // Use CF proxy - it handles direct/RPi/Hetzner fallback internally
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    console.log('[Handshake] Using CF proxy (direct first)');
+    const cfParams = new URLSearchParams({
+      url: requestUrl,
+      mac: macAddress,
+    });
+    
+    response = await fetch(`${cfBaseUrl}/iptv/api?${cfParams.toString()}`, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     
     const text = await response.text();
+    
+    // Check for HTTP errors
+    if (!response.ok) {
+      throw new Error(`Portal returned HTTP ${response.status}: ${text.substring(0, 200)}`);
+    }
+    
     // Handle secure JSON wrapper
     const clean = text.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
-    const data = JSON.parse(clean);
+    
+    let data;
+    try {
+      data = JSON.parse(clean);
+    } catch (parseErr) {
+      throw new Error(`Invalid JSON response from portal: ${clean.substring(0, 200)}`);
+    }
     
     if (data?.js?.token) {
       return data.js.token;
@@ -102,34 +107,37 @@ async function getProfile(portalUrl: string, macAddress: string, token: string):
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    let response: Response;
-    
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      const rpiParams = new URLSearchParams({
-        url: requestUrl,
-        mac: macAddress,
-        token: token,
-        key: RPI_PROXY_KEY,
-      });
-      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
-        signal: controller.signal,
-      });
-    } else {
-      response = await fetch(requestUrl, { 
-        signal: controller.signal,
-        headers: buildHeaders(macAddress, token),
-      });
-    }
+    // Use CF proxy
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    const cfParams = new URLSearchParams({
+      url: requestUrl,
+      mac: macAddress,
+      token: token,
+    });
+    const response = await fetch(`${cfBaseUrl}/iptv/api?${cfParams.toString()}`, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     
     const text = await response.text();
+    
+    if (!response.ok) {
+      throw new Error(`Profile request failed: HTTP ${response.status}`);
+    }
+    
     const clean = text.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
-    const data = JSON.parse(clean);
+    
+    let data;
+    try {
+      data = JSON.parse(clean);
+    } catch {
+      throw new Error(`Invalid JSON in profile response: ${clean.substring(0, 100)}`);
+    }
     
     if (data?.js) {
       return data.js;
     }
-    throw new Error('Invalid profile response');
+    throw new Error('Invalid profile response - no js object');
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
@@ -139,7 +147,7 @@ async function getProfile(portalUrl: string, macAddress: string, token: string):
   }
 }
 
-// Get content count - uses RPi proxy if available
+// Get content count - uses CF proxy
 async function getContentCount(portalUrl: string, macAddress: string, token: string, contentType: string): Promise<number> {
   const url = new URL('/portal.php', portalUrl);
   url.searchParams.set('type', contentType);
@@ -152,24 +160,16 @@ async function getContentCount(portalUrl: string, macAddress: string, token: str
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    let response: Response;
-    
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      const rpiParams = new URLSearchParams({
-        url: requestUrl,
-        mac: macAddress,
-        token: token,
-        key: RPI_PROXY_KEY,
-      });
-      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
-        signal: controller.signal,
-      });
-    } else {
-      response = await fetch(requestUrl, { 
-        signal: controller.signal,
-        headers: buildHeaders(macAddress, token),
-      });
-    }
+    // Use CF proxy
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    const cfParams = new URLSearchParams({
+      url: requestUrl,
+      mac: macAddress,
+      token: token,
+    });
+    const response = await fetch(`${cfBaseUrl}/iptv/api?${cfParams.toString()}`, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     
     const text = await response.text();
@@ -182,7 +182,7 @@ async function getContentCount(portalUrl: string, macAddress: string, token: str
   }
 }
 
-// Get genres/categories - uses RPi proxy if available
+// Get genres/categories - uses CF proxy
 async function getGenres(portalUrl: string, macAddress: string, token: string, contentType: string): Promise<any[]> {
   const url = new URL('/portal.php', portalUrl);
   url.searchParams.set('type', contentType);
@@ -194,24 +194,16 @@ async function getGenres(portalUrl: string, macAddress: string, token: string, c
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    let response: Response;
-    
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      const rpiParams = new URLSearchParams({
-        url: requestUrl,
-        mac: macAddress,
-        token: token,
-        key: RPI_PROXY_KEY,
-      });
-      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
-        signal: controller.signal,
-      });
-    } else {
-      response = await fetch(requestUrl, { 
-        signal: controller.signal,
-        headers: buildHeaders(macAddress, token),
-      });
-    }
+    // Use CF proxy
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    const cfParams = new URLSearchParams({
+      url: requestUrl,
+      mac: macAddress,
+      token: token,
+    });
+    const response = await fetch(`${cfBaseUrl}/iptv/api?${cfParams.toString()}`, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     
     const text = await response.text();
@@ -234,7 +226,7 @@ function parseSecureJson(text: string): any {
   }
 }
 
-// Get channels list - uses RPi proxy if available
+// Get channels list - uses CF proxy
 async function getChannels(portalUrl: string, macAddress: string, token: string, genre: string = '*', page: number = 0, pageSize: number = 14): Promise<any> {
   const url = new URL('/portal.php', portalUrl);
   url.searchParams.set('type', 'itv');
@@ -252,24 +244,16 @@ async function getChannels(portalUrl: string, macAddress: string, token: string,
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    let response: Response;
-    
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      const rpiParams = new URLSearchParams({
-        url: requestUrl,
-        mac: macAddress,
-        token: token,
-        key: RPI_PROXY_KEY,
-      });
-      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
-        signal: controller.signal,
-      });
-    } else {
-      response = await fetch(requestUrl, { 
-        signal: controller.signal,
-        headers: buildHeaders(macAddress, token),
-      });
-    }
+    // Use CF proxy
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    const cfParams = new URLSearchParams({
+      url: requestUrl,
+      mac: macAddress,
+      token: token,
+    });
+    const response = await fetch(`${cfBaseUrl}/iptv/api?${cfParams.toString()}`, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     
     const text = await response.text();
@@ -297,8 +281,8 @@ function extractUrlFromCmd(cmd: string): string {
 }
 
 // Get stream URL for a channel
-// Uses RPi proxy if available to ensure token is bound to residential IP
-async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<{ streamUrl: string | null; rawResponse: any; requestUrl: string; usedRpiProxy: boolean }> {
+// Uses CF proxy which handles direct/fallback internally
+async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<{ streamUrl: string | null; rawResponse: any; requestUrl: string; usedRpiProxy: boolean; usedMethod?: string }> {
   // The cmd from channel list is the full command - we need to pass it as-is
   // Some portals expect "ffmpeg http://..." format, others just the URL
   // We'll try the original cmd first
@@ -318,36 +302,27 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    let response: Response;
-    let usedRpiProxy = false;
+    // Use CF proxy - it handles direct/fallback internally
+    const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+    console.log('Using CF proxy for create_link');
+    const cfParams = new URLSearchParams({
+      url: requestUrl,
+      mac: macAddress,
+      token: token,
+    });
     
-    // Use RPi proxy if available - this ensures the stream token is bound to the residential IP
-    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
-      console.log('Using RPi proxy for create_link to bind token to residential IP');
-      const rpiParams = new URLSearchParams({
-        url: requestUrl,
-        mac: macAddress,
-        token: token,
-        key: RPI_PROXY_KEY,
-      });
-      
-      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
-        signal: controller.signal,
-      });
-      usedRpiProxy = true;
-    } else {
-      // Direct fetch (token will be bound to server IP - may not work for streaming)
-      console.log('No RPi proxy configured - token will be bound to server IP');
-      response = await fetch(requestUrl, { 
-        signal: controller.signal,
-        headers: buildHeaders(macAddress, token),
-      });
-    }
+    const response = await fetch(`${cfBaseUrl}/iptv/api?${cfParams.toString()}`, {
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     
+    // Check which method CF used
+    const usedMethod = response.headers.get('X-Used-Method') || 'unknown';
+    const usedRpiProxy = usedMethod === 'rpi';
+    
     const text = await response.text();
-    console.log('Raw response from proxy:', text.substring(0, 500));
-    console.log('Response status:', response.status);
+    console.log('Raw response from CF proxy:', text.substring(0, 500));
+    console.log('Response status:', response.status, 'Method:', usedMethod);
     
     // Handle Stalker's secure JSON wrapper
     const cleanText = text.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
@@ -359,7 +334,7 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
       console.log('Parsed data:', JSON.stringify(data).substring(0, 500));
     } catch (parseErr) {
       console.error('JSON parse error:', parseErr);
-      return { streamUrl: null, rawResponse: { parseError: true, rawText: text.substring(0, 500) }, requestUrl, usedRpiProxy };
+      return { streamUrl: null, rawResponse: { parseError: true, rawText: text.substring(0, 500) }, requestUrl, usedRpiProxy, usedMethod };
     }
     
     let streamUrl = data?.js?.cmd || null;
@@ -378,12 +353,12 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
     console.log('Stream URL extracted:', streamUrl);
     console.log('Original cmd:', cmd);
     console.log('Response cmd:', data?.js?.cmd);
-    console.log('Used RPi proxy:', usedRpiProxy);
+    console.log('Used method:', usedMethod);
     
-    return { streamUrl, rawResponse: data, requestUrl, usedRpiProxy };
+    return { streamUrl, rawResponse: data, requestUrl, usedRpiProxy, usedMethod };
   } catch (e) {
     clearTimeout(timeoutId);
-    return { streamUrl: null, rawResponse: { error: String(e) }, requestUrl, usedRpiProxy: false };
+    return { streamUrl: null, rawResponse: { error: String(e) }, requestUrl, usedRpiProxy: false, usedMethod: 'error' };
   }
 }
 
@@ -419,8 +394,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  let body: any;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch (parseErr) {
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Invalid JSON in request body' 
+    }, { status: 400 });
+  }
+
+  try {
     const { action, portalUrl, macAddress, token, genre, page, cmd } = body;
 
     if (!portalUrl || !macAddress) {
@@ -805,9 +789,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
   } catch (error: any) {
+    console.error('[IPTV Debug API] Error:', error);
     return NextResponse.json({ 
       success: false, 
-      error: error.message || 'Unknown error' 
+      error: error.message || 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     }, { status: 500 });
   }
 }
