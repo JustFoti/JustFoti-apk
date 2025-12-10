@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Initialize IPTV tables if they don't exist
 async function ensureIPTVTables() {
   await initializeDB();
-  const db = getDB();
+  const db = getDB().getAdapter();
   const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
   
   if (isNeon) {
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
 
   try {
     await ensureIPTVTables();
-    const db = await getDB();
+    const db = getDB().getAdapter();
     
     const accounts = await db.query(`
       SELECT * FROM iptv_accounts 
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await ensureIPTVTables();
-    const db = await getDB();
+    const db = getDB().getAdapter();
     const body = await request.json();
     const { action } = body;
 

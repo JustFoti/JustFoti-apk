@@ -173,7 +173,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Channel ID required' }, { status: 400 });
     }
 
-    const db = await getDB();
+    await initializeDB();
+    const db = getDB().getAdapter();
     const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
     
     // If just checking for mapping existence

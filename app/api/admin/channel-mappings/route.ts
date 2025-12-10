@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 // Initialize channel mappings table if it doesn't exist
 async function ensureMappingsTables() {
   await initializeDB();
-  const db = getDB();
+  const db = getDB().getAdapter();
   const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
   
   if (isNeon) {
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
   try {
     await ensureMappingsTables();
-    const db = await getDB();
+    const db = getDB().getAdapter();
     
     const searchParams = request.nextUrl.searchParams;
     const ourChannelId = searchParams.get('ourChannelId');
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
 
   try {
     await ensureMappingsTables();
-    const db = await getDB();
+    const db = getDB().getAdapter();
     const body = await request.json();
     const { action } = body;
     const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
