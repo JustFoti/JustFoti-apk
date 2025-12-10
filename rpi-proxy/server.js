@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * Raspberry Pi CORS Proxy Server
+ * Raspberry Pi Simple Proxy Server
  * 
- * A simple proxy that forwards requests from your Vercel backend
- * through your residential IP to bypass CDN blocks.
+ * A minimal residential IP proxy for DLHD keys and m3u8 playlists.
+ * No special headers needed - residential IP is all that matters!
  * 
  * Setup:
  *   1. Copy this folder to your Raspberry Pi
  *   2. npm install
  *   3. Set API_KEY environment variable
  *   4. Run: node server.js
- *   5. Use Cloudflare Tunnel or ngrok to expose it securely
+ *   5. Use Cloudflare Tunnel or ngrok to expose it
  * 
- * Usage from Vercel:
- *   GET https://your-tunnel.trycloudflare.com/proxy?url=<encoded_url>
+ * Usage:
+ *   GET /proxy?url=<encoded_url>
  *   Header: X-API-Key: your-secret-key
  */
 
@@ -24,11 +24,10 @@ const { URL } = require('url');
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.API_KEY || 'change-this-secret-key';
 
-// Rate limiting - very generous limits for live streaming with segment proxying
-// Each stream needs ~15-30 segments/min + M3U8 refreshes
+// Simple rate limiting
 const rateLimiter = new Map();
-const RATE_LIMIT = 1000; // requests per minute (supports multiple concurrent streams with segments)
-const RATE_WINDOW = 60000; // 1 minute
+const RATE_LIMIT = 500; // requests per minute
+const RATE_WINDOW = 60000;
 
 function checkRateLimit(ip) {
   const now = Date.now();
@@ -41,11 +40,10 @@ function checkRateLimit(ip) {
   
   record.count++;
   rateLimiter.set(ip, record);
-  
   return record.count <= RATE_LIMIT;
 }
 
-// Clean up old rate limit entries every 5 minutes
+// Clean up rate limits every 5 minutes
 setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of rateLimiter.entries()) {
@@ -53,118 +51,199 @@ setInterval(() => {
   }
 }, 300000);
 
-// Response cache - reduces upstream requests dramatically
-// CRITICAL: M3U8 playlists for live streams are "sliding windows" that update
-// every few seconds with new segments. Caching too long causes playback to stop!
-const responseCache = new Map();
-const M3U8_CACHE_TTL = 2000; // 2 seconds for M3U8 files - MUST be short for live streams!
-const KEY_CACHE_TTL = 3600000; // 1 hour for encryption keys
-const SEGMENT_CACHE_TTL = 300000; // 5 minutes for video segments (they don't change)
+// Simple response cache
+const cache = new Map();
+const KEY_CACHE_TTL = 3600000; // 1 hour for keys
+const M3U8_CACHE_TTL = 5000;   // 5 seconds for m3u8 (they update frequently)
 
 function getCacheTTL(url) {
-  // Encryption keys - cache for 1 hour (but each unique URL with different 'number' param is separate)
   if (url.includes('.key') || url.includes('key.php') || url.includes('wmsxx.php')) return KEY_CACHE_TTL;
-  // Video segments - cache for 5 minutes (they don't change once created)
-  // .css is used for segments on giokko.ru, whalesignal.ai uses encoded paths
-  if (url.includes('.ts') || url.includes('whalesignal.ai/')) return SEGMENT_CACHE_TTL;
-  // M3U8 playlists (mono.css on giokko.ru) - DON'T cache, need fresh every time
-  if (url.includes('mono.css') || url.includes('.m3u8')) return 0; // No caching for live playlists
-  return M3U8_CACHE_TTL;
+  if (url.includes('.m3u8') || url.includes('mono.css')) return M3U8_CACHE_TTL;
+  return 30000; // 30 seconds default
 }
 
-function getCachedResponse(url) {
+function getCached(url) {
   const ttl = getCacheTTL(url);
-  
-  // TTL of 0 means no caching - always fetch fresh
   if (ttl === 0) return null;
   
-  const cached = responseCache.get(url);
+  const cached = cache.get(url);
   if (!cached) return null;
   
-  const age = Date.now() - cached.timestamp;
-  
-  if (age > ttl) {
-    responseCache.delete(url);
+  if (Date.now() - cached.timestamp > ttl) {
+    cache.delete(url);
     return null;
   }
   
-  // Don't log segment cache hits to reduce noise (includes whalesignal.ai segments)
-  if (!url.includes('.ts') && !url.includes('whalesignal.ai/')) {
-    console.log(`[Cache HIT] ${url.substring(0, 60)}... (age: ${Math.round(age/1000)}s)`);
-  }
   return cached;
 }
 
-function cacheResponse(url, data, contentType) {
+function setCache(url, data, contentType) {
   const ttl = getCacheTTL(url);
-  
-  // Don't cache if TTL is 0 (live M3U8 playlists)
   if (ttl === 0) return;
-  
-  responseCache.set(url, {
-    data,
-    contentType,
-    timestamp: Date.now()
-  });
-  // Don't log segment caches to reduce noise
-  if (!url.includes('.ts') && !url.includes('whalesignal.ai/')) {
-    console.log(`[Cache SET] ${url.substring(0, 60)}...`);
-  }
+  cache.set(url, { data, contentType, timestamp: Date.now() });
 }
 
-// Clean up old cache entries every minute
+// Clean cache every minute
 setInterval(() => {
   const now = Date.now();
-  let cleaned = 0;
-  for (const [url, cached] of responseCache.entries()) {
-    const ttl = getCacheTTL(url);
-    if (now - cached.timestamp > ttl) {
-      responseCache.delete(url);
-      cleaned++;
+  for (const [url, cached] of cache.entries()) {
+    if (now - cached.timestamp > getCacheTTL(url)) {
+      cache.delete(url);
     }
-  }
-  if (cleaned > 0) {
-    console.log(`[Cache] Cleaned ${cleaned} expired entries, ${responseCache.size} remaining`);
   }
 }, 60000);
 
+/**
+ * Generate fake AWS auth headers (server checks presence, not validity)
+ */
+function getAwsHeaders() {
+  const now = new Date();
+  // Format: 20251210T004300Z
+  const pad = (n) => n.toString().padStart(2, '0');
+  const amzDate = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}Z`;
+  const dateStamp = amzDate.substring(0, 8);
+  const fakeSignature = '0'.repeat(64);
+  const authorization = `AWS4-HMAC-SHA256 Credential=/${dateStamp}/us-east-1//aws4_request, SignedHeaders=host;x-amz-date, Signature=${fakeSignature}`;
+  
+  return { amzDate, authorization };
+}
+
+const { spawn } = require('child_process');
+
+/**
+ * Proxy using curl (bypasses Node TLS fingerprinting issues)
+ */
+function proxyWithCurl(targetUrl, res) {
+  const isKeyRequest = targetUrl.includes('wmsxx.php') || targetUrl.includes('.key');
+  
+  // Force HTTP/2, disable cert verification (like Insomnia)
+  // Note: removed -L (follow redirects) as it may cause issues
+  const args = ['-s', '--max-time', '30', '--http2', '-k'];
+  
+  // Match Insomnia's exact header order and format
+  args.push('-H', 'user-agent: insomnia/2022.4.2');
+  
+  // Add AWS headers for key requests
+  if (isKeyRequest) {
+    const { amzDate, authorization } = getAwsHeaders();
+    args.push('-H', `x-amz-date: ${amzDate}`);
+    args.push('-H', `authorization: ${authorization}`);
+    console.log(`[Key Request] Using curl with AWS headers (HTTP/2)`);
+  }
+  
+  args.push('-H', 'accept: */*');
+  args.push('-i'); // Include response headers
+  args.push(targetUrl);
+  
+  console.log(`[Curl] ${targetUrl.substring(0, 80)}...`);
+  console.log(`[Curl Args] ${args.join(' ')}`);
+  
+  const curl = spawn('curl', args);
+  const chunks = [];
+  let stderr = '';
+  
+  curl.stdout.on('data', (data) => chunks.push(data));
+  curl.stderr.on('data', (data) => { stderr += data.toString(); });
+  
+  curl.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`[Curl Error] Exit ${code}: ${stderr}`);
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Curl failed', details: stderr }));
+      }
+      return;
+    }
+    
+    const output = Buffer.concat(chunks);
+    console.log(`[Curl Raw Output] ${output.length} bytes total`);
+    
+    // With -i flag, output is: HTTP headers + \r\n\r\n + body
+    // Parse status from first line: "HTTP/2 200" or "HTTP/1.1 200 OK"
+    let statusCode = 200;
+    let data = output;
+    
+    // Find the header/body separator (double CRLF)
+    const headerEnd = output.indexOf(Buffer.from('\r\n\r\n'));
+    if (headerEnd > 0) {
+      const headers = output.slice(0, headerEnd).toString();
+      data = output.slice(headerEnd + 4);
+      
+      // Parse status from first line
+      const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
+      if (statusMatch) {
+        statusCode = parseInt(statusMatch[1], 10);
+      }
+      console.log(`[Curl Headers] ${headers.split('\r\n')[0]}`);
+    }
+    
+    console.log(`[Curl Parsed] Status: ${statusCode}, Body: ${data.length} bytes`);
+    
+    console.log(`[Response] ${statusCode} - ${data.length} bytes`);
+    
+    if (statusCode === 200) {
+      setCache(targetUrl, data, 'application/octet-stream');
+    }
+    
+    res.writeHead(statusCode, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': data.length,
+      'Access-Control-Allow-Origin': '*',
+      'X-Cache': 'MISS',
+    });
+    res.end(data);
+  });
+  
+  curl.on('error', (err) => {
+    console.error(`[Curl Spawn Error] ${err.message}`);
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Curl spawn failed', details: err.message }));
+    }
+  });
+}
+
+/**
+ * Simple proxy - uses curl for key requests, Node https for others
+ */
 function proxyRequest(targetUrl, res) {
-  // Check cache first
-  const cached = getCachedResponse(targetUrl);
+  // Check cache
+  const cached = getCached(targetUrl);
   if (cached) {
+    console.log(`[Cache HIT] ${targetUrl.substring(0, 60)}...`);
     res.writeHead(200, {
       'Content-Type': cached.contentType,
       'Content-Length': cached.data.length,
       'Access-Control-Allow-Origin': '*',
-      'X-Proxied-By': 'rpi-proxy',
       'X-Cache': 'HIT',
     });
     res.end(cached.data);
     return;
   }
 
+  // Use curl for key requests (TLS fingerprint matters)
+  const isKeyRequest = targetUrl.includes('wmsxx.php') || targetUrl.includes('.key');
+  if (isKeyRequest) {
+    return proxyWithCurl(targetUrl, res);
+  }
+
+  // Use Node https for everything else
   const url = new URL(targetUrl);
   const client = url.protocol === 'https:' ? https : http;
-  
-  // Use epicplayplay.cfd as referer/origin for ALL giokko.ru requests (M3U8 and keys)
-  const playerDomain = 'epicplayplay.cfd';
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-    'Accept': '*/*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'identity',
-    'Referer': `https://${playerDomain}/`,
-    'Origin': `https://${playerDomain}`,
-  };
   
   const options = {
     hostname: url.hostname,
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
     path: url.pathname + url.search,
     method: 'GET',
-    headers,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': '*/*',
+    },
     timeout: 30000,
   };
+
+  console.log(`[Fetch] ${targetUrl.substring(0, 80)}...`);
 
   const proxyReq = client.request(options, (proxyRes) => {
     const contentType = proxyRes.headers['content-type'] || 'application/octet-stream';
@@ -175,16 +254,16 @@ function proxyRequest(targetUrl, res) {
     proxyRes.on('end', () => {
       const data = Buffer.concat(chunks);
       
-      // Cache successful responses for M3U8 and key files
+      console.log(`[Response] ${proxyRes.statusCode} - ${data.length} bytes`);
+      
       if (proxyRes.statusCode === 200) {
-        cacheResponse(targetUrl, data, contentType);
+        setCache(targetUrl, data, contentType);
       }
       
       res.writeHead(proxyRes.statusCode, {
         'Content-Type': contentType,
         'Content-Length': data.length,
         'Access-Control-Allow-Origin': '*',
-        'X-Proxied-By': 'rpi-proxy',
         'X-Cache': 'MISS',
       });
       res.end(data);
@@ -192,7 +271,7 @@ function proxyRequest(targetUrl, res) {
   });
 
   proxyReq.on('error', (err) => {
-    console.error(`[Proxy Error] ${err.message}`);
+    console.error(`[Error] ${err.message}`);
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Proxy error', details: err.message }));
@@ -223,7 +302,6 @@ const server = http.createServer((req, res) => {
     return res.end();
   }
 
-  // Only allow GET
   if (req.method !== 'GET') {
     res.writeHead(405, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Method not allowed' }));
@@ -232,7 +310,6 @@ const server = http.createServer((req, res) => {
   // Check API key
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== API_KEY) {
-    console.log(`[Auth Failed] ${clientIp}`);
     res.writeHead(401, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Unauthorized' }));
   }
@@ -243,13 +320,16 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ error: 'Rate limited' }));
   }
 
-  // Parse URL
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
   
   // Health check
   if (reqUrl.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', timestamp: Date.now() }));
+    return res.end(JSON.stringify({ 
+      status: 'ok', 
+      timestamp: Date.now(),
+      cacheSize: cache.size 
+    }));
   }
 
   // Proxy endpoint
@@ -263,7 +343,6 @@ const server = http.createServer((req, res) => {
 
     try {
       const decoded = decodeURIComponent(targetUrl);
-      console.log(`[Proxy] ${decoded.substring(0, 80)}...`);
       proxyRequest(decoded, res);
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -272,27 +351,28 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 404 for everything else
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
 });
 
 server.listen(PORT, () => {
   console.log(`
-╔════════════════════════════════════════════════════════════╗
-║           Raspberry Pi CORS Proxy Server                   ║
-╠════════════════════════════════════════════════════════════╣
-║  Port: ${PORT.toString().padEnd(50)}║
-║  API Key: ${API_KEY.substring(0, 8)}${'*'.repeat(Math.max(0, API_KEY.length - 8)).padEnd(42)}║
-╠════════════════════════════════════════════════════════════╣
-║  Endpoints:                                                ║
-║    GET /proxy?url=<encoded_url>  - Proxy a request         ║
-║    GET /health                   - Health check            ║
-╠════════════════════════════════════════════════════════════╣
-║  Next steps:                                               ║
-║    1. Expose with: cloudflared tunnel --url localhost:${PORT.toString().padEnd(5)}║
-║    2. Or use ngrok: ngrok http ${PORT.toString().padEnd(27)}║
-║    3. Add tunnel URL to your Vercel env vars               ║
-╚════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════╗
+║       Raspberry Pi Simple Proxy (Residential IP)          ║
+╠═══════════════════════════════════════════════════════════╣
+║  Port: ${PORT.toString().padEnd(49)}║
+║  API Key: ${API_KEY.substring(0, 8)}${'*'.repeat(Math.max(0, API_KEY.length - 8)).padEnd(41)}║
+╠═══════════════════════════════════════════════════════════╣
+║  No Puppeteer, no special headers - just simple fetches!  ║
+║  Residential IP is all that's needed.                     ║
+╠═══════════════════════════════════════════════════════════╣
+║  Endpoints:                                               ║
+║    GET /proxy?url=<encoded_url>  - Proxy a request        ║
+║    GET /health                   - Health check           ║
+╠═══════════════════════════════════════════════════════════╣
+║  Expose with:                                             ║
+║    cloudflared tunnel --url localhost:${PORT.toString().padEnd(20)}║
+║    ngrok http ${PORT.toString().padEnd(43)}║
+╚═══════════════════════════════════════════════════════════╝
   `);
 });

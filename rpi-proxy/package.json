@@ -1,13 +1,14 @@
 {
-  "name": "rpi-cors-proxy",
-  "version": "1.0.0",
-  "description": "Simple CORS proxy for Raspberry Pi",
+  "name": "rpi-simple-proxy",
+  "version": "3.0.0",
+  "description": "Simple residential IP proxy - no special headers needed!",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "engines": {
-    "node": ">=16.0.0"
-  }
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
 }

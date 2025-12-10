@@ -219,8 +219,20 @@ export default {
         return await handleDLHDRequest(request, env);
       } catch (error) {
         metrics.errors++;
-        logger.error('DLHD proxy error', error as Error);
-        return errorResponse('DLHD proxy error', 500);
+        const err = error as Error;
+        logger.error('DLHD proxy error', err);
+        return new Response(JSON.stringify({
+          error: 'DLHD proxy error',
+          message: err.message,
+          stack: err.stack,
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
       }
     }
 

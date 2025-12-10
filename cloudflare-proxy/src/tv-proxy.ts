@@ -180,7 +180,10 @@ async function handleKeyProxy(url: URL, env: Env, logger: any): Promise<Response
   logger.debug('Fetching encryption key', { url: decodedUrl });
   
   const fetchStart = Date.now();
-  const response = await fetchViaProxy(decodedUrl, env, logger);
+  
+  // Keys MUST go through RPI proxy - direct fetch always returns 418
+  // The RPI proxy uses Puppeteer with a browser session from dlhd.dad
+  const response = await fetchKeyViaRpiProxy(decodedUrl, env, logger);
   const keyData = await response.arrayBuffer();
   
   logger.info('Key fetched', { 
@@ -199,6 +202,33 @@ async function handleKeyProxy(url: URL, env: Env, logger: any): Promise<Response
 
   logger.requestEnd(res);
   return res;
+}
+
+// Keys require RPI proxy with Puppeteer browser session - direct fetch always fails
+async function fetchKeyViaRpiProxy(url: string, env: Env, logger: any): Promise<Response> {
+  if (!env.RPI_PROXY_URL || !env.RPI_PROXY_KEY) {
+    throw new Error('RPI proxy not configured - required for key fetching');
+  }
+  
+  let vpsBaseUrl = env.RPI_PROXY_URL;
+  if (!vpsBaseUrl.startsWith('http://') && !vpsBaseUrl.startsWith('https://')) {
+    vpsBaseUrl = `https://${vpsBaseUrl}`;
+  }
+  
+  const proxyUrl = `${vpsBaseUrl}/proxy?url=${encodeURIComponent(url)}`;
+  logger.info('Fetching key via RPI proxy', { proxyUrl: proxyUrl.substring(0, 100) });
+  
+  const response = await fetch(proxyUrl, {
+    headers: { 'X-API-Key': env.RPI_PROXY_KEY },
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('RPI proxy key fetch failed', { status: response.status, error: errorText.substring(0, 200) });
+    throw new Error(`RPI proxy key fetch failed: ${response.status}`);
+  }
+  
+  return response;
 }
 
 async function handleSegmentProxy(url: URL, env: Env, logger: any): Promise<Response> {
@@ -304,14 +334,21 @@ async function fetchViaProxy(url: string, env: Env, logger: any): Promise<Respon
       return directResponse;
     }
     
-    logger.warn('Direct fetch failed, status:', { status: directResponse.status });
+    const errorText = await directResponse.text();
+    logger.warn('Direct fetch failed', { status: directResponse.status, error: errorText.substring(0, 200) });
   } catch (err) {
     logger.warn('Direct fetch error:', { error: (err as Error).message });
   }
 
   // Fallback to RPI proxy if direct fetch fails
   if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
-    const proxyUrl = `${env.RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+    // Ensure URL has http:// prefix
+    let vpsBaseUrl = env.RPI_PROXY_URL;
+    if (!vpsBaseUrl.startsWith('http://') && !vpsBaseUrl.startsWith('https://')) {
+      vpsBaseUrl = `http://${vpsBaseUrl}`;
+    }
+    
+    const proxyUrl = `${vpsBaseUrl}/proxy?url=${encodeURIComponent(url)}`;
     logger.debug('Falling back to RPI proxy', { proxyUrl: proxyUrl.substring(0, 100) });
     
     const response = await fetch(proxyUrl, {

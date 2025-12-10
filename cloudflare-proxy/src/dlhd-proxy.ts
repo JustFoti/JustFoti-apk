@@ -1,8 +1,11 @@
 /**
- * DLHD Proxy with Oxylabs Residential ISP Rotation
+ * DLHD Proxy with Raspberry Pi Residential IP
  * 
- * Proxies DLHD.dad live streams through Oxylabs residential IPs
- * to bypass geo-restrictions and CDN blocks.
+ * Proxies DLHD.dad live streams through your Raspberry Pi's residential IP
+ * to bypass CDN blocks on encryption keys.
+ * 
+ * Architecture:
+ *   Cloudflare Worker → RPI Proxy (residential IP) → DLHD CDN
  * 
  * Routes:
  *   GET /?channel=<id>           - Get proxied M3U8 playlist
@@ -10,25 +13,16 @@
  *   GET /segment?url=<encoded_url> - Proxy video segment
  *   GET /health                  - Health check
  * 
- * Oxylabs Configuration:
- *   Set these secrets via wrangler:
- *   - OXYLABS_USERNAME: Your Oxylabs username
- *   - OXYLABS_PASSWORD: Your Oxylabs password
- *   - OXYLABS_ENDPOINT: Proxy endpoint (default: pr.oxylabs.io:7777)
+ * Configuration (via wrangler secrets):
+ *   - RPI_PROXY_URL: Your Raspberry Pi proxy URL
+ *   - RPI_PROXY_KEY: API key for authentication
  */
 
 import { createLogger, type LogLevel } from './logger';
 
 export interface Env {
   LOG_LEVEL?: string;
-  // Oxylabs credentials
-  OXYLABS_USERNAME?: string;
-  OXYLABS_PASSWORD?: string;
-  OXYLABS_ENDPOINT?: string;
-  // Optional: specific country/city targeting
-  OXYLABS_COUNTRY?: string; // e.g., 'us', 'uk', 'de'
-  OXYLABS_CITY?: string;    // e.g., 'new_york', 'london'
-  // Fallback RPI proxy
+  // Raspberry Pi proxy
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
 }
@@ -48,24 +42,6 @@ const CDN_PATTERNS = {
 const serverKeyCache = new Map<string, { serverKey: string; playerDomain: string; fetchedAt: number }>();
 const SERVER_KEY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
-// Session ID for sticky sessions (rotates every 10 minutes)
-let currentSessionId = generateSessionId();
-let sessionCreatedAt = Date.now();
-const SESSION_ROTATION_MS = 10 * 60 * 1000; // 10 minutes
-
-function generateSessionId(): string {
-  return `dlhd_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-}
-
-function getSessionId(): string {
-  // Rotate session every 10 minutes for IP rotation
-  if (Date.now() - sessionCreatedAt > SESSION_ROTATION_MS) {
-    currentSessionId = generateSessionId();
-    sessionCreatedAt = Date.now();
-  }
-  return currentSessionId;
-}
-
 export async function handleDLHDRequest(request: Request, env: Env): Promise<Response> {
   const logLevel = (env.LOG_LEVEL || 'info') as LogLevel;
   const logger = createLogger(request, logLevel);
@@ -76,10 +52,7 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
 
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
-    return new Response(null, { 
-      status: 200, 
-      headers: corsHeaders(origin) 
-    });
+    return new Response(null, { status: 200, headers: corsHeaders(origin) });
   }
 
   if (request.method !== 'GET') {
@@ -87,33 +60,23 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
   }
 
   try {
-    // Health check
     if (path === '/health') {
-      return handleHealthCheck(env, logger, origin);
+      return handleHealthCheck(env, origin);
     }
 
-    // Route: /key - Proxy encryption key
     if (path === '/key') {
       return handleKeyProxy(url, env, logger, origin);
     }
 
-    // Route: /segment - Proxy video segment
     if (path === '/segment') {
       return handleSegmentProxy(url, env, logger, origin);
     }
 
-    // Route: / - Get M3U8 playlist
     const channel = url.searchParams.get('channel');
     if (!channel) {
       return jsonResponse({
         error: 'Missing channel parameter',
         usage: 'GET /dlhd?channel=325',
-        routes: {
-          playlist: '/dlhd?channel=<id>',
-          key: '/dlhd/key?url=<encoded_url>',
-          segment: '/dlhd/segment?url=<encoded_url>',
-          health: '/dlhd/health',
-        },
       }, 400, origin);
     }
 
@@ -122,28 +85,22 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
   } catch (error) {
     logger.error('DLHD Proxy error', error as Error);
     return jsonResponse({
-      error: 'Proxy error',
-      details: error instanceof Error ? error.message : String(error),
+      error: 'DLHD proxy error',
+      message: error instanceof Error ? error.message : String(error),
+      timestamp: new Date().toISOString(),
     }, 500, origin);
   }
 }
 
-async function handleHealthCheck(env: Env, logger: any, origin: string | null): Promise<Response> {
-  const hasOxylabs = !!(env.OXYLABS_USERNAME && env.OXYLABS_PASSWORD);
+
+function handleHealthCheck(env: Env, origin: string | null): Response {
   const hasRpiProxy = !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY);
   
   return jsonResponse({
-    status: 'healthy',
-    proxy: {
-      oxylabs: hasOxylabs ? 'configured' : 'not configured',
-      rpiProxy: hasRpiProxy ? 'configured' : 'not configured',
-      country: env.OXYLABS_COUNTRY || 'auto',
-      city: env.OXYLABS_CITY || 'auto',
-    },
-    session: {
-      id: getSessionId(),
-      age: Math.floor((Date.now() - sessionCreatedAt) / 1000) + 's',
-      rotatesIn: Math.floor((SESSION_ROTATION_MS - (Date.now() - sessionCreatedAt)) / 1000) + 's',
+    status: hasRpiProxy ? 'healthy' : 'misconfigured',
+    rpiProxy: {
+      configured: hasRpiProxy,
+      url: env.RPI_PROXY_URL ? env.RPI_PROXY_URL.substring(0, 40) + '...' : 'not set',
     },
     timestamp: new Date().toISOString(),
   }, 200, origin);
@@ -158,46 +115,63 @@ async function handlePlaylistRequest(
 ): Promise<Response> {
   const channelKey = `premium${channel}`;
   
-  logger.debug('Looking up server key', { channelKey });
-  const { serverKey, playerDomain } = await getServerKey(channelKey, env, logger);
-  logger.info('Server key found', { serverKey, playerDomain });
+  // Get server key (may fall back to known keys if lookup is blocked)
+  const { serverKey: initialServerKey, playerDomain } = await getServerKey(channelKey, logger);
+  logger.info('Server key found', { serverKey: initialServerKey, playerDomain });
   
-  const m3u8Url = constructM3U8Url(serverKey, channelKey);
-  logger.debug('Constructed M3U8 URL', { m3u8Url });
+  // Try the initial server key, then fall back to other known keys
+  const serverKeysToTry = [initialServerKey, ...KNOWN_SERVER_KEYS.filter(k => k !== initialServerKey)];
   
-  // Fetch M3U8 with cache-busting
-  const cacheBustUrl = `${m3u8Url}?_t=${Date.now()}`;
-  const fetchStart = Date.now();
-  const response = await fetchViaOxylabs(cacheBustUrl, env, logger, playerDomain);
-  const content = await response.text();
-  
-  logger.debug('M3U8 fetched', { 
-    duration: Date.now() - fetchStart,
-    contentLength: content.length,
-  });
-  
-  if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
-    logger.error('Invalid M3U8 content', { preview: content.substring(0, 200) });
-    return jsonResponse({ error: 'Invalid M3U8 content', preview: content.substring(0, 200) }, 502, origin);
+  let lastError = '';
+  for (const serverKey of serverKeysToTry) {
+    try {
+      // Fetch M3U8 via RPI proxy (giokko.ru blocks Cloudflare IPs)
+      const m3u8Url = constructM3U8Url(serverKey, channelKey);
+      logger.info('Trying M3U8 URL', { serverKey, url: m3u8Url });
+      
+      const response = await fetchViaRpiProxy(`${m3u8Url}?_t=${Date.now()}`, env, logger);
+      const content = await response.text();
+      
+      if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
+        // Valid M3U8 found - cache this server key for future requests
+        serverKeyCache.set(channelKey, {
+          serverKey,
+          playerDomain,
+          fetchedAt: Date.now(),
+        });
+        
+        // Rewrite M3U8 to proxy key and segments
+        const { keyUrl, iv } = parseM3U8(content);
+        const proxiedM3U8 = generateProxiedM3U8(content, keyUrl, proxyOrigin);
+
+        return new Response(proxiedM3U8, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            ...corsHeaders(origin),
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'X-DLHD-Channel': channel,
+            'X-DLHD-Server-Key': serverKey,
+            'X-DLHD-IV': iv || '',
+          },
+        });
+      }
+      
+      lastError = `Invalid M3U8 from ${serverKey}: ${content.substring(0, 100)}`;
+      logger.warn('Invalid M3U8 content, trying next server key', { serverKey, preview: content.substring(0, 100) });
+    } catch (err) {
+      lastError = `Error from ${serverKey}: ${(err as Error).message}`;
+      logger.warn('M3U8 fetch failed, trying next server key', { serverKey, error: (err as Error).message });
+    }
   }
-
-  // Parse and rewrite M3U8
-  const { keyUrl, iv } = parseM3U8(content);
-  logger.debug('M3U8 parsed', { hasKey: !!keyUrl, hasIV: !!iv });
   
-  const proxiedM3U8 = generateProxiedM3U8(content, keyUrl, proxyOrigin);
-
-  return new Response(proxiedM3U8, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/vnd.apple.mpegurl',
-      ...corsHeaders(origin),
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'X-DLHD-Channel': channel,
-      'X-DLHD-IV': iv || '',
-      'X-Proxy-Session': getSessionId(),
-    },
-  });
+  // All server keys failed
+  logger.error('All server keys failed', { lastError });
+  return jsonResponse({ 
+    error: 'Failed to fetch M3U8 from any server', 
+    details: lastError,
+    triedKeys: serverKeysToTry 
+  }, 502, origin);
 }
 
 async function handleKeyProxy(url: URL, env: Env, logger: any, origin: string | null): Promise<Response> {
@@ -206,26 +180,41 @@ async function handleKeyProxy(url: URL, env: Env, logger: any, origin: string | 
     return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
   }
 
-  const decodedUrl = decodeURIComponent(keyUrl);
-  logger.debug('Fetching encryption key', { url: decodedUrl });
-  
-  const fetchStart = Date.now();
-  const response = await fetchViaOxylabs(decodedUrl, env, logger);
-  const keyData = await response.arrayBuffer();
-  
-  logger.info('Key fetched', { 
-    duration: Date.now() - fetchStart,
-    size: keyData.byteLength,
-  });
+  try {
+    // Keys MUST go through RPI proxy (blocked from datacenter IPs)
+    const response = await fetchViaRpiProxy(decodeURIComponent(keyUrl), env, logger);
+    const keyData = await response.arrayBuffer();
+    
+    // Validate key size (AES-128 keys should be 16 bytes)
+    if (keyData.byteLength !== 16) {
+      logger.warn('Invalid key size', { size: keyData.byteLength, expected: 16 });
+      return jsonResponse({ 
+        error: 'Invalid key data', 
+        size: keyData.byteLength,
+        expected: 16,
+        hint: 'RPI proxy may need session refresh'
+      }, 502, origin);
+    }
+    
+    logger.info('Key fetched', { size: keyData.byteLength });
 
-  return new Response(keyData, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/octet-stream',
-      ...corsHeaders(origin),
-      'Cache-Control': 'no-store',
-    },
-  });
+    return new Response(keyData, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        ...corsHeaders(origin),
+        'Cache-Control': 'no-store',
+      },
+    });
+  } catch (error) {
+    logger.error('Key proxy failed', error as Error);
+    return jsonResponse({
+      error: 'Key fetch failed',
+      message: error instanceof Error ? error.message : String(error),
+      hint: 'Check if RPI proxy is running and accessible',
+      timestamp: new Date().toISOString(),
+    }, 502, origin);
+  }
 }
 
 async function handleSegmentProxy(url: URL, env: Env, logger: any, origin: string | null): Promise<Response> {
@@ -235,16 +224,10 @@ async function handleSegmentProxy(url: URL, env: Env, logger: any, origin: strin
   }
 
   const decodedUrl = decodeURIComponent(segmentUrl);
-  logger.debug('Fetching segment', { url: decodedUrl.substring(0, 100) });
   
-  const fetchStart = Date.now();
-  const response = await fetchViaOxylabs(decodedUrl, env, logger);
+  // Try direct fetch first for segments (CDNs like DigitalOcean/Google don't block)
+  const response = await fetchSegment(decodedUrl, env, logger);
   const segmentData = await response.arrayBuffer();
-  
-  logger.debug('Segment fetched', { 
-    duration: Date.now() - fetchStart,
-    size: segmentData.byteLength,
-  });
 
   return new Response(segmentData, {
     status: 200,
@@ -257,40 +240,47 @@ async function handleSegmentProxy(url: URL, env: Env, logger: any, origin: strin
   });
 }
 
-async function getServerKey(channelKey: string, env: Env, logger: any): Promise<{ serverKey: string; playerDomain: string }> {
+// Known server keys - fallback when lookup fails (anti-bot protection)
+const KNOWN_SERVER_KEYS = ['top1/cdn', 'top2', 'top3'];
+
+async function getServerKey(channelKey: string, logger: any): Promise<{ serverKey: string; playerDomain: string }> {
   // Check cache
   const cached = serverKeyCache.get(channelKey);
   if (cached && (Date.now() - cached.fetchedAt) < SERVER_KEY_CACHE_TTL_MS) {
-    logger.debug('Server key cache hit', { channelKey });
     return { serverKey: cached.serverKey, playerDomain: cached.playerDomain };
   }
 
-  logger.debug('Server key cache miss, fetching', { channelKey });
-
+  // Try server lookup from each domain
   for (const domain of PLAYER_DOMAINS) {
-    const lookupUrl = `https://${domain}/server_lookup.js?channel_id=${channelKey}`;
     try {
-      logger.debug('Trying server lookup', { domain });
-      
-      // Server lookup doesn't need proxy - it's just metadata
-      const response = await fetch(lookupUrl, {
+      const response = await fetch(`https://${domain}/server_lookup.js?channel_id=${channelKey}`, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
           'Referer': `https://${domain}/`,
-          'Origin': `https://${domain}`,
         },
       });
 
       if (response.ok) {
-        const data = await response.json() as { server_key?: string };
-        if (data.server_key) {
-          logger.info('Server key found', { domain, serverKey: data.server_key });
-          serverKeyCache.set(channelKey, {
-            serverKey: data.server_key,
-            playerDomain: domain,
-            fetchedAt: Date.now(),
-          });
-          return { serverKey: data.server_key, playerDomain: domain };
+        const text = await response.text();
+        
+        // Check if we got HTML (anti-bot challenge) instead of JSON
+        if (text.startsWith('<') || text.includes('<!DOCTYPE')) {
+          logger.warn('Server lookup returned HTML challenge', { domain });
+          continue;
+        }
+        
+        try {
+          const data = JSON.parse(text) as { server_key?: string };
+          if (data.server_key) {
+            serverKeyCache.set(channelKey, {
+              serverKey: data.server_key,
+              playerDomain: domain,
+              fetchedAt: Date.now(),
+            });
+            return { serverKey: data.server_key, playerDomain: domain };
+          }
+        } catch (parseErr) {
+          logger.warn('Server lookup JSON parse failed', { domain, error: (parseErr as Error).message });
         }
       }
     } catch (err) {
@@ -298,7 +288,9 @@ async function getServerKey(channelKey: string, env: Env, logger: any): Promise<
     }
   }
 
-  throw new Error('All server lookups failed');
+  // Fallback to known server keys (most channels use top1/cdn)
+  logger.warn('Server lookup blocked, using fallback server key', { fallback: KNOWN_SERVER_KEYS[0] });
+  return { serverKey: KNOWN_SERVER_KEYS[0], playerDomain: PLAYER_DOMAINS[0] };
 }
 
 function constructM3U8Url(serverKey: string, channelKey: string): string {
@@ -306,189 +298,63 @@ function constructM3U8Url(serverKey: string, channelKey: string): string {
   return CDN_PATTERNS.standard(serverKey, channelKey);
 }
 
-/**
- * Fetch via Oxylabs Residential Proxy
- * 
- * Uses Oxylabs' Proxy API with session-based sticky IPs for streaming.
- * Falls back to direct fetch or RPI proxy if Oxylabs fails.
- */
-async function fetchViaOxylabs(url: string, env: Env, logger: any, refererDomain?: string): Promise<Response> {
-  const referer = refererDomain ? `https://${refererDomain}/` : 'https://epicplayplay.cfd/';
-  const headers: Record<string, string> = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Accept': '*/*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': referer,
-    'Origin': referer.replace(/\/$/, ''),
-  };
-
-  // If Oxylabs is configured, use their proxy
-  if (env.OXYLABS_USERNAME && env.OXYLABS_PASSWORD) {
-    logger.debug('Using Oxylabs proxy', { url: url.substring(0, 80) });
-    
-    try {
-      const response = await fetchWithOxylabsProxy(url, headers, env, logger);
-      if (response.ok) {
-        logger.info('Oxylabs fetch succeeded');
-        return response;
-      }
-      logger.warn('Oxylabs fetch failed', { status: response.status });
-    } catch (err) {
-      logger.warn('Oxylabs error', { error: (err as Error).message });
-    }
-  }
-
-  // Try direct fetch as fallback
-  logger.debug('Trying direct fetch', { url: url.substring(0, 80) });
-  try {
-    const directResponse = await fetch(url, { headers });
-    if (directResponse.ok) {
-      logger.info('Direct fetch succeeded');
-      return directResponse;
-    }
-    logger.warn('Direct fetch failed', { status: directResponse.status });
-  } catch (err) {
-    logger.warn('Direct fetch error', { error: (err as Error).message });
-  }
-
-  // Fallback to RPI proxy
-  if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
-    logger.debug('Falling back to RPI proxy');
-    const proxyUrl = `${env.RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl, {
-      headers: { 'X-API-Key': env.RPI_PROXY_KEY },
-    });
-    if (response.ok) {
-      logger.info('RPI proxy succeeded');
-      return response;
-    }
-    throw new Error(`RPI proxy failed: ${response.status}`);
-  }
-
-  throw new Error('All fetch methods failed');
-}
 
 /**
- * Oxylabs Proxy Integration
- * 
- * Cloudflare Workers don't support traditional HTTP CONNECT proxies,
- * so we use Oxylabs' Web Scraper API which handles the proxy internally.
- * 
- * For streaming content, we use their "universal" source which returns
- * raw content without parsing.
+ * Fetch via Raspberry Pi proxy (residential IP)
+ * Required for M3U8 playlists and encryption keys
  */
-async function fetchWithOxylabsProxy(
-  targetUrl: string, 
-  headers: Record<string, string>, 
-  env: Env, 
-  logger: any
-): Promise<Response> {
-  // Oxylabs Web Scraper API endpoint
-  const endpoint = env.OXYLABS_ENDPOINT || 'https://realtime.oxylabs.io/v1/queries';
-  const auth = btoa(`${env.OXYLABS_USERNAME}:${env.OXYLABS_PASSWORD}`);
-  
-  // Build geo-targeting
-  let geoLocation: string | undefined;
-  if (env.OXYLABS_COUNTRY) {
-    geoLocation = env.OXYLABS_COUNTRY.toUpperCase();
+async function fetchViaRpiProxy(url: string, env: Env, logger: any): Promise<Response> {
+  if (!env.RPI_PROXY_URL || !env.RPI_PROXY_KEY) {
+    throw new Error('RPI proxy not configured. Set RPI_PROXY_URL and RPI_PROXY_KEY secrets.');
   }
 
-  // Determine content type for proper handling
-  const isBinary = targetUrl.includes('.ts') || 
-                   targetUrl.includes('.key') || 
-                   targetUrl.includes('wmsxx.php') ||
-                   targetUrl.includes('whalesignal.ai/');
-
-  const payload: Record<string, any> = {
-    source: 'universal',
-    url: targetUrl,
-    user_agent_type: 'desktop_chrome',
-    render: 'html',
-    // Session ID for sticky IP (same IP for duration of session)
-    session_id: getSessionId(),
-    // Custom headers
-    headers: headers,
-  };
-
-  // Add geo-targeting if specified
-  if (geoLocation) {
-    payload.geo_location = geoLocation;
+  let rpiBaseUrl = env.RPI_PROXY_URL;
+  if (!rpiBaseUrl.startsWith('http://') && !rpiBaseUrl.startsWith('https://')) {
+    rpiBaseUrl = `http://${rpiBaseUrl}`;
   }
 
-  // For binary content, request base64 encoding
-  if (isBinary) {
-    payload.content_encoding = 'base64';
-  }
+  logger.debug('Fetching via RPI proxy', { url: url.substring(0, 80) });
 
-  logger.debug('Oxylabs request', { 
-    url: targetUrl.substring(0, 80),
-    geo: geoLocation || 'auto',
-    session: getSessionId(),
-    binary: isBinary,
-  });
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Basic ${auth}`,
-    },
-    body: JSON.stringify(payload),
+  const proxyUrl = `${rpiBaseUrl}/proxy?url=${encodeURIComponent(url)}`;
+  const response = await fetch(proxyUrl, {
+    headers: { 'X-API-Key': env.RPI_PROXY_KEY },
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    logger.error('Oxylabs API error', { status: response.status, error: errorText.substring(0, 200) });
-    throw new Error(`Oxylabs API error: ${response.status}`);
+    logger.error('RPI proxy failed', { status: response.status, error: errorText.substring(0, 200) });
+    throw new Error(`RPI proxy error: ${response.status} - ${errorText.substring(0, 100)}`);
   }
 
-  const result = await response.json() as { 
-    results?: Array<{ 
-      content?: string; 
-      body?: string;
-      status_code?: number;
-    }> 
+  logger.info('RPI proxy succeeded');
+  return response;
+}
+
+/**
+ * Fetch video segment - try direct first, fallback to RPI proxy
+ * Segments on public CDNs (DigitalOcean, Google Cloud) usually work direct
+ */
+async function fetchSegment(url: string, env: Env, logger: any): Promise<Response> {
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': '*/*',
+    'Referer': 'https://epicplayplay.cfd/',
   };
-  
-  if (!result.results?.[0]) {
-    throw new Error('No results from Oxylabs');
-  }
 
-  const resultData = result.results[0];
-  
-  // Check if upstream returned an error
-  if (resultData.status_code && resultData.status_code >= 400) {
-    throw new Error(`Upstream error: ${resultData.status_code}`);
-  }
-
-  const content = resultData.content || resultData.body || '';
-  
-  // Handle binary content (base64 encoded)
-  if (isBinary && content) {
-    try {
-      // Decode base64 content
-      const binaryString = atob(content);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return new Response(bytes, {
-        headers: {
-          'Content-Type': targetUrl.includes('.ts') ? 'video/mp2t' : 'application/octet-stream',
-        },
-      });
-    } catch (e) {
-      // If base64 decode fails, return as-is
-      logger.warn('Base64 decode failed, returning raw content');
-      return new Response(content);
+  // Try direct fetch first (works for CDN-hosted segments)
+  try {
+    const response = await fetch(url, { headers });
+    if (response.ok) {
+      logger.debug('Segment fetched direct');
+      return response;
     }
+    logger.warn('Direct segment fetch failed', { status: response.status });
+  } catch (err) {
+    logger.warn('Direct segment fetch error', { error: (err as Error).message });
   }
 
-  return new Response(content, {
-    headers: {
-      'Content-Type': 'application/vnd.apple.mpegurl',
-    },
-  });
+  // Fallback to RPI proxy
+  return fetchViaRpiProxy(url, env, logger);
 }
 
 function parseM3U8(content: string): { keyUrl: string | null; iv: string | null } {
@@ -500,7 +366,7 @@ function parseM3U8(content: string): { keyUrl: string | null; iv: string | null 
 function generateProxiedM3U8(originalM3U8: string, keyUrl: string | null, proxyOrigin: string): string {
   let modified = originalM3U8;
 
-  // Proxy the key URL
+  // Proxy the key URL (MUST go through RPI proxy)
   if (keyUrl) {
     const proxiedKeyUrl = `${proxyOrigin}/dlhd/key?url=${encodeURIComponent(keyUrl)}`;
     modified = modified.replace(/URI="[^"]+"/, `URI="${proxiedKeyUrl}"`);
@@ -511,8 +377,12 @@ function generateProxiedM3U8(originalM3U8: string, keyUrl: string | null, proxyO
 
   // Proxy segment URLs
   modified = modified.replace(
-    /^(https?:\/\/(?:[^\s]+\.(ts|css)|whalesignal\.ai\/[^\s]+))$/gm,
-    (segmentUrl) => `${proxyOrigin}/dlhd/segment?url=${encodeURIComponent(segmentUrl)}`
+    /^(https?:\/\/(?:whalesignal\.ai\/[^\s]+|redirect\.giokko\.ru\/[^\s]+|[^\s]+\.ts|[^\s]+\.css))$/gm,
+    (segmentUrl) => {
+      // Don't proxy the M3U8 playlist URL itself
+      if (segmentUrl.includes('mono.css')) return segmentUrl;
+      return `${proxyOrigin}/dlhd/segment?url=${encodeURIComponent(segmentUrl)}`;
+    }
   );
 
   return modified;

@@ -14,7 +14,10 @@ import {
   ExternalLink,
   Upload,
   Star,
-  Trash2
+  Trash2,
+  RotateCcw,
+  Square,
+  Zap
 } from 'lucide-react';
 import type Hls from 'hls.js';
 import type mpegts from 'mpegts.js';
@@ -55,6 +58,16 @@ interface Genre {
   alias?: string;
 }
 
+interface AutoCycleResult {
+  portal: string;
+  mac: string;
+  success: boolean;
+  canStream: boolean;
+  channels: number;
+  error?: string;
+  testedAt: string;
+}
+
 export default function IPTVDebugPage() {
   const [portalUrl, setPortalUrl] = useState('');
   const [macAddress, setMacAddress] = useState('');
@@ -73,6 +86,11 @@ export default function IPTVDebugPage() {
   const [streamDebug, setStreamDebug] = useState<any>(null);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [playerError, setPlayerError] = useState<string | null>(null);
+  const [autoCycleRunning, setAutoCycleRunning] = useState(false);
+  const [autoCycleResults, setAutoCycleResults] = useState<AutoCycleResult[]>([]);
+  const [autoCycleProgress, setAutoCycleProgress] = useState({ current: 0, total: 0, currentAccount: '' });
+  const [testStreamDuringCycle, setTestStreamDuringCycle] = useState(false);
+  const autoCycleAbortRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const mpegtsRef = useRef<mpegts.Player | null>(null);
@@ -190,6 +208,122 @@ export default function IPTVDebugPage() {
       return [...prev, newAccount];
     });
   }, [testResult, portalUrl, macAddress]);
+
+  // Auto-cycle through accounts to test which ones can access streams
+  const startAutoCycle = useCallback(async () => {
+    if (savedAccounts.length === 0) {
+      alert('No saved accounts to test');
+      return;
+    }
+
+    setAutoCycleRunning(true);
+    setAutoCycleResults([]);
+    autoCycleAbortRef.current = false;
+    setAutoCycleProgress({ current: 0, total: savedAccounts.length, currentAccount: '' });
+
+    const results: AutoCycleResult[] = [];
+
+    for (let i = 0; i < savedAccounts.length; i++) {
+      if (autoCycleAbortRef.current) break;
+
+      const account = savedAccounts[i];
+      setAutoCycleProgress({ 
+        current: i + 1, 
+        total: savedAccounts.length, 
+        currentAccount: `${account.mac} @ ${new URL(account.portal).hostname}` 
+      });
+
+      const result: AutoCycleResult = {
+        portal: account.portal,
+        mac: account.mac,
+        success: false,
+        canStream: false,
+        channels: 0,
+        testedAt: new Date().toISOString(),
+      };
+
+      try {
+        // Test connection
+        const response = await fetch('/api/admin/iptv-debug', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'test', portalUrl: account.portal, macAddress: account.mac })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success && data.token) {
+          result.success = true;
+          result.channels = data.content?.itv || 0;
+          
+          // Optionally test stream access
+          if (testStreamDuringCycle && result.channels > 0) {
+            try {
+              // Get first channel
+              const channelsRes = await fetch('/api/admin/iptv-debug', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  action: 'channels', 
+                  portalUrl: account.portal, 
+                  macAddress: account.mac, 
+                  token: data.token,
+                  genre: '*',
+                  page: 0
+                })
+              });
+              const channelsData = await channelsRes.json();
+              
+              if (channelsData.success && channelsData.channels?.data?.length > 0) {
+                const firstChannel = channelsData.channels.data[0];
+                
+                // Try to get stream URL
+                const streamRes = await fetch('/api/admin/iptv-debug', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ 
+                    action: 'stream', 
+                    portalUrl: account.portal, 
+                    macAddress: account.mac, 
+                    token: data.token,
+                    cmd: firstChannel.cmd
+                  })
+                });
+                const streamData = await streamRes.json();
+                
+                if (streamData.success && streamData.streamUrl) {
+                  result.canStream = true;
+                }
+              }
+            } catch (streamErr) {
+              // Stream test failed, but connection worked
+            }
+          } else if (!testStreamDuringCycle) {
+            // If not testing streams, assume it can stream if connected
+            result.canStream = result.channels > 0;
+          }
+        } else {
+          result.error = data.error || 'Connection failed';
+        }
+      } catch (err: any) {
+        result.error = err.message || 'Request failed';
+      }
+
+      results.push(result);
+      setAutoCycleResults([...results]);
+
+      // Small delay between tests to avoid rate limiting
+      if (i < savedAccounts.length - 1 && !autoCycleAbortRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    setAutoCycleRunning(false);
+  }, [savedAccounts, testStreamDuringCycle]);
+
+  const stopAutoCycle = useCallback(() => {
+    autoCycleAbortRef.current = true;
+  }, []);
 
   // Setup player when stream URL changes
   // Setup player when stream URL changes
@@ -644,6 +778,223 @@ export default function IPTVDebugPage() {
             )}
           </div>
         </div>
+
+        {/* Auto-Cycle Controls */}
+        {savedAccounts.length > 0 && (
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.4)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Zap size={18} color="#fbbf24" />
+                <span style={{ color: '#f8fafc', fontSize: '14px', fontWeight: '500' }}>Auto-Cycle Test</span>
+              </div>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={testStreamDuringCycle}
+                    onChange={(e) => setTestStreamDuringCycle(e.target.checked)}
+                    disabled={autoCycleRunning}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <span style={{ color: '#94a3b8', fontSize: '13px' }}>Test stream access</span>
+                </label>
+                
+                {!autoCycleRunning ? (
+                  <button
+                    onClick={startAutoCycle}
+                    style={{
+                      padding: '8px 16px',
+                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#000',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RotateCcw size={14} /> Start Cycle Test
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopAutoCycle}
+                    style={{
+                      padding: '8px 16px',
+                      background: 'rgba(239, 68, 68, 0.8)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Square size={14} /> Stop
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            {/* Progress */}
+            {autoCycleRunning && (
+              <div style={{ marginTop: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <Loader2 size={14} color="#fbbf24" style={{ animation: 'spin 1s linear infinite' }} />
+                  <span style={{ color: '#fbbf24', fontSize: '13px' }}>
+                    Testing {autoCycleProgress.current}/{autoCycleProgress.total}: {autoCycleProgress.currentAccount}
+                  </span>
+                </div>
+                <div style={{
+                  height: '4px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  borderRadius: '2px',
+                  overflow: 'hidden'
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${(autoCycleProgress.current / autoCycleProgress.total) * 100}%`,
+                    background: 'linear-gradient(90deg, #fbbf24, #f59e0b)',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+              </div>
+            )}
+            
+            {/* Results Summary */}
+            {autoCycleResults.length > 0 && !autoCycleRunning && (
+              <div style={{ marginTop: '12px', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <CheckCircle size={14} color="#22c55e" />
+                  <span style={{ color: '#22c55e', fontSize: '13px' }}>
+                    {autoCycleResults.filter(r => r.canStream).length} working
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle size={14} color="#f59e0b" />
+                  <span style={{ color: '#f59e0b', fontSize: '13px' }}>
+                    {autoCycleResults.filter(r => r.success && !r.canStream).length} connected (no stream)
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <AlertCircle size={14} color="#ef4444" />
+                  <span style={{ color: '#ef4444', fontSize: '13px' }}>
+                    {autoCycleResults.filter(r => !r.success).length} failed
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Auto-Cycle Results */}
+        {autoCycleResults.length > 0 && (
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.4)',
+            borderRadius: '12px',
+            padding: '16px',
+            marginBottom: '16px',
+            border: '1px solid rgba(255, 255, 255, 0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ color: '#f8fafc', fontSize: '14px', fontWeight: '500' }}>Test Results</span>
+              <button
+                onClick={() => setAutoCycleResults([])}
+                style={{
+                  padding: '4px 8px',
+                  background: 'transparent',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '4px',
+                  color: '#64748b',
+                  fontSize: '11px',
+                  cursor: 'pointer'
+                }}
+              >
+                Clear
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+              {autoCycleResults.map((result, idx) => (
+                <div
+                  key={`${result.portal}-${result.mac}-${idx}`}
+                  onClick={() => {
+                    setPortalUrl(result.portal);
+                    setMacAddress(result.mac);
+                    setTestResult(null);
+                    setGenres([]);
+                    setChannels([]);
+                    setStreamUrl(null);
+                  }}
+                  style={{
+                    background: result.canStream 
+                      ? 'rgba(34, 197, 94, 0.1)' 
+                      : result.success 
+                        ? 'rgba(251, 191, 36, 0.1)' 
+                        : 'rgba(239, 68, 68, 0.1)',
+                    border: `1px solid ${result.canStream ? 'rgba(34, 197, 94, 0.3)' : result.success ? 'rgba(251, 191, 36, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                    borderRadius: '8px',
+                    padding: '10px 14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                    {result.canStream ? (
+                      <CheckCircle size={16} color="#22c55e" />
+                    ) : result.success ? (
+                      <AlertCircle size={16} color="#fbbf24" />
+                    ) : (
+                      <AlertCircle size={16} color="#ef4444" />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ color: '#f8fafc', fontSize: '12px', fontWeight: '500' }}>
+                        {result.mac}
+                      </div>
+                      <div style={{ 
+                        color: '#64748b', 
+                        fontSize: '11px', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap' 
+                      }}>
+                        {new URL(result.portal).hostname}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ 
+                      color: result.canStream ? '#22c55e' : result.success ? '#fbbf24' : '#ef4444', 
+                      fontSize: '11px', 
+                      fontWeight: '500' 
+                    }}>
+                      {result.canStream ? 'Working' : result.success ? 'Connected' : 'Failed'}
+                    </div>
+                    {result.channels > 0 && (
+                      <div style={{ color: '#64748b', fontSize: '10px' }}>
+                        {result.channels} ch
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {savedAccounts.length === 0 ? (
           <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
