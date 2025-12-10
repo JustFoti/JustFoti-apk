@@ -579,6 +579,18 @@
   margin-right: 60px;
 }
 
+.sourceTag {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
 /* Custom Video Controls */
 .customControls {
   position: absolute;

@@ -554,6 +554,7 @@ function LiveTVPlayer({
   const [showControls, setShowControls] = useState(true);
   const [bufferingStatus, setBufferingStatus] = useState<string | null>(null);
   const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
+  const [streamSource, setStreamSource] = useState<'dlhd' | 'stalker'>('dlhd');
 
   // Cast to TV functionality
   const cast = useCast({
@@ -651,11 +652,35 @@ function LiveTVPlayer({
     }
 
     try {
-      // Use proxied M3U8 URL - key is embedded, segments fetch directly from CDN
-      // Uses Cloudflare Worker if configured, otherwise falls back to Vercel Edge
-      let streamUrl = getTvPlaylistUrl(channel.streamId);
-      if (invalidateCache) {
-        streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'invalidate=true';
+      let streamUrl: string;
+      let usingStalker = false;
+      
+      // First, check if there's a Stalker IPTV mapping for this channel
+      try {
+        const stalkerRes = await fetch(`/api/livetv/stalker-stream?channelId=${channel.streamId}`);
+        const stalkerData = await stalkerRes.json();
+        
+        if (stalkerData.success && stalkerData.streamUrl) {
+          console.log('[LiveTV] Using Stalker IPTV stream:', stalkerData.mapping?.stalkerChannelName);
+          streamUrl = stalkerData.streamUrl;
+          usingStalker = true;
+          setStreamSource('stalker');
+        } else {
+          // Fall back to DLHD stream
+          streamUrl = getTvPlaylistUrl(channel.streamId);
+          if (invalidateCache) {
+            streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'invalidate=true';
+          }
+          setStreamSource('dlhd');
+        }
+      } catch (stalkerErr) {
+        // Stalker check failed, use DLHD
+        console.log('[LiveTV] Stalker check failed, using DLHD:', stalkerErr);
+        streamUrl = getTvPlaylistUrl(channel.streamId);
+        if (invalidateCache) {
+          streamUrl += (streamUrl.includes('?') ? '&' : '?') + 'invalidate=true';
+        }
+        setStreamSource('dlhd');
       }
 
       const Hls = (await import('hls.js')).default;
@@ -1068,6 +1093,9 @@ function LiveTVPlayer({
           <span className={styles.liveTag}><span className={styles.liveDot} /> LIVE</span>
           <span className={styles.channelTitle}>{channel.name}</span>
           <span className={styles.channelFlag}>{channel.countryInfo.flag}</span>
+          {streamSource === 'stalker' && (
+            <span className={styles.sourceTag} title="Using IPTV Stalker source">📡 IPTV</span>
+          )}
         </div>
 
         {/* Video - NO controls attribute */}

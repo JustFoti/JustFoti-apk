@@ -3,6 +3,10 @@ import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 
 const REQUEST_TIMEOUT = 15000;
 
+// RPi proxy configuration for residential IP requests
+const RPI_PROXY_URL = process.env.RPI_PROXY_URL;
+const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;
+
 // STB Device Headers - Required for Stalker Portal authentication
 const STB_USER_AGENT = 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3';
 
@@ -164,12 +168,16 @@ function parseSecureJson(text: string): any {
 }
 
 // Get channels list
-async function getChannels(portalUrl: string, macAddress: string, token: string, genre: string = '*', page: number = 0): Promise<any> {
+async function getChannels(portalUrl: string, macAddress: string, token: string, genre: string = '*', page: number = 0, pageSize: number = 14): Promise<any> {
   const url = new URL('/portal.php', portalUrl);
   url.searchParams.set('type', 'itv');
   url.searchParams.set('action', 'get_ordered_list');
   url.searchParams.set('genre', genre);
   url.searchParams.set('p', page.toString());
+  // Some Stalker portals support 'cnt' parameter for page size
+  if (pageSize !== 14) {
+    url.searchParams.set('cnt', pageSize.toString());
+  }
   url.searchParams.set('JsHttpRequest', '1-xml');
 
   const controller = new AbortController();
@@ -207,7 +215,8 @@ function extractUrlFromCmd(cmd: string): string {
 }
 
 // Get stream URL for a channel
-async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<{ streamUrl: string | null; rawResponse: any; requestUrl: string }> {
+// Uses RPi proxy if available to ensure token is bound to residential IP
+async function getStreamUrl(portalUrl: string, macAddress: string, token: string, cmd: string): Promise<{ streamUrl: string | null; rawResponse: any; requestUrl: string; usedRpiProxy: boolean }> {
   // The cmd from channel list is the full command - we need to pass it as-is
   // Some portals expect "ffmpeg http://..." format, others just the URL
   // We'll try the original cmd first
@@ -227,21 +236,48 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
   try {
-    const response = await fetch(requestUrl, { 
-      signal: controller.signal,
-      headers: buildHeaders(macAddress, token),
-    });
+    let response: Response;
+    let usedRpiProxy = false;
+    
+    // Use RPi proxy if available - this ensures the stream token is bound to the residential IP
+    if (RPI_PROXY_URL && RPI_PROXY_KEY) {
+      console.log('Using RPi proxy for create_link to bind token to residential IP');
+      const rpiParams = new URLSearchParams({
+        url: requestUrl,
+        mac: macAddress,
+        token: token,
+        key: RPI_PROXY_KEY,
+      });
+      
+      response = await fetch(`${RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`, {
+        signal: controller.signal,
+      });
+      usedRpiProxy = true;
+    } else {
+      // Direct fetch (token will be bound to server IP - may not work for streaming)
+      console.log('No RPi proxy configured - token will be bound to server IP');
+      response = await fetch(requestUrl, { 
+        signal: controller.signal,
+        headers: buildHeaders(macAddress, token),
+      });
+    }
     clearTimeout(timeoutId);
     
     const text = await response.text();
+    console.log('Raw response from proxy:', text.substring(0, 500));
+    console.log('Response status:', response.status);
+    
     // Handle Stalker's secure JSON wrapper
     const cleanText = text.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
+    console.log('Cleaned text:', cleanText.substring(0, 500));
     
     let data;
     try {
       data = JSON.parse(cleanText);
-    } catch {
-      return { streamUrl: null, rawResponse: { parseError: true, rawText: text.substring(0, 500) }, requestUrl };
+      console.log('Parsed data:', JSON.stringify(data).substring(0, 500));
+    } catch (parseErr) {
+      console.error('JSON parse error:', parseErr);
+      return { streamUrl: null, rawResponse: { parseError: true, rawText: text.substring(0, 500) }, requestUrl, usedRpiProxy };
     }
     
     let streamUrl = data?.js?.cmd || null;
@@ -260,11 +296,12 @@ async function getStreamUrl(portalUrl: string, macAddress: string, token: string
     console.log('Stream URL extracted:', streamUrl);
     console.log('Original cmd:', cmd);
     console.log('Response cmd:', data?.js?.cmd);
+    console.log('Used RPi proxy:', usedRpiProxy);
     
-    return { streamUrl, rawResponse: data, requestUrl };
+    return { streamUrl, rawResponse: data, requestUrl, usedRpiProxy };
   } catch (e) {
     clearTimeout(timeoutId);
-    return { streamUrl: null, rawResponse: { error: String(e) }, requestUrl };
+    return { streamUrl: null, rawResponse: { error: String(e) }, requestUrl, usedRpiProxy: false };
   }
 }
 
@@ -342,7 +379,8 @@ export async function POST(request: NextRequest) {
         if (!token) {
           return NextResponse.json({ error: 'Token required' }, { status: 400 });
         }
-        const channels = await getChannels(normalizedUrl, macAddress, token, genre || '*', page || 0);
+        const pageSize = body.pageSize || 14;
+        const channels = await getChannels(normalizedUrl, macAddress, token, genre || '*', page || 0, pageSize);
         // Log first channel for debugging
         if (channels.data && channels.data.length > 0) {
           console.log('Sample channel data:', JSON.stringify(channels.data[0], null, 2));
@@ -354,8 +392,8 @@ export async function POST(request: NextRequest) {
         if (!token || !cmd) {
           return NextResponse.json({ error: 'Token and cmd required' }, { status: 400 });
         }
-        const { streamUrl, rawResponse, requestUrl } = await getStreamUrl(normalizedUrl, macAddress, token, cmd);
-        return NextResponse.json({ success: true, streamUrl, rawResponse, cmd, requestUrl });
+        const { streamUrl, rawResponse, requestUrl, usedRpiProxy } = await getStreamUrl(normalizedUrl, macAddress, token, cmd);
+        return NextResponse.json({ success: true, streamUrl, rawResponse, cmd, requestUrl, usedRpiProxy });
       }
 
       default:

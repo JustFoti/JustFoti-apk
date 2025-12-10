@@ -15,7 +15,8 @@ import {
     MousePointerClick,
     TrendingUp,
     MessageSquare,
-    Tv
+    Tv,
+    Database
 } from 'lucide-react';
 
 export default function AdminSidebar() {
@@ -33,6 +34,7 @@ export default function AdminSidebar() {
         { icon: Activity, label: 'Real-time', href: '/admin/live' },
         { icon: MessageSquare, label: 'Feedback', href: '/admin/feedback' },
         { icon: Tv, label: 'IPTV Debug', href: '/admin/iptv-debug' },
+        { icon: Database, label: 'IPTV Manager', href: '/admin/iptv-manager' },
         { icon: Settings, label: 'Settings', href: '/admin/settings' },
     ];
 

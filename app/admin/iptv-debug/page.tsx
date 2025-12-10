@@ -329,7 +329,6 @@ export default function IPTVDebugPage() {
   }, []);
 
   // Setup player when stream URL changes
-  // Setup player when stream URL changes
   useEffect(() => {
     if (!streamUrl || !videoRef.current) return;
 
@@ -415,13 +414,16 @@ export default function IPTVDebugPage() {
           const rawUrl = rawStreamUrl || streamUrl;
           let proxyUrl: string;
           
+          // Build proxy URL with MAC for proper STB headers
+          const proxyParams = new URLSearchParams({ url: rawUrl });
+          if (macAddress) proxyParams.set('mac', macAddress);
+          
           if (RPI_PROXY_URL) {
-            const params = new URLSearchParams({ url: rawUrl });
-            if (RPI_PROXY_KEY) params.set('key', RPI_PROXY_KEY);
-            proxyUrl = `${RPI_PROXY_URL}/iptv/stream?${params.toString()}`;
+            if (RPI_PROXY_KEY) proxyParams.set('key', RPI_PROXY_KEY);
+            proxyUrl = `${RPI_PROXY_URL}/iptv/stream?${proxyParams.toString()}`;
             console.log('mpegts using RPi proxy (residential IP):', proxyUrl.substring(0, 100));
           } else {
-            proxyUrl = `${CF_PROXY_URL}/iptv/stream?url=${encodeURIComponent(rawUrl)}`;
+            proxyUrl = `${CF_PROXY_URL}/iptv/stream?${proxyParams.toString()}`;
             console.log('mpegts using CF proxy (may get 403):', proxyUrl.substring(0, 100));
           }
           
@@ -430,33 +432,47 @@ export default function IPTVDebugPage() {
             isLive: true,
             url: proxyUrl,
           }, {
-            enableWorker: false,
-            enableStashBuffer: false,
-            stashInitialSize: 128,
-            liveBufferLatencyChasing: true,
-            liveBufferLatencyMaxLatency: 1.5,
-            liveBufferLatencyMinRemain: 0.3,
+            enableWorker: true,
+            enableStashBuffer: true,
+            stashInitialSize: 384 * 1024, // 384KB initial buffer
+            liveBufferLatencyChasing: false, // Disable aggressive latency chasing
+            liveBufferLatencyMaxLatency: 5.0, // Allow up to 5 seconds latency
+            liveBufferLatencyMinRemain: 1.0, // Keep at least 1 second buffer
+            lazyLoad: false,
+            lazyLoadMaxDuration: 3 * 60, // 3 minutes
+            lazyLoadRecoverDuration: 30,
+            autoCleanupSourceBuffer: true,
+            autoCleanupMaxBackwardDuration: 3 * 60,
+            autoCleanupMinBackwardDuration: 2 * 60,
           });
           
           player.attachMediaElement(video);
           player.load();
           
-          player.on(mpegtsLib.Events.ERROR, (errorType: string, errorDetail: string) => {
-            console.error('mpegts error:', errorType, errorDetail);
+          player.on(mpegtsLib.Events.ERROR, (errorType: string, errorDetail: string, info: any) => {
+            console.error('mpegts error:', { errorType, errorDetail, info });
             if (errorDetail.includes('403') || errorDetail.includes('HttpStatusCodeInvalid')) {
               const hint = RPI_PROXY_URL 
                 ? 'Portal may have blocked this IP. Try VLC with the URL below.'
                 : 'Portal blocked datacenter IP (403). Configure RPI proxy or use VLC.';
               setPlayerError(hint);
             } else if (errorDetail.includes('SSL') || errorDetail.includes('fetch') || errorDetail.includes('Network')) {
-              setPlayerError(`Network Error: Stream may have expired. Click Refresh and try VLC.`);
+              setPlayerError(`Network Error: ${errorDetail}. Try VLC.`);
             } else {
-              setPlayerError(`MPEG-TS Error: ${errorType}. Use VLC to play this stream.`);
+              setPlayerError(`MPEG-TS Error: ${errorType} - ${errorDetail}`);
             }
           });
           
           player.on(mpegtsLib.Events.LOADING_COMPLETE, () => {
             console.log('mpegts loading complete');
+          });
+
+          player.on(mpegtsLib.Events.MEDIA_INFO, (info: any) => {
+            console.log('mpegts media info:', info);
+          });
+
+          player.on(mpegtsLib.Events.STATISTICS_INFO, (stats: any) => {
+            console.log('mpegts stats:', stats);
           });
           
           video.play().catch((err) => {
@@ -499,7 +515,7 @@ export default function IPTVDebugPage() {
         mpegtsRef.current = null;
       }
     };
-  }, [streamUrl, rawStreamUrl]);
+  }, [streamUrl, rawStreamUrl, macAddress]);
 
   // Load channels - accepts optional token override for immediate use after connection
   const loadChannels = useCallback(async (genre: string = '*', page: number = 0, tokenOverride?: string) => {

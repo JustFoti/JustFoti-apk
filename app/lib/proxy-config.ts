@@ -105,7 +105,11 @@ export function getIPTVProxyUrl(): string | null {
 }
 
 export function getIPTVProxyKey(): string | null {
-  // Only available server-side
+  // Client-side: use public env var
+  if (typeof window !== 'undefined') {
+    return process.env.NEXT_PUBLIC_RPI_PROXY_KEY || null;
+  }
+  // Server-side: use server env var
   return process.env.RPI_PROXY_KEY || null;
 }
 

@@ -56,7 +56,12 @@ PROTECTION_MODE = "none"
 # wrangler secret put SIGNING_SECRET      # Required for all modes except 'none'
 # wrangler secret put WATERMARK_SECRET    # Required for quantum mode (watermarks video)
 #
-# OXYLABS RESIDENTIAL PROXY (for DLHD streaming)
+# RPI RESIDENTIAL PROXY (for DLHD and IPTV streaming)
+# Required to bypass datacenter IP blocking by IPTV providers
+# wrangler secret put RPI_PROXY_URL       # Your RPi proxy URL (e.g., https://xxx.trycloudflare.com)
+# wrangler secret put RPI_PROXY_KEY       # Your RPi proxy API key
+#
+# OXYLABS RESIDENTIAL PROXY (alternative for DLHD streaming)
 # wrangler secret put OXYLABS_USERNAME    # Your Oxylabs username
 # wrangler secret put OXYLABS_PASSWORD    # Your Oxylabs password
 #

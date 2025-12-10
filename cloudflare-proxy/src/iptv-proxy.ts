@@ -5,12 +5,17 @@
  * 
  * Routes:
  *   GET /iptv/stream?url=<encoded_url>&mac=<mac>&token=<token>
+ * 
+ * If RPI_PROXY_URL is configured, streams are routed through the residential
+ * IP proxy to bypass datacenter IP blocking by IPTV providers.
  */
 
 import { createLogger, type LogLevel } from './logger';
 
 export interface Env {
   LOG_LEVEL?: string;
+  RPI_PROXY_URL?: string;
+  RPI_PROXY_KEY?: string;
 }
 
 // STB Device Headers - Required for Stalker Portal authentication
@@ -81,7 +86,7 @@ export async function handleIPTVRequest(request: Request, env: Env): Promise<Res
 
 async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string | null): Promise<Response> {
   const streamUrl = url.searchParams.get('url');
-  const mac = url.searchParams.get('mac');
+  let mac = url.searchParams.get('mac');
   const token = url.searchParams.get('token');
 
   if (!streamUrl) {
@@ -95,6 +100,15 @@ async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string
     const decodedUrl = decodeURIComponent(streamUrl);
     logger.info('IPTV stream proxy request', { url: decodedUrl.substring(0, 100) });
 
+    // Extract MAC from stream URL if not provided (e.g., mac=00:1A:79:00:00:0C)
+    if (!mac) {
+      const macMatch = decodedUrl.match(/mac=([0-9A-Fa-f:]+)/);
+      if (macMatch) {
+        mac = decodeURIComponent(macMatch[1]);
+        logger.info('Extracted MAC from URL', { mac });
+      }
+    }
+
     // Extract referer from stream URL
     let referer: string | undefined;
     try {
@@ -102,24 +116,46 @@ async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string
       referer = `${urlObj.protocol}//${urlObj.host}/`;
     } catch {}
 
-    // Build headers
+    // Build headers - always use STB headers for IPTV streams
     const headers = mac ? buildStreamHeaders(mac, token || undefined, referer) : {
       'User-Agent': STB_USER_AGENT,
+      'X-User-Agent': 'Model: MAG250; Link: WiFi',
       'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Connection': 'keep-alive',
       ...(referer ? { 'Referer': referer } : {}),
     };
 
-    // Fetch the stream
-    const response = await fetch(decodedUrl, {
-      headers,
-      // @ts-ignore - Cloudflare Workers support this
-      cf: {
-        // Disable SSL verification for problematic IPTV CDNs
-        // This is safe because we're just proxying video content
-        cacheTtl: 0,
-        cacheEverything: false,
-      },
-    });
+    let response: Response;
+
+    // If RPi proxy is configured, route through it for residential IP
+    if (env.RPI_PROXY_URL) {
+      logger.info('Using RPi proxy for IPTV stream', { rpiProxy: env.RPI_PROXY_URL });
+      
+      const rpiParams = new URLSearchParams({ url: decodedUrl });
+      if (mac) rpiParams.set('mac', mac);
+      if (token) rpiParams.set('token', token);
+      
+      const rpiUrl = `${env.RPI_PROXY_URL}/iptv/stream?${rpiParams.toString()}`;
+      
+      response = await fetch(rpiUrl, {
+        headers: {
+          'X-API-Key': env.RPI_PROXY_KEY || '',
+        },
+      });
+    } else {
+      // Direct fetch (will likely get blocked by IPTV providers)
+      logger.warn('No RPi proxy configured - direct fetch may be blocked');
+      
+      response = await fetch(decodedUrl, {
+        headers,
+        // @ts-ignore - Cloudflare Workers support this
+        cf: {
+          cacheTtl: 0,
+          cacheEverything: false,
+        },
+      });
+    }
 
     if (!response.ok) {
       logger.error('Stream fetch failed', { status: response.status });
