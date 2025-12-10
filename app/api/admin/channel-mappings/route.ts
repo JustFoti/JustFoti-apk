@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
-import { getDB } from '@/app/lib/db/connection';
+import { getDB, initializeDB } from '@/app/lib/db/neon-connection';
 import { v4 as uuidv4 } from 'uuid';
 
 // Initialize channel mappings table if it doesn't exist
 async function ensureMappingsTables() {
-  const db = await getDB();
+  await initializeDB();
+  const db = getDB();
   const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
   
   if (isNeon) {

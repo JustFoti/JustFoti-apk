@@ -493,12 +493,21 @@ export async function POST(request: NextRequest) {
         // Test handshake from different sources to see which IPs are blocked
         const results: Record<string, any> = {};
         
-        const handshakeUrl = new URL('/portal.php', normalizedUrl);
-        handshakeUrl.searchParams.set('type', 'stb');
-        handshakeUrl.searchParams.set('action', 'handshake');
-        handshakeUrl.searchParams.set('token', '');
-        handshakeUrl.searchParams.set('JsHttpRequest', '1-xml');
-        const testUrl = handshakeUrl.toString();
+        let testUrl: string;
+        try {
+          const handshakeUrl = new URL('/portal.php', normalizedUrl);
+          handshakeUrl.searchParams.set('type', 'stb');
+          handshakeUrl.searchParams.set('action', 'handshake');
+          handshakeUrl.searchParams.set('token', '');
+          handshakeUrl.searchParams.set('JsHttpRequest', '1-xml');
+          testUrl = handshakeUrl.toString();
+        } catch (urlError: any) {
+          return NextResponse.json({ 
+            success: false, 
+            error: `Invalid portal URL: ${urlError.message}`,
+            normalizedUrl 
+          });
+        }
         
         // 1. Test direct from Vercel (datacenter IP)
         try {
@@ -536,7 +545,10 @@ export async function POST(request: NextRequest) {
             const startCf = Date.now();
             // Use the IPTV API endpoint on CF worker
             const cfParams = new URLSearchParams({ url: testUrl, mac: macAddress });
-            const cfRes = await fetch(`${cfProxyUrl}/iptv/api?${cfParams.toString()}`, {
+            const cfFullUrl = `${cfProxyUrl}/iptv/api?${cfParams.toString()}`;
+            console.log('[Debug Sources] Testing CF worker:', cfFullUrl.substring(0, 100));
+            
+            const cfRes = await fetch(cfFullUrl, {
               signal: AbortSignal.timeout(10000),
             });
             const cfText = await cfRes.text();
@@ -551,13 +563,15 @@ export async function POST(request: NextRequest) {
               token: cfData?.js?.token ? cfData.js.token.substring(0, 20) + '...' : null,
               latency: Date.now() - startCf,
               error: !cfRes.ok ? `HTTP ${cfRes.status}` : (!cfData?.js?.token ? 'No token in response' : null),
-              rawResponse: cfText.substring(0, 200),
+              rawResponse: cfText.substring(0, 300),
+              testedUrl: cfFullUrl.substring(0, 80) + '...',
             };
           } catch (e: any) {
+            console.error('[Debug Sources] CF worker error:', e);
             results.cloudflare = {
               source: 'Cloudflare Worker (Datacenter)',
               success: false,
-              error: e.message || String(e),
+              error: e.name === 'TimeoutError' ? 'Request timed out (10s)' : (e.message || String(e)),
             };
           }
         } else {

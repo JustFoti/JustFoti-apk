@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getDB } from '@/app/lib/db/connection';
+import { getDB, initializeDB } from '@/app/lib/db/neon-connection';
 
 const RPI_PROXY_URL = process.env.RPI_PROXY_URL;
 const RPI_PROXY_KEY = process.env.RPI_PROXY_KEY;

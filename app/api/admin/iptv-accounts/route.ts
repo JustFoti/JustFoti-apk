@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
-import { getDB } from '@/app/lib/db/connection';
+import { getDB, initializeDB } from '@/app/lib/db/neon-connection';
 import { v4 as uuidv4 } from 'uuid';
 
 // Initialize IPTV tables if they don't exist
 async function ensureIPTVTables() {
-  const db = await getDB();
+  await initializeDB();
+  const db = getDB();
   const isNeon = process.env.DATABASE_URL?.includes('neon.tech');
   
   if (isNeon) {
