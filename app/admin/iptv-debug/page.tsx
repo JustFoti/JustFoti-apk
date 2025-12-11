@@ -79,7 +79,7 @@ export default function IPTVDebugPage() {
   const [macAddress, setMacAddress] = useState('');
   const [loading, setLoading] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
-  const [genres, setGenres] = useState<Genre[]>([]);
+  const [_genres, setGenres] = useState<Genre[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [totalChannels, setTotalChannels] = useState(0);
   const [loadingChannels, setLoadingChannels] = useState(false);
