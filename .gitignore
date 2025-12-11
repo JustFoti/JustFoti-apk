@@ -44,3 +44,58 @@ results-2025-12-09T01-56-09.json
 results-2025-12-09T02-53-04.json
 results-2025-12-09T03-48-59.json
 working-2025-12-09T03-48-59.json
+
+# Debug and temp files
+debug-*.html
+debug-*.js
+debug-*.txt
+debug-*.json
+debug-*.png
+debug_*.html
+*-debug.txt
+*-debug.js
+
+# Analysis/dump files
+analysis-*.html
+dump-*.html
+*-analysis.html
+
+# Temp extraction files
+*-embed.html
+*-rcp.html
+*-prorcp.html
+*-response*.txt
+*-source-*.txt
+*-inline-script-*.js
+
+# Superembed temp files
+superembed-*.html
+superembed-*.json
+superembed-*.png
+
+# Rapidshare temp files
+rapidshare-*.html
+rapidshare-*.js
+rapidshare-*.txt
+rapidairmax-*.js
+
+# 1movies temp files
+1movies-*.html
+1movies-*.json
+1movies-*.txt
+1movies-*.js
+
+# Player dumps
+player-*.html
+
+# Misc temp files
+*.log
+decoded-*.txt
+formatted_error.txt
+syntax_error.txt
+*-screenshot*.png
+streamsrcs-*.html
+
+# Results files with timestamps
+results-*.json
+working-*.json

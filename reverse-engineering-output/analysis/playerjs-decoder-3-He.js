@@ -1,1 +1,0 @@
-function He(e){var t=W(e)||{isTypeSupported:function(){return!1}};return{mpeg:t.isTypeSupported("audio/mpeg"),mp3:t.isTypeSupported('audio/mp4; codecs="mp3"'),ac3:t.isTypeSupported('audio/mp4; codecs="ac-3"')}}function Ye(e){return e.replace(/^.+codecs=["']?([^"']+).*$/,"$1")}

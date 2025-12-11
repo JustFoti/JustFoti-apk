@@ -1,1 +1,0 @@
-function ci(e){return e.replace(/\?[^?]*$/,"")}function gi(e,t){for(var r=0,i=e.length;r<i;r++){var n;if((null==(n=e[r])?void 0:n.cc)===t)return e[r]}

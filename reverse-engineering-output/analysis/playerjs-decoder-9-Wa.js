@@ -1,1 +1,0 @@
-function Wa(e){if(!1===/^[a-z*][a-z0-9\-_.*]*$/.test(e))throw Da(e,Ya);return e}function ja(e){return null==e?"":Object.entries(e).map((function(e){var t=e[0],r=e[1];return!0===r?";"+Wa(t):";"+Wa(t)+"="+Ha(r)}

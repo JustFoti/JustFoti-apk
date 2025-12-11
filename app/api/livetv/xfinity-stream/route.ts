@@ -221,7 +221,7 @@ export async function GET(request: NextRequest) {
       }),
     });
     
-    const cfData = await cfResponse.json() as { success?: boolean; streamUrl?: string; error?: string };
+    const cfData = await cfResponse.json() as { success?: boolean; streamUrl?: string; error?: string; debug?: any };
     
     if (!cfData.success || !cfData.streamUrl) {
       if (accountId) await updateAccountUsage(accountId, channelId, false);
@@ -248,6 +248,11 @@ export async function GET(request: NextRequest) {
         id: accountId || 'fallback',
         mac: maskedMac,
         isFromDb: !!accountId,
+      },
+      // Debug info - shows what IP was passed and bound
+      debug: {
+        clientIpSentToCF: clientIp,
+        cfDebug: cfData.debug,
       },
     });
     

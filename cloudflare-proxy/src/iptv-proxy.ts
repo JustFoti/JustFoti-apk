@@ -323,6 +323,13 @@ async function handleChannelRequest(
       return new Response(JSON.stringify({
         success: true,
         streamUrl: fullStreamUrl,
+        // Debug info - remove in production
+        debug: {
+          boundIp: clientIp,
+          clientIpSource: body.clientIp ? 'request-body' : 'headers',
+          bodyClientIp: body.clientIp || null,
+          cfConnectingIp: request.headers.get('CF-Connecting-IP'),
+        },
       }), {
         status: 200,
         headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
@@ -817,17 +824,15 @@ async function handleStreamProxy(request: Request, url: URL, env: Env, logger: a
         });
       }
 
-      // Verify IP binding to prevent restreaming
+      // IP binding disabled - the IPTV portal binds streams to CF's IP anyway
+      // Token expiry (60s) is sufficient protection against sharing
       if (tokenData.boundIp && tokenData.boundIp !== 'unknown' && tokenData.boundIp !== clientIp) {
-        logger.warn('Token IP mismatch - possible restreaming attempt', { 
+        logger.info('Token used from different IP (allowed)', { 
           token: streamToken.substring(0, 8) + '...',
           boundIp: tokenData.boundIp.substring(0, 20) + '...',
           requestIp: clientIp.substring(0, 20) + '...',
         });
-        return new Response(JSON.stringify({ error: 'Token not valid for this IP' }), {
-          status: 403,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-        });
+        // Don't block - just log it
       }
 
       mac = tokenData.mac;
