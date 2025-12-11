@@ -8,9 +8,6 @@ import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import styles from './LiveTV.module.css';
 
-// CF proxy URL for IPTV streams
-const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
-
 // Types
 interface Channel {
   id: string;
