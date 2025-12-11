@@ -293,12 +293,8 @@ export default function IPTVManagerPage() {
     
     // Process 3 at a time
     const CONCURRENCY = 3;
-    const queue = [...accounts];
-    const inProgress = new Set<string>();
     
     const processAccount = async (account: IPTVAccount, index: number) => {
-      inProgress.add(account.id);
-      
       // Verify this account
       const result = await verifyAccount(account);
       results[index] = result;
@@ -331,8 +327,6 @@ export default function IPTVManagerPage() {
       } else {
         errors++;
       }
-      
-      inProgress.delete(account.id);
     };
     
     // Process in batches of 3
