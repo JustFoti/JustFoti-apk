@@ -4,7 +4,9 @@
  * Proxies IPTV Stalker portal streams to bypass CORS and SSL issues.
  * 
  * Routes:
- *   GET /iptv/stream?url=<encoded_url>&mac=<mac>&token=<token>
+ *   POST /iptv/token - Create a stream token (hides real URL)
+ *   GET /iptv/stream?t=<token> - Stream using token (preferred, URL hidden)
+ *   GET /iptv/stream?url=<encoded_url>&mac=<mac> - Legacy direct URL (deprecated)
  * 
  * If RPI_PROXY_URL is configured, streams are routed through the residential
  * IP proxy to bypass datacenter IP blocking by IPTV providers.
@@ -14,6 +16,10 @@ import { createLogger, type LogLevel } from './logger';
 
 export interface Env {
   LOG_LEVEL?: string;
+  // KV namespace for stream tokens (URL hiding)
+  STREAM_TOKENS?: KVNamespace;
+  // Secret key for signing tokens
+  TOKEN_SECRET?: string;
   // RPi proxy (residential IP)
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
@@ -24,6 +30,35 @@ export interface Env {
   OXYLABS_USERNAME?: string;
   OXYLABS_PASSWORD?: string;
   OXYLABS_COUNTRY?: string;
+}
+
+// Stream token data stored in KV
+// NOTE: We store portal credentials + channel ID, NOT the stream URL
+// This is because the portal's play_token expires quickly and is single-use
+interface StreamTokenData {
+  // Old format (deprecated - stream URL expires too quickly)
+  url?: string;
+  // New format - store credentials to fetch fresh stream URL on demand
+  portal?: string;
+  stalkerChannelId?: string;
+  // Common fields
+  mac: string;
+  channelId?: string;
+  channelName?: string;
+  createdAt: number;
+  expiresAt: number;
+  // IP binding to prevent restreaming - token only works from this IP
+  boundIp?: string;
+}
+
+// Token expiration time (5 minutes - streams are fetched immediately)
+const TOKEN_TTL_SECONDS = 300;
+
+// Generate a random token
+function generateToken(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // STB Device Headers - Required for Stalker Portal authentication
@@ -55,10 +90,260 @@ function buildStreamHeaders(macAddress: string, token?: string, referer?: string
 function corsHeaders(origin?: string | null): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Range, Content-Type',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
   };
+}
+
+/**
+ * Create a stream token - stores the real URL in KV and returns an opaque token
+ * This hides the actual stream URL from the client
+ */
+async function handleCreateToken(
+  request: Request,
+  env: Env,
+  logger: any,
+  origin: string | null
+): Promise<Response> {
+  try {
+    const body = await request.json() as { url: string; mac: string; channelId?: string; channelName?: string };
+    
+    if (!body.url || !body.mac) {
+      return new Response(JSON.stringify({ error: 'Missing url or mac' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    // Check if KV is configured
+    if (!env.STREAM_TOKENS) {
+      // Fallback: return legacy URL format if KV not configured
+      logger.warn('STREAM_TOKENS KV not configured, using legacy URL format');
+      const legacyUrl = `/iptv/stream?url=${encodeURIComponent(body.url)}&mac=${encodeURIComponent(body.mac)}`;
+      return new Response(JSON.stringify({ 
+        success: true, 
+        streamUrl: legacyUrl,
+        legacy: true,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    // Generate token and store data
+    const token = generateToken();
+    const now = Date.now();
+    const tokenData: StreamTokenData = {
+      url: body.url,
+      mac: body.mac,
+      channelId: body.channelId,
+      channelName: body.channelName,
+      createdAt: now,
+      expiresAt: now + (TOKEN_TTL_SECONDS * 1000),
+    };
+
+    // Store in KV with TTL
+    await env.STREAM_TOKENS.put(`stream:${token}`, JSON.stringify(tokenData), {
+      expirationTtl: TOKEN_TTL_SECONDS,
+    });
+
+    logger.info('Created stream token', { 
+      token: token.substring(0, 8) + '...', 
+      channelId: body.channelId,
+      expiresIn: TOKEN_TTL_SECONDS,
+    });
+
+    // Return the token-based URL (no sensitive data exposed)
+    return new Response(JSON.stringify({ 
+      success: true, 
+      streamUrl: `/iptv/stream?t=${token}`,
+      expiresIn: TOKEN_TTL_SECONDS,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
+
+  } catch (error) {
+    logger.error('Failed to create stream token', error as Error);
+    return new Response(JSON.stringify({ error: 'Failed to create token' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
+  }
+}
+
+/**
+ * Single endpoint for LiveTV channel requests
+ * Does handshake + create_link + token creation all in one call
+ * Returns a tokenized stream URL that hides the real IPTV URL
+ */
+async function handleChannelRequest(
+  request: Request,
+  env: Env,
+  logger: any,
+  origin: string | null
+): Promise<Response> {
+  try {
+    const body = await request.json() as {
+      portal: string;
+      mac: string;
+      stalkerChannelId: string;
+      channelId?: string;
+      channelName?: string;
+    };
+
+    if (!body.portal || !body.mac || !body.stalkerChannelId) {
+      return new Response(JSON.stringify({ error: 'Missing portal, mac, or stalkerChannelId' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    const { portal, mac, stalkerChannelId, channelId, channelName } = body;
+    const portalBase = portal.replace(/\/c\/?$/, '').replace(/\/+$/, '');
+
+    // Get client IP for token binding (prevents restreaming)
+    const clientIp = request.headers.get('CF-Connecting-IP') || 
+                     request.headers.get('X-Real-IP') ||
+                     request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
+                     'unknown';
+
+    logger.info('Channel request', { 
+      portal: portalBase, 
+      mac: mac.substring(0, 14) + '...', 
+      stalkerChannelId,
+      clientIp: clientIp.substring(0, 20) + '...',
+    });
+
+    // Step 1: Handshake to get portal token
+    const handshakeUrl = `${portalBase}/portal.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml`;
+    const handshakeHeaders = buildStreamHeaders(mac);
+    
+    const handshakeRes = await fetch(handshakeUrl, { headers: handshakeHeaders });
+    const handshakeText = await handshakeRes.text();
+    const handshakeClean = handshakeText.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
+    
+    let portalToken: string;
+    try {
+      const handshakeData = JSON.parse(handshakeClean);
+      portalToken = handshakeData?.js?.token;
+      if (!portalToken) throw new Error('No token in response');
+    } catch (e) {
+      logger.error('Handshake failed', { error: String(e), response: handshakeClean.substring(0, 200) });
+      return new Response(JSON.stringify({ success: false, error: 'Handshake failed' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    logger.info('Handshake succeeded', { token: portalToken.substring(0, 20) + '...' });
+
+    // Step 2: Create link to get stream URL
+    const cmd = `ffrt http://localhost/ch/${stalkerChannelId}`;
+    const createLinkUrl = new URL(`${portalBase}/portal.php`);
+    createLinkUrl.searchParams.set('type', 'itv');
+    createLinkUrl.searchParams.set('action', 'create_link');
+    createLinkUrl.searchParams.set('cmd', cmd);
+    createLinkUrl.searchParams.set('series', '');
+    createLinkUrl.searchParams.set('forced_storage', 'undefined');
+    createLinkUrl.searchParams.set('disable_ad', '0');
+    createLinkUrl.searchParams.set('download', '0');
+    createLinkUrl.searchParams.set('JsHttpRequest', '1-xml');
+
+    const createLinkHeaders = buildStreamHeaders(mac, portalToken);
+    const createLinkRes = await fetch(createLinkUrl.toString(), { headers: createLinkHeaders });
+    const createLinkText = await createLinkRes.text();
+    const createLinkClean = createLinkText.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
+
+    let streamUrl: string;
+    try {
+      const createLinkData = JSON.parse(createLinkClean);
+      streamUrl = createLinkData?.js?.cmd;
+      if (!streamUrl) throw new Error('No stream URL in response');
+      
+      // Extract URL from ffmpeg command format
+      const prefixes = ['ffmpeg ', 'ffrt ', 'ffrt2 ', 'ffrt3 ', 'ffrt4 '];
+      for (const prefix of prefixes) {
+        if (streamUrl.startsWith(prefix)) {
+          streamUrl = streamUrl.substring(prefix.length);
+          break;
+        }
+      }
+      streamUrl = streamUrl.trim();
+    } catch (e) {
+      logger.error('Create link failed', { error: String(e), response: createLinkClean.substring(0, 200) });
+      return new Response(JSON.stringify({ success: false, error: 'Failed to get stream URL' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    logger.info('Got stream URL', { url: streamUrl.substring(0, 60) + '...' });
+
+    // Step 3: Create token and store PORTAL CREDENTIALS in KV (not the stream URL!)
+    // The portal's play_token expires quickly and is single-use, so we need to
+    // fetch a fresh stream URL when the client actually requests the stream
+    if (env.STREAM_TOKENS) {
+      const token = generateToken();
+      const now = Date.now();
+      const tokenData: StreamTokenData = {
+        // Store portal credentials for on-demand stream URL generation
+        portal: portalBase,
+        stalkerChannelId: stalkerChannelId,
+        mac: mac,
+        channelId: channelId,
+        channelName: channelName,
+        createdAt: now,
+        expiresAt: now + (TOKEN_TTL_SECONDS * 1000),
+        // Bind token to client IP to prevent restreaming
+        boundIp: clientIp,
+      };
+
+      await env.STREAM_TOKENS.put(`stream:${token}`, JSON.stringify(tokenData), {
+        expirationTtl: TOKEN_TTL_SECONDS,
+      });
+
+      logger.info('Created stream token (IP-bound)', { 
+        token: token.substring(0, 8) + '...',
+        portal: portalBase,
+        stalkerChannelId,
+        boundIp: clientIp.substring(0, 20) + '...',
+      });
+
+      const workerUrl = new URL(request.url);
+      const fullStreamUrl = `${workerUrl.protocol}//${workerUrl.host}/iptv/stream?t=${token}`;
+
+      return new Response(JSON.stringify({
+        success: true,
+        streamUrl: fullStreamUrl,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    // Fallback: base64 encode the URL (legacy, may not work due to token expiry)
+    const encodedUrl = btoa(streamUrl);
+    const workerUrl = new URL(request.url);
+    const fallbackUrl = `${workerUrl.protocol}//${workerUrl.host}/iptv/stream?u=${encodeURIComponent(encodedUrl)}&m=${encodeURIComponent(mac)}`;
+
+    return new Response(JSON.stringify({
+      success: true,
+      streamUrl: fallbackUrl,
+      legacy: true,
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
+
+  } catch (error) {
+    logger.error('Channel request failed', error as Error);
+    return new Response(JSON.stringify({ success: false, error: 'Channel request failed' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+    });
+  }
 }
 
 /**
@@ -141,14 +426,25 @@ export async function handleIPTVRequest(request: Request, env: Env): Promise<Res
     });
   }
 
+  // Route: POST /iptv/channel - Single endpoint: handshake + create_link + token creation
+  // This is the main endpoint for LiveTV - does everything in one call
+  if ((path === '/iptv/channel' || path === '/iptv/channel/') && request.method === 'POST') {
+    return handleChannelRequest(request, env, logger, origin);
+  }
+
+  // Route: POST /iptv/token - Create a stream token (hides real URL from client)
+  if ((path === '/iptv/token' || path === '/iptv/token/') && request.method === 'POST') {
+    return handleCreateToken(request, env, logger, origin);
+  }
+
   // Route: /iptv/api - Proxy Stalker portal API calls
   if (path === '/iptv/api' || path === '/iptv/api/') {
     return handleApiProxy(url, env, logger, origin, request);
   }
 
-  // Route: /iptv/stream - Proxy IPTV stream
+  // Route: /iptv/stream - Proxy IPTV stream (supports both token and legacy URL params)
   if (path === '/iptv/stream' || path === '/iptv/stream/') {
-    return handleStreamProxy(url, env, logger, origin);
+    return handleStreamProxy(request, url, env, logger, origin);
   }
 
   return new Response(JSON.stringify({
@@ -391,28 +687,276 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
   }
 }
 
-async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string | null): Promise<Response> {
-  const streamUrl = url.searchParams.get('url');
-  let mac = url.searchParams.get('mac');
-  const token = url.searchParams.get('token');
+/**
+ * Rewrite M3U8 playlist URLs to go through the CF proxy
+ * This ensures all segment requests come from the same IP that the token was bound to
+ */
+function rewriteM3U8ForProxy(content: string, baseUrl: string, mac: string, token: string, proxyBase: string): string {
+  const baseUrlObj = new URL(baseUrl);
+  const basePath = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
 
+  const lines = content.split('\n');
+  const rewrittenLines = lines.map(line => {
+    const trimmedLine = line.trim();
+    
+    // Handle EXT-X-KEY with URI
+    if (trimmedLine.includes('URI=')) {
+      const uriMatch = trimmedLine.match(/URI="([^"]+)"/);
+      if (uriMatch) {
+        let keyUrl = uriMatch[1];
+        // Make absolute URL if relative
+        if (!keyUrl.startsWith('http')) {
+          if (keyUrl.startsWith('/')) {
+            keyUrl = `${baseUrlObj.protocol}//${baseUrlObj.host}${keyUrl}`;
+          } else {
+            keyUrl = basePath + keyUrl;
+          }
+        }
+        const params = new URLSearchParams({ url: keyUrl, mac });
+        if (token) params.set('token', token);
+        const proxiedKeyUrl = `${proxyBase}?${params.toString()}`;
+        return trimmedLine.replace(/URI="[^"]+"/, `URI="${proxiedKeyUrl}"`);
+      }
+      return line;
+    }
+    
+    // Skip empty lines and other comments
+    if (!trimmedLine || trimmedLine.startsWith('#')) {
+      return line;
+    }
+    
+    // Handle segment URLs
+    let segmentUrl = trimmedLine;
+    
+    // Make absolute URL if relative
+    if (!segmentUrl.startsWith('http')) {
+      if (segmentUrl.startsWith('/')) {
+        segmentUrl = `${baseUrlObj.protocol}//${baseUrlObj.host}${segmentUrl}`;
+      } else {
+        segmentUrl = basePath + segmentUrl;
+      }
+    }
+    
+    // Proxy the segment through CF
+    const params = new URLSearchParams({ url: segmentUrl, mac });
+    if (token) params.set('token', token);
+    return `${proxyBase}?${params.toString()}`;
+  });
+
+  return rewrittenLines.join('\n');
+}
+
+async function handleStreamProxy(request: Request, url: URL, env: Env, logger: any, origin: string | null): Promise<Response> {
+  // Get client IP for token verification
+  const clientIp = request.headers.get('CF-Connecting-IP') || 
+                   request.headers.get('X-Real-IP') ||
+                   request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
+                   'unknown';
+
+  // Check for token-based access first (preferred - hides real URL)
+  const streamToken = url.searchParams.get('t');
+  // Support both base64-encoded (u) and legacy plaintext (url) params
+  let streamUrl = url.searchParams.get('url');
+  const encodedUrl = url.searchParams.get('u');
+  if (encodedUrl && !streamUrl) {
+    try {
+      streamUrl = atob(encodedUrl);
+      logger.info('Decoded base64 URL', { decodedUrl: streamUrl.substring(0, 80) + '...' });
+    } catch (e) {
+      logger.warn('Failed to decode base64 URL', { error: String(e), encodedUrl: encodedUrl.substring(0, 50) });
+    }
+  }
+  // Support both short (m) and legacy (mac) params
+  let mac = url.searchParams.get('mac') || url.searchParams.get('m');
+  const legacyToken = url.searchParams.get('token'); // Old auth token, not stream token
+  
+  logger.info('IPTV stream request', { 
+    hasToken: !!streamToken, 
+    hasEncodedUrl: !!encodedUrl,
+    hasLegacyUrl: !!url.searchParams.get('url'),
+    hasMac: !!mac,
+    streamUrlPreview: streamUrl?.substring(0, 60) + '...',
+  });
+
+  // Token-based lookup (preferred method - URL is hidden from client)
+  if (streamToken) {
+    if (!env.STREAM_TOKENS) {
+      return new Response(JSON.stringify({ error: 'Token system not configured' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    logger.info('Looking up token in KV', { token: streamToken.substring(0, 8) + '...', key: `stream:${streamToken}` });
+    const tokenDataStr = await env.STREAM_TOKENS.get(`stream:${streamToken}`);
+    logger.info('KV lookup result', { found: !!tokenDataStr, dataLength: tokenDataStr?.length });
+    
+    if (!tokenDataStr) {
+      logger.warn('Invalid or expired stream token', { token: streamToken.substring(0, 8) + '...' });
+      return new Response(JSON.stringify({ error: 'Invalid or expired stream token' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+
+    try {
+      const tokenData = JSON.parse(tokenDataStr) as StreamTokenData;
+      
+      // Check expiration (belt and suspenders - KV TTL should handle this)
+      if (Date.now() > tokenData.expiresAt) {
+        logger.warn('Stream token expired', { token: streamToken.substring(0, 8) + '...' });
+        return new Response(JSON.stringify({ error: 'Stream token expired' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      }
+
+      // Verify IP binding to prevent restreaming
+      if (tokenData.boundIp && tokenData.boundIp !== 'unknown' && tokenData.boundIp !== clientIp) {
+        logger.warn('Token IP mismatch - possible restreaming attempt', { 
+          token: streamToken.substring(0, 8) + '...',
+          boundIp: tokenData.boundIp.substring(0, 20) + '...',
+          requestIp: clientIp.substring(0, 20) + '...',
+        });
+        return new Response(JSON.stringify({ error: 'Token not valid for this IP' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      }
+
+      mac = tokenData.mac;
+      
+      // Check if we have portal credentials (new format) or pre-stored URL (old format)
+      if (tokenData.portal && tokenData.stalkerChannelId) {
+        // NEW FORMAT: Fetch fresh stream URL on demand
+        logger.info('Token has portal credentials, fetching fresh stream URL', {
+          token: streamToken.substring(0, 8) + '...',
+          portal: tokenData.portal,
+          stalkerChannelId: tokenData.stalkerChannelId,
+          channelName: tokenData.channelName,
+        });
+        
+        try {
+          // Step 1: Handshake to get portal token
+          const handshakeUrl = `${tokenData.portal}/portal.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml`;
+          const handshakeHeaders = buildStreamHeaders(mac);
+          
+          const handshakeRes = await fetch(handshakeUrl, { headers: handshakeHeaders });
+          const handshakeText = await handshakeRes.text();
+          const handshakeClean = handshakeText.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
+          
+          let portalToken: string;
+          try {
+            const handshakeData = JSON.parse(handshakeClean);
+            portalToken = handshakeData?.js?.token;
+            if (!portalToken) throw new Error('No token in response');
+          } catch (e) {
+            logger.error('Handshake failed during stream fetch', { error: String(e) });
+            return new Response(JSON.stringify({ error: 'Portal handshake failed' }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+            });
+          }
+          
+          logger.info('Fresh handshake succeeded', { token: portalToken.substring(0, 20) + '...' });
+          
+          // Step 2: Create link to get fresh stream URL
+          const cmd = `ffrt http://localhost/ch/${tokenData.stalkerChannelId}`;
+          const createLinkUrl = new URL(`${tokenData.portal}/portal.php`);
+          createLinkUrl.searchParams.set('type', 'itv');
+          createLinkUrl.searchParams.set('action', 'create_link');
+          createLinkUrl.searchParams.set('cmd', cmd);
+          createLinkUrl.searchParams.set('series', '');
+          createLinkUrl.searchParams.set('forced_storage', 'undefined');
+          createLinkUrl.searchParams.set('disable_ad', '0');
+          createLinkUrl.searchParams.set('download', '0');
+          createLinkUrl.searchParams.set('JsHttpRequest', '1-xml');
+          
+          const createLinkHeaders = buildStreamHeaders(mac, portalToken);
+          const createLinkRes = await fetch(createLinkUrl.toString(), { headers: createLinkHeaders });
+          const createLinkText = await createLinkRes.text();
+          const createLinkClean = createLinkText.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
+          
+          try {
+            const createLinkData = JSON.parse(createLinkClean);
+            streamUrl = createLinkData?.js?.cmd;
+            if (!streamUrl) throw new Error('No stream URL in response');
+            
+            // Extract URL from ffmpeg command format
+            const prefixes = ['ffmpeg ', 'ffrt ', 'ffrt2 ', 'ffrt3 ', 'ffrt4 '];
+            for (const prefix of prefixes) {
+              if (streamUrl.startsWith(prefix)) {
+                streamUrl = streamUrl.substring(prefix.length);
+                break;
+              }
+            }
+            streamUrl = streamUrl.trim();
+          } catch (e) {
+            logger.error('Create link failed during stream fetch', { error: String(e) });
+            return new Response(JSON.stringify({ error: 'Failed to get fresh stream URL' }), {
+              status: 502,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+            });
+          }
+          
+          logger.info('Got fresh stream URL', { url: streamUrl.substring(0, 80) + '...' });
+          
+        } catch (e) {
+          logger.error('Failed to fetch fresh stream URL', e as Error);
+          return new Response(JSON.stringify({ error: 'Failed to fetch fresh stream URL' }), {
+            status: 502,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+          });
+        }
+      } else if (tokenData.url) {
+        // OLD FORMAT: Use pre-stored URL (may fail due to token expiry)
+        streamUrl = tokenData.url;
+        logger.info('Token has pre-stored URL (legacy format)', { 
+          token: streamToken.substring(0, 8) + '...', 
+          url: streamUrl.substring(0, 80) + '...',
+        });
+      } else {
+        logger.error('Token data missing both portal credentials and URL');
+        return new Response(JSON.stringify({ error: 'Invalid token data format' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+        });
+      }
+    } catch (e) {
+      logger.error('Failed to parse token data', e as Error);
+      return new Response(JSON.stringify({ error: 'Invalid token data' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+    }
+  }
+
+  // Require either token or legacy URL params
   if (!streamUrl) {
-    return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
+    return new Response(JSON.stringify({ error: 'Missing stream token or url parameter' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
     });
   }
 
   try {
-    const decodedUrl = decodeURIComponent(streamUrl);
-    logger.info('IPTV stream proxy request', { url: decodedUrl.substring(0, 100) });
+    // Determine if URL needs decoding:
+    // - Token-based: URL is stored as-is, no decoding needed
+    // - Base64 (u param): URL was base64 decoded, no further decoding needed
+    // - Legacy (url param): URL is URL-encoded, needs decodeURIComponent
+    const decodedUrl = streamToken ? streamUrl : (encodedUrl ? streamUrl : decodeURIComponent(streamUrl));
+    logger.info('IPTV stream proxy request', { 
+      url: decodedUrl.substring(0, 80) + '...', 
+      viaToken: !!streamToken,
+      viaBase64: !!encodedUrl,
+    });
 
     // Extract MAC from stream URL if not provided (e.g., mac=00:1A:79:00:00:0C)
     if (!mac) {
       const macMatch = decodedUrl.match(/mac=([0-9A-Fa-f:]+)/);
       if (macMatch) {
         mac = decodeURIComponent(macMatch[1]);
-        logger.info('Extracted MAC from URL', { mac });
+        logger.info('Extracted MAC from URL', { mac: mac.substring(0, 14) + '...' });
       }
     }
 
@@ -424,7 +968,7 @@ async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string
     } catch {}
 
     // Build headers - always use STB headers for IPTV streams
-    const headers = mac ? buildStreamHeaders(mac, token || undefined, referer) : {
+    const headers = mac ? buildStreamHeaders(mac, legacyToken || undefined, referer) : {
       'User-Agent': STB_USER_AGENT,
       'X-User-Agent': 'Model: MAG250; Link: WiFi',
       'Accept': '*/*',
@@ -440,13 +984,20 @@ async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string
     const buildProxyParams = () => {
       const params = new URLSearchParams({ url: decodedUrl });
       if (mac) params.set('mac', mac);
-      if (token) params.set('token', token);
+      if (legacyToken) params.set('token', legacyToken);
       return params;
     };
 
     // NEW STRATEGY: Try direct FIRST for streams (matching API proxy behavior)
     // Priority: Direct > RPi (backup) > Hetzner (last resort)
-    logger.info('Attempting direct stream fetch first');
+    logger.info('STREAM FETCH DEBUG', { 
+      FULL_URL: decodedUrl,
+      MAC: mac,
+      viaToken: !!streamToken,
+      viaBase64: !!encodedUrl,
+      viaLegacy: !!url.searchParams.get('url'),
+      headers: headers,
+    });
     
     try {
       response = await fetch(decodedUrl, {
@@ -459,10 +1010,33 @@ async function handleStreamProxy(url: URL, env: Env, logger: any, origin: string
       });
       usedProxy = 'direct';
       
-      // Check if blocked
-      if (response.status === 403 || response.status === 429) {
-        logger.warn('Direct stream blocked', { status: response.status });
-        throw new Error(`Direct blocked with ${response.status}`);
+      // Check if blocked or token expired
+      // 403 = forbidden, 429 = rate limited, 458/456 = IPTV portal token expired/invalid
+      if (response.status === 403 || response.status === 429 || response.status === 458 || response.status === 456) {
+        // Try to read error body for more details
+        let errorBody = '';
+        try {
+          errorBody = await response.clone().text();
+        } catch {}
+        
+        logger.warn('Direct stream blocked/expired', { 
+          status: response.status, 
+          FULL_URL: decodedUrl,
+          MAC: mac,
+          viaToken: !!streamToken,
+          errorBody: errorBody.substring(0, 500),
+          responseHeaders: Object.fromEntries(response.headers.entries()),
+        });
+        throw new Error(`Direct blocked/expired with ${response.status}`);
+      }
+      
+      // Also check for non-2xx responses
+      if (!response.ok) {
+        logger.warn('Direct stream returned error', { 
+          status: response.status,
+          url: decodedUrl.substring(0, 100),
+        });
+        throw new Error(`Direct returned ${response.status}`);
       }
       
       logger.info('Direct stream fetch succeeded', { status: response.status });

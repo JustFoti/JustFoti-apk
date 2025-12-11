@@ -228,6 +228,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      case 'deleteAll': {
+        // Delete all accounts
+        await db.execute('DELETE FROM iptv_accounts');
+        // Also delete all channel mappings since they reference accounts
+        try {
+          await db.execute('DELETE FROM channel_mappings');
+        } catch {
+          // Table might not exist
+        }
+        return NextResponse.json({ success: true });
+      }
+
       case 'test': {
         // Test connection to a specific account
         const { id, portal_url, mac_address } = body;

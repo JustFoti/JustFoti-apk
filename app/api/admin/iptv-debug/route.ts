@@ -455,14 +455,86 @@ export async function POST(request: NextRequest) {
       }
 
       case 'all_channels': {
-        // Fetch ALL channels from ALL genres at once
+        // Fetch channels - if usOnly is true, only fetch from US/NA/CA genres
         if (!token) {
           return NextResponse.json({ error: 'Token required' }, { status: 400 });
         }
         
-        console.log('[All Channels] Starting to fetch all channels...');
+        const usOnly = body.usOnly !== false; // Default to US only
+        const selectedGenre = body.selectedGenre; // Optional: filter to specific genre
         const allChannels: any[] = [];
-        const pageSize = 500; // Request large pages to minimize requests
+        const seenIds = new Set<string>(); // Track seen channel IDs to avoid duplicates
+        const pageSize = 500;
+        
+        if (usOnly) {
+          // Fetch only US/NA/CA channels by genre
+          console.log('[All Channels] Fetching US/NA/CA channels only...');
+          
+          // First get all genres
+          const allGenres = await getGenres(normalizedUrl, macAddress, token, 'itv');
+          console.log(`[All Channels] Found ${allGenres.length} genres`);
+          
+          // Filter to US/NA/CA genres (exclude 24/7 - those are VOD-style)
+          // Only include actual live TV categories
+          const usGenrePrefixes = ['US|', 'NA|', 'CA|'];
+          let usGenres = allGenres.filter((g: any) => 
+            usGenrePrefixes.some(prefix => g.title?.toUpperCase().startsWith(prefix))
+          );
+          
+          // If a specific genre is selected, only fetch that one
+          if (selectedGenre && selectedGenre !== 'all') {
+            usGenres = usGenres.filter((g: any) => g.id === selectedGenre || g.title === selectedGenre);
+          }
+          
+          console.log(`[All Channels] Found ${usGenres.length} US/NA/CA genres`);
+          
+          // Fetch channels from each US genre
+          for (const genre of usGenres) {
+            try {
+              let page = 0;
+              let hasMore = true;
+              
+              while (hasMore && page < 10) { // Max 10 pages per genre (5000 channels per genre max)
+                const pageData = await getChannels(normalizedUrl, macAddress, token, genre.id, page, pageSize);
+                if (pageData.data && pageData.data.length > 0) {
+                  // Add genre info to each channel and deduplicate
+                  for (const ch of pageData.data) {
+                    if (!seenIds.has(ch.id)) {
+                      seenIds.add(ch.id);
+                      allChannels.push({
+                        ...ch,
+                        genre_title: genre.title, // Add genre for grouping
+                        genre_id: genre.id
+                      });
+                    }
+                  }
+                  page++;
+                  hasMore = pageData.data.length === pageSize;
+                } else {
+                  hasMore = false;
+                }
+                await new Promise(r => setTimeout(r, 30)); // Small delay
+              }
+            } catch (genreErr) {
+              console.error(`[All Channels] Error fetching genre ${genre.title}:`, genreErr);
+            }
+          }
+          
+          console.log(`[All Channels] Finished: ${allChannels.length} unique US/NA/CA channels`);
+          
+          // Return genres list for dropdown
+          const genresList = usGenres.map((g: any) => ({ id: g.id, title: g.title }));
+          
+          return NextResponse.json({ 
+            success: true, 
+            channels: allChannels,
+            total: allChannels.length,
+            genres: genresList
+          });
+        }
+        
+        // Fetch ALL channels (original behavior)
+        console.log('[All Channels] Starting to fetch all channels...');
         
         // First, get total count
         const firstPage = await getChannels(normalizedUrl, macAddress, token, '*', 0, pageSize);

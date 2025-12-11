@@ -10,7 +10,9 @@ import {
   CheckCircle, 
   XCircle,
   Loader2,
-  Zap
+  Zap,
+  ShieldCheck,
+  AlertTriangle
 } from 'lucide-react';
 
 interface IPTVAccount {
@@ -72,8 +74,285 @@ export default function IPTVManagerPage() {
   const [selectedOurChannel, setSelectedOurChannel] = useState<OurChannel | null>(null);
   const [selectedStalkerChannel, setSelectedStalkerChannel] = useState<any | null>(null);
   const [autoMatching, setAutoMatching] = useState(false);
+  const [autoMappingAll, setAutoMappingAll] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Progress state for mapping
+  const [mappingProgress, setMappingProgress] = useState<string | null>(null);
+  
+  // Verification state
+  const [verifying, setVerifying] = useState(false);
+  const [verifyProgress, setVerifyProgress] = useState<string | null>(null);
+  const [verifyResults, setVerifyResults] = useState<{
+    accountId: string;
+    mac: string;
+    status: 'checking' | 'valid' | 'invalid' | 'error';
+    error?: string;
+    channelsTested?: number;
+  }[]>([]);
+
+  // Auto-map ALL channels for ALL accounts - one account at a time with DB updates
+  const handleAutoMapAllAccountsChannels = async () => {
+    if (accounts.length === 0) {
+      alert('No accounts to map. Import accounts first.');
+      return;
+    }
+    
+    if (!confirm(`This will create channel mappings for ALL ${accounts.length} accounts.\n\nProcesses one account at a time (102 channels each).\n\nContinue?`)) {
+      return;
+    }
+    
+    setAutoMappingAll(true);
+    setMappingProgress(`Starting... 0/${accounts.length} accounts`);
+    
+    let totalMapped = 0;
+    let totalSkipped = 0;
+    let accountsProcessed = 0;
+    
+    try {
+      for (let i = 0; i < accounts.length; i++) {
+        const account = accounts[i];
+        setMappingProgress(`Mapping account ${i + 1}/${accounts.length}: ${account.name || account.mac_address.substring(0, 14)}...`);
+        
+        const res = await fetch('/api/admin/channel-mappings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'auto-map-all',
+            stalker_account_id: account.id,
+          })
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          totalMapped += result.mapped;
+          totalSkipped += result.skipped;
+          accountsProcessed++;
+          
+          // Refresh mappings after each account to update the database view
+          await fetchMappings();
+        }
+        
+        setMappingProgress(`Completed ${i + 1}/${accounts.length} accounts (${totalMapped} mappings created)`);
+      }
+      
+      setMappingProgress(null);
+      alert(`✓ Auto-mapping complete!\n\nAccounts processed: ${accountsProcessed}/${accounts.length}\nTotal mappings created: ${totalMapped}\nSkipped: ${totalSkipped}`);
+    } catch (err: any) {
+      setMappingProgress(null);
+      alert(`Error: ${err.message}`);
+    } finally {
+      setAutoMappingAll(false);
+      setMappingProgress(null);
+    }
+  };
+
+  // Helper to fetch with timeout
+  const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs: number = 10000): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutMs / 1000}s`);
+      }
+      throw err;
+    }
+  };
+
+  // Verify a single account - returns result
+  const verifyAccount = async (account: IPTVAccount): Promise<typeof verifyResults[0]> => {
+    const maskedMac = account.mac_address.substring(0, 11) + '**:**:**';
+    
+    try {
+      // Step 1: Test connection (handshake) - 15s timeout
+      const testRes = await fetchWithTimeout('/api/admin/iptv-debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'test', 
+          portalUrl: account.portal_url, 
+          macAddress: account.mac_address 
+        })
+      }, 15000);
+      const testData = await testRes.json();
+      
+      if (!testData.success || !testData.token) {
+        return { accountId: account.id, mac: maskedMac, status: 'invalid', error: testData.error || 'Handshake failed' };
+      }
+      
+      // Step 2: Get a channel to test - 15s timeout
+      const channelsRes = await fetchWithTimeout('/api/admin/iptv-debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'channels', 
+          portalUrl: account.portal_url, 
+          macAddress: account.mac_address,
+          token: testData.token,
+          genre: '*',
+          page: 0,
+          pageSize: 5
+        })
+      }, 15000);
+      const channelsData = await channelsRes.json();
+      
+      if (!channelsData.success || !channelsData.channels?.data?.length) {
+        return { accountId: account.id, mac: maskedMac, status: 'invalid', error: 'No channels available' };
+      }
+      
+      // Step 3: Try to get a stream URL for the first channel - 15s timeout
+      const testChannel = channelsData.channels.data[0];
+      const streamRes = await fetchWithTimeout('/api/admin/iptv-debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'stream', 
+          portalUrl: account.portal_url, 
+          macAddress: account.mac_address,
+          token: testData.token,
+          cmd: testChannel.cmd
+        })
+      }, 15000);
+      const streamData = await streamRes.json();
+      
+      if (!streamData.success || !streamData.streamUrl) {
+        return { accountId: account.id, mac: maskedMac, status: 'invalid', error: streamData.error || 'Failed to get stream URL' };
+      }
+      
+      // Step 4: Actually fetch the stream to verify it works - 10s timeout
+      const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
+      const cfBase = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
+      const proxyParams = new URLSearchParams({ url: streamData.streamUrl, mac: account.mac_address });
+      const proxyUrl = `${cfBase}/iptv/stream?${proxyParams.toString()}`;
+      
+      try {
+        const streamTestRes = await fetchWithTimeout(proxyUrl, {
+          method: 'GET',
+          headers: { 'Range': 'bytes=0-1023' },
+        }, 10000);
+        
+        if (streamTestRes.ok) {
+          const contentType = streamTestRes.headers.get('content-type') || '';
+          const contentLength = streamTestRes.headers.get('content-length');
+          
+          if (contentType.includes('video') || contentType.includes('mpegts') || contentType.includes('octet-stream') || (contentLength && parseInt(contentLength) > 0)) {
+            return { 
+              accountId: account.id, 
+              mac: maskedMac, 
+              status: 'valid', 
+              channelsTested: parseInt(channelsData.channels.total_items || '0')
+            };
+          } else {
+            return { accountId: account.id, mac: maskedMac, status: 'invalid', error: `Unexpected content: ${contentType}` };
+          }
+        } else if (streamTestRes.status === 403 || streamTestRes.status === 458 || streamTestRes.status === 456) {
+          return { accountId: account.id, mac: maskedMac, status: 'invalid', error: `Stream blocked (${streamTestRes.status})` };
+        } else {
+          return { accountId: account.id, mac: maskedMac, status: 'invalid', error: `Stream error: ${streamTestRes.status}` };
+        }
+      } catch (fetchErr: any) {
+        return { accountId: account.id, mac: maskedMac, status: 'invalid', error: `Stream fetch failed: ${fetchErr.message}` };
+      }
+      
+    } catch (err: any) {
+      return { accountId: account.id, mac: maskedMac, status: 'error', error: err.message };
+    }
+  };
+
+  // Verify all accounts - 3 at a time, delete invalid immediately
+  const handleVerifyAllAccounts = async () => {
+    if (accounts.length === 0) {
+      alert('No accounts to verify.');
+      return;
+    }
+    
+    setVerifying(true);
+    setVerifyResults([]);
+    setVerifyProgress(`Starting verification of ${accounts.length} accounts...`);
+    
+    const results: typeof verifyResults = accounts.map(acc => ({
+      accountId: acc.id,
+      mac: acc.mac_address.substring(0, 11) + '**:**:**',
+      status: 'checking' as const,
+    }));
+    setVerifyResults([...results]);
+    
+    let valid = 0;
+    let invalid = 0;
+    let deleted = 0;
+    let errors = 0;
+    let completed = 0;
+    
+    // Process 3 at a time
+    const CONCURRENCY = 3;
+    const queue = [...accounts];
+    const inProgress = new Set<string>();
+    
+    const processAccount = async (account: IPTVAccount, index: number) => {
+      inProgress.add(account.id);
+      
+      // Verify this account
+      const result = await verifyAccount(account);
+      results[index] = result;
+      setVerifyResults([...results]);
+      
+      completed++;
+      setVerifyProgress(`Verified ${completed}/${accounts.length} (${valid} valid, ${invalid} invalid)`);
+      
+      // Update counters and delete immediately if invalid
+      if (result.status === 'valid') {
+        valid++;
+      } else if (result.status === 'invalid') {
+        invalid++;
+        // Delete immediately
+        try {
+          const deleteRes = await fetch('/api/admin/iptv-accounts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', id: account.id })
+          });
+          const deleteData = await deleteRes.json();
+          if (deleteData.success) {
+            deleted++;
+            results[index] = { ...result, error: `${result.error} (DELETED)` };
+            setVerifyResults([...results]);
+          }
+        } catch (err) {
+          console.error('Failed to delete account:', account.id, err);
+        }
+      } else {
+        errors++;
+      }
+      
+      inProgress.delete(account.id);
+    };
+    
+    // Process in batches of 3
+    for (let i = 0; i < accounts.length; i += CONCURRENCY) {
+      const batch = accounts.slice(i, i + CONCURRENCY);
+      const batchPromises = batch.map((account, batchIndex) => 
+        processAccount(account, i + batchIndex)
+      );
+      await Promise.all(batchPromises);
+    }
+    
+    // Refresh accounts list at the end
+    await fetchAccounts();
+    await fetchMappings();
+    
+    setVerifyProgress(null);
+    setVerifying(false);
+    
+    alert(`Verification complete!\n\n✓ Valid: ${valid}\n✗ Invalid: ${invalid} (${deleted} removed)\n⚠ Errors: ${errors}`);
+  };
 
   // Fetch accounts
   const fetchAccounts = useCallback(async () => {
@@ -164,6 +443,42 @@ export default function IPTVManagerPage() {
     }
   };
 
+  // Delete ALL accounts
+  const handleDeleteAllAccounts = async () => {
+    if (!confirm(`Delete ALL ${accounts.length} accounts? This will also delete all channel mappings.`)) return;
+    if (!confirm('Are you sure? This cannot be undone!')) return;
+    
+    try {
+      await fetch('/api/admin/iptv-accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deleteAll' })
+      });
+      fetchAccounts();
+      fetchMappings();
+      alert('All accounts deleted');
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // Delete ALL mappings
+  const handleDeleteAllMappings = async () => {
+    if (!confirm(`Delete ALL ${mappings.length} channel mappings?`)) return;
+    
+    try {
+      await fetch('/api/admin/channel-mappings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'deleteAll' })
+      });
+      fetchMappings();
+      alert('All mappings deleted');
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
   // Test account
   const handleTestAccount = async (account: IPTVAccount) => {
     try {
@@ -190,6 +505,8 @@ export default function IPTVManagerPage() {
   };
 
   // Import accounts from JSON
+  // Scanner output format: [{ portal, mac, success, profile: { playback_limit, name }, content: { itv } }]
+  // Only imports accounts from line.protv.cc (our mapped portal)
   const handleImportAccounts = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -198,31 +515,61 @@ export default function IPTVManagerPage() {
     reader.onload = async (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
-        const accountsToImport = (data.accounts || data)
-          .filter((acc: any) => acc.success && (acc.content?.itv || 0) > 0)
+        const rawAccounts = Array.isArray(data) ? data : (data.accounts || []);
+        
+        if (!Array.isArray(rawAccounts)) {
+          alert('Invalid JSON format. Expected an array of accounts.');
+          return;
+        }
+
+        // Normalize and filter accounts - match scanner output format
+        const accountsToImport = rawAccounts
+          .filter((acc: any) => {
+            // Must be successful scan with portal and mac
+            if (!acc.portal || !acc.mac) return false;
+            if (acc.success === false) return false;
+            
+            // Only allow line.protv.cc accounts (our mapped portal)
+            const isProTV = acc.portal.includes('line.protv.cc');
+            if (!isProTV) {
+              console.log(`Skipping non-ProTV account: ${acc.portal}`);
+            }
+            return isProTV;
+          })
           .map((acc: any) => ({
             portal_url: acc.portal,
             mac_address: acc.mac,
+            name: acc.profile?.name || acc.profile?.login || null,
             channels_count: acc.content?.itv || 0,
-            stream_limit: 1,
+            stream_limit: acc.profile?.playback_limit || 1,
             priority: 0
           }));
 
         if (accountsToImport.length === 0) {
-          alert('No valid accounts found in file');
+          const totalScanned = rawAccounts.length;
+          const protvCount = rawAccounts.filter((a: any) => a.portal?.includes('line.protv.cc')).length;
+          alert(`No valid line.protv.cc accounts found.\n\nScanned: ${totalScanned} accounts\nProTV accounts: ${protvCount}\n\nOnly successful accounts from line.protv.cc are supported.`);
           return;
         }
 
+        const skipped = rawAccounts.length - accountsToImport.length;
+        
         const res = await fetch('/api/admin/iptv-accounts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'import', accounts: accountsToImport })
         });
         const result = await res.json();
-        alert(`Imported ${result.imported} accounts`);
+        
+        let message = `✓ Imported ${result.imported} accounts`;
+        if (skipped > 0) {
+          message += `\n(${skipped} skipped - failed or not line.protv.cc)`;
+        }
+        alert(message);
         fetchAccounts();
       } catch (err) {
-        alert('Failed to parse JSON file');
+        console.error('Import error:', err);
+        alert('Failed to parse JSON file. Check console for details.');
       }
     };
     reader.readAsText(file);
@@ -546,12 +893,124 @@ export default function IPTVManagerPage() {
           <button style={styles.btn('primary')} onClick={() => setShowAddAccount(true)}>
             <Plus size={16} /> Add Account
           </button>
+          {accounts.length > 0 && (
+            <>
+              <button 
+                style={styles.btn('secondary')} 
+                onClick={handleVerifyAllAccounts}
+                disabled={verifying || autoMappingAll}
+              >
+                {verifying ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <ShieldCheck size={16} />}
+                {verifying ? 'Verifying...' : 'Verify All'}
+              </button>
+              <button 
+                style={styles.btn('primary')} 
+                onClick={handleAutoMapAllAccountsChannels}
+                disabled={autoMappingAll || verifying}
+              >
+                {autoMappingAll ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Link2 size={16} />}
+                {autoMappingAll ? 'Mapping...' : 'Map All'}
+              </button>
+              <button style={styles.btn('danger')} onClick={handleDeleteAllAccounts} disabled={verifying || autoMappingAll}>
+                <Trash2 size={16} /> Remove All
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {error && (
         <div style={{ ...styles.card, background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
           <p style={{ color: '#ef4444', margin: 0 }}>{error}</p>
+        </div>
+      )}
+
+      {/* Mapping Progress */}
+      {mappingProgress && (
+        <div style={{ ...styles.card, background: 'rgba(120, 119, 198, 0.1)', borderColor: 'rgba(120, 119, 198, 0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} color="#7877c6" />
+            <p style={{ color: '#a78bfa', margin: 0, fontWeight: '500' }}>{mappingProgress}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Progress */}
+      {verifyProgress && (
+        <div style={{ ...styles.card, background: 'rgba(34, 197, 94, 0.1)', borderColor: 'rgba(34, 197, 94, 0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} color="#22c55e" />
+            <p style={{ color: '#22c55e', margin: 0, fontWeight: '500' }}>{verifyProgress}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Verification Results */}
+      {verifyResults.length > 0 && (
+        <div style={{ ...styles.card, marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px' }}>
+              <ShieldCheck size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+              Verification Results
+            </h3>
+            <button 
+              style={{ ...styles.btn('secondary'), padding: '4px 10px', fontSize: '12px' }} 
+              onClick={() => setVerifyResults([])}
+            >
+              Clear
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+            {verifyResults.map((result, idx) => (
+              <div 
+                key={idx} 
+                style={{ 
+                  padding: '10px 14px', 
+                  background: result.status === 'valid' ? 'rgba(34, 197, 94, 0.1)' 
+                    : result.status === 'invalid' ? 'rgba(239, 68, 68, 0.1)'
+                    : result.status === 'error' ? 'rgba(245, 158, 11, 0.1)'
+                    : 'rgba(156, 163, 175, 0.1)',
+                  borderRadius: '8px',
+                  border: `1px solid ${
+                    result.status === 'valid' ? 'rgba(34, 197, 94, 0.3)' 
+                    : result.status === 'invalid' ? 'rgba(239, 68, 68, 0.3)'
+                    : result.status === 'error' ? 'rgba(245, 158, 11, 0.3)'
+                    : 'rgba(156, 163, 175, 0.3)'
+                  }`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}
+              >
+                {result.status === 'checking' && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} color="#9ca3af" />}
+                {result.status === 'valid' && <CheckCircle size={16} color="#22c55e" />}
+                {result.status === 'invalid' && <XCircle size={16} color="#ef4444" />}
+                {result.status === 'error' && <AlertTriangle size={16} color="#f59e0b" />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ 
+                    color: result.status === 'valid' ? '#22c55e' 
+                      : result.status === 'invalid' ? '#ef4444'
+                      : result.status === 'error' ? '#f59e0b'
+                      : '#9ca3af',
+                    fontSize: '13px',
+                    fontFamily: 'monospace'
+                  }}>
+                    {result.mac}
+                  </div>
+                  {result.error && (
+                    <div style={{ color: '#9ca3af', fontSize: '11px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {result.error}
+                    </div>
+                  )}
+                  {result.status === 'valid' && result.channelsTested && (
+                    <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px' }}>
+                      {result.channelsTested} channels available
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -651,9 +1110,6 @@ export default function IPTVManagerPage() {
                 <button style={styles.btn('secondary')} onClick={() => handleTestAccount(account)}>
                   <Zap size={14} /> Test
                 </button>
-                <button style={styles.btn('secondary')} onClick={() => { setShowAddMapping(true); loadStalkerChannels(account); }}>
-                  <Link2 size={14} /> Map Channels
-                </button>
                 <button style={styles.btn('danger')} onClick={() => handleDeleteAccount(account.id)}>
                   <Trash2 size={14} />
                 </button>
@@ -670,33 +1126,72 @@ export default function IPTVManagerPage() {
       )}
 
 
-      {/* Mappings Tab */}
+      {/* Mappings Tab - Grouped by Channel */}
       {activeTab === 'mappings' && (
         <div>
+          {mappings.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ color: '#94a3b8', fontSize: '14px' }}>
+                {(() => {
+                  const uniqueChannels = new Set(mappings.map(m => m.our_channel_id)).size;
+                  return `${uniqueChannels} channels mapped (${mappings.length} total account-channel pairs)`;
+                })()}
+              </div>
+              <button style={styles.btn('danger')} onClick={handleDeleteAllMappings}>
+                <Trash2 size={16} /> Delete All Mappings
+              </button>
+            </div>
+          )}
           {mappings.length === 0 ? (
             <div style={{ ...styles.card, textAlign: 'center' }}>
-              <p style={{ color: '#64748b', margin: 0 }}>No channel mappings yet. Select an account and map channels.</p>
+              <p style={{ color: '#64748b', margin: 0 }}>No channel mappings yet. Use "Map All" to auto-map all accounts to all channels.</p>
             </div>
           ) : (
-            mappings.map(mapping => (
-              <div key={mapping.id} style={styles.mappingRow}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ color: '#f8fafc', fontWeight: '500' }}>{mapping.our_channel_name}</span>
-                  <span style={{ color: '#64748b', margin: '0 8px' }}>→</span>
-                  <span style={{ color: '#7877c6' }}>{mapping.stalker_channel_name}</span>
+            (() => {
+              // Group mappings by our_channel_id
+              const grouped = mappings.reduce((acc, m) => {
+                if (!acc[m.our_channel_id]) {
+                  acc[m.our_channel_id] = {
+                    channelId: m.our_channel_id,
+                    channelName: m.our_channel_name,
+                    stalkerChannelName: m.stalker_channel_name,
+                    accounts: [],
+                    totalSuccess: 0,
+                    totalFailure: 0,
+                  };
+                }
+                acc[m.our_channel_id].accounts.push(m);
+                acc[m.our_channel_id].totalSuccess += m.success_count;
+                acc[m.our_channel_id].totalFailure += m.failure_count;
+                return acc;
+              }, {} as Record<string, { channelId: string; channelName: string; stalkerChannelName: string; accounts: ChannelMapping[]; totalSuccess: number; totalFailure: number }>);
+              
+              const sortedChannels = Object.values(grouped).sort((a, b) => a.channelName.localeCompare(b.channelName));
+              
+              return sortedChannels.map(channel => (
+                <div key={channel.channelId} style={styles.mappingRow}>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ color: '#f8fafc', fontWeight: '500' }}>{channel.channelName}</span>
+                    <span style={{ color: '#64748b', margin: '0 8px' }}>→</span>
+                    <span style={{ color: '#7877c6' }}>{channel.stalkerChannelName}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ 
+                      background: 'rgba(120, 119, 198, 0.2)', 
+                      color: '#a78bfa', 
+                      padding: '4px 10px', 
+                      borderRadius: '12px', 
+                      fontSize: '12px',
+                      fontWeight: '600'
+                    }}>
+                      {channel.accounts.length} account{channel.accounts.length !== 1 ? 's' : ''}
+                    </span>
+                    <span style={{ color: '#22c55e', fontSize: '12px' }}>✓ {channel.totalSuccess}</span>
+                    <span style={{ color: '#ef4444', fontSize: '12px' }}>✗ {channel.totalFailure}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ color: '#64748b', fontSize: '12px' }}>
-                    {mapping.account_name || mapping.portal_url?.split('/')[2]}
-                  </span>
-                  <span style={{ color: '#22c55e', fontSize: '12px' }}>✓ {mapping.success_count}</span>
-                  <span style={{ color: '#ef4444', fontSize: '12px' }}>✗ {mapping.failure_count}</span>
-                  <button style={styles.btn('danger')} onClick={() => handleDeleteMapping(mapping.id)}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
+              ));
+            })()
           )}
         </div>
       )}

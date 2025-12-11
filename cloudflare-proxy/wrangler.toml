@@ -73,9 +73,10 @@ PROTECTION_MODE = "none"
 # =============================================================================
 # KV NAMESPACE BINDINGS
 # =============================================================================
-# Create namespaces:
-#   wrangler kv:namespace create "SESSION_KV"
-#   wrangler kv:namespace create "BLACKLIST_KV"
+# Create namespaces (note: no colon between kv and namespace):
+#   wrangler kv namespace create "SESSION_KV"
+#   wrangler kv namespace create "BLACKLIST_KV"
+#   wrangler kv namespace create "STREAM_TOKENS"
 #
 # Then uncomment and add the IDs:
 #
@@ -86,6 +87,10 @@ PROTECTION_MODE = "none"
 # [[kv_namespaces]]
 # binding = "BLACKLIST_KV"
 # id = "your-blacklist-kv-id"
+#
+# [[kv_namespaces]]
+# binding = "STREAM_TOKENS"
+# id = "your-stream-tokens-kv-id"
 
 # Production environment
 [env.production]
@@ -118,3 +123,7 @@ id = "0000000000000000000000000000000000000001"
 [[env.development.kv_namespaces]]
 binding = "BLACKLIST_KV"
 id = "0000000000000000000000000000000000000002"
+
+[[env.development.kv_namespaces]]
+binding = "STREAM_TOKENS"
+id = "0000000000000000000000000000000000000003"

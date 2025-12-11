@@ -54,6 +54,8 @@ interface Channel {
   cmd: string;
   logo?: string;
   tv_genre_id?: string;
+  genre_title?: string; // Added by our API for grouping
+  genre_id?: string;
 }
 
 interface Genre {
@@ -94,9 +96,9 @@ export default function IPTVDebugPage() {
   const [testStreamDuringCycle, setTestStreamDuringCycle] = useState(false);
   const [debugSourcesResult, setDebugSourcesResult] = useState<any>(null);
   const [debugSourcesLoading, setDebugSourcesLoading] = useState(false);
-  const [dlhdChannels, setDlhdChannels] = useState<{ id: string; name: string }[]>([]);
-  const [filterByDlhd, setFilterByDlhd] = useState(false);
   const [channelSearch, setChannelSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all'); // Category filter
+  const [availableCategories, setAvailableCategories] = useState<{id: string, title: string}[]>([]);
   const autoCycleAbortRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -111,25 +113,6 @@ export default function IPTVDebugPage() {
         setSavedAccounts(JSON.parse(saved));
       } catch {}
     }
-  }, []);
-
-  // Load DLHD channels for filtering
-  useEffect(() => {
-    const loadDlhdChannels = async () => {
-      try {
-        const res = await fetch('/api/livetv/channels?limit=1000');
-        const data = await res.json();
-        if (data.success && data.channels) {
-          setDlhdChannels(data.channels.map((ch: any) => ({ 
-            id: ch.streamId || ch.id, 
-            name: ch.name 
-          })));
-        }
-      } catch (err) {
-        console.error('Failed to load DLHD channels:', err);
-      }
-    };
-    loadDlhdChannels();
   }, []);
 
   // Save accounts to localStorage when they change
@@ -598,8 +581,8 @@ export default function IPTVDebugPage() {
     };
   }, [streamUrl, rawStreamUrl, macAddress]);
 
-  // Load ALL channels at once - fetches from all pages
-  const loadAllChannels = useCallback(async (tokenOverride?: string) => {
+  // Load channels - if usOnly is true, only fetches from US/NA/CA genres
+  const loadAllChannels = useCallback(async (tokenOverride?: string, usOnly: boolean = true, category?: string) => {
     const token = tokenOverride || testResult?.token;
     if (!token) return;
     
@@ -614,7 +597,9 @@ export default function IPTVDebugPage() {
           action: 'all_channels', 
           portalUrl, 
           macAddress, 
-          token
+          token,
+          usOnly,
+          selectedGenre: category // Filter to specific category
         })
       });
       
@@ -623,6 +608,10 @@ export default function IPTVDebugPage() {
       if (data.success) {
         setChannels(data.channels || []);
         setTotalChannels(data.total || 0);
+        // Store available categories for dropdown
+        if (data.genres && data.genres.length > 0) {
+          setAvailableCategories(data.genres);
+        }
       } else {
         console.error('Failed to load all channels:', data);
       }
@@ -664,15 +653,15 @@ export default function IPTVDebugPage() {
           setGenres(genresData.genres || []);
         }
         
-        // Auto-load ALL channels at once (not paginated)
-        await loadAllChannels(data.token);
+        // Auto-load channels (US only, all categories)
+        await loadAllChannels(data.token, true, selectedCategory);
       }
     } catch (error: any) {
       setTestResult({ success: false, error: error.message });
     } finally {
       setLoading(false);
     }
-  }, [portalUrl, macAddress, loadAllChannels]);
+  }, [portalUrl, macAddress, loadAllChannels, selectedCategory]);
 
   const getStream = useCallback(async (channel: Channel) => {
     if (!testResult?.token) return;
@@ -1762,37 +1751,36 @@ export default function IPTVDebugPage() {
             Channel Browser ({totalChannels} channels loaded)
           </h3>
 
-          {/* Reload button */}
-          <div style={{ marginBottom: '20px' }}>
-            <button
-              onClick={() => loadAllChannels()}
-              disabled={loadingChannels}
-              style={{
-                padding: '8px 16px',
-                background: loadingChannels ? 'rgba(120, 119, 198, 0.3)' : 'rgba(120, 119, 198, 0.2)',
-                border: '1px solid rgba(120, 119, 198, 0.3)',
-                borderRadius: '8px',
-                color: '#7877c6',
-                fontSize: '13px',
-                cursor: loadingChannels ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              {loadingChannels ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={14} />}
-              {loadingChannels ? 'Loading all channels...' : 'Reload All Channels'}
-            </button>
-            {/* Genre info - just for display */}
-            {genres.length > 0 && (
-              <div style={{ marginTop: '8px', color: '#64748b', fontSize: '12px' }}>
-                Categories: {genres.map(g => g.title).join(', ')}
-              </div>
-            )}
-          </div>
-
           {/* Channel Filters */}
           <div style={{ marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Category Dropdown */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                if (testResult?.token) {
+                  loadAllChannels(testResult.token, true, e.target.value);
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                color: '#f8fafc',
+                fontSize: '13px',
+                minWidth: '200px',
+                outline: 'none',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">All US/NA/CA Categories</option>
+              {availableCategories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.title}</option>
+              ))}
+            </select>
+            
+            {/* Search */}
             <input
               type="text"
               placeholder="Search channels..."
@@ -1809,28 +1797,40 @@ export default function IPTVDebugPage() {
                 outline: 'none'
               }}
             />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={filterByDlhd}
-                onChange={(e) => setFilterByDlhd(e.target.checked)}
-                style={{ cursor: 'pointer' }}
-              />
-              <span style={{ color: '#94a3b8', fontSize: '13px' }}>
-                Only show channels matching our Live TV ({dlhdChannels.length} channels)
-              </span>
-            </label>
+            
+            {/* Reload button */}
+            <button
+              onClick={() => loadAllChannels(undefined, true, selectedCategory)}
+              disabled={loadingChannels}
+              style={{
+                padding: '6px 12px',
+                background: loadingChannels ? 'rgba(120, 119, 198, 0.3)' : 'rgba(120, 119, 198, 0.2)',
+                border: '1px solid rgba(120, 119, 198, 0.3)',
+                borderRadius: '6px',
+                color: '#7877c6',
+                fontSize: '12px',
+                cursor: loadingChannels ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}
+            >
+              {loadingChannels ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={12} />}
+              Reload
+            </button>
           </div>
 
           {/* Channels List */}
           {loadingChannels ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
               <Loader2 size={32} style={{ margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
-              Loading channels...
+              {selectedCategory !== 'all' 
+                ? `Loading channels from selected category...` 
+                : 'Loading US/NA/CA channels...'}
             </div>
           ) : channels.length > 0 ? (
             (() => {
-              // Apply filters
+              // Apply search filter only (category filter is done server-side)
               let filteredChannels = channels;
               
               // Search filter
@@ -1841,32 +1841,28 @@ export default function IPTVDebugPage() {
                 );
               }
               
-              // DLHD matching filter - fuzzy match channel names
-              if (filterByDlhd && dlhdChannels.length > 0) {
-                const dlhdNamesLower = dlhdChannels.map(ch => ch.name.toLowerCase());
-                filteredChannels = filteredChannels.filter(ch => {
-                  const chNameLower = ch.name.toLowerCase();
-                  // Check for exact match or partial match
-                  return dlhdNamesLower.some(dlhdName => 
-                    chNameLower.includes(dlhdName) || 
-                    dlhdName.includes(chNameLower) ||
-                    // Also check without common suffixes like HD, FHD, etc
-                    chNameLower.replace(/\s*(hd|fhd|uhd|4k|\+)$/i, '').trim() === dlhdName.replace(/\s*(hd|fhd|uhd|4k|\+)$/i, '').trim()
-                  );
-                });
-              }
+              // Sort by genre then name for better organization
+              filteredChannels.sort((a, b) => {
+                // First sort by genre
+                const genreCompare = (a.genre_title || '').localeCompare(b.genre_title || '');
+                if (genreCompare !== 0) return genreCompare;
+                // Then by name
+                return a.name.localeCompare(b.name);
+              });
               
               return (
             <>
-              <div style={{ marginBottom: '8px', color: '#64748b', fontSize: '12px' }}>
-                Showing {filteredChannels.length} of {channels.length} channels
-                {filterByDlhd && ` (filtered to match ${dlhdChannels.length} Live TV channels)`}
+              <div style={{ marginBottom: '12px', color: '#64748b', fontSize: '13px' }}>
+                🇺🇸 {filteredChannels.length} channels {channelSearch ? `matching "${channelSearch}"` : ''} 
+                {selectedCategory !== 'all' && availableCategories.find(c => c.id === selectedCategory)?.title 
+                  ? ` in ${availableCategories.find(c => c.id === selectedCategory)?.title}` 
+                  : ''}
               </div>
               <div style={{ 
                 display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
-                gap: '12px',
-                maxHeight: '400px',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', 
+                gap: '10px',
+                maxHeight: '600px',
                 overflowY: 'auto',
                 padding: '4px'
               }}>
@@ -1915,46 +1911,27 @@ export default function IPTVDebugPage() {
                         #{channel.number}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); getStream(channel); }}
-                        disabled={loadingStream}
-                        title="Play via Vercel API"
-                        style={{
-                          padding: '6px 10px',
-                          background: 'rgba(120, 119, 198, 0.2)',
-                          border: '1px solid rgba(120, 119, 198, 0.3)',
-                          borderRadius: '6px',
-                          color: '#7877c6',
-                          fontSize: '11px',
-                          cursor: loadingStream ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Play size={12} /> API
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); getStreamViaCF(channel); }}
-                        disabled={loadingStream}
-                        title="Play via Cloudflare (direct)"
-                        style={{
-                          padding: '6px 10px',
-                          background: 'rgba(249, 115, 22, 0.2)',
-                          border: '1px solid rgba(249, 115, 22, 0.3)',
-                          borderRadius: '6px',
-                          color: '#f97316',
-                          fontSize: '11px',
-                          cursor: loadingStream ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Zap size={12} /> CF
-                      </button>
-                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); getStreamViaCF(channel); }}
+                      disabled={loadingStream}
+                      title="Play via Cloudflare"
+                      style={{
+                        padding: '8px 14px',
+                        background: 'linear-gradient(135deg, #7877c6 0%, #9333ea 100%)',
+                        border: 'none',
+                        borderRadius: '6px',
+                        color: '#fff',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: loadingStream ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        opacity: loadingStream ? 0.5 : 1
+                      }}
+                    >
+                      <Play size={14} /> Play
+                    </button>
                   </div>
                 ))}
               </div>

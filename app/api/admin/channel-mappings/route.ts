@@ -233,6 +233,78 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, deleted: ids.length });
       }
 
+      case 'deleteAll': {
+        await db.execute('DELETE FROM channel_mappings');
+        return NextResponse.json({ success: true });
+      }
+
+      case 'auto-map-all': {
+        // Auto-map all Xfinity channels using our static mapping
+        const { stalker_account_id } = body;
+        
+        if (!stalker_account_id) {
+          return NextResponse.json({ error: 'Account ID required' }, { status: 400 });
+        }
+        
+        // Import the static mapping
+        const { STALKER_CHANNEL_MAPPING } = await import('@/app/lib/data/stalker-channel-mapping');
+        
+        const now = Date.now();
+        let mapped = 0;
+        let skipped = 0;
+        
+        // Get existing mappings for this account
+        const existingMappings = await db.query(
+          isNeon 
+            ? `SELECT our_channel_id FROM channel_mappings WHERE stalker_account_id = $1`
+            : `SELECT our_channel_id FROM channel_mappings WHERE stalker_account_id = ?`,
+          [stalker_account_id]
+        ) as { our_channel_id: string }[];
+        
+        const existingChannelIds = new Set(existingMappings.map(m => m.our_channel_id));
+        
+        // Create mappings for each channel in our static mapping
+        for (const [channelId, mapping] of Object.entries(STALKER_CHANNEL_MAPPING)) {
+          // Skip if already mapped
+          if (existingChannelIds.has(channelId)) {
+            skipped++;
+            continue;
+          }
+          
+          // Use east coast by default, fall back to west
+          const stalkerInfo = mapping.east || mapping.west;
+          if (!stalkerInfo) {
+            skipped++;
+            continue;
+          }
+          
+          const id = uuidv4();
+          const cmd = `ffrt http://localhost/ch/${stalkerInfo.id}`;
+          
+          try {
+            if (isNeon) {
+              await db.execute(`
+                INSERT INTO channel_mappings 
+                (id, our_channel_id, our_channel_name, stalker_account_id, stalker_channel_id, stalker_channel_name, stalker_channel_cmd, priority, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+              `, [id, channelId, mapping.name, stalker_account_id, stalkerInfo.id, stalkerInfo.name, cmd, 0, now, now]);
+            } else {
+              await db.execute(`
+                INSERT INTO channel_mappings 
+                (id, our_channel_id, our_channel_name, stalker_account_id, stalker_channel_id, stalker_channel_name, stalker_channel_cmd, priority, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `, [id, channelId, mapping.name, stalker_account_id, stalkerInfo.id, stalkerInfo.name, cmd, 0, now, now]);
+            }
+            mapped++;
+          } catch (e) {
+            console.error(`Failed to map ${channelId}:`, e);
+            skipped++;
+          }
+        }
+        
+        return NextResponse.json({ success: true, mapped, skipped });
+      }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }
