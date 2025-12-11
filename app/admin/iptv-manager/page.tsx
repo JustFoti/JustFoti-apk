@@ -68,7 +68,7 @@ export default function IPTVManagerPage() {
   const [showAddMapping, setShowAddMapping] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<IPTVAccount | null>(null);
   const [stalkerChannels, setStalkerChannels] = useState<any[]>([]);
-  const [loadingStalkerChannels, setLoadingStalkerChannels] = useState(false);
+  const [loadingStalkerChannels, _setLoadingStalkerChannels] = useState(false);
   const [channelSearch, setChannelSearch] = useState('');
   const [ourChannelSearch, setOurChannelSearch] = useState('');
   const [selectedOurChannel, setSelectedOurChannel] = useState<OurChannel | null>(null);
@@ -571,80 +571,6 @@ export default function IPTVManagerPage() {
   };
 
 
-  // Load Stalker channels for mapping - loads ALL channels with pagination
-  const _loadStalkerChannels = async (account: IPTVAccount) => {
-    setSelectedAccount(account);
-    setLoadingStalkerChannels(true);
-    setStalkerChannels([]);
-    
-    try {
-      // First, test connection to get token
-      const testRes = await fetch('/api/admin/iptv-debug', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'test', 
-          portalUrl: account.portal_url, 
-          macAddress: account.mac_address 
-        })
-      });
-      const testData = await testRes.json();
-      
-      if (!testData.success || !testData.token) {
-        alert(`Failed to connect: ${testData.error}`);
-        setLoadingStalkerChannels(false);
-        return;
-      }
-      
-      // Load ALL channels with pagination
-      let allChannels: any[] = [];
-      let page = 0;
-      let hasMore = true;
-      const pageSize = 100; // Request more per page
-      
-      while (hasMore) {
-        const channelsRes = await fetch('/api/admin/iptv-debug', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            action: 'channels', 
-            portalUrl: account.portal_url, 
-            macAddress: account.mac_address,
-            token: testData.token,
-            genre: '*',
-            page: page,
-            pageSize: pageSize
-          })
-        });
-        const channelsData = await channelsRes.json();
-        
-        if (channelsData.success && channelsData.channels?.data) {
-          const pageChannels = channelsData.channels.data;
-          allChannels = [...allChannels, ...pageChannels];
-          
-          // Check if there are more pages
-          const totalItems = parseInt(channelsData.channels.total_items || '0');
-          hasMore = allChannels.length < totalItems && pageChannels.length > 0;
-          page++;
-          
-          // Update UI with progress
-          setStalkerChannels([...allChannels]);
-          
-          // Small delay to avoid overwhelming the portal
-          if (hasMore) await new Promise(r => setTimeout(r, 200));
-        } else {
-          hasMore = false;
-        }
-      }
-      
-      console.log(`Loaded ${allChannels.length} total channels from portal`);
-    } catch (err: any) {
-      alert(`Failed to load channels: ${err.message}`);
-    } finally {
-      setLoadingStalkerChannels(false);
-    }
-  };
-
   // Create mapping
   const createMapping = async (ourChannel: OurChannel, stalkerChannel: any, silent = false) => {
     if (!selectedAccount) return false;
@@ -750,20 +676,6 @@ export default function IPTVManagerPage() {
       .filter(ch => ch.score >= 20)
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
-  };
-
-  // Delete mapping
-  const handleDeleteMapping = async (id: string) => {
-    try {
-      await fetch('/api/admin/channel-mappings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', id })
-      });
-      fetchMappings();
-    } catch (err: any) {
-      setError(err.message);
-    }
   };
 
   // Filter channels

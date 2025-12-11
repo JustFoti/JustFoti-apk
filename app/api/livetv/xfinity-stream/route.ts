@@ -12,7 +12,6 @@ import { getDB, initializeDB } from '@/app/lib/db/neon-connection';
 const CF_PROXY_URL = process.env.CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
 const FALLBACK_PORTAL_URL = process.env.STALKER_PORTAL_URL || 'http://line.protv.cc/c/';
 const FALLBACK_MAC_ADDRESS = process.env.STALKER_MAC_ADDRESS || '00:1A:79:00:00:01';
-const REQUEST_TIMEOUT = 15000;
 
 interface StalkerAccount {
   id: string;
@@ -143,86 +142,6 @@ async function updateAccountUsage(accountId: string, channelId: string, success:
   } catch (error) {
     console.log('[xfinity-stream] Failed to update usage stats:', error);
   }
-}
-
-function parseSecureJson(text: string): any {
-  const clean = text.replace(/^\/\*-secure-\s*/, '').replace(/\s*\*\/$/, '');
-  try {
-    return JSON.parse(clean);
-  } catch {
-    return null;
-  }
-}
-
-function extractUrlFromCmd(cmd: string): string {
-  let url = cmd;
-  const prefixes = ['ffmpeg ', 'ffrt ', 'ffrt2 ', 'ffrt3 ', 'ffrt4 '];
-  for (const prefix of prefixes) {
-    if (url.startsWith(prefix)) {
-      url = url.substring(prefix.length);
-      break;
-    }
-  }
-  return url.trim();
-}
-
-async function makeProxiedRequest(url: string, mac: string, token?: string): Promise<any> {
-  const params = new URLSearchParams({ url, mac });
-  if (token) params.set('token', token);
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
-  
-  try {
-    const response = await fetch(`${CF_PROXY_URL}/iptv/api?${params.toString()}`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    
-    const text = await response.text();
-    return parseSecureJson(text);
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-async function performHandshake(portalUrl: string, macAddress: string): Promise<string> {
-  const portalBase = portalUrl.replace(/\/c\/?$/, '').replace(/\/+$/, '');
-  const url = `${portalBase}/portal.php?type=stb&action=handshake&token=&JsHttpRequest=1-xml`;
-  
-  const data = await makeProxiedRequest(url, macAddress);
-  
-  if (data?.js?.token) {
-    return data.js.token;
-  }
-  throw new Error('No token received from handshake');
-}
-
-async function getStreamUrl(token: string, stalkerChannelId: string, portalUrl: string, macAddress: string): Promise<string | null> {
-  const portalBase = portalUrl.replace(/\/c\/?$/, '').replace(/\/+$/, '');
-  
-  const cmd = `ffrt http://localhost/ch/${stalkerChannelId}`;
-  
-  const url = new URL(`${portalBase}/portal.php`);
-  url.searchParams.set('type', 'itv');
-  url.searchParams.set('action', 'create_link');
-  url.searchParams.set('cmd', cmd);
-  url.searchParams.set('series', '');
-  url.searchParams.set('forced_storage', 'undefined');
-  url.searchParams.set('disable_ad', '0');
-  url.searchParams.set('download', '0');
-  url.searchParams.set('JsHttpRequest', '1-xml');
-  
-  const data = await makeProxiedRequest(url.toString(), macAddress, token);
-  
-  let streamUrl = data?.js?.cmd || null;
-  if (streamUrl) {
-    streamUrl = extractUrlFromCmd(streamUrl);
-    // Keep as TS format - frontend uses mpegts.js to play MPEG-TS streams
-  }
-  
-  return streamUrl;
 }
 
 export async function GET(request: NextRequest) {
