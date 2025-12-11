@@ -572,7 +572,7 @@ export default function IPTVManagerPage() {
 
 
   // Load Stalker channels for mapping - loads ALL channels with pagination
-  const loadStalkerChannels = async (account: IPTVAccount) => {
+  const _loadStalkerChannels = async (account: IPTVAccount) => {
     setSelectedAccount(account);
     setLoadingStalkerChannels(true);
     setStalkerChannels([]);
