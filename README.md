@@ -97,6 +97,10 @@ The app integrates with TMDB (The Movie Database) API for:
 3. Request an API key (choose "Developer" option)
 4. Copy your API key and add it to your `.env.local` file
 
+## Credits
+
+IPTV - MoldTaint/https://github.com/MoldyTaint/Cinephage for his amazing help with sourcing IPTV
+
 ## Contributing
 
 1. Fork the repository
