@@ -318,7 +318,7 @@ function LiveTVPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null); // mpegts.js player
-  const controlsTimeoutRef = useRef<NodeJS.Timeout>();
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const watchStartTimeRef = useRef<number>(0);
   const CONTROLS_HIDE_DELAY = 3000;
   
