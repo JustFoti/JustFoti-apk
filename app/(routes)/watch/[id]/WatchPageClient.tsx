@@ -61,7 +61,7 @@ function WatchContent() {
   const episodeId = episode ? parseInt(episode) : undefined;
 
   const [nextEpisode, setNextEpisode] = useState<NextEpisodeInfo | null>(null);
-  const [isLoadingNextEpisode, setIsLoadingNextEpisode] = useState(false);
+  const [, setIsLoadingNextEpisode] = useState(false);
 
   // Fetch season data to determine next episode
   const fetchNextEpisodeInfo = useCallback(async () => {
