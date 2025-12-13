@@ -1,7 +1,6 @@
 'use client';
 
-
-
+import { useMemo } from 'react';
 import { Slider } from '@/components/ui/Slider';
 import { GENRES } from '@/lib/constants/genres';
 
@@ -21,7 +20,7 @@ interface SearchSidebarProps {
 
 export function SearchSidebar({ filters, onFilterChange, className = '' }: SearchSidebarProps) {
     // Get available genres based on content type
-    const availableGenres = React.useMemo(() => {
+    const availableGenres = useMemo(() => {
         if (filters.contentType === 'person') return [];
 
         let genres = GENRES;
