@@ -10,31 +10,42 @@ import { ALL_TABLES, SCHEMA_VERSION, TABLES } from './schema';
 // Dynamic import for database based on runtime
 let Database: any;
 let isBunRuntime = false;
+let dbLoaded = false;
 
-// Detect runtime and load appropriate SQLite implementation
-if (typeof Bun !== 'undefined') {
-  // Running in Bun
-  try {
-    const { Database: BunDatabase } = require('bun:sqlite');
-    Database = BunDatabase;
-    isBunRuntime = true;
-    console.log('Using Bun SQLite');
-  } catch (error) {
-    console.warn('Bun SQLite not available, falling back to better-sqlite3');
-    Database = require('better-sqlite3');
-    isBunRuntime = false;
+// Lazy load database to avoid webpack bundling bun:sqlite
+const loadDatabase = () => {
+  if (dbLoaded) return;
+  
+  // Check if running in Bun by checking for Bun global
+  const runningInBun = typeof globalThis !== 'undefined' && 'Bun' in globalThis;
+  
+  if (runningInBun) {
+    // Running in Bun - use dynamic import to avoid webpack analysis
+    try {
+      // Use eval to prevent webpack from analyzing this require
+      const bunSqlite = eval('require')('bun:sqlite');
+      Database = bunSqlite.Database;
+      isBunRuntime = true;
+      console.log('Using Bun SQLite');
+    } catch (error) {
+      console.warn('Bun SQLite not available, falling back to better-sqlite3');
+      Database = require('better-sqlite3');
+      isBunRuntime = false;
+    }
+  } else {
+    // Running in Node.js
+    try {
+      Database = require('better-sqlite3');
+      isBunRuntime = false;
+      console.log('Using better-sqlite3 for Node.js');
+    } catch (error) {
+      console.error('better-sqlite3 not available:', error);
+      throw new Error('No SQLite implementation available. Install better-sqlite3: npm install better-sqlite3');
+    }
   }
-} else {
-  // Running in Node.js (production)
-  try {
-    Database = require('better-sqlite3');
-    isBunRuntime = false;
-    console.log('Using better-sqlite3 for Node.js');
-  } catch (error) {
-    console.error('better-sqlite3 not available:', error);
-    throw new Error('No SQLite implementation available');
-  }
-}
+  
+  dbLoaded = true;
+};
 
 class DatabaseConnection {
   private static instance: DatabaseConnection | null = null;
@@ -85,6 +96,9 @@ class DatabaseConnection {
     }
 
     try {
+      // Load database driver
+      loadDatabase();
+      
       // Create database connection
       console.log(`Initializing database at: ${this.dbPath}`);
       this.db = new Database(this.dbPath);

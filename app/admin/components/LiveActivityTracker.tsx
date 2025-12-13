@@ -567,10 +567,19 @@ export default function LiveActivityTracker() {
             return true;
           });
           
+          // Count unique users in filtered activities
+          const uniqueUserIds = new Set(filteredActivities.map(a => a.user_id));
+          const uniqueUserCount = uniqueUserIds.size;
+          
           return (
             <>
               <h3 style={{ margin: '0 0 1rem 0', color: '#f8fafc', fontSize: '1.125rem' }}>
-                Active Sessions ({filteredActivities.length})
+                Active Users ({uniqueUserCount})
+                {filteredActivities.length !== uniqueUserCount && (
+                  <span style={{ color: '#64748b', fontSize: '0.875rem', fontWeight: '400', marginLeft: '8px' }}>
+                    ({filteredActivities.length} sessions)
+                  </span>
+                )}
               </h3>
               {filteredActivities.length === 0 ? (
           <div style={{

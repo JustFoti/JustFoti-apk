@@ -138,6 +138,8 @@ export function StatsProvider({ children }: { children: ReactNode }) {
       if (data.success) {
         setStats({
           // Real-time (unique users currently active)
+          // Use totalActive for the main count (2-min window for stability)
+          // trulyActive is for stricter 1-min validation
           liveUsers: data.realtime?.totalActive || 0,
           trulyActiveUsers: data.realtime?.trulyActive || 0,
           liveWatching: data.realtime?.watching || 0,

@@ -35,7 +35,6 @@ export async function GET(request: NextRequest) {
     const isNeon = db.isUsingNeon();
 
     const now = Date.now();
-    const fiveMinutesAgo = now - 5 * 60 * 1000;
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const oneMonthAgo = now - 30 * 24 * 60 * 60 * 1000;
@@ -43,9 +42,14 @@ export async function GET(request: NextRequest) {
     // ============================================
     // 1. REAL-TIME DATA (from live_activity)
     // Count UNIQUE users currently active
-    // Includes "truly active" count (heartbeat within 30 seconds)
+    // 
+    // Time windows:
+    // - "totalActive": Users with heartbeat in last 2 minutes (standard active)
+    // - "trulyActive": Users with heartbeat in last 60 seconds (confirmed active)
+    // - Activity breakdown uses 2-minute window for stability
     // ============================================
-    const thirtySecondsAgo = now - 30 * 1000;
+    const twoMinutesAgo = now - 2 * 60 * 1000;
+    const oneMinuteAgo = now - 60 * 1000;
     let realtime = { totalActive: 0, trulyActive: 0, watching: 0, browsing: 0, livetv: 0 };
     try {
       // Count unique users per activity type with both standard and strict counts
@@ -66,7 +70,7 @@ export async function GET(request: NextRequest) {
            GROUP BY activity_type`;
       
       const liveResult = await adapter.query(liveQuery, 
-        isNeon ? [fiveMinutesAgo, thirtySecondsAgo] : [thirtySecondsAgo, fiveMinutesAgo]
+        isNeon ? [twoMinutesAgo, oneMinuteAgo] : [oneMinuteAgo, twoMinutesAgo]
       );
       
       let total = 0;
@@ -295,7 +299,7 @@ export async function GET(request: NextRequest) {
       pageViews,
       // Include time ranges for transparency
       timeRanges: {
-        realtime: '5 minutes',
+        realtime: '2 minutes (1 min for truly active)',
         dau: '24 hours',
         wau: '7 days',
         mau: '30 days',

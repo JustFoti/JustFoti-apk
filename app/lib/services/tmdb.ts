@@ -12,6 +12,36 @@ const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 const TMDB_IMAGE_BASE_URL = 'https://image.tmdb.org/t/p';
 
 /**
+ * Direct TMDB API fetch helper for server components
+ * This is a simpler alternative to tmdbService for direct API calls
+ */
+export async function fetchTMDBData(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+  if (!apiKey) {
+    throw new Error('TMDB API key is not configured');
+  }
+
+  const url = new URL(`${TMDB_BASE_URL}${endpoint}`);
+  url.searchParams.append('api_key', apiKey);
+  
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      url.searchParams.append(key, value);
+    }
+  });
+
+  const response = await fetch(url.toString(), {
+    next: { revalidate: 3600 } // Cache for 1 hour
+  });
+
+  if (!response.ok) {
+    throw new Error(`TMDB API error: ${response.status} ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Get TMDB API key from environment
  */
 function getAPIKey(): string {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import LiveActivityTracker from '../components/LiveActivityTracker';
+import ImprovedLiveDashboard from '../components/ImprovedLiveDashboard';
 import { useStats } from '../context/StatsContext';
 
 // Helper function to get country name from ISO code
@@ -58,7 +59,7 @@ export default function AdminLivePage() {
   const [stats, setStats] = useState<LiveStats | null>(null);
   const [peakToday, setPeakToday] = useState(0);
   const [history, setHistory] = useState<HistoricalPoint[]>([]);
-  const [viewMode, setViewMode] = useState<'realtime' | 'summary' | 'map'>('realtime');
+  const [viewMode, setViewMode] = useState<'dashboard' | 'realtime' | 'summary' | 'map'>('dashboard');
   const [refreshRate, setRefreshRate] = useState(5);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
@@ -146,42 +147,52 @@ export default function AdminLivePage() {
               <option value={10}>10s refresh</option>
               <option value={30}>30s refresh</option>
             </select>
-            <button onClick={() => setViewMode('realtime')} style={{ padding: '8px 16px', background: viewMode === 'realtime' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: viewMode === 'realtime' ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>🔴 Real-time</button>
-            <button onClick={() => setViewMode('summary')} style={{ padding: '8px 16px', background: viewMode === 'summary' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: viewMode === 'summary' ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>📊 Summary</button>
+            <button onClick={() => setViewMode('dashboard')} style={{ padding: '8px 16px', background: viewMode === 'dashboard' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: viewMode === 'dashboard' ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>📊 Dashboard</button>
+            <button onClick={() => setViewMode('realtime')} style={{ padding: '8px 16px', background: viewMode === 'realtime' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: viewMode === 'realtime' ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>🔴 Sessions</button>
+            <button onClick={() => setViewMode('summary')} style={{ padding: '8px 16px', background: viewMode === 'summary' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: viewMode === 'summary' ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>📈 Content</button>
             <button onClick={() => setViewMode('map')} style={{ padding: '8px 16px', background: viewMode === 'map' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: viewMode === 'map' ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '14px' }}>🌍 Map</button>
           </div>
         </div>
       </div>
 
-      {/* Live Stats Cards - Using unified stats for UNIQUE user counts */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <StatCard title="Active Now" value={unifiedStats.liveUsers} icon="👥" color="#10b981" pulse />
-        <StatCard title="Watching VOD" value={unifiedStats.liveWatching} icon="▶️" color="#7877c6" />
-        <StatCard title="Live TV" value={unifiedStats.liveTVViewers} icon="📺" color="#f59e0b" />
-        <StatCard title="Browsing" value={unifiedStats.liveBrowsing} icon="🔍" color="#3b82f6" />
-        <StatCard title="Peak Today" value={peakToday} icon="📈" color="#ec4899" />
-        <StatCard title="Countries" value={unifiedStats.topCountries.length} icon="🌍" color="#8b5cf6" />
-      </div>
-
-      {/* Mini Activity Chart */}
-      {history.length > 1 && (
-        <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ color: '#94a3b8', fontSize: '14px' }}>Activity Trend (Last 5 min)</span>
-            <span style={{ color: '#f8fafc', fontWeight: '600' }}>{unifiedStats.liveUsers || 0} active</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '60px' }}>
-            {history.map((point, i) => {
-              const maxCount = Math.max(...history.map(h => h.count), 1);
-              const height = (point.count / maxCount) * 100;
-              return (
-                <div key={i} style={{ flex: 1, height: `${Math.max(height, 4)}%`, background: i === history.length - 1 ? '#10b981' : 'rgba(120, 119, 198, 0.6)', borderRadius: '2px', transition: 'height 0.3s' }} title={`${point.count} users`} />
-              );
-            })}
-          </div>
-        </div>
+      {/* Dashboard View - New improved dashboard with persistent peaks */}
+      {viewMode === 'dashboard' && (
+        <ImprovedLiveDashboard />
       )}
 
+      {/* Show stats cards only in non-dashboard views */}
+      {viewMode !== 'dashboard' && (
+        <>
+          {/* Live Stats Cards - Using unified stats for UNIQUE user counts */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <StatCard title="Active Now" value={unifiedStats.liveUsers} icon="👥" color="#10b981" pulse />
+            <StatCard title="Watching VOD" value={unifiedStats.liveWatching} icon="▶️" color="#7877c6" />
+            <StatCard title="Live TV" value={unifiedStats.liveTVViewers} icon="📺" color="#f59e0b" />
+            <StatCard title="Browsing" value={unifiedStats.liveBrowsing} icon="🔍" color="#3b82f6" />
+            <StatCard title="Peak Today" value={peakToday} icon="📈" color="#ec4899" />
+            <StatCard title="Countries" value={unifiedStats.topCountries.length} icon="🌍" color="#8b5cf6" />
+          </div>
+
+          {/* Mini Activity Chart */}
+          {history.length > 1 && (
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '16px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <span style={{ color: '#94a3b8', fontSize: '14px' }}>Activity Trend (Last 5 min)</span>
+                <span style={{ color: '#f8fafc', fontWeight: '600' }}>{unifiedStats.liveUsers || 0} active</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '60px' }}>
+                {history.map((point, i) => {
+                  const maxCount = Math.max(...history.map(h => h.count), 1);
+                  const height = (point.count / maxCount) * 100;
+                  return (
+                    <div key={i} style={{ flex: 1, height: `${Math.max(height, 4)}%`, background: i === history.length - 1 ? '#10b981' : 'rgba(120, 119, 198, 0.6)', borderRadius: '2px', transition: 'height 0.3s' }} title={`${point.count} users`} />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Real-time View */}
       {viewMode === 'realtime' && (

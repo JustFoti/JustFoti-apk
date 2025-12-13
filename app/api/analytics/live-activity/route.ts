@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const maxAge = parseInt(searchParams.get('maxAge') || '5');
+    // Default to 2 minutes for more stable counts (was 5)
+    const maxAge = parseInt(searchParams.get('maxAge') || '2');
 
     console.log('[Live Activity] Fetching activities, maxAge:', maxAge);
 

@@ -3,6 +3,7 @@
 import OverviewStats from './components/OverviewStats';
 import SystemStatus from './components/SystemStatus';
 import AnalyticsCharts from './components/AnalyticsCharts';
+import LiveActivitySummary from './components/LiveActivitySummary';
 
 export default function AdminOverviewPage() {
   return (
@@ -28,6 +29,11 @@ export default function AdminOverviewPage() {
         }}>
           Monitor your platform's performance and analytics
         </p>
+      </div>
+
+      {/* Live Activity Summary - prominent position */}
+      <div style={{ marginBottom: '24px' }}>
+        <LiveActivitySummary />
       </div>
 
       <OverviewStats />

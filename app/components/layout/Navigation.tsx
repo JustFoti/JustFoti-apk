@@ -100,11 +100,17 @@ export const Navigation: React.FC<NavigationProps> = ({
     }
   };
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim() && onSearch) {
-      onSearch(searchQuery);
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (searchQuery.trim()) {
+      if (onSearch) {
+        onSearch(searchQuery);
+      } else {
+        // Fallback: navigate to search page directly
+        router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+      }
       setSearchOpen(false);
+      setSearchQuery('');
     }
   };
 
@@ -140,7 +146,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             aria-label="Flyx home"
           >
             <div className={styles.logoIcon}>
-              <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+              <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
                 <defs>
                   <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#00f5ff" />
@@ -149,14 +155,14 @@ export const Navigation: React.FC<NavigationProps> = ({
                   </linearGradient>
                 </defs>
                 <path 
-                  d="M4 8L16 2L28 8V24L16 30L4 24V8Z" 
+                  d="M5 9L16 3L27 9V23L16 29L5 23V9Z" 
                   stroke="url(#logoGradient)" 
                   strokeWidth="2" 
                   fill="rgba(139, 92, 246, 0.1)" 
                 />
-                <circle cx="16" cy="16" r="6" fill="url(#logoGradient)" />
+                <circle cx="16" cy="16" r="5.5" fill="url(#logoGradient)" />
                 <path 
-                  d="M12 16L15 19L20 13" 
+                  d="M13 16L15 18.5L19 13.5" 
                   stroke="white" 
                   strokeWidth="2.5" 
                   strokeLinecap="round" 
@@ -178,6 +184,24 @@ export const Navigation: React.FC<NavigationProps> = ({
                 onClick={() => handleNavigation('/')}
               >
                 Home
+              </NavLink>
+              <NavLink
+                isActive={pathname === '/movies' || pathname.startsWith('/movies')}
+                onClick={() => handleNavigation('/movies')}
+              >
+                Movies
+              </NavLink>
+              <NavLink
+                isActive={pathname === '/series' || pathname.startsWith('/series')}
+                onClick={() => handleNavigation('/series')}
+              >
+                Series
+              </NavLink>
+              <NavLink
+                isActive={pathname === '/anime' || pathname.startsWith('/anime')}
+                onClick={() => handleNavigation('/anime')}
+              >
+                Anime
               </NavLink>
               <NavLink
                 isActive={pathname === '/livetv'}
@@ -265,6 +289,10 @@ export const Navigation: React.FC<NavigationProps> = ({
                 type="submit" 
                 className={styles.searchButton}
                 aria-label="Submit search"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSearchSubmit();
+                }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <circle cx="11" cy="11" r="8" strokeWidth="2" />
@@ -283,6 +311,24 @@ export const Navigation: React.FC<NavigationProps> = ({
               onClick={() => handleNavigation('/')}
             >
               Home
+            </NavLink>
+            <NavLink
+              isActive={pathname === '/movies' || pathname.startsWith('/movies')}
+              onClick={() => handleNavigation('/movies')}
+            >
+              Movies
+            </NavLink>
+            <NavLink
+              isActive={pathname === '/series' || pathname.startsWith('/series')}
+              onClick={() => handleNavigation('/series')}
+            >
+              Series
+            </NavLink>
+            <NavLink
+              isActive={pathname === '/anime' || pathname.startsWith('/anime')}
+              onClick={() => handleNavigation('/anime')}
+            >
+              Anime
             </NavLink>
             <NavLink
               isActive={pathname === '/livetv'}

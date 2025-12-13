@@ -55,8 +55,28 @@ export default function HomePageClient({
   // Refs
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Hero carousel content
-  const heroItems = [heroContent, ...trendingToday.slice(0, 4)].filter(Boolean) as MediaItem[];
+  // Hero carousel content - filter out duplicates
+  const heroItems = React.useMemo(() => {
+    const items: MediaItem[] = [];
+    const seenIds = new Set<number | string>();
+    
+    // Add heroContent first if it exists
+    if (heroContent) {
+      items.push(heroContent);
+      seenIds.add(heroContent.id);
+    }
+    
+    // Add trending items, skipping duplicates
+    for (const item of trendingToday.slice(0, 5)) {
+      if (!seenIds.has(item.id)) {
+        items.push(item);
+        seenIds.add(item.id);
+      }
+      if (items.length >= 5) break;
+    }
+    
+    return items;
+  }, [heroContent, trendingToday]);
 
   // Analytics tracking
   useEffect(() => {
@@ -214,7 +234,7 @@ export default function HomePageClient({
             {/* Hero Content */}
             <div className="relative z-10 h-full flex items-center">
               <div className="container mx-auto px-6 lg:px-8">
-                <div className="max-w-4xl">
+                <div className="max-w-5xl">
                   <motion.div
                     initial={{ opacity: 0, y: 50 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -223,10 +243,9 @@ export default function HomePageClient({
                     {/* Featured Content Marquee */}
                     <div className="mb-8">
                       <motion.div
-                        initial={{ opacity: 0, x: -50 }}
+                        initial={{ opacity: 0, x: -30 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.8 }}
-                        className="overflow-hidden"
                       >
                         <div className="flex items-center gap-4 mb-4">
                           <div className="px-3 py-1 bg-gradient-to-r from-purple-600/80 to-pink-600/80 backdrop-blur-md rounded-full text-white text-sm font-semibold">
@@ -242,15 +261,16 @@ export default function HomePageClient({
                           </div>
                         </div>
 
-                        {/* Animated Title Marquee */}
-                        <div className="relative overflow-hidden mb-4">
+                        {/* Animated Title */}
+                        <div className="relative mb-6">
                           <motion.h1
                             key={currentHeroIndex}
-                            initial={{ x: '100%' }}
-                            animate={{ x: 0 }}
-                            exit={{ x: '-100%' }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                            className="text-4xl md:text-6xl lg:text-7xl font-black text-white leading-tight"
+                            initial={{ opacity: 0, y: 30 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            transition={{ duration: 0.8, ease: "easeOut" }}
+                            className="text-4xl md:text-6xl lg:text-7xl font-black text-white pb-3"
+                            style={{ lineHeight: 1.2 }}
                           >
                             {currentHero.title || currentHero.name || 'Featured Content'}
                           </motion.h1>
