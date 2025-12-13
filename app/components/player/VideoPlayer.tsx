@@ -1483,67 +1483,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
   };
 
-  // Sync current subtitle to video time
-  // This finds the currently displayed subtitle and adjusts timing so it matches the current video position
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const _syncSubtitleToCurrentTime = () => {
-    if (!videoRef.current || !videoRef.current.textTracks || videoRef.current.textTracks.length === 0) {
-      console.log('[VideoPlayer] No text tracks to sync');
-      return;
-    }
-
-    const textTrack = videoRef.current.textTracks[0];
-    if (!textTrack.cues || textTrack.cues.length === 0) {
-      console.log('[VideoPlayer] No cues to sync');
-      return;
-    }
-
-    const currentVideoTime = videoRef.current.currentTime;
-    
-    // Find the currently active cue (the one being displayed)
-    let activeCue: VTTCue | null = null;
-    for (let i = 0; i < textTrack.cues.length; i++) {
-      const cue = textTrack.cues[i] as VTTCue;
-      if (cue.startTime <= currentVideoTime && cue.endTime >= currentVideoTime) {
-        activeCue = cue;
-        break;
-      }
-    }
-
-    // If no active cue, find the next upcoming cue
-    if (!activeCue) {
-      for (let i = 0; i < textTrack.cues.length; i++) {
-        const cue = textTrack.cues[i] as VTTCue;
-        if (cue.startTime > currentVideoTime) {
-          activeCue = cue;
-          break;
-        }
-      }
-    }
-
-    if (!activeCue) {
-      console.log('[VideoPlayer] No suitable cue found for sync');
-      return;
-    }
-
-    // Calculate the offset needed to make this cue start at the current video time
-    // If the cue starts at 10s but video is at 15s, we need to shift all cues by +5s
-    const neededOffset = currentVideoTime - activeCue.startTime;
-    
-    console.log('[VideoPlayer] Smart sync:', {
-      currentVideoTime,
-      cueStartTime: activeCue.startTime,
-      neededOffset,
-      cueText: activeCue.text.substring(0, 50)
-    });
-
-    // Apply the offset
-    if (Math.abs(neededOffset) > 0.1) { // Only adjust if more than 0.1s difference
-      adjustSubtitleOffset(neededOffset - subtitleOffset); // Adjust relative to current offset
-      setSubtitleOffset(neededOffset);
-    }
-  };
-
   const fetchSubtitles = async (imdbId: string) => {
     try {
       setSubtitlesLoading(true);

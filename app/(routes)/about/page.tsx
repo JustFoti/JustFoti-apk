@@ -51,12 +51,14 @@ export default function AboutPage() {
       <div className="progress-bar" style={{ width: `${progress}%` }} />
 
       <header className="about-header">
-        <div className="journal-badge">Journal of Questionable Software Engineering • Vol. 1, Issue 1 • November 2025</div>
+        <div className="journal-badge">Journal of Questionable Software Engineering • Vol. 1, Issue 2 • December 2025</div>
+        <div className="last-updated">Last updated: December 13, 2025</div>
         <h1>Flyx: An Empirical Study in Stealing from Thieves While Maintaining Moral Superiority</h1>
         <p className="subtitle">
           A comprehensive analysis of building ethical streaming infrastructure by reverse engineering 
           the security measures of criminals who profit from content they do not own, featuring extensive 
-          documentation of late-night debugging sessions and an alarming amount of Monster Energy consumption.
+          documentation of late-night debugging sessions, an alarming amount of Monster Energy consumption,
+          and the ongoing evolution from legacy providers to modern extraction pipelines.
         </p>
         <div className="author">
           <span className="avatar">V</span>
@@ -67,9 +69,9 @@ export default function AboutPage() {
         </div>
         <div className="paper-meta">
           <span>Received: June 2025</span>
-          <span>Revised: October 2025</span>
-          <span>Accepted: November 2025</span>
-          <span>Reading Time: ~20 minutes</span>
+          <span>Revised: December 2025</span>
+          <span>Accepted: December 2025</span>
+          <span>Reading Time: ~25 minutes</span>
         </div>
       </header>
 
@@ -105,7 +107,7 @@ export default function AboutPage() {
             <div className="abstract-box">
               <p>
                 This paper presents Flyx, a fully-functional video streaming platform developed over 
-                five months to test a hypothesis that many would consider obvious but few have bothered 
+                seven months (and counting) to test a hypothesis that many would consider obvious but few have bothered 
                 to prove: that free streaming services do not actually require malicious advertising, 
                 invasive tracking, cryptocurrency miners, or user interfaces designed by someone who 
                 genuinely hates humanity. The pirate streaming ecosystem has long operated under the 
@@ -121,8 +123,16 @@ export default function AboutPage() {
                 basic human decency, not a technical or economic necessity.
               </p>
               <p>
+                <strong>Update (December 2025):</strong> Since initial publication, the platform has 
+                undergone significant evolution. Legacy providers like 2Embed and MoviesAPI have been 
+                deprecated in favor of more reliable sources: Vidsrc and Videasy now form the backbone 
+                of our extraction pipeline. Live TV support has been added. Anime streaming via AnimeKai 
+                integration is now available. The cat-and-mouse game continues.
+              </p>
+              <p>
                 <strong>Keywords:</strong> Streaming Architecture, Reverse Engineering, Ethical Design, 
-                Obfuscation Analysis, JavaScript Archaeology, Sleep Deprivation, Monster Energy Dependency
+                Obfuscation Analysis, JavaScript Archaeology, Sleep Deprivation, Monster Energy Dependency,
+                Vidsrc, Videasy, AnimeKai, Live TV, Provider Migration
               </p>
             </div>
           </section>
@@ -357,10 +367,19 @@ export default function AboutPage() {
               <div className="phase">
                 <span className="phase-num">04</span>
                 <div>
-                  <h4>Documentation</h4>
-                  <p>Writing this paper, which took longer than expected because academic writing is 
-                  hard and we kept getting distracted by the platform we built.</p>
-                  <span className="phase-time">Weeks 20-22</span>
+                  <h4>Provider Migration & Expansion</h4>
+                  <p>Deprecating 2Embed and MoviesAPI in favor of Vidsrc and Videasy. Adding Live TV 
+                  support, AnimeKai integration, and learning that provider APIs change without warning.</p>
+                  <span className="phase-time">Weeks 20-28</span>
+                </div>
+              </div>
+              <div className="phase">
+                <span className="phase-num">05</span>
+                <div>
+                  <h4>Documentation & Ongoing Maintenance</h4>
+                  <p>Writing this paper, keeping up with provider changes, and accepting that this 
+                  project will never truly be &quot;done.&quot;</p>
+                  <span className="phase-time">Weeks 29+</span>
                 </div>
               </div>
             </div>
@@ -445,10 +464,10 @@ export default function AboutPage() {
             </p>
             <div className="tech-stack">
               <div className="tech-item">
-                <strong>Next.js 14</strong>
-                <p>The backbone of the application. Server-side rendering for SEO, API routes for the 
-                proxy layer, and a developer experience that does not make us want to throw our laptop 
-                out the window. The App Router took some getting used to, but we got there eventually.</p>
+                <strong>Next.js 16</strong>
+                <p>Upgraded from 14 to 16 during development. The backbone of the application with 
+                server-side rendering for SEO, API routes for the proxy layer, and Turbopack for 
+                faster builds. The App Router is now second nature.</p>
               </div>
               <div className="tech-item">
                 <strong>TypeScript</strong>
@@ -468,10 +487,19 @@ export default function AboutPage() {
                 project with unpredictable traffic patterns and a budget of exactly zero dollars.</p>
               </div>
               <div className="tech-item">
-                <strong>HLS.js</strong>
-                <p>The industry standard for adaptive bitrate streaming in browsers. Handles manifest 
-                parsing, quality switching, and buffer management so we could focus on not making the 
-                user interface terrible.</p>
+                <strong>HLS.js + mpegts.js</strong>
+                <p>HLS.js for standard VOD streaming, mpegts.js added for Live TV support. Together 
+                they handle everything from movies to live broadcasts without breaking a sweat.</p>
+              </div>
+              <div className="tech-item">
+                <strong>Vidsrc + Videasy</strong>
+                <p>Our primary stream providers after migrating away from 2Embed and MoviesAPI. More 
+                reliable, faster extraction, and (slightly) less hostile obfuscation.</p>
+              </div>
+              <div className="tech-item">
+                <strong>AnimeKai</strong>
+                <p>Dedicated anime streaming integration. Because anime fans deserve better than the 
+                ad-infested hellscapes that pass for anime streaming sites.</p>
               </div>
             </div>
 
@@ -728,19 +756,19 @@ export default function AboutPage() {
             <h3>6.3 The Numbers</h3>
             <div className="stats-grid">
               <div className="stat">
-                <span className="stat-value">50K+</span>
+                <span className="stat-value">75K+</span>
                 <span className="stat-label">Lines of code</span>
               </div>
               <div className="stat">
-                <span className="stat-value">150+</span>
+                <span className="stat-value">200+</span>
                 <span className="stat-label">React components</span>
               </div>
               <div className="stat">
-                <span className="stat-value">40+</span>
+                <span className="stat-value">60+</span>
                 <span className="stat-label">API endpoints</span>
               </div>
               <div className="stat">
-                <span className="stat-value">15+</span>
+                <span className="stat-value">20+</span>
                 <span className="stat-label">Database tables</span>
               </div>
             </div>
@@ -752,7 +780,7 @@ export default function AboutPage() {
             
             <h3>7.1 Primary Findings</h3>
             <p>
-              After five months of development, countless debugging sessions, and an amount of Monster Energy 
+              After seven months of development, countless debugging sessions, and an amount of Monster Energy 
               that probably qualifies as a medical concern, we can report the following findings:
             </p>
 
@@ -858,10 +886,26 @@ export default function AboutPage() {
           <section id="future">
             <h2>9. Future Work</h2>
             <p>
-              Flyx is not done. It works, but &quot;works&quot; is a low bar. Here is what we want to 
-              build next, assuming we ever recover from the sleep debt accumulated during initial 
-              development:
+              Flyx is not done. It works, but &quot;works&quot; is a low bar. Here is what we have 
+              accomplished since initial release, and what remains on the roadmap:
             </p>
+            
+            <h3>9.1 Completed Since Initial Release</h3>
+            <ul>
+              <li><strong>Provider Migration:</strong> Successfully transitioned from 2Embed and 
+              MoviesAPI to Vidsrc and Videasy as primary sources. Extraction reliability improved 
+              significantly.</li>
+              <li><strong>Live TV Support:</strong> Added live television streaming with channel 
+              guides and real-time playback via mpegts.js integration.</li>
+              <li><strong>Anime Integration:</strong> AnimeKai provider added for dedicated anime 
+              streaming with episode tracking and subtitle support.</li>
+              <li><strong>Admin Dashboard:</strong> Real-time analytics, user activity monitoring, 
+              and system health metrics for platform management.</li>
+              <li><strong>Region Selection:</strong> Users can now select their preferred content 
+              region for localized results.</li>
+            </ul>
+
+            <h3>9.2 Still on the Roadmap</h3>
             <ul>
               <li><strong>Smart Recommendations:</strong> Privacy-preserving personalization that 
               learns what you like without tracking who you are.</li>
@@ -871,8 +915,8 @@ export default function AboutPage() {
               content preferences.</li>
               <li><strong>Accessibility Improvements:</strong> Comprehensive WCAG compliance, screen 
               reader support, keyboard navigation everywhere.</li>
-              <li><strong>More Providers:</strong> Expanding the pool of stream sources to improve 
-              reliability and content coverage.</li>
+              <li><strong>Provider Redundancy:</strong> Continuing to expand backup providers for 
+              when primary sources inevitably break.</li>
             </ul>
           </section>
 
@@ -882,7 +926,7 @@ export default function AboutPage() {
             <p className="lead">
               We built a streaming platform. It works. It does not assault users with pop-ups, mine 
               cryptocurrency on their CPUs, or track them across the web. And we did it alone, 
-              part-time, with no budget, over five months of evenings and weekends.
+              part-time, with no budget, over seven months of evenings and weekends (and counting).
             </p>
             <p>
               That is the point. Not that we are special (we are not). The point is that if one person 
@@ -1198,8 +1242,8 @@ export default function AboutPage() {
 
             <div className="legal-footer">
               <p><strong>Effective Date:</strong> November 2025</p>
-              <p><strong>Last Updated:</strong> November 2025</p>
-              <p><strong>Version:</strong> 1.0</p>
+              <p><strong>Last Updated:</strong> December 2025</p>
+              <p><strong>Version:</strong> 1.1</p>
             </div>
           </section>
 
