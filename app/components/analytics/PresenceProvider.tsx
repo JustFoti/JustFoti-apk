@@ -18,6 +18,7 @@ interface PresenceContextValue {
   sessionId: string;
   isActive: boolean;
   setActivityType: (type: 'browsing' | 'watching' | 'livetv', content?: ContentInfo) => void;
+  setBrowsingContext: (pageName: string, contentTitle?: string, contentId?: string, contentType?: 'movie' | 'tv') => void;
 }
 
 interface ContentInfo {
@@ -309,6 +310,17 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
     sendHeartbeat(true);
   }, [sendHeartbeat]);
   
+  // Set browsing context (called by pages to track what users are browsing)
+  const setBrowsingContext = useCallback((pageName: string, contentTitle?: string, contentId?: string, contentType?: 'movie' | 'tv') => {
+    activityTypeRef.current = 'browsing';
+    contentRef.current = {
+      contentTitle: contentTitle || pageName,
+      contentId: contentId,
+      contentType: contentType,
+    };
+    sendHeartbeat(true);
+  }, [sendHeartbeat]);
+  
   // Initialize with enhanced bot detection
   useEffect(() => {
     if (typeof window === 'undefined' || isInitializedRef.current) return;
@@ -395,7 +407,7 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
   }, [pathname, userId, sessionId, sendHeartbeat]);
   
   return (
-    <PresenceContext.Provider value={{ userId, sessionId, isActive, setActivityType }}>
+    <PresenceContext.Provider value={{ userId, sessionId, isActive, setActivityType, setBrowsingContext }}>
       {children}
     </PresenceContext.Provider>
   );

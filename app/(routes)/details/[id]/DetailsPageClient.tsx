@@ -10,6 +10,7 @@ import { FluidButton } from '@/components/ui/FluidButton';
 import { ContentGrid } from '@/components/content/ContentGrid';
 import { SeasonSelector } from './SeasonSelector';
 import { EpisodeList } from './EpisodeList';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import styles from './DetailsPage.module.css';
 
 // Note: Removed prefetch to avoid duplicate requests
@@ -37,6 +38,7 @@ export default function DetailsPageClient({
 }: DetailsPageClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const presenceContext = usePresenceContext();
   
   // Get season from URL params (for returning from watch page)
   const seasonFromUrl = searchParams.get('season');
@@ -46,6 +48,19 @@ export default function DetailsPageClient({
   const [seasonData, setSeasonData] = useState<Season | null>(null);
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   const [episodeProgress, setEpisodeProgress] = useState<Record<number, number>>({});
+  
+  // Track browsing activity with content title
+  useEffect(() => {
+    if (content && presenceContext?.setBrowsingContext) {
+      const title = content.title || content.name || 'Unknown';
+      presenceContext.setBrowsingContext(
+        `Viewing: ${title}`,
+        title,
+        String(content.id),
+        content.mediaType as 'movie' | 'tv'
+      );
+    }
+  }, [content, presenceContext]);
 
   // Load episodes when season changes for TV shows
   useEffect(() => {

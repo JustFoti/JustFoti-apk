@@ -107,7 +107,7 @@ export default function ImprovedLiveDashboard() {
     
     setLastUpdate(new Date());
     
-    // Add to history
+    // Add to history - always add a point even if values are 0
     setHistory(prev => {
       const newPoint: HistoryPoint = {
         time: Date.now(),
@@ -116,6 +116,13 @@ export default function ImprovedLiveDashboard() {
         livetv: currentActivity.livetv,
         browsing: currentActivity.browsing,
       };
+      
+      // Don't add duplicate points within 2 seconds
+      const lastPoint = prev[prev.length - 1];
+      if (lastPoint && (Date.now() - lastPoint.time) < 2000) {
+        return prev;
+      }
+      
       const newHistory = [...prev, newPoint];
       // Keep last 60 data points (10 minutes at 10s intervals)
       return newHistory.slice(-60);
@@ -125,16 +132,20 @@ export default function ImprovedLiveDashboard() {
     if (peakUpdateRef.current) {
       clearTimeout(peakUpdateRef.current);
     }
-    peakUpdateRef.current = setTimeout(() => {
-      updatePeakStats();
-    }, 5000); // Update peaks every 5 seconds max
+    
+    // Only update peaks if there are actual users
+    if (currentActivity.total > 0) {
+      peakUpdateRef.current = setTimeout(() => {
+        updatePeakStats();
+      }, 3000); // Update peaks every 3 seconds max
+    }
 
     return () => {
       if (peakUpdateRef.current) {
         clearTimeout(peakUpdateRef.current);
       }
     };
-  }, [unifiedStats, statsLoading, updatePeakStats]);
+  }, [unifiedStats, statsLoading, updatePeakStats, currentActivity]);
 
   // Auto-refresh stats
   useEffect(() => {
@@ -227,7 +238,7 @@ export default function ImprovedLiveDashboard() {
           title="On Site"
           subtitle="Total users currently active"
           value={currentActivity.total}
-          peak={peakStats?.peakTotal || 0}
+          peak={Math.max(peakStats?.peakTotal || 0, currentActivity.total)}
           peakTime={peakStats?.peakTotalTime || 0}
           icon="👥"
           color="#10b981"
@@ -239,7 +250,7 @@ export default function ImprovedLiveDashboard() {
           title="Watching VOD"
           subtitle="Users watching movies/shows"
           value={currentActivity.watching}
-          peak={peakStats?.peakWatching || 0}
+          peak={Math.max(peakStats?.peakWatching || 0, currentActivity.watching)}
           peakTime={peakStats?.peakWatchingTime || 0}
           icon="▶️"
           color="#7877c6"
@@ -250,7 +261,7 @@ export default function ImprovedLiveDashboard() {
           title="Live TV"
           subtitle="Users watching live channels"
           value={currentActivity.livetv}
-          peak={peakStats?.peakLiveTV || 0}
+          peak={Math.max(peakStats?.peakLiveTV || 0, currentActivity.livetv)}
           peakTime={peakStats?.peakLiveTVTime || 0}
           icon="📺"
           color="#f59e0b"
@@ -261,7 +272,7 @@ export default function ImprovedLiveDashboard() {
           title="Browsing"
           subtitle="Users exploring content"
           value={currentActivity.browsing}
-          peak={peakStats?.peakBrowsing || 0}
+          peak={Math.max(peakStats?.peakBrowsing || 0, currentActivity.browsing)}
           peakTime={peakStats?.peakBrowsingTime || 0}
           icon="🔍"
           color="#3b82f6"
@@ -352,43 +363,56 @@ export default function ImprovedLiveDashboard() {
       </div>
 
       {/* Activity Trend Chart */}
-      {history.length > 1 && (
-        <div style={{ 
-          background: 'rgba(255, 255, 255, 0.03)', 
-          border: '1px solid rgba(255, 255, 255, 0.1)', 
-          borderRadius: '12px', 
-          padding: '16px' 
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>
-              Activity Trend (Last {Math.round(history.length * refreshRate / 60)} min)
-            </span>
-            <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
-              <span style={{ color: '#10b981' }}>● Total</span>
-              <span style={{ color: '#7877c6' }}>● VOD</span>
-              <span style={{ color: '#f59e0b' }}>● Live TV</span>
-            </div>
+      <div style={{ 
+        background: 'rgba(255, 255, 255, 0.03)', 
+        border: '1px solid rgba(255, 255, 255, 0.1)', 
+        borderRadius: '12px', 
+        padding: '16px' 
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>
+            Activity Trend (Last {history.length > 0 ? Math.max(1, Math.round(history.length * refreshRate / 60)) : 10} min)
+          </span>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
+            <span style={{ color: '#10b981' }}>● Total</span>
+            <span style={{ color: '#7877c6' }}>● VOD</span>
+            <span style={{ color: '#f59e0b' }}>● Live TV</span>
           </div>
-          <div style={{ position: 'relative', height: '100px' }}>
-            {/* Grid lines */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', width: '100%' }} />
-              ))}
+        </div>
+        <div style={{ position: 'relative', height: '100px' }}>
+          {/* Grid lines */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', width: '100%' }} />
+            ))}
+          </div>
+          
+          {history.length === 0 ? (
+            <div style={{ 
+              position: 'absolute', 
+              inset: 0, 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              color: '#64748b',
+              fontSize: '13px'
+            }}>
+              Collecting data...
             </div>
-            
-            {/* Chart */}
-            <svg width="100%" height="100%" style={{ position: 'relative' }}>
+          ) : (
+            /* Chart */
+            <svg width="100%" height="100%" style={{ position: 'relative' }} viewBox="0 0 100 100" preserveAspectRatio="none">
               {/* Total line */}
               <polyline
                 fill="none"
                 stroke="#10b981"
                 strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
                 points={history.map((point, i) => {
-                  const x = (i / (history.length - 1)) * 100;
+                  const x = history.length > 1 ? (i / (history.length - 1)) * 100 : 50;
                   const maxVal = Math.max(...history.map(h => h.total), 1);
                   const y = 100 - (point.total / maxVal) * 90;
-                  return `${x}%,${y}%`;
+                  return `${x},${y}`;
                 }).join(' ')}
               />
               {/* VOD line */}
@@ -397,11 +421,12 @@ export default function ImprovedLiveDashboard() {
                 stroke="#7877c6"
                 strokeWidth="1.5"
                 strokeDasharray="4,2"
+                vectorEffect="non-scaling-stroke"
                 points={history.map((point, i) => {
-                  const x = (i / (history.length - 1)) * 100;
+                  const x = history.length > 1 ? (i / (history.length - 1)) * 100 : 50;
                   const maxVal = Math.max(...history.map(h => h.total), 1);
                   const y = 100 - (point.watching / maxVal) * 90;
-                  return `${x}%,${y}%`;
+                  return `${x},${y}`;
                 }).join(' ')}
               />
               {/* Live TV line */}
@@ -410,21 +435,30 @@ export default function ImprovedLiveDashboard() {
                 stroke="#f59e0b"
                 strokeWidth="1.5"
                 strokeDasharray="4,2"
+                vectorEffect="non-scaling-stroke"
                 points={history.map((point, i) => {
-                  const x = (i / (history.length - 1)) * 100;
+                  const x = history.length > 1 ? (i / (history.length - 1)) * 100 : 50;
                   const maxVal = Math.max(...history.map(h => h.total), 1);
                   const y = 100 - (point.livetv / maxVal) * 90;
-                  return `${x}%,${y}%`;
+                  return `${x},${y}`;
                 }).join(' ')}
               />
+              {/* Show dots for single points */}
+              {history.length === 1 && (
+                <>
+                  <circle cx="50" cy={100 - (history[0].total / Math.max(history[0].total, 1)) * 90} r="4" fill="#10b981" />
+                  <circle cx="50" cy={100 - (history[0].watching / Math.max(history[0].total, 1)) * 90} r="3" fill="#7877c6" />
+                  <circle cx="50" cy={100 - (history[0].livetv / Math.max(history[0].total, 1)) * 90} r="3" fill="#f59e0b" />
+                </>
+              )}
             </svg>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-            <span style={{ color: '#64748b', fontSize: '11px' }}>{formatTime(history[0]?.time || Date.now())}</span>
-            <span style={{ color: '#64748b', fontSize: '11px' }}>{formatTime(history[history.length - 1]?.time || Date.now())}</span>
-          </div>
+          )}
         </div>
-      )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
+          <span style={{ color: '#64748b', fontSize: '11px' }}>{formatTime(history[0]?.time || Date.now())}</span>
+          <span style={{ color: '#64748b', fontSize: '11px' }}>{formatTime(history[history.length - 1]?.time || Date.now())}</span>
+        </div>
+      </div>
 
       <style jsx>{`
         @keyframes pulse {

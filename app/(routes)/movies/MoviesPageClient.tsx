@@ -8,6 +8,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import { useRegion } from '@/app/lib/context/RegionContext';
 import { RegionSelector } from '@/components/ui/RegionSelector';
 
@@ -45,9 +46,17 @@ const initialData: MoviesData = {
 export default function MoviesPageClient() {
   const router = useRouter();
   const { trackEvent } = useAnalytics();
+  const presenceContext = usePresenceContext();
   const { region } = useRegion();
   const [data, setData] = useState<MoviesData>(initialData);
   const [loading, setLoading] = useState(true);
+
+  // Track browsing activity
+  useEffect(() => {
+    if (presenceContext?.setBrowsingContext) {
+      presenceContext.setBrowsingContext('Movies');
+    }
+  }, [presenceContext]);
 
   useEffect(() => {
     async function fetchData() {

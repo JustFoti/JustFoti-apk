@@ -193,47 +193,46 @@ export async function POST(request: NextRequest) {
       
       await adapter.execute(insertQuery, params);
     } else {
-      // Update only if new values are higher
+      // Update only if new values are higher - use simple full update approach
       const current = existing[0];
-      const updates: string[] = [];
-      const params: any[] = [];
-      let paramIndex = 1;
       
-      if ((total || 0) > (current.peak_total || 0)) {
-        updates.push(isNeon ? `peak_total = $${paramIndex++}` : `peak_total = ?`);
-        params.push(total);
-        updates.push(isNeon ? `peak_total_time = $${paramIndex++}` : `peak_total_time = ?`);
-        params.push(now);
-      }
-      if ((watching || 0) > (current.peak_watching || 0)) {
-        updates.push(isNeon ? `peak_watching = $${paramIndex++}` : `peak_watching = ?`);
-        params.push(watching);
-        updates.push(isNeon ? `peak_watching_time = $${paramIndex++}` : `peak_watching_time = ?`);
-        params.push(now);
-      }
-      if ((livetv || 0) > (current.peak_livetv || 0)) {
-        updates.push(isNeon ? `peak_livetv = $${paramIndex++}` : `peak_livetv = ?`);
-        params.push(livetv);
-        updates.push(isNeon ? `peak_livetv_time = $${paramIndex++}` : `peak_livetv_time = ?`);
-        params.push(now);
-      }
-      if ((browsing || 0) > (current.peak_browsing || 0)) {
-        updates.push(isNeon ? `peak_browsing = $${paramIndex++}` : `peak_browsing = ?`);
-        params.push(browsing);
-        updates.push(isNeon ? `peak_browsing_time = $${paramIndex++}` : `peak_browsing_time = ?`);
-        params.push(now);
-      }
+      // Calculate new peak values (keep existing if current is not higher)
+      const newPeakTotal = (total || 0) > (current.peak_total || 0) ? total : (current.peak_total || 0);
+      const newPeakWatching = (watching || 0) > (current.peak_watching || 0) ? watching : (current.peak_watching || 0);
+      const newPeakLiveTV = (livetv || 0) > (current.peak_livetv || 0) ? livetv : (current.peak_livetv || 0);
+      const newPeakBrowsing = (browsing || 0) > (current.peak_browsing || 0) ? browsing : (current.peak_browsing || 0);
       
-      if (updates.length > 0) {
-        updates.push(isNeon ? `last_updated = $${paramIndex++}` : `last_updated = ?`);
-        params.push(now);
-        params.push(today);
-        
+      // Update timestamps only when peak changes
+      const newPeakTotalTime = (total || 0) > (current.peak_total || 0) ? now : (current.peak_total_time || now);
+      const newPeakWatchingTime = (watching || 0) > (current.peak_watching || 0) ? now : (current.peak_watching_time || now);
+      const newPeakLiveTVTime = (livetv || 0) > (current.peak_livetv || 0) ? now : (current.peak_livetv_time || now);
+      const newPeakBrowsingTime = (browsing || 0) > (current.peak_browsing || 0) ? now : (current.peak_browsing_time || now);
+      
+      // Check if any peak actually changed
+      const hasChanges = 
+        newPeakTotal > (current.peak_total || 0) ||
+        newPeakWatching > (current.peak_watching || 0) ||
+        newPeakLiveTV > (current.peak_livetv || 0) ||
+        newPeakBrowsing > (current.peak_browsing || 0);
+      
+      if (hasChanges) {
         const updateQuery = isNeon
-          ? `UPDATE peak_stats SET ${updates.join(', ')} WHERE date = $${paramIndex}`
-          : `UPDATE peak_stats SET ${updates.join(', ')} WHERE date = ?`;
+          ? `UPDATE peak_stats SET 
+              peak_total = $1, peak_watching = $2, peak_livetv = $3, peak_browsing = $4,
+              peak_total_time = $5, peak_watching_time = $6, peak_livetv_time = $7, peak_browsing_time = $8,
+              last_updated = $9
+             WHERE date = $10`
+          : `UPDATE peak_stats SET 
+              peak_total = ?, peak_watching = ?, peak_livetv = ?, peak_browsing = ?,
+              peak_total_time = ?, peak_watching_time = ?, peak_livetv_time = ?, peak_browsing_time = ?,
+              last_updated = ?
+             WHERE date = ?`;
         
-        await adapter.execute(updateQuery, params);
+        await adapter.execute(updateQuery, [
+          newPeakTotal, newPeakWatching, newPeakLiveTV, newPeakBrowsing,
+          newPeakTotalTime, newPeakWatchingTime, newPeakLiveTVTime, newPeakBrowsingTime,
+          now, today
+        ]);
       }
     }
 

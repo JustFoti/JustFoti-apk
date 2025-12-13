@@ -8,6 +8,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import { useDebounce } from '@/app/hooks/useDebounce';
 import { GENRES } from '@/lib/constants/genres';
 import { SearchSidebar } from './SearchSidebar';
@@ -84,12 +85,21 @@ export default function SearchPageClient({
     }
   }, []);
 
+  // Get presence context for browsing tracking
+  const presenceContext = usePresenceContext();
+
   // Analytics tracking
   useEffect(() => {
     if (sessionId) {
       trackPageView('/search');
+      
+      // Track browsing activity with search query
+      if (presenceContext?.setBrowsingContext) {
+        const searchContext = query ? `Search: "${query}"` : 'Search';
+        presenceContext.setBrowsingContext(searchContext);
+      }
     }
-  }, [trackPageView, sessionId]);
+  }, [trackPageView, sessionId, query, presenceContext]);
 
   // Sort helper
   const sortResults = (items: MediaItem[], sortBy: string): MediaItem[] => {

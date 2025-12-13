@@ -8,6 +8,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 
 interface HomePageClientProps {
   heroContent: MediaItem | null;
@@ -78,6 +79,9 @@ export default function HomePageClient({
     return items;
   }, [heroContent, trendingToday]);
 
+  // Get presence context for browsing tracking
+  const presenceContext = usePresenceContext();
+
   // Analytics tracking
   useEffect(() => {
     trackPageView('/');
@@ -87,7 +91,12 @@ export default function HomePageClient({
       popular_movies_count: popularMovies.length,
       popular_tv_count: popularTV.length
     });
-  }, [trackPageView, trackEvent, heroContent, trendingToday.length, popularMovies.length, popularTV.length]);
+    
+    // Track browsing activity on homepage
+    if (presenceContext?.setBrowsingContext) {
+      presenceContext.setBrowsingContext('Home');
+    }
+  }, [trackPageView, trackEvent, heroContent, trendingToday.length, popularMovies.length, popularTV.length, presenceContext]);
 
   // Scroll tracking
   useEffect(() => {

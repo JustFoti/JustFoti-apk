@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '@/types/media';
@@ -8,6 +8,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 
 interface BrowsePageClientProps {
   items: MediaItem[];
@@ -33,6 +34,14 @@ export default function BrowsePageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { trackEvent } = useAnalytics();
+  const presenceContext = usePresenceContext();
+  
+  // Track browsing activity with page context
+  useEffect(() => {
+    if (presenceContext?.setBrowsingContext) {
+      presenceContext.setBrowsingContext(`Browse: ${title}`);
+    }
+  }, [title, presenceContext]);
 
   const handleContentClick = useCallback((item: MediaItem) => {
     trackEvent('content_clicked', { content_id: item.id, source: 'browse' });

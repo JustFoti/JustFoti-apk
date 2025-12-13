@@ -680,15 +680,16 @@ export default function LiveActivityTracker() {
                 ) : activity.activity_type === 'browsing' ? (
                   <div style={{ marginBottom: '1rem' }}>
                     <div style={{ 
-                      color: '#94a3b8', 
-                      fontSize: '0.875rem',
-                      fontStyle: 'italic',
+                      color: activity.content_title ? '#f8fafc' : '#94a3b8', 
+                      fontSize: activity.content_title ? '1rem' : '0.875rem',
+                      fontStyle: activity.content_title ? 'normal' : 'italic',
+                      fontWeight: activity.content_title ? '500' : 'normal',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.5rem'
                     }}>
                       <span>🔍</span>
-                      Exploring content...
+                      {activity.content_title || 'Exploring content...'}
                     </div>
                   </div>
                 ) : null}

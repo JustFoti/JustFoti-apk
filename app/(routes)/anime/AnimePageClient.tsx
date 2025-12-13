@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MediaItem } from '@/types/media';
@@ -8,6 +8,7 @@ import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 
 interface CategoryData {
   items: MediaItem[];
@@ -29,6 +30,14 @@ export default function AnimePageClient({
 }: AnimePageClientProps) {
   const router = useRouter();
   const { trackEvent } = useAnalytics();
+  const presenceContext = usePresenceContext();
+
+  // Track browsing activity
+  useEffect(() => {
+    if (presenceContext?.setBrowsingContext) {
+      presenceContext.setBrowsingContext('Anime');
+    }
+  }, [presenceContext]);
 
   const handleContentClick = useCallback((item: MediaItem, source: string) => {
     trackEvent('content_clicked', { content_id: item.id, source });
