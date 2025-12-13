@@ -141,13 +141,14 @@ class AnalyticsService {
     // Set up periodic flush
     this.scheduleFlush();
     
-    // Start live activity heartbeat only for non-admin pages
+    // NOTE: Live activity heartbeat is now handled by PresenceProvider
+    // to avoid duplicate tracking. Only start watch time sync and page tracking here.
     if (this.shouldTrackPage()) {
-      this.startLiveActivityHeartbeat();
+      // Don't call startLiveActivityHeartbeat() - PresenceProvider handles this
       this.startWatchTimeSyncInterval();
       this.startPageTracking();
     } else {
-      console.log('[Analytics] Skipping live activity for admin page');
+      console.log('[Analytics] Skipping tracking for admin page');
     }
     
     // Track scroll depth
@@ -162,12 +163,12 @@ class AnalyticsService {
       if (document.hidden) {
         this.flushEvents();
         this.syncAllWatchTime();
-        this.stopLiveActivity();
+        // Don't call stopLiveActivity() - PresenceProvider handles this
         this.stopPageTracking();
         this.endLiveTVSession();
         this.syncCurrentPageView();
       } else {
-        this.startLiveActivityHeartbeat();
+        // Don't call startLiveActivityHeartbeat() - PresenceProvider handles this
         this.startWatchTimeSyncInterval();
         this.startPageTracking();
       }
@@ -732,6 +733,8 @@ class AnalyticsService {
 
   /**
    * Update current activity
+   * NOTE: This no longer sends heartbeats - PresenceProvider handles live activity tracking
+   * This method is kept for internal state tracking only
    */
   updateActivity(activity: {
     type: 'browsing' | 'watching' | 'livetv';
@@ -748,7 +751,7 @@ class AnalyticsService {
     category?: string;
   }): void {
     this.currentActivity = activity;
-    this.sendLiveActivityHeartbeat();
+    // Don't call sendLiveActivityHeartbeat() - PresenceProvider handles this
   }
 
   /**
