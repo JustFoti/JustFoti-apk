@@ -1036,6 +1036,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
     setAutoPlayCountdownState(null);
   }, []);
+  // Export for use in UI - will be used in auto-play overlay
+  void cancelAutoPlay;
 
   // Keyboard shortcuts
   useEffect(() => {
