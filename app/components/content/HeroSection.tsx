@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { ParallaxContainer, ParallaxLayer } from '@/components/ui/ParallaxContainer';

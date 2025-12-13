@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { useUserPreferences } from '@/lib/hooks/useUserPreferences';
 import { useViewingHistory } from '@/lib/hooks/useViewingHistory';
