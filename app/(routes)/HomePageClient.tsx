@@ -215,28 +215,8 @@ export default function HomePageClient({
                 <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/30" />
 
-                {/* Animated Particles */}
-                <div className="absolute inset-0">
-                  {[...Array(20)].map((_, i) => (
-                    <motion.div
-                      key={i}
-                      className="absolute w-1 h-1 bg-white/20 rounded-full"
-                      style={{
-                        left: `${Math.random() * 100}%`,
-                        top: `${Math.random() * 100}%`,
-                      }}
-                      animate={{
-                        y: [-20, -100],
-                        opacity: [0, 1, 0],
-                      }}
-                      transition={{
-                        duration: 3 + Math.random() * 2,
-                        repeat: Infinity,
-                        delay: Math.random() * 2,
-                      }}
-                    />
-                  ))}
-                </div>
+                {/* Subtle gradient overlay for depth */}
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-transparent to-pink-900/10 pointer-events-none" />
               </motion.div>
             </AnimatePresence>
 
@@ -887,18 +867,15 @@ function ContentSection({
                       loading="lazy"
                     />
                   </div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
                   {/* Play Button Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      className="w-20 h-20 bg-gradient-to-r from-purple-600/80 to-pink-600/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-2xl border border-white/20"
-                    >
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
+                    <div className="w-20 h-20 bg-gradient-to-r from-purple-600/80 to-pink-600/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-2xl border border-white/20">
                       <svg width="28" height="28" viewBox="0 0 24 24" fill="white" strokeWidth="0">
                         <path d="M8 5v14l11-7z" />
                       </svg>
-                    </motion.div>
+                    </div>
                   </div>
 
                   {/* Rating Badge */}

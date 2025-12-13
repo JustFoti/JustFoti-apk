@@ -7,6 +7,7 @@ import { useWatchProgress } from '@/lib/hooks/useWatchProgress';
 import { trackWatchStart, trackWatchProgress, trackWatchPause, trackWatchComplete } from '@/lib/utils/live-activity';
 import { usePresenceContext } from '../analytics/PresenceProvider';
 import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage, getSubtitleStyle, setSubtitleStyle, type SubtitleStyle } from '@/lib/utils/subtitle-preferences';
+import { getPlayerPreferences, setAutoPlayNextEpisode, setAutoPlayCountdown, type PlayerPreferences } from '@/lib/utils/player-preferences';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { CastOverlay } from './CastButton';
@@ -23,6 +24,7 @@ interface VideoPlayerProps {
     season: number;
     episode: number;
     title?: string;
+    isNextSeason?: boolean;
   } | null;
   onNextEpisode?: () => void;
 }
@@ -92,6 +94,9 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
 
   const [showNextEpisodeButton, setShowNextEpisodeButton] = useState(false);
+  const [autoPlayCountdown, setAutoPlayCountdownState] = useState<number | null>(null);
+  const [playerPrefs, setPlayerPrefs] = useState<PlayerPreferences>(getPlayerPreferences());
+  const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [provider, setProvider] = useState('vidsrc'); // Default to vidsrc (primary provider)
   const [menuProvider, setMenuProvider] = useState('vidsrc');
   const [showServerMenu, setShowServerMenu] = useState(false);
@@ -934,7 +939,13 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     const handleEnded = () => {
       setIsPlaying(false);
       if (nextEpisode && onNextEpisode) {
-        onNextEpisode();
+        // Check if auto-play is enabled
+        const prefs = getPlayerPreferences();
+        if (prefs.autoPlayNextEpisode) {
+          // Start countdown for auto-play
+          setAutoPlayCountdownState(prefs.autoPlayCountdown);
+        }
+        // If auto-play is disabled, just show the next episode button
       }
     };
 
@@ -995,6 +1006,35 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Auto-play countdown timer
+  useEffect(() => {
+    if (autoPlayCountdown === null || autoPlayCountdown <= 0) {
+      if (autoPlayCountdown === 0 && nextEpisode && onNextEpisode) {
+        // Countdown finished, play next episode
+        onNextEpisode();
+      }
+      return;
+    }
+
+    autoPlayTimerRef.current = setTimeout(() => {
+      setAutoPlayCountdownState(prev => prev !== null ? prev - 1 : null);
+    }, 1000);
+
+    return () => {
+      if (autoPlayTimerRef.current) {
+        clearTimeout(autoPlayTimerRef.current);
+      }
+    };
+  }, [autoPlayCountdown, nextEpisode, onNextEpisode]);
+
+  // Cancel auto-play countdown when user interacts
+  const cancelAutoPlay = useCallback(() => {
+    if (autoPlayTimerRef.current) {
+      clearTimeout(autoPlayTimerRef.current);
+    }
+    setAutoPlayCountdownState(null);
   }, []);
 
   // Keyboard shortcuts
@@ -1714,6 +1754,64 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                       )}
                     </div>
                   </div>
+
+                  {/* Auto-play settings - only show for TV shows */}
+                  {mediaType === 'tv' && (
+                    <div className={styles.settingsSection} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '0.5rem', paddingTop: '0.75rem' }}>
+                      <div className={styles.settingsLabel}>Auto-Play</div>
+                      <button
+                        className={styles.settingsOption}
+                        onClick={() => {
+                          const newValue = !playerPrefs.autoPlayNextEpisode;
+                          setAutoPlayNextEpisode(newValue);
+                          setPlayerPrefs(prev => ({ ...prev, autoPlayNextEpisode: newValue }));
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                      >
+                        <span>Auto-play next episode</span>
+                        <span style={{
+                          width: '40px',
+                          height: '22px',
+                          borderRadius: '11px',
+                          backgroundColor: playerPrefs.autoPlayNextEpisode ? '#e50914' : 'rgba(255, 255, 255, 0.2)',
+                          position: 'relative',
+                          transition: 'background-color 0.2s',
+                        }}>
+                          <span style={{
+                            position: 'absolute',
+                            top: '2px',
+                            left: playerPrefs.autoPlayNextEpisode ? '20px' : '2px',
+                            width: '18px',
+                            height: '18px',
+                            borderRadius: '50%',
+                            backgroundColor: '#fff',
+                            transition: 'left 0.2s',
+                          }} />
+                        </span>
+                      </button>
+                      {playerPrefs.autoPlayNextEpisode && (
+                        <div style={{ padding: '0.5rem 1rem' }}>
+                          <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                            Countdown: {playerPrefs.autoPlayCountdown}s
+                          </div>
+                          <input
+                            type="range"
+                            min="5"
+                            max="30"
+                            step="5"
+                            value={playerPrefs.autoPlayCountdown}
+                            onChange={(e) => {
+                              const newValue = Number(e.target.value);
+                              setAutoPlayCountdown(newValue);
+                              setPlayerPrefs(prev => ({ ...prev, autoPlayCountdown: newValue }));
+                            }}
+                            className={styles.volumeSlider}
+                            style={{ width: '100%' }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
