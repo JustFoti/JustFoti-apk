@@ -1,4 +1,4 @@
-import React from 'react';
+
 import SearchPageClient from './SearchPageClient';
 
 interface SearchPageProps {

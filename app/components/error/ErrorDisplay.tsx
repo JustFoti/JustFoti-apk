@@ -5,7 +5,7 @@
  * Reusable component for displaying API errors with retry functionality
  */
 
-import React from 'react';
+
 import { APIError } from '@/types/api';
 import { getErrorMessage, shouldShowRetry } from '@/lib/utils/api-client';
 import styles from './ErrorDisplay.module.css';

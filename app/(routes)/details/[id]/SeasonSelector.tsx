@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+
 import { motion } from 'framer-motion';
 import type { Season } from '@/types/media';
 import styles from './SeasonSelector.module.css';

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { notFound } from 'next/navigation';
 import { tmdbService } from '@/lib/services/tmdb';
 import type { MediaItem } from '@/types/media';

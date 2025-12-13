@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+
 
 import { Slider } from '@/components/ui/Slider';
 import { GENRES } from '@/lib/constants/genres';
