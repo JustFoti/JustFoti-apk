@@ -54,6 +54,12 @@ const ALLOWED_ORIGINS = [
 ];
 
 function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
+  // Allow server-side requests (no origin/referer) - these come from Vercel API routes
+  // The RPI proxy key provides authentication for these requests
+  if (!origin && !referer) {
+    return true;
+  }
+
   const checkOrigin = (o: string): boolean => {
     return ALLOWED_ORIGINS.some(allowed => {
       if (allowed.includes('localhost')) return o.includes('localhost');
@@ -175,14 +181,15 @@ export async function handleAnimeKaiRequest(request: Request, env: Env): Promise
     }, 403, origin);
   }
 
-  // Get target URL
+  // Get target URL and optional User-Agent
   const targetUrl = url.searchParams.get('url');
   if (!targetUrl) {
     return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
   }
 
   const decodedUrl = decodeURIComponent(targetUrl);
-  logger.info('AnimeKai proxy request', { url: decodedUrl.substring(0, 100) });
+  const customUserAgent = url.searchParams.get('ua');
+  logger.info('AnimeKai proxy request', { url: decodedUrl.substring(0, 100), ua: customUserAgent ? 'custom' : 'default' });
 
   // Check if RPI proxy is configured
   if (!env.RPI_PROXY_URL || !env.RPI_PROXY_KEY) {
@@ -204,6 +211,11 @@ export async function handleAnimeKaiRequest(request: Request, env: Env): Promise
       url: decodedUrl,
       key: env.RPI_PROXY_KEY,
     });
+    
+    // Pass custom User-Agent if provided (important for enc-dec.app decryption)
+    if (customUserAgent) {
+      rpiParams.set('ua', customUserAgent);
+    }
     
     const rpiUrl = `${rpiBaseUrl}/animekai?${rpiParams.toString()}`;
     logger.debug('Forwarding to RPI proxy', { rpiUrl: rpiUrl.substring(0, 80) });

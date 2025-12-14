@@ -62,6 +62,11 @@ const ARM_API = 'https://arm.haglund.dev/api/v2/ids';
  * Used for MegaUp CDN which blocks datacenter IPs
  * 
  * Flow: Vercel → Cloudflare Worker (/animekai) → RPI Proxy → MegaUp CDN
+ * 
+ * IMPORTANT: The User-Agent MUST be consistent across the entire chain:
+ * - RPI proxy uses it to fetch from MegaUp
+ * - enc-dec.app uses it to decrypt the response
+ * If they don't match, decryption will fail!
  */
 async function fetchViaCfAnimeKaiProxy(
   targetUrl: string,
@@ -80,18 +85,14 @@ async function fetchViaCfAnimeKaiProxy(
   }
 
   // Strip /stream suffix if present and use /animekai route
+  // Pass the User-Agent so RPI proxy uses the same one we'll use for decryption
   const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
-  const proxyUrl = `${baseUrl}/animekai?url=${encodeURIComponent(targetUrl)}`;
+  const proxyUrl = `${baseUrl}/animekai?url=${encodeURIComponent(targetUrl)}&ua=${encodeURIComponent(HEADERS['User-Agent'])}`;
 
   console.log(`[AnimeKai] Fetching via CF→RPI proxy: ${targetUrl.substring(0, 60)}...`);
 
-  // IMPORTANT: Include Origin/Referer headers for Cloudflare Worker anti-leech check
-  // Server-side fetch doesn't include these by default
+  // Server-side requests (no Origin/Referer) are now allowed by the CF Worker
   return fetch(proxyUrl, {
-    headers: {
-      'Origin': 'https://tv.vynx.cc',
-      'Referer': 'https://tv.vynx.cc/',
-    },
     signal: AbortSignal.timeout(options?.timeout || 15000),
   });
 }
@@ -649,7 +650,16 @@ async function decryptMegaUpEmbed(embedUrl: string): Promise<string | null> {
     const mediaResponse = await fetchViaCfAnimeKaiProxy(mediaUrl, { timeout: 15000 });
     
     if (!mediaResponse.ok) {
-      console.log(`[AnimeKai] MegaUp media request failed: HTTP ${mediaResponse.status}`);
+      // Log the error details from the response body
+      let errorDetails = '';
+      try {
+        const errorBody = await mediaResponse.text();
+        errorDetails = errorBody.substring(0, 500);
+        console.log(`[AnimeKai] MegaUp media request failed: HTTP ${mediaResponse.status}`);
+        console.log(`[AnimeKai] Error details: ${errorDetails}`);
+      } catch {
+        console.log(`[AnimeKai] MegaUp media request failed: HTTP ${mediaResponse.status}`);
+      }
       // Fallback to manual extraction
       return await extractMegaUpSourcesManually(embedUrl);
     }
@@ -778,7 +788,16 @@ async function extractMegaUpSourcesManually(embedUrl: string): Promise<string | 
     const response = await fetchViaCfAnimeKaiProxy(embedUrl, { timeout: 15000 });
     
     if (!response.ok) {
-      console.log(`[AnimeKai] Failed to fetch MegaUp embed: HTTP ${response.status}`);
+      // Log the error details from the response body
+      let errorDetails = '';
+      try {
+        const errorBody = await response.text();
+        errorDetails = errorBody.substring(0, 500);
+        console.log(`[AnimeKai] Failed to fetch MegaUp embed: HTTP ${response.status}`);
+        console.log(`[AnimeKai] Error details: ${errorDetails}`);
+      } catch {
+        console.log(`[AnimeKai] Failed to fetch MegaUp embed: HTTP ${response.status}`);
+      }
       return null;
     }
     

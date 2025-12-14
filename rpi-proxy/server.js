@@ -400,8 +400,11 @@ function proxyIPTVStream(targetUrl, mac, token, res, redirectCount = 0) {
  *   3. Requests with Referer header (sometimes)
  * 
  * This proxy fetches WITHOUT Origin/Referer headers from a residential IP.
+ * 
+ * IMPORTANT: The User-Agent MUST be consistent with what's sent to enc-dec.app
+ * for decryption. Pass ?ua=<user-agent> to use a custom User-Agent.
  */
-function proxyAnimeKaiStream(targetUrl, res) {
+function proxyAnimeKaiStream(targetUrl, customUserAgent, res) {
   // Check cache (short TTL for m3u8, longer for segments)
   const cached = getCached(targetUrl);
   if (cached) {
@@ -420,13 +423,17 @@ function proxyAnimeKaiStream(targetUrl, res) {
   const client = url.protocol === 'https:' ? https : http;
   
   // CRITICAL: Do NOT send Origin or Referer headers - MegaUp blocks them
+  // IMPORTANT: User-Agent MUST match what's sent to enc-dec.app for decryption
+  const defaultUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
+  const userAgent = customUserAgent || defaultUserAgent;
+  
   const options = {
     hostname: url.hostname,
     port: url.port || (url.protocol === 'https:' ? 443 : 80),
     path: url.pathname + url.search,
     method: 'GET',
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'User-Agent': userAgent,
       'Accept': '*/*',
       'Accept-Encoding': 'identity', // Don't request compression for video
       'Connection': 'keep-alive',
@@ -453,8 +460,8 @@ function proxyAnimeKaiStream(targetUrl, res) {
         ? redirectUrl 
         : new URL(redirectUrl, targetUrl).toString();
       
-      // Follow the redirect
-      proxyAnimeKaiStream(absoluteUrl, res);
+      // Follow the redirect (preserve custom User-Agent)
+      proxyAnimeKaiStream(absoluteUrl, customUserAgent, res);
       return;
     }
     
@@ -696,6 +703,7 @@ const server = http.createServer((req, res) => {
   // MegaUp blocks datacenter IPs and requests with Origin/Referer headers
   if (reqUrl.pathname === '/animekai') {
     const targetUrl = reqUrl.searchParams.get('url');
+    const customUserAgent = reqUrl.searchParams.get('ua');
     
     if (!targetUrl) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -704,7 +712,8 @@ const server = http.createServer((req, res) => {
 
     try {
       const decoded = decodeURIComponent(targetUrl);
-      proxyAnimeKaiStream(decoded, res);
+      const decodedUa = customUserAgent ? decodeURIComponent(customUserAgent) : null;
+      proxyAnimeKaiStream(decoded, decodedUa, res);
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ error: 'Invalid URL' }));
