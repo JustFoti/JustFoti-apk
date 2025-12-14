@@ -589,6 +589,68 @@ blockquote cite {
   text-decoration: underline;
 }
 
+/* Feedback Highlights */
+.feedback-highlights {
+  margin: 24px 0;
+  font-family: -apple-system, sans-serif;
+}
+
+.feedback-item {
+  display: flex;
+  gap: 18px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.feedback-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.1);
+  border-radius: 10px;
+}
+
+.feedback-item h4 {
+  margin-bottom: 6px;
+  font-size: 1rem;
+  color: #a5b4fc;
+}
+
+.feedback-item p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+/* Feature Details */
+.feature-detail {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 18px;
+  margin-bottom: 14px;
+  font-family: -apple-system, sans-serif;
+}
+
+.feature-detail h4 {
+  color: #a5b4fc;
+  margin-bottom: 8px;
+  font-size: 0.95rem;
+}
+
+.feature-detail p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
 /* Responsive */
 @media (max-width: 1000px) {
   .about-nav {
@@ -621,5 +683,16 @@ blockquote cite {
   
   .phase-num {
     font-size: 1.2rem;
+  }
+  
+  .feedback-item {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .feedback-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1.4rem;
   }
 }

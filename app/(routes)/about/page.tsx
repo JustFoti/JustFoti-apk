@@ -7,11 +7,13 @@ import './about.css';
 const sections = [
   { id: 'abstract', title: 'Abstract' },
   { id: 'introduction', title: 'Introduction' },
+  { id: 'reception', title: 'Public Reception' },
   { id: 'literature', title: 'Literature Review' },
   { id: 'methodology', title: 'Methodology' },
   { id: 'architecture', title: 'System Architecture' },
   { id: 'heist', title: 'The Heist' },
   { id: 'implementation', title: 'Implementation' },
+  { id: 'features', title: 'Feature Evolution' },
   { id: 'results', title: 'Results & Analysis' },
   { id: 'discussion', title: 'Discussion' },
   { id: 'future', title: 'Future Work' },
@@ -126,13 +128,21 @@ export default function AboutPage() {
                 <strong>Update (December 2025):</strong> Since initial publication, the platform has 
                 undergone significant evolution. Legacy providers like 2Embed and MoviesAPI have been 
                 deprecated in favor of more reliable sources: Vidsrc and Videasy now form the backbone 
-                of our extraction pipeline. Live TV support has been added. Anime streaming via AnimeKai 
-                integration is now available. The cat-and-mouse game continues.
+                of our extraction pipeline. AnimeKai integration provides dedicated anime streaming with 
+                sub/dub toggle. The public response has been overwhelming—thousands of users, viral Reddit 
+                posts, and the delicious irony of pirate sites updating their obfuscation in response to 
+                our work. The cat-and-mouse game continues, and we are winning.
+              </p>
+              <p>
+                <strong>December 2025 Feature Drop:</strong> Chromecast &amp; AirPlay casting, full TV 
+                remote navigation, 29-language subtitle support with sync adjustment, pinch-to-zoom on 
+                mobile, continue watching with progress tracking, auto-play next episode, and region 
+                filtering. The platform that was &quot;good enough&quot; is now genuinely good.
               </p>
               <p>
                 <strong>Keywords:</strong> Streaming Architecture, Reverse Engineering, Ethical Design, 
                 Obfuscation Analysis, JavaScript Archaeology, Sleep Deprivation, Monster Energy Dependency,
-                Vidsrc, Videasy, AnimeKai, Live TV, Provider Migration
+                Vidsrc, Videasy, AnimeKai, Chromecast, AirPlay, TV Navigation, OpenSubtitles, Provider Migration
               </p>
             </div>
           </section>
@@ -233,12 +243,154 @@ export default function AboutPage() {
                 <strong>Economic Analysis:</strong> Evidence that the &quot;we need aggressive 
                 monetization to survive&quot; argument is, to use the technical term, complete nonsense.
               </li>
+              <li>
+                <strong>Public Validation:</strong> Thousands of users proving that people will choose 
+                the ethical option when it actually exists and works properly.
+              </li>
             </ul>
+          </section>
+
+          {/* Public Reception */}
+          <section id="reception">
+            <h2>2. Public Reception: The Internet Responds</h2>
+            
+            <h3>2.1 The Reddit Effect</h3>
+            <p className="lead">
+              We posted about Flyx on Reddit expecting maybe a few dozen people to care. We were 
+              wrong. Spectacularly, wonderfully wrong.
+            </p>
+            <p>
+              The post went viral. Thousands of upvotes. Hundreds of comments. People sharing their 
+              own horror stories about pirate streaming sites. Developers asking how we cracked 
+              specific obfuscation schemes. Users thanking us for building something that does not 
+              make them want to throw their laptop out a window.
+            </p>
+            <p>
+              The response validated everything we suspected: people are desperate for alternatives 
+              to the exploitative garbage that dominates the pirate streaming ecosystem. They are 
+              not choosing malware-riddled sites because they like malware. They are choosing them 
+              because they thought there was no other option.
+            </p>
+            <p>
+              Now there is.
+            </p>
+
+            <h3>2.2 The Feedback Loop</h3>
+            <p>
+              With users came feedback. Lots of feedback. Feature requests, bug reports, suggestions, 
+              and the occasional message from someone who just wanted to say thanks. We listened to 
+              all of it.
+            </p>
+            <div className="feedback-highlights">
+              <div className="feedback-item">
+                <span className="feedback-icon">📺</span>
+                <div>
+                  <h4>&quot;Can I cast this to my TV?&quot;</h4>
+                  <p>Asked approximately 847 times. We added Chromecast and AirPlay support. You can 
+                  now watch on your TV without HDMI cables like it&apos;s 2010.</p>
+                </div>
+              </div>
+              <div className="feedback-item">
+                <span className="feedback-icon">📝</span>
+                <div>
+                  <h4>&quot;The subtitles are out of sync&quot;</h4>
+                  <p>A universal complaint about streaming. We added subtitle sync adjustment—hit G/H 
+                  to shift timing by 0.5 seconds. Plus 29 languages via OpenSubtitles with quality 
+                  scoring to auto-pick the best version.</p>
+                </div>
+              </div>
+              <div className="feedback-item">
+                <span className="feedback-icon">🎮</span>
+                <div>
+                  <h4>&quot;I want to use this on my Fire TV&quot;</h4>
+                  <p>Built full spatial navigation from scratch. Arrow keys navigate everything. 
+                  Works on any device with a D-pad. The entire UI is now TV-friendly.</p>
+                </div>
+              </div>
+              <div className="feedback-item">
+                <span className="feedback-icon">🎌</span>
+                <div>
+                  <h4>&quot;Anime support when?&quot;</h4>
+                  <p>AnimeKai integration with sub/dub toggle. One click to switch between Japanese 
+                  audio with subtitles and English dub. Remembers your preference.</p>
+                </div>
+              </div>
+            </div>
+
+            <h3>2.3 The Pirate Sites Notice</h3>
+            <p>
+              Here is where it gets interesting. Some of the pirate sites we reverse engineered have 
+              noticed Flyx. A few have started changing their obfuscation. One even added a new layer 
+              of protection specifically designed to break our extraction.
+            </p>
+            <p>
+              Let that sink in: they are spending engineering resources to protect their ability to 
+              serve you malware. Not to protect content they do not own. To protect their ad revenue 
+              from people like us who want to give users the content without the cancer.
+            </p>
+            <blockquote>
+              &quot;The fact that they are updating their obfuscation in response to us is the 
+              highest compliment they could pay. It means we are hurting their bottom line. Good.&quot;
+              <cite>- Field Notes, December 2025</cite>
+            </blockquote>
+            <p>
+              We cracked their new protections within days. The cat-and-mouse game continues, and 
+              we are winning.
+            </p>
+
+            <h3>2.4 The Unexpected Alliance</h3>
+            <p>
+              And then something truly bizarre happened.
+            </p>
+            <p>
+              One of the site owners we cracked reached out. Not with a cease and desist. Not with 
+              threats. With <em>information about their competitors</em>.
+            </p>
+            <p>
+              Let that sink in. A pirate site operator, whose obfuscation we had just broken, decided 
+              that helping us crack their competition was more valuable than fighting us. They offered 
+              up details about how rival sites structure their protection, where their weaknesses are, 
+              and how to bypass their defenses.
+            </p>
+            <blockquote>
+              &quot;There is no honor among thieves. But apparently there is spite, and spite is 
+              just as useful.&quot;
+              <cite>- Field Notes, December 2025</cite>
+            </blockquote>
+            <p>
+              The pirate streaming ecosystem is eating itself. They are so busy competing for ad 
+              revenue that they will sabotage each other to get ahead. Meanwhile, we are over here 
+              building something that does not exploit anyone, and they are handing us the keys to 
+              their rivals&apos; kingdoms.
+            </p>
+            <p>
+              You cannot make this stuff up.
+            </p>
+
+            <h3>2.4 The Numbers</h3>
+            <div className="stats-grid">
+              <div className="stat">
+                <span className="stat-value">10K+</span>
+                <span className="stat-label">Active users</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">500K+</span>
+                <span className="stat-label">Streams served</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">0</span>
+                <span className="stat-label">Ads shown</span>
+              </div>
+              <div className="stat">
+                <span className="stat-value">0</span>
+                <span className="stat-label">Users tracked</span>
+              </div>
+            </div>
           </section>
 
           {/* Literature Review */}
           <section id="literature">
-            <h2>2. Literature Review</h2>
+            <h2>3. Literature Review</h2>
             
             <h3>2.1 The Exploitation Economy</h3>
             <p>
@@ -322,7 +474,7 @@ export default function AboutPage() {
 
           {/* Methodology */}
           <section id="methodology">
-            <h2>3. Methodology</h2>
+            <h2>4. Methodology</h2>
             
             <h3>3.1 Research Design</h3>
             <p>
@@ -439,7 +591,7 @@ export default function AboutPage() {
 
           {/* Architecture */}
           <section id="architecture">
-            <h2>4. System Architecture</h2>
+            <h2>5. System Architecture</h2>
             
             <h3>4.1 Architectural Philosophy</h3>
             <p>
@@ -521,7 +673,7 @@ export default function AboutPage() {
 
           {/* The Heist */}
           <section id="heist">
-            <h2>5. The Heist: Reverse Engineering Stream Providers</h2>
+            <h2>6. The Heist: Reverse Engineering Stream Providers</h2>
             
             <h3>5.1 The Irony</h3>
             <p className="lead">
@@ -717,7 +869,7 @@ export default function AboutPage() {
 
           {/* Implementation */}
           <section id="implementation">
-            <h2>6. Implementation Details</h2>
+            <h2>7. Implementation Details</h2>
             
             <h3>6.1 The Streaming Pipeline</h3>
             <p>
@@ -774,9 +926,159 @@ export default function AboutPage() {
             </div>
           </section>
 
+          {/* Feature Evolution */}
+          <section id="features">
+            <h2>8. Feature Evolution: December 2025</h2>
+            
+            <h3>8.1 The 10-Day Sprint</h3>
+            <p>
+              After the initial public release, we went into overdrive. Ten days of intense development, 
+              driven by user feedback and our own frustration with missing features. The result was a 
+              platform that went from &quot;functional proof of concept&quot; to &quot;actually 
+              competitive with commercial services.&quot;
+            </p>
+
+            <h3>8.2 Casting: Finally, Your TV</h3>
+            <p>
+              The most requested feature by far. People wanted to watch on their TVs without HDMI 
+              cables, and honestly, so did we.
+            </p>
+            <p>
+              We implemented casting using native browser APIs—Remote Playback API for Chromecast 
+              (Chrome/Edge) and WebKit&apos;s playback target picker for AirPlay (Safari/iOS). No 
+              third-party SDKs, no bloat, just clean integration that works.
+            </p>
+            <p>
+              Hit the cast button, pick your device, and you are watching on the big screen. The 
+              implementation was surprisingly clean once we stopped trying to use deprecated Google 
+              Cast SDKs and embraced the modern standards.
+            </p>
+
+            <h3>8.3 TV Navigation: The Couch Experience</h3>
+            <p>
+              Building spatial navigation for a web app is harder than it sounds. &quot;Which element 
+              is above this one?&quot; seems simple until you have a responsive grid layout where 
+              elements wrap differently at different screen sizes.
+            </p>
+            <p>
+              We built a custom navigation system from scratch:
+            </p>
+            <ul>
+              <li>Arrow keys navigate the entire UI</li>
+              <li>Enter/Space to select</li>
+              <li>Automatic scrolling to keep focused elements visible</li>
+              <li>Group-aware navigation (left/right within rows, up/down between sections)</li>
+              <li>Works on Fire TV, Android TV, or any device with a D-pad</li>
+            </ul>
+            <p>
+              The player has its own keyboard controls too—seek with arrow keys, volume with up/down, 
+              fullscreen with F, mute with M. Everything you need without touching a mouse.
+            </p>
+
+            <h3>8.4 Subtitles: 29 Languages and Actually Usable</h3>
+            <p>
+              Subtitles on pirate streaming sites are usually an afterthought. Wrong language, out 
+              of sync, hardcoded into the video, or just missing entirely. We fixed all of it.
+            </p>
+            <div className="feature-detail">
+              <h4>OpenSubtitles Integration</h4>
+              <p>
+                29 languages with quality scoring. The system automatically picks the highest-rated 
+                subtitle based on download count and user ratings. No more scrolling through 47 
+                versions of the same subtitle trying to find one that is not garbage.
+              </p>
+            </div>
+            <div className="feature-detail">
+              <h4>Subtitle Sync Adjustment</h4>
+              <p>
+                This was the feature that made us want to throw our keyboard during development. 
+                Subs out of sync? Hit G to delay by 0.5 seconds, H to advance. Keep tapping until 
+                it lines up. Reset button to go back to original timing.
+              </p>
+            </div>
+            <div className="feature-detail">
+              <h4>Custom Upload</h4>
+              <p>
+                Drop in your own .SRT or .VTT files when the built-in subs are not good enough. 
+                Perfect for obscure content or when you have a better version.
+              </p>
+            </div>
+            <div className="feature-detail">
+              <h4>Style Customization</h4>
+              <p>
+                Font size (50% to 200%), background opacity, text color, vertical position. All 
+                preferences saved locally. Make them look however you want.
+              </p>
+            </div>
+
+            <h3>8.5 AnimeKai: Anime Done Right</h3>
+            <p>
+              Anime fans have suffered long enough. The dedicated anime streaming sites are somehow 
+              even worse than the general pirate sites—more ads, more pop-ups, more malware, and 
+              players that buffer every 30 seconds.
+            </p>
+            <p>
+              AnimeKai integration gives anime content its own dedicated provider with features 
+              that actually matter:
+            </p>
+            <ul>
+              <li><strong>Sub/Dub Toggle:</strong> One click to switch between Japanese audio with 
+              subtitles and English dub. No hunting through server lists.</li>
+              <li><strong>Preference Memory:</strong> If you are a dub person, it remembers and 
+              always loads dubs first. Same for sub preference.</li>
+              <li><strong>Multiple Servers:</strong> Mega, Yuki, and others with automatic fallback.</li>
+              <li><strong>Auto-Detection:</strong> If TMDB says it is Japanese animation, you get 
+              AnimeKai automatically. No manual switching.</li>
+            </ul>
+
+            <h3>8.6 Mobile: Pinch-to-Zoom</h3>
+            <p>
+              Mobile users wanted to crop out black bars on ultrawide content. Fair request.
+            </p>
+            <ul>
+              <li>Double-tap for 2x zoom</li>
+              <li>Pinch to zoom up to 4x</li>
+              <li>Single tap to pause/play</li>
+              <li>Smooth gesture handling that does not fight with the browser</li>
+            </ul>
+            <p>
+              The touch event math was rewritten three times before it stopped feeling janky. Worth it.
+            </p>
+
+            <h3>8.7 Continue Watching</h3>
+            <p>
+              The homepage now shows your in-progress content with progress bars. Click and you are 
+              right back where you left off.
+            </p>
+            <ul>
+              <li>Works for movies and TV shows</li>
+              <li>Full episode tracking (S2E7, etc.)</li>
+              <li>Filters out completed content and accidental clicks (less than 2% progress)</li>
+              <li>All stored locally—no accounts, no tracking</li>
+            </ul>
+
+            <h3>8.8 Auto-Play Next Episode</h3>
+            <p>
+              For the binge watchers who do not want to lift a finger between episodes:
+            </p>
+            <ul>
+              <li>Countdown timer at the end of episodes</li>
+              <li>Skip button if you are impatient</li>
+              <li>Configurable countdown time (5-30 seconds)</li>
+              <li>Can disable it entirely if you hate it</li>
+            </ul>
+
+            <h3>8.9 Region Filter</h3>
+            <p>
+              Filter content by country. 35+ regions—US, UK, Korea, Japan, etc. See what is trending 
+              in specific markets. Useful for finding content that is popular somewhere but does not 
+              show up in global trending.
+            </p>
+          </section>
+
           {/* Results */}
           <section id="results">
-            <h2>7. Results &amp; Analysis</h2>
+            <h2>9. Results &amp; Analysis</h2>
             
             <h3>7.1 Primary Findings</h3>
             <p>
@@ -833,7 +1135,7 @@ export default function AboutPage() {
 
           {/* Discussion */}
           <section id="discussion">
-            <h2>8. Discussion</h2>
+            <h2>10. Discussion</h2>
             
             <h3>8.1 Implications</h3>
             <p>
@@ -884,13 +1186,13 @@ export default function AboutPage() {
 
           {/* Future Work */}
           <section id="future">
-            <h2>9. Future Work</h2>
+            <h2>11. Future Work</h2>
             <p>
               Flyx is not done. It works, but &quot;works&quot; is a low bar. Here is what we have 
               accomplished since initial release, and what remains on the roadmap:
             </p>
             
-            <h3>9.1 Completed Since Initial Release</h3>
+            <h3>11.1 Completed Since Initial Release</h3>
             <ul>
               <li><strong>Provider Migration:</strong> Successfully transitioned from 2Embed and 
               MoviesAPI to Vidsrc and Videasy as primary sources. Extraction reliability improved 
@@ -898,35 +1200,66 @@ export default function AboutPage() {
               <li><strong>Live TV Support:</strong> Added live television streaming with channel 
               guides and real-time playback via mpegts.js integration.</li>
               <li><strong>Anime Integration:</strong> AnimeKai provider added for dedicated anime 
-              streaming with episode tracking and subtitle support.</li>
+              streaming with sub/dub toggle and preference memory.</li>
               <li><strong>Admin Dashboard:</strong> Real-time analytics, user activity monitoring, 
               and system health metrics for platform management.</li>
               <li><strong>Region Selection:</strong> Users can now select their preferred content 
-              region for localized results.</li>
+              region for localized results across 35+ countries.</li>
             </ul>
 
-            <h3>9.2 Still on the Roadmap</h3>
+            <h3>11.2 December 2025 Feature Drop</h3>
+            <ul>
+              <li><strong>Chromecast &amp; AirPlay:</strong> Cast to your TV using native browser 
+              APIs. No third-party SDKs, just clean integration.</li>
+              <li><strong>TV Remote Navigation:</strong> Full spatial navigation built from scratch. 
+              Arrow keys navigate everything. Works on Fire TV, Android TV, any D-pad device.</li>
+              <li><strong>29-Language Subtitles:</strong> OpenSubtitles integration with quality 
+              scoring to auto-pick the best version. Upload your own .SRT/.VTT files.</li>
+              <li><strong>Subtitle Sync:</strong> Hit G/H to adjust timing by 0.5 seconds. No more 
+              watching with dialogue that is 2 seconds behind.</li>
+              <li><strong>Subtitle Customization:</strong> Font size, background opacity, text color, 
+              vertical position. All preferences saved locally.</li>
+              <li><strong>Pinch-to-Zoom:</strong> Double-tap for 2x, pinch up to 4x. Crop out black 
+              bars on mobile.</li>
+              <li><strong>Continue Watching:</strong> Homepage shows in-progress content with progress 
+              bars. Click to resume exactly where you left off.</li>
+              <li><strong>Auto-Play Next Episode:</strong> Countdown timer at end of episodes with 
+              configurable duration. Skip button for the impatient.</li>
+            </ul>
+
+            <h3>11.3 Still on the Roadmap</h3>
             <ul>
               <li><strong>Smart Recommendations:</strong> Privacy-preserving personalization that 
               learns what you like without tracking who you are.</li>
               <li><strong>Progressive Web App:</strong> Offline capability and app-like experience 
               without going through app stores that would definitely reject us.</li>
-              <li><strong>Internationalization:</strong> Multiple languages, RTL support, regional 
-              content preferences.</li>
-              <li><strong>Accessibility Improvements:</strong> Comprehensive WCAG compliance, screen 
-              reader support, keyboard navigation everywhere.</li>
+              <li><strong>Internationalization:</strong> Multiple UI languages, RTL support for 
+              Arabic/Hebrew users.</li>
               <li><strong>Provider Redundancy:</strong> Continuing to expand backup providers for 
               when primary sources inevitably break.</li>
+              <li><strong>Watch Parties:</strong> Synchronized viewing with friends. Because watching 
+              alone is sometimes sad.</li>
             </ul>
           </section>
 
           {/* Conclusion */}
           <section id="conclusion">
-            <h2>10. Conclusion</h2>
+            <h2>12. Conclusion</h2>
             <p className="lead">
               We built a streaming platform. It works. It does not assault users with pop-ups, mine 
               cryptocurrency on their CPUs, or track them across the web. And we did it alone, 
               part-time, with no budget, over seven months of evenings and weekends (and counting).
+            </p>
+            <p>
+              Then thousands of people started using it. They sent feedback. They requested features. 
+              They shared their own horror stories about the pirate streaming ecosystem. And we 
+              listened. Ten days of intense development later, the platform went from &quot;functional 
+              proof of concept&quot; to something that genuinely competes with commercial services.
+            </p>
+            <p>
+              Chromecast. AirPlay. TV remote navigation. 29-language subtitles with sync adjustment. 
+              Anime with sub/dub toggle. Continue watching. Auto-play next episode. All built by one 
+              person, still with no budget, still without exploiting a single user.
             </p>
             <p>
               That is the point. Not that we are special (we are not). The point is that if one person 
@@ -939,6 +1272,11 @@ export default function AboutPage() {
               is not necessary. They are choices. And those choices tell you everything you need to 
               know about the people making them.&quot;
             </blockquote>
+            <p>
+              The pirate sites have noticed. Some are updating their obfuscation. One even offered 
+              us intel on their competitors. The ecosystem is eating itself while we keep building 
+              something better.
+            </p>
             <p>
               To users: you deserve better. You do not have to accept malware as the price of free 
               content. Alternatives can exist.
@@ -962,7 +1300,7 @@ export default function AboutPage() {
 
           {/* Legal Framework */}
           <section id="legal">
-            <h2>11. Legal Framework</h2>
+            <h2>13. Legal Framework</h2>
             
             <div className="legal-notice">
               <p>
@@ -1249,7 +1587,7 @@ export default function AboutPage() {
 
           {/* References */}
           <section id="references">
-            <h2>12. References</h2>
+            <h2>14. References</h2>
             <div className="references">
               <p>[1] Rafique, M. Z., Van Goethem, T., Joosen, W., Huygens, C., &amp; Nikiforakis, N. 
               (2016). It&apos;s free for a reason: Exploring the ecosystem of free live streaming 
