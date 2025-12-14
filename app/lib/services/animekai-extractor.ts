@@ -346,6 +346,50 @@ async function getTmdbAnimeInfo(tmdbId: string, type: 'movie' | 'tv'): Promise<{
 }
 
 /**
+ * Get season name from TMDB
+ * This is crucial for anime like Bleach where Season 2 is "Thousand-Year Blood War"
+ */
+async function getTmdbSeasonName(tmdbId: string, seasonNumber: number): Promise<string | null> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+    if (!apiKey) return null;
+
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${apiKey}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      next: { revalidate: 86400 },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    
+    // TMDB returns season name in the "name" field
+    // e.g., "Thousand-Year Blood War" for Bleach Season 2
+    const seasonName = data.name;
+    
+    // Skip generic names like "Season 2", "Specials", etc.
+    if (seasonName && 
+        !seasonName.toLowerCase().startsWith('season ') && 
+        !seasonName.toLowerCase().startsWith('specials') &&
+        seasonName.toLowerCase() !== `season ${seasonNumber}`) {
+      console.log(`[AnimeKai] TMDB Season ${seasonNumber} name: "${seasonName}"`);
+      return seasonName;
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Helper to normalize title for comparison
  */
 function normalizeTitle(title: string): string {
@@ -1115,13 +1159,32 @@ export async function extractAnimeKaiStreams(
     // IMPORTANT: Anime sites typically list each season as a SEPARATE anime entry
     // So we need to search for "Title Season X" for seasons > 1
     const seasonNum = season || 1;
-    let searchTitle = tmdbInfo?.title || '';
+    const baseTitle = tmdbInfo?.title || '';
     
-    // For seasons > 1, try searching with season number appended
-    // Common patterns: "Title II", "Title Season 2", "Title 2nd Season", "Title Part 2"
-    const seasonSearchVariants = getSeasonSearchVariants(searchTitle, seasonNum);
+    // For seasons > 1, get the TMDB season name first (e.g., "Thousand-Year Blood War" for Bleach S2)
+    let tmdbSeasonName: string | null = null;
+    if (seasonNum > 1 && type === 'tv') {
+      tmdbSeasonName = await getTmdbSeasonName(tmdbId, seasonNum);
+    }
     
-    console.log(`[AnimeKai] Searching with: title="${searchTitle}", MAL ID=${animeIds.mal_id}, season=${seasonNum}`);
+    // Build search variants - prioritize TMDB season name if available
+    const seasonSearchVariants: string[] = [];
+    
+    if (tmdbSeasonName) {
+      // Try the full title with season name: "Bleach: Thousand-Year Blood War"
+      seasonSearchVariants.push(`${baseTitle}: ${tmdbSeasonName}`);
+      seasonSearchVariants.push(`${baseTitle} ${tmdbSeasonName}`);
+      // Also try just the season name alone (some anime are listed this way)
+      seasonSearchVariants.push(tmdbSeasonName);
+    }
+    
+    // Add standard season variants
+    seasonSearchVariants.push(...getSeasonSearchVariants(baseTitle, seasonNum));
+    
+    console.log(`[AnimeKai] Searching with: title="${baseTitle}", MAL ID=${animeIds.mal_id}, season=${seasonNum}`);
+    if (tmdbSeasonName) {
+      console.log(`[AnimeKai] TMDB Season name: "${tmdbSeasonName}"`);
+    }
     if (seasonSearchVariants.length > 0) {
       console.log(`[AnimeKai] Season search variants:`, seasonSearchVariants);
     }
@@ -1147,11 +1210,11 @@ export async function extractAnimeKaiStreams(
       // (in case the anime uses absolute episode numbering)
       if (!animeResult) {
         console.log(`[AnimeKai] No season-specific entry found, trying base title...`);
-        animeResult = await searchAnimeKai(searchTitle, animeIds.mal_id);
+        animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
       }
     } else {
       // Season 1 or no season specified - search normally
-      animeResult = await searchAnimeKai(searchTitle, animeIds.mal_id);
+      animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
     }
 
     if (!animeResult) {
@@ -1176,7 +1239,7 @@ export async function extractAnimeKaiStreams(
     // If so, we should use season 1 and the episode number directly
     // because the season-specific anime is a separate entry with its own episode numbering
     let foundSeasonSpecificEntry = false;
-    if (seasonNum > 1 && animeResult.title !== tmdbInfo?.title) {
+    if (seasonNum > 1 && animeResult.title !== baseTitle) {
       // Check if the found title contains season indicators
       const seasonIndicators = [
         `season ${seasonNum}`,
@@ -1188,8 +1251,22 @@ export async function extractAnimeKaiStreams(
         'shippuden', // Naruto
         'brotherhood', // FMA
       ];
+      
+      // Also add the TMDB season name if available
+      if (tmdbSeasonName) {
+        seasonIndicators.push(tmdbSeasonName.toLowerCase());
+      }
+      
       const lowerTitle = animeResult.title.toLowerCase();
       foundSeasonSpecificEntry = seasonIndicators.some(indicator => lowerTitle.includes(indicator));
+      
+      // Also check if the found title is different from the base title
+      // This catches cases where the anime is listed under a completely different name
+      if (!foundSeasonSpecificEntry && animeResult.title.toLowerCase() !== baseTitle.toLowerCase()) {
+        // If we searched with season variants and found something different, it's likely season-specific
+        foundSeasonSpecificEntry = true;
+        console.log(`[AnimeKai] Found different title "${animeResult.title}" vs base "${baseTitle}" - treating as season-specific`);
+      }
       
       if (foundSeasonSpecificEntry) {
         console.log(`[AnimeKai] ✓ Found season-specific entry "${animeResult.title}" - will use episode ${episode || 1} directly`);
@@ -1450,17 +1527,33 @@ export async function fetchAnimeKaiSourceByName(
     // IMPORTANT: Anime sites list each season as a SEPARATE anime entry
     // So for seasons > 1, we MUST try season-specific search FIRST
     const seasonNum = season || 1;
-    let searchTitle = tmdbInfo?.title || '';
+    const baseTitle = tmdbInfo?.title || '';
+    
+    // For seasons > 1, get the TMDB season name first
+    let tmdbSeasonName: string | null = null;
+    if (seasonNum > 1 && type === 'tv') {
+      tmdbSeasonName = await getTmdbSeasonName(tmdbId, seasonNum);
+    }
+    
+    // Build search variants - prioritize TMDB season name if available
+    const seasonVariants: string[] = [];
+    if (tmdbSeasonName) {
+      seasonVariants.push(`${baseTitle}: ${tmdbSeasonName}`);
+      seasonVariants.push(`${baseTitle} ${tmdbSeasonName}`);
+      seasonVariants.push(tmdbSeasonName);
+    }
+    seasonVariants.push(...getSeasonSearchVariants(baseTitle, seasonNum));
     
     let animeResult: { content_id: string; title: string; episodes?: ParsedEpisodes } | null = null;
     
     // For seasons > 1, ALWAYS try season-specific search FIRST
     // This is critical because anime sites list each season as a separate entry
     // e.g., "Record of Ragnarok III" is a different entry from "Record of Ragnarok"
-    if (seasonNum > 1 && searchTitle) {
-      const seasonVariants = getSeasonSearchVariants(searchTitle, seasonNum);
-      
+    if (seasonNum > 1 && baseTitle && seasonVariants.length > 0) {
       console.log(`[AnimeKai] Season ${seasonNum} requested - trying season-specific search first...`);
+      if (tmdbSeasonName) {
+        console.log(`[AnimeKai] TMDB Season name: "${tmdbSeasonName}"`);
+      }
       
       for (const variant of seasonVariants) {
         console.log(`[AnimeKai] Trying: "${variant}"`);
@@ -1476,11 +1569,11 @@ export async function fetchAnimeKaiSourceByName(
       // (in case the anime uses absolute episode numbering)
       if (!animeResult) {
         console.log(`[AnimeKai] No season-specific entry found, trying base title...`);
-        animeResult = await searchAnimeKai(searchTitle, animeIds.mal_id);
+        animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
       }
     } else {
       // Season 1 or no season specified - search normally
-      animeResult = await searchAnimeKai(searchTitle, animeIds.mal_id);
+      animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
     }
     
     if (!animeResult) {
@@ -1490,7 +1583,7 @@ export async function fetchAnimeKaiSourceByName(
     // Check if we found a season-specific entry
     // If so, we should use season 1 and the episode number directly
     let foundSeasonSpecificEntry = false;
-    if (seasonNum > 1 && animeResult.title !== tmdbInfo?.title) {
+    if (seasonNum > 1 && animeResult.title !== baseTitle) {
       const seasonIndicators = [
         `season ${seasonNum}`,
         `${seasonNum}nd season`, `${seasonNum}rd season`, `${seasonNum}th season`,
@@ -1498,8 +1591,20 @@ export async function fetchAnimeKaiSourceByName(
         toRomanNumeral(seasonNum).toLowerCase(),
         'thousand-year blood war', 'tybw', 'shippuden', 'brotherhood',
       ];
+      
+      // Also add the TMDB season name if available
+      if (tmdbSeasonName) {
+        seasonIndicators.push(tmdbSeasonName.toLowerCase());
+      }
+      
       const lowerTitle = animeResult.title.toLowerCase();
       foundSeasonSpecificEntry = seasonIndicators.some(indicator => lowerTitle.includes(indicator));
+      
+      // Also check if the found title is different from the base title
+      if (!foundSeasonSpecificEntry && animeResult.title.toLowerCase() !== baseTitle.toLowerCase()) {
+        foundSeasonSpecificEntry = true;
+        console.log(`[AnimeKai] Found different title "${animeResult.title}" vs base "${baseTitle}" - treating as season-specific`);
+      }
       
       if (foundSeasonSpecificEntry) {
         console.log(`[AnimeKai] ✓ Found season-specific entry "${animeResult.title}" - will use episode ${episode || 1} directly`);
