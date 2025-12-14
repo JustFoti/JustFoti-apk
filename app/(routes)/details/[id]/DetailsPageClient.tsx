@@ -252,11 +252,12 @@ export default function DetailsPageClient({
   }, [content?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Check if content is anime and fetch MAL data
+  // Re-fetch when season changes because different seasons may have different MAL entries
   useEffect(() => {
     if (content?.mediaType === 'tv') {
       checkAndLoadMALData();
     }
-  }, [content?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [content?.id, selectedSeason]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const checkAndLoadMALData = async () => {
     if (!content) return;
@@ -272,10 +273,37 @@ export default function DetailsPageClient({
       if (checkData.isAnime) {
         setIsAnime(true);
         
-        // Fetch MAL data
-        const title = content.title || content.name || '';
+        // For seasons > 1, we need to get the season name from TMDB
+        // e.g., Bleach Season 2 is "Thousand-Year Blood War" on TMDB
+        let searchTitle = content.title || content.name || '';
+        
+        if (selectedSeason > 1 && content.seasons) {
+          // Find the season info
+          const seasonInfo = content.seasons.find(s => s.seasonNumber === selectedSeason);
+          if (seasonInfo) {
+            // Fetch season details to get the name
+            try {
+              const seasonResponse = await fetch(
+                `/api/content/season?tvId=${content.id}&seasonNumber=${selectedSeason}`
+              );
+              if (seasonResponse.ok) {
+                const seasonDataTemp = await seasonResponse.json();
+                // TMDB season names are often like "Thousand-Year Blood War"
+                // We want to search MAL with "Bleach: Thousand-Year Blood War"
+                if (seasonDataTemp.name && seasonDataTemp.name !== `Season ${selectedSeason}`) {
+                  searchTitle = `${content.title || content.name}: ${seasonDataTemp.name}`;
+                  console.log(`[DetailsPage] Using season-specific title for MAL search: "${searchTitle}"`);
+                }
+              }
+            } catch (e) {
+              console.log('[DetailsPage] Could not fetch season name, using base title');
+            }
+          }
+        }
+        
+        // Fetch MAL data with the appropriate title
         const malResponse = await fetch(
-          `/api/content/mal-info?tmdbId=${content.id}&type=${content.mediaType}&title=${encodeURIComponent(title)}`
+          `/api/content/mal-info?tmdbId=${content.id}&type=${content.mediaType}&title=${encodeURIComponent(searchTitle)}`
         );
         const malResult = await malResponse.json();
         

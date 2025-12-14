@@ -558,7 +558,7 @@ export const tmdbService = {
   /**
    * Get TV season details with episodes
    */
-  async getSeasonDetails(tvId: string, seasonNumber: number): Promise<Season> {
+  async getSeasonDetails(tvId: string, seasonNumber: number): Promise<Season & { name?: string }> {
     const response = await tmdbRequest<any>(
       `/tv/${tvId}/season/${seasonNumber}`,
       {},
@@ -573,6 +573,7 @@ export const tmdbService = {
       seasonNumber: response.data.season_number,
       episodeCount: response.data.episodes.length,
       episodes: response.data.episodes.map(transformToEpisode),
+      name: response.data.name, // Include season name (e.g., "Thousand-Year Blood War")
     };
   },
 
