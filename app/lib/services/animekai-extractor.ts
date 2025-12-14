@@ -1176,6 +1176,12 @@ export async function extractAnimeKaiStreams(
       seasonSearchVariants.push(`${baseTitle} ${tmdbSeasonName}`);
       // Also try just the season name alone (some anime are listed this way)
       seasonSearchVariants.push(tmdbSeasonName);
+      // Try without hyphens (some databases don't use them)
+      const noHyphens = tmdbSeasonName.replace(/-/g, ' ');
+      if (noHyphens !== tmdbSeasonName) {
+        seasonSearchVariants.push(`${baseTitle} ${noHyphens}`);
+        seasonSearchVariants.push(noHyphens);
+      }
     }
     
     // Add standard season variants
@@ -1208,9 +1214,16 @@ export async function extractAnimeKaiStreams(
       
       // If no season-specific entry found, fall back to base title search
       // (in case the anime uses absolute episode numbering)
+      // NOTE: Don't use MAL ID first because it maps to the original anime, not the season
       if (!animeResult) {
-        console.log(`[AnimeKai] No season-specific entry found, trying base title...`);
-        animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
+        console.log(`[AnimeKai] No season-specific entry found, trying base title (without MAL ID)...`);
+        animeResult = await searchAnimeKai(baseTitle, null);
+        
+        // If still not found and we have a MAL ID, try with it as last resort
+        if (!animeResult && animeIds.mal_id) {
+          console.log(`[AnimeKai] Still not found, trying with MAL ID as last resort...`);
+          animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
+        }
       }
     } else {
       // Season 1 or no season specified - search normally
@@ -1541,6 +1554,12 @@ export async function fetchAnimeKaiSourceByName(
       seasonVariants.push(`${baseTitle}: ${tmdbSeasonName}`);
       seasonVariants.push(`${baseTitle} ${tmdbSeasonName}`);
       seasonVariants.push(tmdbSeasonName);
+      // Try without hyphens (some databases don't use them)
+      const noHyphens = tmdbSeasonName.replace(/-/g, ' ');
+      if (noHyphens !== tmdbSeasonName) {
+        seasonVariants.push(`${baseTitle} ${noHyphens}`);
+        seasonVariants.push(noHyphens);
+      }
     }
     seasonVariants.push(...getSeasonSearchVariants(baseTitle, seasonNum));
     
@@ -1566,10 +1585,16 @@ export async function fetchAnimeKaiSourceByName(
       }
       
       // If no season-specific entry found, fall back to base title search
-      // (in case the anime uses absolute episode numbering)
+      // NOTE: Don't use MAL ID first because it maps to the original anime, not the season
       if (!animeResult) {
-        console.log(`[AnimeKai] No season-specific entry found, trying base title...`);
-        animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
+        console.log(`[AnimeKai] No season-specific entry found, trying base title (without MAL ID)...`);
+        animeResult = await searchAnimeKai(baseTitle, null);
+        
+        // If still not found and we have a MAL ID, try with it as last resort
+        if (!animeResult && animeIds.mal_id) {
+          console.log(`[AnimeKai] Still not found, trying with MAL ID as last resort...`);
+          animeResult = await searchAnimeKai(baseTitle, animeIds.mal_id);
+        }
       }
     } else {
       // Season 1 or no season specified - search normally
