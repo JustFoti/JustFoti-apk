@@ -272,18 +272,21 @@ export const Navigation: React.FC<NavigationProps> = ({
             )}
             
             {isMobile && (
-              <button
-                className={styles.mobileMenuToggle}
-                onClick={toggleMobileMenu}
-                aria-label="Toggle menu"
-                aria-expanded={mobileMenuOpen}
-              >
-                <span className={styles.hamburger}>
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </span>
-              </button>
+              <div className={styles.mobileActions}>
+                {/* Hamburger Menu */}
+                <button
+                  className={styles.mobileMenuToggle}
+                  onClick={toggleMobileMenu}
+                  aria-label="Toggle menu"
+                  aria-expanded={mobileMenuOpen}
+                >
+                  <span className={styles.hamburger}>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -325,34 +328,6 @@ export const Navigation: React.FC<NavigationProps> = ({
         {/* Mobile Menu */}
         {isMobile && mobileMenuOpen && (
           <div className={styles.mobileMenu}>
-            {/* Mobile Search Input */}
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (searchQuery.trim()) {
-                  router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-                  setMobileMenuOpen(false);
-                  setSearchQuery('');
-                }
-              }} 
-              className={styles.mobileSearchForm}
-            >
-              <input
-                type="search"
-                placeholder="Search movies & shows..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={styles.mobileSearchInput}
-                autoComplete="off"
-              />
-              <button type="submit" className={styles.mobileSearchButton} aria-label="Search">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
-                  <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-            </form>
-            
             <NavLink
               isActive={pathname === '/'}
               onClick={() => handleNavigation('/')}
@@ -425,45 +400,64 @@ export const Navigation: React.FC<NavigationProps> = ({
             onClick={() => handleNavigation('/')}
             aria-label="Home"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               <polyline points="9 22 9 12 15 12 15 22" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             <span>Home</span>
           </button>
           <button
-            className={`${styles.bottomNavItem} ${pathname === '/livetv' ? styles.active : ''}`}
-            onClick={() => handleNavigation('/livetv')}
-            aria-label="Live TV"
+            className={`${styles.bottomNavItem} ${pathname === '/movies' || pathname.startsWith('/movies') ? styles.active : ''}`}
+            onClick={() => handleNavigation('/movies')}
+            aria-label="Movies"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="2" y="7" width="20" height="15" rx="2" ry="2" strokeWidth="2" />
-              <polyline points="17 2 12 7 7 2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" strokeWidth="2" />
+              <line x1="7" y1="2" x2="7" y2="22" strokeWidth="2" />
+              <line x1="17" y1="2" x2="17" y2="22" strokeWidth="2" />
+              <line x1="2" y1="12" x2="22" y2="12" strokeWidth="2" />
+              <line x1="2" y1="7" x2="7" y2="7" strokeWidth="2" />
+              <line x1="2" y1="17" x2="7" y2="17" strokeWidth="2" />
+              <line x1="17" y1="17" x2="22" y2="17" strokeWidth="2" />
+              <line x1="17" y1="7" x2="22" y2="7" strokeWidth="2" />
             </svg>
-            <span>Live TV</span>
+            <span>Movies</span>
           </button>
           <button
-            className={styles.bottomNavItem}
+            className={`${styles.bottomNavItem} ${styles.searchNavItem} ${pathname === '/search' ? styles.active : ''}`}
             onClick={toggleSearch}
             aria-label="Search"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="11" cy="11" r="8" strokeWidth="2" />
-              <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <div className={styles.searchNavIcon}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle cx="11" cy="11" r="8" strokeWidth="2.5" />
+                <path d="M21 21l-4.35-4.35" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+            </div>
             <span>Search</span>
           </button>
           <button
-            className={`${styles.bottomNavItem} ${pathname === '/about' ? styles.active : ''}`}
-            onClick={() => handleNavigation('/about')}
-            aria-label="About"
+            className={`${styles.bottomNavItem} ${pathname === '/series' || pathname.startsWith('/series') ? styles.active : ''}`}
+            onClick={() => handleNavigation('/series')}
+            aria-label="Series"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" strokeWidth="2" />
-              <line x1="12" y1="16" x2="12" y2="12" strokeWidth="2" strokeLinecap="round" />
-              <line x1="12" y1="8" x2="12.01" y2="8" strokeWidth="2" strokeLinecap="round" />
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <rect x="2" y="7" width="20" height="15" rx="2" ry="2" strokeWidth="2" />
+              <polyline points="17 2 12 7 7 2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <span>About</span>
+            <span>Series</span>
+          </button>
+          <button
+            className={`${styles.bottomNavItem} ${pathname === '/anime' || pathname.startsWith('/anime') ? styles.active : ''}`}
+            onClick={() => handleNavigation('/anime')}
+            aria-label="Anime"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 17l10 5 10-5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 12l10 5 10-5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>Anime</span>
           </button>
         </div>
       )}
