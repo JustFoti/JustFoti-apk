@@ -143,8 +143,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   useEffect(() => { showNextEpisodeButtonRef.current = showNextEpisodeButton; }, [showNextEpisodeButton]);
   useEffect(() => { autoPlayCountdownRef.current = autoPlayCountdown; }, [autoPlayCountdown]);
   
-  const [provider, setProvider] = useState('videasy'); // Default to Videasy (primary provider with multi-language support)
-  const [menuProvider, setMenuProvider] = useState('videasy');
+  const [provider, setProvider] = useState('vidsrc'); // Default to VidSrc (primary provider)
+  const [menuProvider, setMenuProvider] = useState('vidsrc');
   const [showServerMenu, setShowServerMenu] = useState(false);
   const [sourcesCache, setSourcesCache] = useState<Record<string, any[]>>({});
   const [loadingProviders, setLoadingProviders] = useState<Record<string, boolean>>({});
@@ -152,8 +152,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [castError, setCastError] = useState<string | null>(null);
   const castErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [providerAvailability, setProviderAvailability] = useState<Record<string, boolean>>({
-    vidsrc: false, // VidSrc is disabled by default (requires ENABLE_VIDSRC_PROVIDER=true)
-    videasy: true, // Videasy is always enabled (primary provider with multi-language support)
+    vidsrc: true, // VidSrc is the primary provider for movies and TV shows
+    videasy: true, // Videasy as fallback provider with multi-language support
     animekai: true, // Anime-specific provider - auto-selected for anime content
   });
   const [isAnimeContent, setIsAnimeContent] = useState(false); // Track if current content is anime
@@ -493,8 +493,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     const initializePlayer = async () => {
       // First fetch provider availability
       let availability: Record<string, boolean> = {
-        vidsrc: false, // VidSrc is disabled by default (requires ENABLE_VIDSRC_PROVIDER=true)
-        videasy: true, // Videasy is always enabled (primary provider with multi-language support)
+        vidsrc: true, // VidSrc is the primary provider for movies and TV shows
+        videasy: true, // Videasy as fallback provider with multi-language support
         animekai: true, // Anime-specific provider
       };
 
@@ -530,8 +530,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       if (isAnime && availability.animekai) {
         providerOrder.push('animekai'); // AnimeKai as primary for anime
       }
-      providerOrder.push('videasy'); // Videasy as primary/fallback (multi-language support)
-      if (availability.vidsrc) providerOrder.push('vidsrc'); // VidSrc as optional fallback
+      if (availability.vidsrc) providerOrder.push('vidsrc'); // VidSrc as primary for movies/TV
+      providerOrder.push('videasy'); // Videasy as fallback (multi-language support)
 
       console.log(`[VideoPlayer] Provider order: ${providerOrder.join(' → ')}`);
 
@@ -1428,9 +1428,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               // No tab navigation for anime - just stay on AnimeKai
               return;
             }
-            // For non-anime content, navigate between Videasy and VidSrc
-            const availableProviders: string[] = ['videasy'];
+            // For non-anime content, navigate between VidSrc and Videasy
+            const availableProviders: string[] = [];
             if (providerAvailability.vidsrc) availableProviders.push('vidsrc');
+            availableProviders.push('videasy');
             
             const currentTabIndex = availableProviders.indexOf(menuProvider);
             if (currentTabIndex > 0) {
@@ -1491,9 +1492,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               // No tab navigation for anime - just stay on AnimeKai
               return;
             }
-            // For non-anime content, navigate between Videasy and VidSrc
-            const availableProviders: string[] = ['videasy'];
+            // For non-anime content, navigate between VidSrc and Videasy
+            const availableProviders: string[] = [];
             if (providerAvailability.vidsrc) availableProviders.push('vidsrc');
+            availableProviders.push('videasy');
             
             const currentTabIndex = availableProviders.indexOf(menuProvider);
             if (currentTabIndex < availableProviders.length - 1) {
@@ -3439,16 +3441,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 {/* Only show tabs for non-anime content (anime only uses AnimeKai) */}
                 {!isAnimeContent && (
                   <div className={styles.tabsContainer} data-server-tabs="true">
-                    <button
-                      className={`${styles.tab} ${menuProvider === 'videasy' ? styles.active : ''}`}
-                      data-server-tab="videasy"
-                      onClick={() => {
-                        setMenuProvider('videasy');
-                        fetchSources('videasy');
-                      }}
-                    >
-                      Videasy
-                    </button>
                     {providerAvailability.vidsrc && (
                       <button
                         className={`${styles.tab} ${menuProvider === 'vidsrc' ? styles.active : ''}`}
@@ -3461,6 +3453,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                         VidSrc
                       </button>
                     )}
+                    <button
+                      className={`${styles.tab} ${menuProvider === 'videasy' ? styles.active : ''}`}
+                      data-server-tab="videasy"
+                      onClick={() => {
+                        setMenuProvider('videasy');
+                        fetchSources('videasy');
+                      }}
+                    >
+                      Videasy
+                    </button>
                   </div>
                 )}
 
