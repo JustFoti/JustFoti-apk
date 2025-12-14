@@ -121,6 +121,12 @@ export const Navigation: React.FC<NavigationProps> = ({
   };
 
   const toggleSearch = () => {
+    // On mobile, navigate directly to search page
+    if (isMobile) {
+      router.push('/search');
+      return;
+    }
+    
     setSearchOpen(!searchOpen);
     if (!searchOpen) {
       // Focus search input when opening
@@ -288,21 +294,24 @@ export const Navigation: React.FC<NavigationProps> = ({
             <form onSubmit={handleSearchSubmit} className={styles.searchForm}>
               <input
                 id="nav-search-input"
-                type="text"
+                type="search"
                 className={styles.searchInput}
                 placeholder="Search movies and TV shows..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSearchSubmit();
+                  }
+                }}
                 aria-label="Search"
+                autoComplete="off"
               />
               <button 
                 type="submit" 
                 className={styles.searchButton}
                 aria-label="Submit search"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleSearchSubmit();
-                }}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                   <circle cx="11" cy="11" r="8" strokeWidth="2" />
@@ -316,6 +325,34 @@ export const Navigation: React.FC<NavigationProps> = ({
         {/* Mobile Menu */}
         {isMobile && mobileMenuOpen && (
           <div className={styles.mobileMenu}>
+            {/* Mobile Search Input */}
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (searchQuery.trim()) {
+                  router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+                  setMobileMenuOpen(false);
+                  setSearchQuery('');
+                }
+              }} 
+              className={styles.mobileSearchForm}
+            >
+              <input
+                type="search"
+                placeholder="Search movies & shows..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={styles.mobileSearchInput}
+                autoComplete="off"
+              />
+              <button type="submit" className={styles.mobileSearchButton} aria-label="Search">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                  <path d="M21 21l-4.35-4.35" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </button>
+            </form>
+            
             <NavLink
               isActive={pathname === '/'}
               onClick={() => handleNavigation('/')}
