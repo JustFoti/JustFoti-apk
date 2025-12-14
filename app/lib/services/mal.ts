@@ -335,12 +335,20 @@ export async function getMALSeriesSeasons(malId: number): Promise<MALAnimeDetail
     
     console.log(`[MAL] Found ${relatedIds.size} related entries:`, Array.from(relatedIds));
     
-    // Fetch details for all related anime
-    const allAnimePromises = Array.from(relatedIds).map(id => getMALAnimeById(id));
-    const allAnimeResults = await Promise.all(allAnimePromises);
-    const allAnime = allAnimeResults.filter((a): a is MALAnime => a !== null);
+    // Fetch details for all related anime SEQUENTIALLY to respect rate limits
+    // Using Promise.all would bypass rate limiting and cause requests to fail
+    const allAnime: MALAnime[] = [];
+    for (const id of relatedIds) {
+      const anime = await getMALAnimeById(id);
+      if (anime) {
+        allAnime.push(anime);
+        console.log(`[MAL] Fetched: ${anime.title} (${anime.episodes} eps)`);
+      } else {
+        console.log(`[MAL] Failed to fetch MAL ID: ${id}`);
+      }
+    }
     
-    console.log(`[MAL] Fetched ${allAnime.length} anime details`);
+    console.log(`[MAL] Fetched ${allAnime.length} anime details out of ${relatedIds.size}`);
     
     // Filter to only TV series and ONA, sort by air date
     const tvSeries = allAnime
