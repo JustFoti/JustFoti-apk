@@ -143,7 +143,7 @@ export function useTVNavigation(options: NavigationOptions = {}) {
         // Prioritize elements in the same group
         const groupBonus = currentGroup && candidate.group === currentGroup ? 0 : 500;
         // Weight secondary distance more to prefer aligned elements
-        const score = primaryDistance + secondaryDistance * 2 + groupBonus - candidate.priority * 100;
+        const score = primaryDistance + secondaryDistance * 2 + groupBonus - (candidate.priority ?? 0) * 100;
 
         if (score < bestScore) {
           bestScore = score;
