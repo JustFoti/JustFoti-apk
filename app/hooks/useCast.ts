@@ -67,13 +67,7 @@ export function useCast(options: UseCastOptions = {}) {
   // Check for Remote Playback API and AirPlay availability
   useEffect(() => {
     const video = options.videoRef?.current as HTMLVideoElement | null;
-    if (!video) {
-      console.log('[Cast] No video element yet, waiting...');
-      return;
-    }
-
-    console.log('[Cast] Checking casting capabilities...');
-    console.log('[Cast] Video element:', video.tagName, 'src:', video.src?.substring(0, 50) || 'none');
+    if (!video) return;
 
     // Check AirPlay (Safari)
     const hasAirPlay = !!(window.WebKitPlaybackTargetAvailabilityEvent || 
@@ -83,7 +77,6 @@ export function useCast(options: UseCastOptions = {}) {
     hasAirPlayRef.current = hasAirPlay;
     
     if (hasAirPlay) {
-      console.log('[Cast] ✓ AirPlay support detected');
       setState(prev => ({ ...prev, isAirPlayAvailable: true, isAvailable: true }));
     }
 
@@ -92,39 +85,31 @@ export function useCast(options: UseCastOptions = {}) {
     const remote = video.remote;
     if (remote) {
       hasRemotePlaybackRef.current = true;
-      console.log('[Cast] ✓ Remote Playback API detected');
       
       // Watch for device availability
-      remote.watchAvailability((available: boolean) => {
-        console.log('[Cast] Remote playback device availability:', available);
+      remote.watchAvailability((_available: boolean) => {
         setState(prev => ({ 
           ...prev, 
           isAvailable: true, // Always keep available
         }));
       }).then((id: number) => {
         watchIdRef.current = id;
-        console.log('[Cast] watchAvailability registered, id:', id);
-      }).catch((err: Error) => {
+      }).catch(() => {
         // watchAvailability not supported (common on localhost/HTTP)
         // This is expected - prompt() can still work
-        console.log('[Cast] watchAvailability not supported:', err.message);
-        console.log('[Cast] This is normal on localhost - prompt() may still work');
       });
 
       // Listen for state changes
       const handleConnecting = () => {
-        console.log('[Cast] Remote playback connecting...');
         setState(prev => ({ ...prev, isConnected: false, isCasting: false, lastError: null }));
       };
 
       const handleConnect = () => {
-        console.log('[Cast] ✓ Remote playback connected!');
         setState(prev => ({ ...prev, isConnected: true, isCasting: true, lastError: null }));
         options.onConnect?.();
       };
 
       const handleDisconnect = () => {
-        console.log('[Cast] Remote playback disconnected');
         setState(prev => ({ ...prev, isConnected: false, isCasting: false }));
         options.onDisconnect?.();
       };
@@ -142,12 +127,6 @@ export function useCast(options: UseCastOptions = {}) {
           remote.cancelWatchAvailability(watchIdRef.current).catch(() => {});
         }
       };
-    } else {
-      console.log('[Cast] Remote Playback API not available');
-      // No Remote Playback API, but might have AirPlay
-      if (!hasAirPlay) {
-        console.log('[Cast] ⚠ No casting APIs available in this browser');
-      }
     }
   }, [options.videoRef, options.onConnect, options.onDisconnect]);
 
@@ -159,7 +138,6 @@ export function useCast(options: UseCastOptions = {}) {
     const handleAirPlayAvailability = (event: any) => {
       const available = event.availability === 'available';
       setState(prev => ({ ...prev, isAirPlayAvailable: available, isAvailable: true }));
-      console.log('[Cast] AirPlay availability changed:', available);
     };
 
     const handleAirPlayChange = () => {
@@ -174,10 +152,8 @@ export function useCast(options: UseCastOptions = {}) {
       }));
       
       if (isWireless) {
-        console.log('[Cast] ✓ AirPlay started');
         options.onConnect?.();
       } else {
-        console.log('[Cast] AirPlay stopped');
         options.onDisconnect?.();
       }
     };
@@ -195,7 +171,6 @@ export function useCast(options: UseCastOptions = {}) {
   const requestSession = useCallback(async () => {
     const video = options.videoRef?.current as HTMLVideoElement | null;
     if (!video) {
-      console.error('[Cast] No video element');
       const error = 'No video element available';
       setState(prev => ({ ...prev, lastError: error }));
       options.onError?.(error);
@@ -205,19 +180,14 @@ export function useCast(options: UseCastOptions = {}) {
     // Clear previous error
     setState(prev => ({ ...prev, lastError: null }));
 
-    console.log('[Cast] Requesting cast session...');
-    console.log('[Cast] Video state: src=', video.src?.substring(0, 50), 'readyState=', video.readyState);
-
     // Try AirPlay first (Safari)
     // @ts-ignore
     if (typeof video.webkitShowPlaybackTargetPicker === 'function') {
       try {
-        console.log('[Cast] Showing AirPlay picker...');
         // @ts-ignore
         video.webkitShowPlaybackTargetPicker();
         return true;
-      } catch (error: any) {
-        console.error('[Cast] AirPlay picker failed:', error);
+      } catch {
         // Don't return - try Remote Playback as fallback
       }
     }
@@ -227,28 +197,19 @@ export function useCast(options: UseCastOptions = {}) {
     const remote = video.remote;
     if (remote) {
       try {
-        console.log('[Cast] Showing Remote Playback picker...');
-        console.log('[Cast] Calling remote.prompt()...');
         await remote.prompt();
-        console.log('[Cast] ✓ remote.prompt() succeeded');
         return true;
       } catch (error: any) {
-        console.error('[Cast] remote.prompt() error:', error.name, error.message);
-        
         let errorMessage: string;
         if (error.name === 'NotFoundError') {
           errorMessage = 'No cast devices found. Make sure your Chromecast/TV is on the same network.';
-          console.log('[Cast] NotFoundError - no devices discovered');
         } else if (error.name === 'NotAllowedError') {
           // User cancelled - not an error
-          console.log('[Cast] User cancelled device picker');
           return false;
         } else if (error.name === 'InvalidStateError') {
           errorMessage = 'Already connecting to a device';
-          console.log('[Cast] InvalidStateError - already connecting');
         } else if (error.name === 'NotSupportedError') {
           errorMessage = 'Casting requires HTTPS. Try deploying to Vercel or using a secure connection.';
-          console.log('[Cast] NotSupportedError - likely HTTP/localhost issue');
         } else {
           errorMessage = error.message || 'Failed to connect to cast device';
         }
@@ -260,7 +221,6 @@ export function useCast(options: UseCastOptions = {}) {
     }
 
     const error = 'Casting is not supported in this browser. Try Chrome or Safari.';
-    console.log('[Cast] No casting method available');
     setState(prev => ({ ...prev, lastError: error }));
     options.onError?.(error);
     return false;
@@ -277,8 +237,6 @@ export function useCast(options: UseCastOptions = {}) {
   const stop = useCallback(() => {
     // For Remote Playback, we can't programmatically disconnect
     // User needs to use the device picker or the cast device's controls
-    console.log('[Cast] Stop requested - user should disconnect from device picker');
-    
     setState(prev => ({ ...prev, isCasting: false, isConnected: false }));
   }, []);
 

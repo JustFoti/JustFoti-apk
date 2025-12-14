@@ -85,7 +85,13 @@ async function fetchViaCfAnimeKaiProxy(
 
   console.log(`[AnimeKai] Fetching via CF→RPI proxy: ${targetUrl.substring(0, 60)}...`);
 
+  // IMPORTANT: Include Origin/Referer headers for Cloudflare Worker anti-leech check
+  // Server-side fetch doesn't include these by default
   return fetch(proxyUrl, {
+    headers: {
+      'Origin': 'https://tv.vynx.cc',
+      'Referer': 'https://tv.vynx.cc/',
+    },
     signal: AbortSignal.timeout(options?.timeout || 15000),
   });
 }
