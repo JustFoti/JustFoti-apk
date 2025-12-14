@@ -17,7 +17,7 @@ export interface FocusableProps extends React.HTMLAttributes<HTMLDivElement> {
   /** Skip this element in navigation */
   skip?: boolean;
   /** Custom element type */
-  as?: keyof JSX.IntrinsicElements;
+  as?: React.ElementType;
   /** Additional class when focused */
   focusedClassName?: string;
 }
