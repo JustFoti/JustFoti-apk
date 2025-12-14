@@ -451,14 +451,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       if (data.sources && data.sources.length > 0) {
         // Use the actual provider from response (may differ due to fallback)
         const actualProvider = data.provider || providerName;
-        console.log(`[VideoPlayer] ${providerName} returned ${data.sources.length} sources (actual provider: ${actualProvider})`);
+        console.log(`[VideoPlayer] ✓ ${providerName} returned ${data.sources.length} sources (actual provider: ${actualProvider})`);
         return { sources: data.sources, provider: actualProvider };
       }
       
-      console.log(`[VideoPlayer] ${providerName} failed: ${data.error || 'No sources'}`);
+      // Log detailed error info for debugging
+      console.warn(`[VideoPlayer] ✗ ${providerName} failed:`, {
+        error: data.error,
+        details: data.details,
+        suggestion: data.suggestion,
+        status: response.status
+      });
       return null;
     } catch (err) {
-      console.error(`[VideoPlayer] ${providerName} error:`, err);
+      console.error(`[VideoPlayer] ✗ ${providerName} network error:`, err);
       return null;
     }
   };
@@ -492,10 +498,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
     const initializePlayer = async () => {
       // First fetch provider availability
+      // NOTE: vidsrc defaults to FALSE because it's disabled by default (requires ENABLE_VIDSRC_PROVIDER=true)
       let availability: Record<string, boolean> = {
-        vidsrc: true, // VidSrc is the primary provider for movies and TV shows
+        vidsrc: false, // VidSrc is DISABLED by default
         videasy: true, // Videasy as fallback provider with multi-language support
-        animekai: true, // Anime-specific provider
+        animekai: true, // Anime-specific provider - auto-selected for anime content
       };
 
       try {
@@ -518,22 +525,30 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         if (animeCheckRes.ok) {
           const animeData = await animeCheckRes.json();
           isAnime = animeData.isAnime === true;
+          console.log(`[VideoPlayer] Anime check result:`, animeData);
+        } else {
+          console.warn(`[VideoPlayer] Anime check failed: HTTP ${animeCheckRes.status}`);
         }
       } catch (err) {
         console.warn('[VideoPlayer] Failed to check anime status:', err);
       }
       setIsAnimeContent(isAnime);
-      console.log(`[VideoPlayer] Content type: ${isAnime ? 'ANIME' : 'regular'}`);
+      console.log(`[VideoPlayer] Content type: ${isAnime ? 'ANIME' : 'regular'}, AnimeKai available: ${availability.animekai}`);
 
       // Build provider priority list based on content type
+      // For ANIME: AnimeKai FIRST, then Videasy as fallback
+      // For non-anime: VidSrc (if enabled), then Videasy
       const providerOrder: string[] = [];
       if (isAnime && availability.animekai) {
-        providerOrder.push('animekai'); // AnimeKai as primary for anime
+        providerOrder.push('animekai'); // AnimeKai as PRIMARY for anime
+        console.log(`[VideoPlayer] ✓ Adding AnimeKai as PRIMARY provider for anime content`);
       }
-      if (availability.vidsrc) providerOrder.push('vidsrc'); // VidSrc as primary for movies/TV
+      if (availability.vidsrc) {
+        providerOrder.push('vidsrc'); // VidSrc only if explicitly enabled
+      }
       providerOrder.push('videasy'); // Videasy as fallback (multi-language support)
 
-      console.log(`[VideoPlayer] Provider order: ${providerOrder.join(' → ')}`);
+      console.log(`[VideoPlayer] Provider order: ${providerOrder.join(' → ')} (isAnime=${isAnime}, animekai=${availability.animekai})`);
 
       // Try each provider in order until one works
       let result: { sources: any[], provider: string } | null = null;

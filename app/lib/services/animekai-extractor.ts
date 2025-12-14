@@ -57,6 +57,39 @@ const ENC_DEC_API = 'https://enc-dec.app';
 const KAI_AJAX = 'https://animekai.to/ajax';
 const ARM_API = 'https://arm.haglund.dev/api/v2/ids';
 
+/**
+ * Fetch a URL through Cloudflare Worker → RPI residential proxy
+ * Used for MegaUp CDN which blocks datacenter IPs
+ * 
+ * Flow: Vercel → Cloudflare Worker (/animekai) → RPI Proxy → MegaUp CDN
+ */
+async function fetchViaCfAnimeKaiProxy(
+  targetUrl: string,
+  options?: { timeout?: number }
+): Promise<Response> {
+  // Use the Cloudflare stream proxy URL with /animekai route
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+
+  if (!cfProxyUrl) {
+    console.log(`[AnimeKai] CF proxy not configured, falling back to direct fetch`);
+    // Fall back to direct fetch (will likely fail with 403)
+    return fetch(targetUrl, {
+      headers: HEADERS,
+      signal: AbortSignal.timeout(options?.timeout || 10000),
+    });
+  }
+
+  // Strip /stream suffix if present and use /animekai route
+  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+  const proxyUrl = `${baseUrl}/animekai?url=${encodeURIComponent(targetUrl)}`;
+
+  console.log(`[AnimeKai] Fetching via CF→RPI proxy: ${targetUrl.substring(0, 60)}...`);
+
+  return fetch(proxyUrl, {
+    signal: AbortSignal.timeout(options?.timeout || 15000),
+  });
+}
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
   'Connection': 'keep-alive',
@@ -603,21 +636,11 @@ async function decryptMegaUpEmbed(embedUrl: string): Promise<string | null> {
     console.log(`[AnimeKai] MegaUp base: ${baseUrl}, videoId: ${videoId}`);
     
     // Step 1: Fetch /media/{videoId} to get encrypted stream data
+    // IMPORTANT: MegaUp blocks datacenter IPs, so we MUST use RPI proxy
     const mediaUrl = `${baseUrl}/media/${videoId}`;
-    console.log(`[AnimeKai] Fetching media endpoint: ${mediaUrl}`);
-    
-    const mediaController = new AbortController();
-    const mediaTimeoutId = setTimeout(() => mediaController.abort(), 10000);
-    
-    const mediaResponse = await fetch(mediaUrl, {
-      headers: {
-        ...HEADERS,
-        'Referer': embedUrl,
-      },
-      signal: mediaController.signal,
-    });
-    
-    clearTimeout(mediaTimeoutId);
+    console.log(`[AnimeKai] Fetching media endpoint via CF→RPI proxy: ${mediaUrl}`);
+
+    const mediaResponse = await fetchViaCfAnimeKaiProxy(mediaUrl, { timeout: 15000 });
     
     if (!mediaResponse.ok) {
       console.log(`[AnimeKai] MegaUp media request failed: HTTP ${mediaResponse.status}`);
@@ -743,21 +766,10 @@ function unpackPACKED(packed: string): string {
  */
 async function extractMegaUpSourcesManually(embedUrl: string): Promise<string | null> {
   try {
-    console.log(`[AnimeKai] Trying manual MegaUp extraction...`);
+    console.log(`[AnimeKai] Trying manual MegaUp extraction via RPI proxy...`);
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    
-    const response = await fetch(embedUrl, {
-      headers: {
-        ...HEADERS,
-        'Referer': 'https://animekai.to/',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      },
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
+    // IMPORTANT: MegaUp blocks datacenter IPs, so we MUST use CF→RPI proxy
+    const response = await fetchViaCfAnimeKaiProxy(embedUrl, { timeout: 15000 });
     
     if (!response.ok) {
       console.log(`[AnimeKai] Failed to fetch MegaUp embed: HTTP ${response.status}`);
