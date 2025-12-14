@@ -115,7 +115,18 @@ export default function BrowsePageClient({
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(index * 0.02, 0.4) }}
                     onClick={() => handleContentClick(item)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleContentClick(item);
+                      }
+                    }}
                     className="cursor-pointer group"
+                    data-tv-focusable="true"
+                    data-tv-group="browse-grid"
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`${item.title || item.name}`}
                   >
                     <motion.div
                       whileHover={{ scale: 1.03, y: -4 }}
@@ -164,6 +175,8 @@ export default function BrowsePageClient({
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage <= 1}
                     className="px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-white text-sm transition-colors"
+                    data-tv-focusable="true"
+                    data-tv-group="pagination"
                   >
                     Previous
                   </button>
@@ -204,6 +217,8 @@ export default function BrowsePageClient({
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage >= totalPages}
                     className="px-4 py-2 bg-white/5 hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg text-white text-sm transition-colors"
+                    data-tv-focusable="true"
+                    data-tv-group="pagination"
                   >
                     Next
                   </button>

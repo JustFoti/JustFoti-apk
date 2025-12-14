@@ -270,6 +270,29 @@ class UserTrackingService {
   }
 
   /**
+   * Get all watch progress items for Continue Watching
+   * Returns items sorted by lastWatched (most recent first)
+   * Filters out completed items and items with very low progress
+   */
+  getAllWatchProgress(): WatchProgress[] {
+    if (!this.preferences?.watchProgress) return [];
+
+    const items = Object.values(this.preferences.watchProgress)
+      .filter(item => {
+        // Filter out completed items
+        if (item.completed) return false;
+        // Filter out items with less than 2% progress (accidental clicks)
+        if (item.completionPercentage < 2) return false;
+        // Filter out items with 85%+ progress (likely finished or auto-next kicked in)
+        if (item.completionPercentage >= 85) return false;
+        return true;
+      })
+      .sort((a, b) => b.lastWatched - a.lastWatched);
+
+    return items;
+  }
+
+  /**
    * Add to viewing history
    */
   addToViewingHistory(item: ViewingHistory): void {

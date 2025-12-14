@@ -34,7 +34,7 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
 
   return (
     <div className={styles.container}>
-      <div className={styles.episodeGrid}>
+      <div className={styles.episodeGrid} data-tv-group="episodes">
         {episodes.map((episode, index) => (
           <motion.div
             key={episode.id}
@@ -53,6 +53,7 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
             role="button"
             tabIndex={0}
             aria-label={`Episode ${episode.episodeNumber}: ${episode.title}`}
+            data-tv-focusable="true"
           >
             {/* Episode Thumbnail */}
             <div className={styles.thumbnailContainer}>

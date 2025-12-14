@@ -103,7 +103,19 @@ async function fetchViaRpiProxy(url: string): Promise<Response> {
 | Endpoint | Description |
 |----------|-------------|
 | `GET /proxy?url=<encoded_url>` | Proxy a request through the Pi |
+| `GET /animekai?url=<encoded_url>` | Proxy AnimeKai/MegaUp CDN streams (no Origin/Referer headers) |
+| `GET /iptv/api?url=<url>&mac=<mac>&token=<token>` | Proxy IPTV Stalker portal API calls |
+| `GET /iptv/stream?url=<url>&mac=<mac>&token=<token>` | Proxy IPTV streams |
 | `GET /health` | Health check |
+
+### AnimeKai Proxy
+
+The `/animekai` endpoint is specifically designed for MegaUp CDN streams used by AnimeKai. MegaUp blocks:
+1. Datacenter IPs (Cloudflare, AWS, etc.)
+2. Requests with Origin header
+3. Requests with Referer header (sometimes)
+
+This endpoint fetches WITHOUT Origin/Referer headers from your residential IP.
 
 ## Security
 

@@ -16,6 +16,7 @@ export interface FluidButtonProps {
   type?: 'button' | 'submit' | 'reset';
   ariaLabel?: string;
   fullWidth?: boolean;
+  tvGroup?: string; // TV navigation group
 }
 
 /**
@@ -40,6 +41,7 @@ export const FluidButton: React.FC<FluidButtonProps> = ({
   type = 'button',
   ariaLabel,
   fullWidth = false,
+  tvGroup,
 }) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [ripples, setRipples] = useState<Array<{ x: number; y: number; id: number }>>([]);
@@ -128,6 +130,8 @@ export const FluidButton: React.FC<FluidButtonProps> = ({
       aria-label={ariaLabel}
       aria-disabled={disabled || loading}
       aria-busy={loading}
+      data-tv-focusable="true"
+      data-tv-group={tvGroup}
       whileHover={!disabled && !loading ? { scale: 1.05 } : {}}
       whileTap={!disabled && !loading ? { scale: 0.95 } : {}}
       transition={{

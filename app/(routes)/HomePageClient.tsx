@@ -9,6 +9,7 @@ import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
+import ContinueWatching from '@/components/home/ContinueWatching';
 import React from 'react';
 
 interface HomePageClientProps {
@@ -308,6 +309,9 @@ export default function HomePageClient({
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleContentClick(currentHero, 'hero_play')}
                         className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-full text-lg shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 flex items-center justify-center gap-3"
+                        data-tv-focusable="true"
+                        data-tv-group="hero-actions"
+                        data-tv-primary="true"
                       >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M8 5v14l11-7z" />
@@ -320,6 +324,8 @@ export default function HomePageClient({
                         whileTap={{ scale: 0.95 }}
                         onClick={() => handleContentClick(currentHero, 'hero_info')}
                         className="px-8 py-4 bg-white/10 backdrop-blur-md text-white font-semibold rounded-full text-lg border border-white/20 hover:bg-white/20 transition-all duration-300 flex items-center justify-center gap-3"
+                        data-tv-focusable="true"
+                        data-tv-group="hero-actions"
                       >
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <circle cx="12" cy="12" r="10" />
@@ -360,6 +366,9 @@ export default function HomePageClient({
                     whileTap={{ scale: 0.9 }}
                     onClick={() => handleHeroNavigation('prev')}
                     className="w-20 h-20 bg-gradient-to-r from-white/10 to-white/5 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-white/20 hover:to-white/10 transition-all duration-300 border border-white/30 shadow-2xl"
+                    data-tv-focusable="true"
+                    data-tv-group="hero-nav"
+                    aria-label="Previous slide"
                   >
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
@@ -370,6 +379,9 @@ export default function HomePageClient({
                     whileTap={{ scale: 0.9 }}
                     onClick={() => handleHeroNavigation('next')}
                     className="w-20 h-20 bg-gradient-to-r from-white/10 to-white/5 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-white/20 hover:to-white/10 transition-all duration-300 border border-white/30 shadow-2xl"
+                    data-tv-focusable="true"
+                    data-tv-group="hero-nav"
+                    aria-label="Next slide"
                   >
                     <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
@@ -378,7 +390,7 @@ export default function HomePageClient({
                 </div>
               )}
 
-              {/* Hero Indicators */}
+              {/* Hero Indicators - Skip from TV navigation */}
               {heroItems.length > 1 && (
                 <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3">
                   {heroItems.map((_, index) => (
@@ -387,6 +399,8 @@ export default function HomePageClient({
                       onClick={() => setCurrentHeroIndex(index)}
                       className={`w-3 h-3 rounded-full transition-all duration-300 ${index === currentHeroIndex ? 'bg-white w-12' : 'bg-white/40'
                         }`}
+                      data-tv-skip="true"
+                      tabIndex={-1}
                     />
                   ))}
                 </div>
@@ -430,11 +444,15 @@ export default function HomePageClient({
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSearch(searchQuery)}
-                    onFocus={() => { }}
-                    onBlur={() => { }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSearch(searchQuery);
+                      }
+                    }}
                     placeholder="Search movies, TV shows, actors..."
                     className="w-full px-6 py-4 pl-14 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white placeholder-gray-400 text-lg focus:outline-none focus:border-purple-500 transition-all duration-300"
+                    data-tv-focusable="true"
+                    data-tv-group="search"
                   />
                   <svg
                     className="absolute left-5 top-1/2 transform -translate-y-1/2 text-gray-400"
@@ -462,6 +480,9 @@ export default function HomePageClient({
               </motion.div>
             </div>
           </section>
+
+          {/* Continue Watching Section */}
+          <ContinueWatching />
 
           {/* Content Sections */}
           <div className="space-y-12 mb-20">
@@ -831,6 +852,8 @@ function ContentSection({
                 whileTap={{ scale: 0.9 }}
                 onClick={() => scroll('left')}
                 className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                data-tv-skip="true"
+                tabIndex={-1}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
@@ -841,6 +864,8 @@ function ContentSection({
                 whileTap={{ scale: 0.9 }}
                 onClick={() => scroll('right')}
                 className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                data-tv-skip="true"
+                tabIndex={-1}
               >
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
@@ -853,6 +878,8 @@ function ContentSection({
             ref={scrollRef}
             className="flex gap-6 overflow-x-auto scrollbar-hide pb-8 pt-4 px-2"
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            data-tv-scroll-container="true"
+            data-tv-group={`content-${title.toLowerCase().replace(/\s+/g, '-')}`}
           >
             {items.map((item, index) => (
               <motion.div
@@ -862,7 +889,17 @@ function ContentSection({
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.05 }}
                 onClick={() => onItemClick(item)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onItemClick(item);
+                  }
+                }}
                 className="flex-shrink-0 w-56 md:w-64 cursor-pointer group p-2"
+                data-tv-focusable="true"
+                tabIndex={0}
+                role="button"
+                aria-label={`${item.title || item.name}`}
               >
                 <motion.div
                   whileHover={{ scale: 1.05, y: -8 }}

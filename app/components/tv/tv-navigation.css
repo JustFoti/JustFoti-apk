@@ -1,0 +1,36 @@
+/* TV Navigation Focus Styles - Purple theme, clean look, NO SCALE */
+
+.tv-focused {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 5px rgba(168, 85, 247, 0.3), 0 0 20px rgba(168, 85, 247, 0.4) !important;
+  z-index: 100 !important;
+  position: relative;
+  /* NO transform/scale - it breaks navigation calculations */
+  transform: none !important;
+}
+
+/* Search inputs get special focus styling */
+input.tv-focused,
+input[type="text"].tv-focused,
+input[type="search"].tv-focused {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 5px rgba(168, 85, 247, 0.3), 0 0 25px rgba(168, 85, 247, 0.5) !important;
+  border-color: #a855f7 !important;
+}
+
+/* Don't apply TV focus styles to video player elements */
+[data-tv-skip-navigation="true"] .tv-focused {
+  outline: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Quick transitions for outline/shadow only - no transform transitions */
+[data-tv-focusable="true"],
+button,
+a[href],
+input {
+  transition: outline 0.1s ease, box-shadow 0.1s ease, border-color 0.1s ease;
+}

@@ -506,6 +506,9 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.1);
   animation: slideUp 0.2s ease;
+  z-index: 200;
+  pointer-events: auto;
+  cursor: default;
 }
 
 @keyframes slideUp {
@@ -1207,7 +1210,9 @@
 }
 
 .resumeButton:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.02);
 }
 
 .resumeButtonPrimary {
@@ -1217,6 +1222,28 @@
 
 .resumeButtonPrimary:hover {
   background: #f40612;
+  transform: scale(1.02);
+  box-shadow: 0 4px 15px rgba(229, 9, 20, 0.4);
+}
+
+/* Focus styles for keyboard navigation - Purple theme */
+.resumeButton:focus,
+.resumeButton:focus-visible,
+.resumeButton:global(.tv-focused) {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 5px rgba(168, 85, 247, 0.3), 0 0 15px rgba(168, 85, 247, 0.4) !important;
+  transform: scale(1.05) !important;
+  background: rgba(168, 85, 247, 0.2) !important;
+}
+
+.resumeButtonPrimary:focus,
+.resumeButtonPrimary:focus-visible,
+.resumeButtonPrimary:global(.tv-focused) {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 5px rgba(168, 85, 247, 0.3), 0 0 15px rgba(168, 85, 247, 0.4) !important;
+  transform: scale(1.05) !important;
 }
 
 /* Dialog Overlay */
@@ -1315,6 +1342,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  z-index: 1;
   /* touch-action is set via JS for proper pinch-zoom handling */
 }
 
@@ -1617,4 +1645,111 @@
     width: 12px;
     height: 12px;
   }
+}
+
+/* Player control button focus styles for TV/keyboard navigation */
+.btn.playerControlFocused,
+.btn:focus-visible {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 2px !important;
+  background: rgba(168, 85, 247, 0.3) !important;
+  transform: scale(1.15) !important;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.2), 0 0 20px rgba(168, 85, 247, 0.4) !important;
+  z-index: 10;
+}
+
+/* Ensure focus is visible on all control buttons */
+.btn[data-player-control]:focus,
+.btn[data-player-control]:focus-visible {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 2px !important;
+  background: rgba(168, 85, 247, 0.3) !important;
+  transform: scale(1.15) !important;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.2), 0 0 20px rgba(168, 85, 247, 0.4) !important;
+}
+
+/* Timeline focus style for row navigation */
+.progressContainer.timelineFocused {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 6px rgba(168, 85, 247, 0.2), 0 0 25px rgba(168, 85, 247, 0.5) !important;
+  height: 10px !important;
+}
+
+.progressContainer.timelineFocused .progressThumb {
+  transform: translate(-50%, -50%) scale(1.5) !important;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.8) !important;
+}
+
+
+
+/* Top row control focus styles (sub/dub toggle, server button) */
+button[data-player-top-control].playerControlFocused,
+button[data-player-top-control]:focus-visible {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 2px !important;
+  background: rgba(168, 85, 247, 0.3) !important;
+  transform: scale(1.1) !important;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.2), 0 0 20px rgba(168, 85, 247, 0.4) !important;
+}
+
+/* Server menu tab focus styles */
+.tab:focus,
+.tab:focus-visible,
+button[data-server-tab]:focus,
+button[data-server-tab]:focus-visible {
+  outline: 2px solid #a855f7 !important;
+  outline-offset: 2px !important;
+  background: rgba(168, 85, 247, 0.2) !important;
+  color: #a855f7 !important;
+}
+
+/* Server menu source item focus styles */
+.settingsOption:focus,
+.settingsOption:focus-visible,
+button[data-server-source]:focus,
+button[data-server-source]:focus-visible {
+  outline: 2px solid #a855f7 !important;
+  outline-offset: -2px !important;
+  background: rgba(168, 85, 247, 0.3) !important;
+  color: #fff !important;
+}
+
+/* Menu header with close button */
+.menuHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menuCloseBtn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 0.2s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.menuCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: scale(1.1);
+}
+
+.menuCloseBtn:focus,
+.menuCloseBtn:focus-visible {
+  outline: 2px solid #a855f7;
+  outline-offset: 2px;
+  background: rgba(168, 85, 247, 0.3);
 }

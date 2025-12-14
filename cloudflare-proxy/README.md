@@ -5,7 +5,10 @@ A Cloudflare Worker that proxies HLS streams and live TV with proper headers and
 ## Features
 
 - **Stream Proxy** (`/stream/`) - Proxies HLS streams for 2embed/vidsrc
+- **AnimeKai Proxy** (`/animekai/`) - Proxies MegaUp CDN streams via RPI residential IP
 - **TV Proxy** (`/tv/`) - Proxies DLHD live TV streams
+- **IPTV Proxy** (`/iptv/`) - Proxies Stalker portal IPTV streams
+- **DLHD Proxy** (`/dlhd/`) - Proxies DLHD via Oxylabs residential IPs
 - **Decoder Sandbox** (`/decode`) - Isolated script execution environment
 - **Health Check** (`/health`) - Status and metrics endpoint
 - **Full Observability** - Structured JSON logging with request tracing
@@ -120,6 +123,19 @@ GET /tv/?channel=<id>
 GET /tv/key?url=<encoded_url>
 GET /tv/segment?url=<encoded_url>
 ```
+
+### AnimeKai Proxy (MegaUp CDN)
+
+```
+GET /animekai?url=<encoded_url>
+GET /animekai/health
+```
+
+Routes MegaUp CDN streams through RPI residential proxy. MegaUp blocks:
+1. Datacenter IPs (Cloudflare, AWS, etc.)
+2. Requests with Origin header
+
+Requires `RPI_PROXY_URL` and `RPI_PROXY_KEY` secrets to be configured.
 
 ### Decoder Sandbox
 

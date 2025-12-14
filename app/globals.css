@@ -382,3 +382,55 @@ input:focus {
     }
   }
 }
+
+
+/* ============================================
+   TV NAVIGATION FOCUS STYLES
+   ============================================ */
+
+/* Main focus ring for TV/keyboard navigation */
+.tv-focused {
+  outline: 4px solid #a855f7 !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 6px rgba(168, 85, 247, 0.4), 0 0 25px rgba(168, 85, 247, 0.5) !important;
+  z-index: 100 !important;
+  position: relative;
+  filter: brightness(1.1) !important;
+}
+
+/* Scale up cards when focused */
+.tv-focused[data-tv-focusable="true"],
+a.tv-focused,
+.content-card-wrapper.tv-focused {
+  transform: scale(1.05) !important;
+}
+
+/* Buttons get subtle scale */
+button.tv-focused {
+  transform: scale(1.05) !important;
+}
+
+/* Don't apply TV focus styles to video player elements */
+[data-tv-skip-navigation="true"] .tv-focused {
+  outline: none !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+/* Smooth transitions for focusable elements */
+[data-tv-focusable="true"] {
+  transition: transform 0.15s ease, outline 0.1s ease, box-shadow 0.1s ease;
+}
+
+/* Player back button focus style for TV/keyboard navigation */
+.player-back-focused,
+[data-player-back="true"]:focus,
+[data-player-back="true"]:focus-visible {
+  outline: 3px solid #a855f7 !important;
+  outline-offset: 2px !important;
+  background: rgba(168, 85, 247, 0.3) !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.2), 0 0 20px rgba(168, 85, 247, 0.4) !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}

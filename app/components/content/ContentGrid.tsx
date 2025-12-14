@@ -15,6 +15,7 @@ export interface ContentGridProps {
   layout?: 'grid' | 'masonry';
   className?: string;
   emptyMessage?: string;
+  tvGroup?: string; // Custom TV navigation group name
 }
 
 /**
@@ -36,6 +37,7 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
   layout = 'grid',
   className = '',
   emptyMessage = 'No content found',
+  tvGroup = 'content-grid',
 }) => {
   const observerTarget = useRef<HTMLDivElement>(null);
   const [visibleItems, setVisibleItems] = useState<MediaItem[]>([]);
@@ -125,7 +127,7 @@ export const ContentGrid: React.FC<ContentGridProps> = ({
 
   return (
     <div className={`content-grid ${className}`}>
-      <div className={gridClasses}>
+      <div className={gridClasses} data-tv-group={tvGroup}>
         <AnimatePresence mode="popLayout">
           {visibleItems.map((item, index) => (
             <motion.div

@@ -50,6 +50,8 @@ const NavLink: React.FC<NavLinkProps> = ({ children, isActive, onClick }) => {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       aria-current={isActive ? 'page' : undefined}
+      data-tv-focusable="true"
+      data-tv-group="main-nav"
     >
       {isHovering && (
         <span
@@ -144,6 +146,8 @@ export const Navigation: React.FC<NavigationProps> = ({
             className={styles.logo}
             onClick={handleLogoClick}
             aria-label="Flyx home"
+            data-tv-focusable="true"
+            data-tv-group="main-nav"
           >
             <div className={styles.logoIcon}>
               <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
@@ -228,6 +232,8 @@ export const Navigation: React.FC<NavigationProps> = ({
                   rel="noopener noreferrer"
                   className={styles.monsterButton}
                   aria-label="Buy me a Monster"
+                  data-tv-focusable="true"
+                  data-tv-group="main-nav"
                 >
                   Buy me a Monster
                 </a>
@@ -235,6 +241,8 @@ export const Navigation: React.FC<NavigationProps> = ({
                   className={styles.feedbackButton}
                   onClick={() => setFeedbackOpen(true)}
                   aria-label="Submit feedback"
+                  data-tv-focusable="true"
+                  data-tv-group="main-nav"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -246,6 +254,8 @@ export const Navigation: React.FC<NavigationProps> = ({
                   onClick={toggleSearch}
                   aria-label="Toggle search"
                   aria-expanded={searchOpen}
+                  data-tv-focusable="true"
+                  data-tv-group="main-nav"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <circle cx="11" cy="11" r="8" strokeWidth="2" />

@@ -32,7 +32,7 @@ export const SeasonSelector: React.FC<SeasonSelectorProps> = ({
 
   return (
     <div className={styles.container}>
-      <div className={styles.seasonList}>
+      <div className={styles.seasonList} data-tv-group="seasons">
         {regularSeasons.map((season) => {
           const isSelected = season.seasonNumber === selectedSeason;
           
@@ -45,6 +45,7 @@ export const SeasonSelector: React.FC<SeasonSelectorProps> = ({
               whileTap={{ scale: 0.95 }}
               aria-pressed={isSelected}
               aria-label={`Season ${season.seasonNumber}`}
+              data-tv-focusable="true"
             >
               <span className={styles.seasonLabel}>Season {season.seasonNumber}</span>
               <span className={styles.episodeCount}>

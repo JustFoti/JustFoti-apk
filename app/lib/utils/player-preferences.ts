@@ -2,10 +2,15 @@
  * Player Preferences - LocalStorage management for video player settings
  */
 
+export type AnimeAudioPreference = 'sub' | 'dub';
+
 export interface PlayerPreferences {
   autoPlayNextEpisode: boolean;
   autoPlayCountdown: number; // seconds for countdown timer before auto-playing (5-30)
   showNextEpisodeBeforeEnd: number; // seconds before video ends to show "Up Next" button (30-180)
+  // Anime-specific preferences
+  animeAudioPreference: AnimeAudioPreference; // 'sub' for Japanese with subtitles, 'dub' for English dub
+  preferredAnimeKaiServer: string | null; // Remember last used AnimeKai server (e.g., "Yuki", "Kaido")
 }
 
 const STORAGE_KEY = 'flyx_player_preferences';
@@ -13,6 +18,8 @@ const DEFAULT_PREFERENCES: PlayerPreferences = {
   autoPlayNextEpisode: true,
   autoPlayCountdown: 10,
   showNextEpisodeBeforeEnd: 90, // Show 90 seconds before end by default
+  animeAudioPreference: 'sub', // Default to subbed anime
+  preferredAnimeKaiServer: null, // No preference by default
 };
 
 /**
@@ -109,5 +116,66 @@ export function clearPlayerPreferences(): void {
     console.log('[PlayerPreferences] Cleared');
   } catch (error) {
     console.error('[PlayerPreferences] Error clearing localStorage:', error);
+  }
+}
+
+// ============================================================================
+// Anime-specific preferences
+// ============================================================================
+
+/**
+ * Get anime audio preference (sub or dub)
+ */
+export function getAnimeAudioPreference(): AnimeAudioPreference {
+  return getPlayerPreferences().animeAudioPreference;
+}
+
+/**
+ * Set anime audio preference
+ */
+export function setAnimeAudioPreference(preference: AnimeAudioPreference): void {
+  const preferences = getPlayerPreferences();
+  preferences.animeAudioPreference = preference;
+  savePlayerPreferences(preferences);
+  console.log('[PlayerPreferences] Anime audio preference set to:', preference);
+}
+
+/**
+ * Get preferred AnimeKai server
+ */
+export function getPreferredAnimeKaiServer(): string | null {
+  return getPlayerPreferences().preferredAnimeKaiServer;
+}
+
+/**
+ * Set preferred AnimeKai server
+ */
+export function setPreferredAnimeKaiServer(serverName: string | null): void {
+  const preferences = getPlayerPreferences();
+  preferences.preferredAnimeKaiServer = serverName;
+  savePlayerPreferences(preferences);
+  console.log('[PlayerPreferences] Preferred AnimeKai server set to:', serverName);
+}
+
+/**
+ * Check if a source matches the user's dub/sub preference
+ * Returns true if the source matches the preference
+ */
+export function sourceMatchesAudioPreference(
+  sourceTitle: string,
+  preference: AnimeAudioPreference
+): boolean {
+  const titleLower = sourceTitle.toLowerCase();
+  
+  if (preference === 'dub') {
+    // Look for dub indicators
+    return titleLower.includes('dub') || 
+           titleLower.includes('english') || 
+           titleLower.includes('(en)') ||
+           titleLower.includes('[dub]');
+  } else {
+    // Sub preference - anything that's not explicitly dub
+    return !titleLower.includes('dub') && 
+           !titleLower.includes('[dub]');
   }
 }

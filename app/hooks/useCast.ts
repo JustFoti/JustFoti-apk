@@ -2,115 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// Chromecast SDK types
+// Extend window for AirPlay detection
 declare global {
   interface Window {
-    __onGCastApiAvailable?: (isAvailable: boolean) => void;
-    cast?: {
-      framework: {
-        CastContext: {
-          getInstance: () => CastContext;
-        };
-        CastContextEventType: {
-          SESSION_STATE_CHANGED: string;
-          CAST_STATE_CHANGED: string;
-        };
-        SessionState: {
-          SESSION_STARTED: string;
-          SESSION_RESUMED: string;
-          SESSION_ENDED: string;
-        };
-        CastState: {
-          NO_DEVICES_AVAILABLE: string;
-          NOT_CONNECTED: string;
-          CONNECTING: string;
-          CONNECTED: string;
-        };
-        RemotePlayerEventType: {
-          IS_CONNECTED_CHANGED: string;
-          IS_MEDIA_LOADED_CHANGED: string;
-          CURRENT_TIME_CHANGED: string;
-          DURATION_CHANGED: string;
-          VOLUME_LEVEL_CHANGED: string;
-          IS_MUTED_CHANGED: string;
-          PLAYER_STATE_CHANGED: string;
-        };
-        RemotePlayer: new () => RemotePlayer;
-        RemotePlayerController: new (player: RemotePlayer) => RemotePlayerController;
-      };
-    };
-    chrome?: {
-      cast: {
-        media: {
-          MediaInfo: new (contentId: string, contentType: string) => MediaInfo;
-          GenericMediaMetadata: new () => GenericMediaMetadata;
-          LoadRequest: new (mediaInfo: MediaInfo) => LoadRequest;
-          StreamType: {
-            BUFFERED: string;
-            LIVE: string;
-          };
-        };
-      };
-    };
+    WebKitPlaybackTargetAvailabilityEvent?: any;
   }
-}
-
-interface CastContext {
-  setOptions: (options: { receiverApplicationId: string; autoJoinPolicy: string }) => void;
-  requestSession: () => Promise<void>;
-  endCurrentSession: (stopCasting: boolean) => void;
-  getCurrentSession: () => CastSession | null;
-  getCastState: () => string;
-  addEventListener: (type: string, handler: (event: any) => void) => void;
-  removeEventListener: (type: string, handler: (event: any) => void) => void;
-}
-
-interface CastSession {
-  getMediaSession: () => MediaSession | null;
-  loadMedia: (request: LoadRequest) => Promise<void>;
-}
-
-interface MediaSession {
-  play: () => void;
-  pause: () => void;
-  stop: () => void;
-  seek: (request: { currentTime: number }) => void;
-}
-
-interface RemotePlayer {
-  isConnected: boolean;
-  isMediaLoaded: boolean;
-  currentTime: number;
-  duration: number;
-  volumeLevel: number;
-  isMuted: boolean;
-  playerState: string;
-}
-
-interface RemotePlayerController {
-  addEventListener: (type: string, handler: (event: any) => void) => void;
-  removeEventListener: (type: string, handler: (event: any) => void) => void;
-  playOrPause: () => void;
-  stop: () => void;
-  seek: () => void;
-  setVolumeLevel: () => void;
-  muteOrUnmute: () => void;
-}
-
-interface MediaInfo {
-  streamType: string;
-  metadata: GenericMediaMetadata;
-}
-
-interface GenericMediaMetadata {
-  title: string;
-  subtitle?: string;
-  images?: { url: string }[];
-}
-
-interface LoadRequest {
-  currentTime?: number;
-  autoplay?: boolean;
 }
 
 export interface CastState {
@@ -123,12 +19,19 @@ export interface CastState {
   volume: number;
   isMuted: boolean;
   playerState: 'IDLE' | 'PLAYING' | 'PAUSED' | 'BUFFERING';
+  // AirPlay specific
+  isAirPlayAvailable: boolean;
+  isAirPlayActive: boolean;
+  // Error state for UI feedback
+  lastError: string | null;
 }
 
 export interface UseCastOptions {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: string) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  videoRef?: any;
 }
 
 export interface CastMedia {
@@ -141,11 +44,9 @@ export interface CastMedia {
   startTime?: number;
 }
 
-const CAST_RECEIVER_APP_ID = 'CC1AD845'; // Default Media Receiver
-
 export function useCast(options: UseCastOptions = {}) {
   const [state, setState] = useState<CastState>({
-    isAvailable: false,
+    isAvailable: true, // Always show button - let user try casting
     isConnected: false,
     isCasting: false,
     deviceName: null,
@@ -154,245 +55,249 @@ export function useCast(options: UseCastOptions = {}) {
     volume: 1,
     isMuted: false,
     playerState: 'IDLE',
+    isAirPlayAvailable: false,
+    isAirPlayActive: false,
+    lastError: null,
   });
 
-  const castContextRef = useRef<CastContext | null>(null);
-  const remotePlayerRef = useRef<RemotePlayer | null>(null);
-  const remotePlayerControllerRef = useRef<RemotePlayerController | null>(null);
-  const sdkLoadedRef = useRef(false);
+  const watchIdRef = useRef<number | null>(null);
+  const hasRemotePlaybackRef = useRef(false);
+  const hasAirPlayRef = useRef(false);
 
-  // Load Cast SDK
+  // Check for Remote Playback API and AirPlay availability
   useEffect(() => {
-    if (sdkLoadedRef.current) return;
-    
-    // Check if SDK is already loaded
-    if (window.cast?.framework) {
-      initializeCast();
+    const video = options.videoRef?.current as HTMLVideoElement | null;
+    if (!video) {
+      console.log('[Cast] No video element yet, waiting...');
       return;
     }
 
-    // Define callback before loading script
-    window.__onGCastApiAvailable = (isAvailable: boolean) => {
-      if (isAvailable) {
-        initializeCast();
+    console.log('[Cast] Checking casting capabilities...');
+    console.log('[Cast] Video element:', video.tagName, 'src:', video.src?.substring(0, 50) || 'none');
+
+    // Check AirPlay (Safari)
+    const hasAirPlay = !!(window.WebKitPlaybackTargetAvailabilityEvent || 
+      'webkitCurrentPlaybackTargetIsWireless' in video ||
+      'webkitShowPlaybackTargetPicker' in video);
+    
+    hasAirPlayRef.current = hasAirPlay;
+    
+    if (hasAirPlay) {
+      console.log('[Cast] ✓ AirPlay support detected');
+      setState(prev => ({ ...prev, isAirPlayAvailable: true, isAvailable: true }));
+    }
+
+    // Check Remote Playback API (Chrome/Edge)
+    // @ts-ignore - remote is not in standard types
+    const remote = video.remote;
+    if (remote) {
+      hasRemotePlaybackRef.current = true;
+      console.log('[Cast] ✓ Remote Playback API detected');
+      
+      // Watch for device availability
+      remote.watchAvailability((available: boolean) => {
+        console.log('[Cast] Remote playback device availability:', available);
+        setState(prev => ({ 
+          ...prev, 
+          isAvailable: true, // Always keep available
+        }));
+      }).then((id: number) => {
+        watchIdRef.current = id;
+        console.log('[Cast] watchAvailability registered, id:', id);
+      }).catch((err: Error) => {
+        // watchAvailability not supported (common on localhost/HTTP)
+        // This is expected - prompt() can still work
+        console.log('[Cast] watchAvailability not supported:', err.message);
+        console.log('[Cast] This is normal on localhost - prompt() may still work');
+      });
+
+      // Listen for state changes
+      const handleConnecting = () => {
+        console.log('[Cast] Remote playback connecting...');
+        setState(prev => ({ ...prev, isConnected: false, isCasting: false, lastError: null }));
+      };
+
+      const handleConnect = () => {
+        console.log('[Cast] ✓ Remote playback connected!');
+        setState(prev => ({ ...prev, isConnected: true, isCasting: true, lastError: null }));
+        options.onConnect?.();
+      };
+
+      const handleDisconnect = () => {
+        console.log('[Cast] Remote playback disconnected');
+        setState(prev => ({ ...prev, isConnected: false, isCasting: false }));
+        options.onDisconnect?.();
+      };
+
+      remote.addEventListener('connecting', handleConnecting);
+      remote.addEventListener('connect', handleConnect);
+      remote.addEventListener('disconnect', handleDisconnect);
+
+      return () => {
+        remote.removeEventListener('connecting', handleConnecting);
+        remote.removeEventListener('connect', handleConnect);
+        remote.removeEventListener('disconnect', handleDisconnect);
+        
+        if (watchIdRef.current !== null) {
+          remote.cancelWatchAvailability(watchIdRef.current).catch(() => {});
+        }
+      };
+    } else {
+      console.log('[Cast] Remote Playback API not available');
+      // No Remote Playback API, but might have AirPlay
+      if (!hasAirPlay) {
+        console.log('[Cast] ⚠ No casting APIs available in this browser');
+      }
+    }
+  }, [options.videoRef, options.onConnect, options.onDisconnect]);
+
+  // Listen for AirPlay state changes
+  useEffect(() => {
+    const video = options.videoRef?.current as HTMLVideoElement | null;
+    if (!video) return;
+
+    const handleAirPlayAvailability = (event: any) => {
+      const available = event.availability === 'available';
+      setState(prev => ({ ...prev, isAirPlayAvailable: available, isAvailable: true }));
+      console.log('[Cast] AirPlay availability changed:', available);
+    };
+
+    const handleAirPlayChange = () => {
+      // @ts-ignore
+      const isWireless = video.webkitCurrentPlaybackTargetIsWireless || false;
+      setState(prev => ({ 
+        ...prev, 
+        isAirPlayActive: isWireless,
+        isCasting: isWireless || prev.isCasting,
+        isConnected: isWireless || prev.isConnected,
+        lastError: null,
+      }));
+      
+      if (isWireless) {
+        console.log('[Cast] ✓ AirPlay started');
+        options.onConnect?.();
+      } else {
+        console.log('[Cast] AirPlay stopped');
+        options.onDisconnect?.();
       }
     };
 
-    // Load Cast SDK
-    const script = document.createElement('script');
-    script.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
-    script.async = true;
-    document.head.appendChild(script);
-
-    sdkLoadedRef.current = true;
+    video.addEventListener('webkitplaybacktargetavailabilitychanged', handleAirPlayAvailability);
+    video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleAirPlayChange);
 
     return () => {
-      // Cleanup is handled by the SDK
+      video.removeEventListener('webkitplaybacktargetavailabilitychanged', handleAirPlayAvailability);
+      video.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', handleAirPlayChange);
     };
-  }, []);
+  }, [options.videoRef, options.onConnect, options.onDisconnect]);
 
-  const initializeCast = useCallback(() => {
-    if (!window.cast?.framework) return;
-
-    const context = window.cast.framework.CastContext.getInstance();
-    castContextRef.current = context;
-
-    context.setOptions({
-      receiverApplicationId: CAST_RECEIVER_APP_ID,
-      autoJoinPolicy: 'ORIGIN_SCOPED',
-    });
-
-    // Create remote player and controller
-    const player = new window.cast.framework.RemotePlayer();
-    const controller = new window.cast.framework.RemotePlayerController(player);
-    remotePlayerRef.current = player;
-    remotePlayerControllerRef.current = controller;
-
-    // Listen for cast state changes
-    context.addEventListener(
-      window.cast.framework.CastContextEventType.CAST_STATE_CHANGED,
-      handleCastStateChanged
-    );
-
-    // Listen for session state changes
-    context.addEventListener(
-      window.cast.framework.CastContextEventType.SESSION_STATE_CHANGED,
-      handleSessionStateChanged
-    );
-
-    // Listen for remote player events
-    const eventTypes = window.cast.framework.RemotePlayerEventType;
-    controller.addEventListener(eventTypes.IS_CONNECTED_CHANGED, handlePlayerEvent);
-    controller.addEventListener(eventTypes.IS_MEDIA_LOADED_CHANGED, handlePlayerEvent);
-    controller.addEventListener(eventTypes.CURRENT_TIME_CHANGED, handlePlayerEvent);
-    controller.addEventListener(eventTypes.DURATION_CHANGED, handlePlayerEvent);
-    controller.addEventListener(eventTypes.VOLUME_LEVEL_CHANGED, handlePlayerEvent);
-    controller.addEventListener(eventTypes.IS_MUTED_CHANGED, handlePlayerEvent);
-    controller.addEventListener(eventTypes.PLAYER_STATE_CHANGED, handlePlayerEvent);
-
-    // Check initial state
-    const castState = context.getCastState();
-    setState(prev => ({
-      ...prev,
-      isAvailable: castState !== window.cast!.framework.CastState.NO_DEVICES_AVAILABLE,
-    }));
-  }, []);
-
-  const handleCastStateChanged = useCallback((event: any) => {
-    if (!window.cast?.framework) return;
-    
-    const castState = event.castState;
-    setState(prev => ({
-      ...prev,
-      isAvailable: castState !== window.cast!.framework.CastState.NO_DEVICES_AVAILABLE,
-      isConnected: castState === window.cast!.framework.CastState.CONNECTED,
-    }));
-  }, []);
-
-  const handleSessionStateChanged = useCallback((event: any) => {
-    if (!window.cast?.framework) return;
-    
-    const sessionState = event.sessionState;
-    const { SessionState } = window.cast.framework;
-
-    if (sessionState === SessionState.SESSION_STARTED || sessionState === SessionState.SESSION_RESUMED) {
-      setState(prev => ({ ...prev, isConnected: true }));
-      options.onConnect?.();
-    } else if (sessionState === SessionState.SESSION_ENDED) {
-      setState(prev => ({
-        ...prev,
-        isConnected: false,
-        isCasting: false,
-        deviceName: null,
-      }));
-      options.onDisconnect?.();
-    }
-  }, [options]);
-
-  const handlePlayerEvent = useCallback(() => {
-    const player = remotePlayerRef.current;
-    if (!player) return;
-
-    setState(prev => ({
-      ...prev,
-      isConnected: player.isConnected,
-      isCasting: player.isMediaLoaded,
-      currentTime: player.currentTime,
-      duration: player.duration,
-      volume: player.volumeLevel,
-      isMuted: player.isMuted,
-      playerState: player.playerState as CastState['playerState'],
-    }));
-  }, []);
-
-  // Request cast session (show device picker)
+  // Request cast session - shows device picker
   const requestSession = useCallback(async () => {
-    if (!castContextRef.current) {
-      options.onError?.('Cast not available');
+    const video = options.videoRef?.current as HTMLVideoElement | null;
+    if (!video) {
+      console.error('[Cast] No video element');
+      const error = 'No video element available';
+      setState(prev => ({ ...prev, lastError: error }));
+      options.onError?.(error);
       return false;
     }
 
-    try {
-      await castContextRef.current.requestSession();
-      return true;
-    } catch (error: any) {
-      if (error.code !== 'cancel') {
-        options.onError?.(error.message || 'Failed to connect to cast device');
+    // Clear previous error
+    setState(prev => ({ ...prev, lastError: null }));
+
+    console.log('[Cast] Requesting cast session...');
+    console.log('[Cast] Video state: src=', video.src?.substring(0, 50), 'readyState=', video.readyState);
+
+    // Try AirPlay first (Safari)
+    // @ts-ignore
+    if (typeof video.webkitShowPlaybackTargetPicker === 'function') {
+      try {
+        console.log('[Cast] Showing AirPlay picker...');
+        // @ts-ignore
+        video.webkitShowPlaybackTargetPicker();
+        return true;
+      } catch (error: any) {
+        console.error('[Cast] AirPlay picker failed:', error);
+        // Don't return - try Remote Playback as fallback
       }
-      return false;
     }
+
+    // Try Remote Playback API (Chrome/Edge)
+    // @ts-ignore
+    const remote = video.remote;
+    if (remote) {
+      try {
+        console.log('[Cast] Showing Remote Playback picker...');
+        console.log('[Cast] Calling remote.prompt()...');
+        await remote.prompt();
+        console.log('[Cast] ✓ remote.prompt() succeeded');
+        return true;
+      } catch (error: any) {
+        console.error('[Cast] remote.prompt() error:', error.name, error.message);
+        
+        let errorMessage: string;
+        if (error.name === 'NotFoundError') {
+          errorMessage = 'No cast devices found. Make sure your Chromecast/TV is on the same network.';
+          console.log('[Cast] NotFoundError - no devices discovered');
+        } else if (error.name === 'NotAllowedError') {
+          // User cancelled - not an error
+          console.log('[Cast] User cancelled device picker');
+          return false;
+        } else if (error.name === 'InvalidStateError') {
+          errorMessage = 'Already connecting to a device';
+          console.log('[Cast] InvalidStateError - already connecting');
+        } else if (error.name === 'NotSupportedError') {
+          errorMessage = 'Casting requires HTTPS. Try deploying to Vercel or using a secure connection.';
+          console.log('[Cast] NotSupportedError - likely HTTP/localhost issue');
+        } else {
+          errorMessage = error.message || 'Failed to connect to cast device';
+        }
+        
+        setState(prev => ({ ...prev, lastError: errorMessage }));
+        options.onError?.(errorMessage);
+        return false;
+      }
+    }
+
+    const error = 'Casting is not supported in this browser. Try Chrome or Safari.';
+    console.log('[Cast] No casting method available');
+    setState(prev => ({ ...prev, lastError: error }));
+    options.onError?.(error);
+    return false;
   }, [options]);
 
-  // Load media to cast device
-  const loadMedia = useCallback(async (media: CastMedia) => {
-    if (!castContextRef.current || !window.chrome?.cast) {
-      options.onError?.('Cast not available');
-      return false;
-    }
+  // Load media (for Remote Playback, media is already loaded via video element)
+  const loadMedia = useCallback(async (_media: CastMedia) => {
+    // With Remote Playback API, the video element's current source is used
+    // No need to load media separately
+    return state.isConnected;
+  }, [state.isConnected]);
 
-    const session = castContextRef.current.getCurrentSession();
-    if (!session) {
-      options.onError?.('No active cast session');
-      return false;
-    }
-
-    try {
-      const mediaInfo = new window.chrome.cast.media.MediaInfo(
-        media.url,
-        media.contentType || 'application/x-mpegURL'
-      );
-
-      mediaInfo.streamType = media.isLive
-        ? window.chrome.cast.media.StreamType.LIVE
-        : window.chrome.cast.media.StreamType.BUFFERED;
-
-      mediaInfo.metadata = new window.chrome.cast.media.GenericMediaMetadata();
-      mediaInfo.metadata.title = media.title;
-      if (media.subtitle) {
-        mediaInfo.metadata.subtitle = media.subtitle;
-      }
-      if (media.posterUrl) {
-        mediaInfo.metadata.images = [{ url: media.posterUrl }];
-      }
-
-      const request = new window.chrome.cast.media.LoadRequest(mediaInfo);
-      request.autoplay = true;
-      if (media.startTime && media.startTime > 0) {
-        request.currentTime = media.startTime;
-      }
-
-      await session.loadMedia(request);
-      setState(prev => ({ ...prev, isCasting: true }));
-      return true;
-    } catch (error: any) {
-      options.onError?.(error.message || 'Failed to load media');
-      return false;
-    }
-  }, [options]);
-
-  // Control methods
-  const playOrPause = useCallback(() => {
-    remotePlayerControllerRef.current?.playOrPause();
-  }, []);
-
+  // Stop casting
   const stop = useCallback(() => {
-    remotePlayerControllerRef.current?.stop();
-    setState(prev => ({ ...prev, isCasting: false }));
+    // For Remote Playback, we can't programmatically disconnect
+    // User needs to use the device picker or the cast device's controls
+    console.log('[Cast] Stop requested - user should disconnect from device picker');
+    
+    setState(prev => ({ ...prev, isCasting: false, isConnected: false }));
   }, []);
 
-  const seek = useCallback((time: number) => {
-    const player = remotePlayerRef.current;
-    if (player) {
-      player.currentTime = time;
-      remotePlayerControllerRef.current?.seek();
-    }
-  }, []);
-
-  const setVolume = useCallback((volume: number) => {
-    const player = remotePlayerRef.current;
-    if (player) {
-      player.volumeLevel = Math.max(0, Math.min(1, volume));
-      remotePlayerControllerRef.current?.setVolumeLevel();
-    }
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    remotePlayerControllerRef.current?.muteOrUnmute();
-  }, []);
-
+  // Disconnect
   const disconnect = useCallback(() => {
-    castContextRef.current?.endCurrentSession(true);
-  }, []);
+    stop();
+  }, [stop]);
 
   return {
     ...state,
     requestSession,
     loadMedia,
-    playOrPause,
     stop,
-    seek,
-    setVolume,
-    toggleMute,
     disconnect,
+    // Expose for compatibility
+    playOrPause: () => {},
+    seek: (_time: number) => {},
+    setVolume: (_volume: number) => {},
+    toggleMute: () => {},
+    showAirPlayPicker: requestSession,
   };
 }

@@ -212,19 +212,19 @@ function ContentRow({ title, data, onItemClick, onSeeAll, accentColor = 'amber' 
     <section className="py-6 px-6">
       <div className="container mx-auto">
         <div className="flex items-center justify-between mb-5">
-          <button onClick={onSeeAll} className="text-xl md:text-2xl font-bold text-white flex items-center gap-3 hover:opacity-80 transition-opacity group">
+          <button onClick={onSeeAll} className="text-xl md:text-2xl font-bold text-white flex items-center gap-3 hover:opacity-80 transition-opacity group" data-tv-focusable="true" data-tv-group={`movies-header-${title.toLowerCase().replace(/[^a-z]/g, '')}`}>
             {title}
             <span className={`text-sm font-normal ${colors.text}`}>({(data?.total ?? data?.items?.length ?? 0).toLocaleString()})</span>
             <span className={`${colors.text} opacity-0 group-hover:opacity-100 transition-opacity`}>→</span>
           </button>
           <div className="flex gap-2">
-            <button onClick={() => scroll('left')} className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-lg font-bold">‹</button>
-            <button onClick={() => scroll('right')} className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-lg font-bold">›</button>
+            <button onClick={() => scroll('left')} className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-lg font-bold" data-tv-skip="true" tabIndex={-1}>‹</button>
+            <button onClick={() => scroll('right')} className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-lg font-bold" data-tv-skip="true" tabIndex={-1}>›</button>
           </div>
         </div>
-        <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        <div ref={scrollRef} className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }} data-tv-scroll-container="true" data-tv-group={`movies-${title.toLowerCase().replace(/[^a-z]/g, '')}`}>
           {data.items.map((item, index) => (
-            <motion.div key={item.id} initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, margin: '-50px' }} transition={{ delay: Math.min(index * 0.03, 0.3) }} onClick={() => onItemClick(item, title)} className="flex-shrink-0 w-36 md:w-44 cursor-pointer group">
+            <motion.div key={item.id} initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true, margin: '-50px' }} transition={{ delay: Math.min(index * 0.03, 0.3) }} onClick={() => onItemClick(item, title)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onItemClick(item, title); } }} className="flex-shrink-0 w-36 md:w-44 cursor-pointer group" data-tv-focusable="true" tabIndex={0} role="button" aria-label={item.title || item.name || ''}>
               <motion.div whileHover={{ scale: 1.05, y: -8 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }} className="relative rounded-xl overflow-hidden bg-gray-900 shadow-lg group-hover:shadow-xl transition-shadow">
                 <img src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '/placeholder-poster.jpg'} alt={item.title || item.name || ''} className="w-full aspect-[2/3] object-cover" loading="lazy" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

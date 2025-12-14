@@ -131,3 +131,85 @@ export function getIPTVStreamProxyUrl(
   
   return `${proxyUrl}/iptv/stream?${params.toString()}`;
 }
+
+// ============================================================================
+// AnimeKai Proxy Configuration
+// ============================================================================
+// AnimeKai uses MegaUp CDN which blocks:
+//   1. Datacenter IPs (Cloudflare, AWS, etc.)
+//   2. Requests with Origin header
+// 
+// The /animekai route on Cloudflare Worker forwards to RPI residential proxy
+// which fetches without Origin/Referer headers from a residential IP.
+// ============================================================================
+
+/**
+ * Check if AnimeKai proxy is configured
+ * Requires NEXT_PUBLIC_CF_STREAM_PROXY_URL to be set
+ */
+export function isAnimeKaiProxyConfigured(): boolean {
+  return !!process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+}
+
+/**
+ * Get AnimeKai stream proxy URL
+ * Routes through Cloudflare Worker -> RPI Proxy -> MegaUp CDN
+ * 
+ * @param url - The MegaUp CDN stream URL (m3u8 or segment)
+ * @returns Proxied URL through Cloudflare /animekai route
+ */
+export function getAnimeKaiProxyUrl(url: string): string {
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+  
+  if (!cfProxyUrl) {
+    console.error('[proxy-config] NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set! AnimeKai proxy requires Cloudflare Worker.');
+    throw new Error('AnimeKai proxy not configured. Set NEXT_PUBLIC_CF_STREAM_PROXY_URL environment variable.');
+  }
+  
+  // Use /animekai route which forwards to RPI residential proxy
+  // Strip /stream suffix if present (the base URL might include it)
+  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+  
+  return `${baseUrl}/animekai?url=${encodeURIComponent(url)}`;
+}
+
+/**
+ * Check if a URL is from AnimeKai CDN (requires RPI residential proxy)
+ * 
+ * AnimeKai uses multiple CDN domains that ALL block:
+ *   1. Datacenter IPs (Cloudflare, AWS, Vercel, etc.)
+ *   2. Requests with Origin header
+ * 
+ * ALL these domains need to go through the /animekai route -> RPI proxy
+ */
+export function isMegaUpCdnUrl(url: string): boolean {
+  // MegaUp CDN domains
+  if (url.includes('megaup') || 
+      url.includes('hub26link') || 
+      url.includes('app28base')) {
+    return true;
+  }
+  
+  // Other AnimeKai CDN domains that also block datacenter IPs
+  // These are used by different servers (Mega, Rapid, etc.)
+  if (url.includes('code29wave') ||    // rrr.code29wave.site
+      url.includes('pro25zone') ||     // rrr.pro25zone.site
+      url.includes('rapidshare') ||
+      url.includes('rapid-cloud') ||
+      url.includes('rabbitstream') ||
+      url.includes('vidcloud') ||
+      url.includes('dokicloud')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if a source is from AnimeKai provider (all AnimeKai sources need RPI proxy)
+ */
+export function isAnimeKaiSource(source: { title?: string; referer?: string }): boolean {
+  if (source.title?.toLowerCase().includes('animekai')) return true;
+  if (source.referer?.includes('animekai.to')) return true;
+  return false;
+}

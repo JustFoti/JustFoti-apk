@@ -49,6 +49,11 @@ export const ContentCard: React.FC<ContentCardProps> = ({
     }
   };
 
+  const handleFocus = () => {
+    // TV navigation handles scrolling, so we don't need to do it here
+    // This prevents double-scrolling issues
+  };
+
   // Format rating to 1 decimal place
   const rating = item.rating || item.vote_average || 0;
   const formattedRating = rating.toFixed(1);
@@ -62,7 +67,13 @@ export const ContentCard: React.FC<ContentCardProps> = ({
   };
 
   return (
-    <div ref={ref} className={`content-card-wrapper ${className}`}>
+    <div 
+      ref={ref} 
+      className={`content-card-wrapper ${className}`}
+      data-tv-focusable="true"
+      tabIndex={0}
+      onFocus={handleFocus}
+    >
       <Card3D
         onClick={handleClick}
         onKeyDown={handleKeyDown}

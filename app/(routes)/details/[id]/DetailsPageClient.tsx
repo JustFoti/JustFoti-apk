@@ -1,17 +1,155 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MediaItem, Season } from '@/types/media';
 import { ParallaxContainer } from '@/components/ui/ParallaxContainer';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { FluidButton } from '@/components/ui/FluidButton';
-import { ContentGrid } from '@/components/content/ContentGrid';
 import { SeasonSelector } from './SeasonSelector';
 import { EpisodeList } from './EpisodeList';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import styles from './DetailsPage.module.css';
+
+// Related Content Section with horizontal scroll and navigation buttons
+function RelatedContentSection({
+  items,
+  onItemSelect
+}: {
+  items: MediaItem[];
+  onItemSelect: (id: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (scrollRef.current) {
+      const scrollAmount = 600;
+      scrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  return (
+    <section className="py-12 px-6">
+      <div className="container mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+        >
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-2xl md:text-3xl font-bold text-white flex items-center gap-3">
+              <span className="text-3xl">✨</span>
+              <span>You May Also Like</span>
+            </h2>
+            <div className="flex gap-4">
+              <motion.button
+                whileHover={{ scale: 1.1, boxShadow: "0 8px 25px rgba(120, 119, 198, 0.4)" }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => scroll('left')}
+                className="w-16 h-16 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                data-tv-skip="true"
+                tabIndex={-1}
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                </svg>
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.1, boxShadow: "0 8px 25px rgba(120, 119, 198, 0.4)" }}
+                whileTap={{ scale: 0.9 }}
+                onClick={() => scroll('right')}
+                className="w-16 h-16 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                data-tv-skip="true"
+                tabIndex={-1}
+              >
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                </svg>
+              </motion.button>
+            </div>
+          </div>
+
+          <div
+            ref={scrollRef}
+            className="flex gap-6 overflow-x-auto scrollbar-hide pb-8 pt-4 px-2"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            data-tv-scroll-container="true"
+            data-tv-group="related-content"
+          >
+            {items.map((item, index) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, x: 50 }}
+                whileInView={{ opacity: 1, x: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: index * 0.05 }}
+                onClick={() => onItemSelect(String(item.id))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onItemSelect(String(item.id));
+                  }
+                }}
+                className="flex-shrink-0 w-48 md:w-56 cursor-pointer group p-2"
+                data-tv-focusable="true"
+                tabIndex={0}
+                role="button"
+                aria-label={`${item.title || item.name}`}
+              >
+                <motion.div
+                  whileHover={{ scale: 1.05, y: -8 }}
+                  transition={{ duration: 0.3, ease: "easeOut" }}
+                  className="relative rounded-xl bg-gray-800 shadow-2xl overflow-hidden"
+                >
+                  <div className="overflow-hidden rounded-xl">
+                    <img
+                      src={item.posterPath || `https://image.tmdb.org/t/p/w500${item.poster_path || ''}`}
+                      alt={item.title || item.name || 'Content'}
+                      className="w-full h-72 md:h-80 object-cover group-hover:scale-110 transition-transform duration-500"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+                  {/* Play Button Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
+                    <div className="w-16 h-16 bg-gradient-to-r from-purple-600/80 to-pink-600/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-2xl border border-white/20">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="white" strokeWidth="0">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  {/* Rating Badge */}
+                  <div className="absolute top-3 right-3 px-2 py-1 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 backdrop-blur-md rounded-full text-white text-xs font-bold flex items-center gap-1 shadow-lg border border-white/20">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                    {(item.vote_average || item.rating || 0).toFixed(1)}
+                  </div>
+                </motion.div>
+
+                <div className="p-3">
+                  <h3 className="text-white font-semibold text-base mb-1 line-clamp-2">
+                    {item.title || item.name || 'Untitled'}
+                  </h3>
+                  <p className="text-gray-400 text-sm">
+                    {new Date(item.release_date || item.first_air_date || item.releaseDate || '').getFullYear() || ''}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}
 
 // Note: Removed prefetch to avoid duplicate requests
 // SimpleVideoPlayer will handle stream extraction when user clicks "Watch Now"
@@ -297,6 +435,8 @@ export default function DetailsPageClient({
           transition={{ duration: 0.5 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
+          data-tv-focusable="true"
+          data-tv-group="details-nav"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={styles.backIcon}>
             <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
@@ -388,6 +528,7 @@ export default function DetailsPageClient({
                   variant="primary"
                   size="lg"
                   className={styles.watchButton}
+                  tvGroup="details-actions"
                 >
                   <svg
                     className={styles.playIcon}
@@ -432,16 +573,12 @@ export default function DetailsPageClient({
         </section>
       )}
 
-      {/* Related Content */}
+      {/* Related Content - Horizontal Scroll Row */}
       {relatedContent.length > 0 && (
-        <section className={styles.relatedSection}>
-          <h2 className={styles.sectionTitle}>You May Also Like</h2>
-          <ContentGrid
-            items={relatedContent}
-            onItemSelect={handleRelatedSelect}
-            layout="grid"
-          />
-        </section>
+        <RelatedContentSection 
+          items={relatedContent} 
+          onItemSelect={handleRelatedSelect} 
+        />
       )}
     </div>
   );

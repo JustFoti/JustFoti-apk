@@ -7,7 +7,19 @@ import { useWatchProgress } from '@/lib/hooks/useWatchProgress';
 import { trackWatchStart, trackWatchProgress, trackWatchPause, trackWatchComplete } from '@/lib/utils/live-activity';
 import { usePresenceContext } from '../analytics/PresenceProvider';
 import { getSubtitlePreferences, setSubtitlesEnabled, setSubtitleLanguage, getSubtitleStyle, setSubtitleStyle, type SubtitleStyle } from '@/lib/utils/subtitle-preferences';
-import { getPlayerPreferences, setAutoPlayNextEpisode, setAutoPlayCountdown, setShowNextEpisodeBeforeEnd, type PlayerPreferences } from '@/lib/utils/player-preferences';
+import { 
+  getPlayerPreferences, 
+  setAutoPlayNextEpisode, 
+  setAutoPlayCountdown, 
+  setShowNextEpisodeBeforeEnd, 
+  getAnimeAudioPreference,
+  setAnimeAudioPreference,
+  getPreferredAnimeKaiServer,
+  setPreferredAnimeKaiServer,
+  sourceMatchesAudioPreference,
+  type PlayerPreferences,
+  type AnimeAudioPreference 
+} from '@/lib/utils/player-preferences';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { CastOverlay } from './CastButton';
@@ -104,6 +116,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [customSubtitles, setCustomSubtitles] = useState<any[]>([]); // User-uploaded VTT files
   const subtitleFileInputRef = useRef<HTMLInputElement>(null);
   const currentSubtitleDataRef = useRef<any>(null); // Store current subtitle data for re-syncing
+  const pendingSeekTimeRef = useRef<number | null>(null); // Store position to restore when switching sources
 
   const [showNextEpisodeButton, setShowNextEpisodeButton] = useState(false);
   const [autoPlayCountdown, setAutoPlayCountdownState] = useState<number | null>(null);
@@ -136,6 +149,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [sourcesCache, setSourcesCache] = useState<Record<string, any[]>>({});
   const [loadingProviders, setLoadingProviders] = useState<Record<string, boolean>>({});
   const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
+  const [castError, setCastError] = useState<string | null>(null);
+  const castErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [providerAvailability, setProviderAvailability] = useState<Record<string, boolean>>({
     vidsrc: false, // VidSrc is disabled by default (requires ENABLE_VIDSRC_PROVIDER=true)
     videasy: true, // Videasy is always enabled (primary provider with multi-language support)
@@ -143,11 +158,19 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   });
   const [isAnimeContent, setIsAnimeContent] = useState(false); // Track if current content is anime
   const [highlightServerButton, setHighlightServerButton] = useState(false);
+  
+  // Anime-specific preferences
+  const [animeAudioPref, setAnimeAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
 
   // HLS quality levels
   const [hlsLevels, setHlsLevels] = useState<{ height: number; bitrate: number; index: number }[]>([]);
   const [currentHlsLevel, setCurrentHlsLevel] = useState<number>(-1); // -1 = auto
   const [currentResolution, setCurrentResolution] = useState<string>('');
+
+  // Player control navigation (TV/keyboard navigation for control buttons)
+  // Row-based navigation: 0=back button, 1=timeline, 2=control buttons
+  const [focusedRow, setFocusedRow] = useState<number>(-1); // -1 = no focus, 0=back, 1=timeline, 2=controls
+  const [focusedControlIndex, setFocusedControlIndex] = useState<number>(-1); // -1 = no focus within row
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFetchedKey = useRef('');
@@ -206,17 +229,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     onSingleTap: handleSingleTap,
   });
 
-  // Cast to TV functionality
+  // Cast to TV functionality (Chromecast + AirPlay)
   const cast = useCast({
+    videoRef: videoRef, // Pass video ref for AirPlay support
     onConnect: () => {
-      console.log('[VideoPlayer] Cast connected');
+      console.log('[VideoPlayer] Cast/AirPlay connected');
+      setCastError(null);
     },
     onDisconnect: () => {
-      console.log('[VideoPlayer] Cast disconnected');
+      console.log('[VideoPlayer] Cast/AirPlay disconnected');
       setIsCastOverlayVisible(false);
     },
     onError: (error) => {
       console.error('[VideoPlayer] Cast error:', error);
+      // Show cast error toast
+      setCastError(error);
+      // Clear previous timeout
+      if (castErrorTimeoutRef.current) {
+        clearTimeout(castErrorTimeoutRef.current);
+      }
+      // Auto-hide after 5 seconds
+      castErrorTimeoutRef.current = setTimeout(() => {
+        setCastError(null);
+      }, 5000);
     },
   });
 
@@ -242,29 +277,36 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const handleCastClick = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (cast.isCasting) {
+    // If already casting, stop
+    if (cast.isCasting || cast.isAirPlayActive) {
       cast.stop();
       setIsCastOverlayVisible(false);
-    } else if (cast.isConnected) {
+      return;
+    }
+    
+    // If already connected, load media
+    if (cast.isConnected) {
       const media = getCastMedia();
       if (media) {
-        // Pause local playback
         videoRef.current?.pause();
         const success = await cast.loadMedia(media);
         if (success) {
           setIsCastOverlayVisible(true);
         }
       }
-    } else {
-      const connected = await cast.requestSession();
-      if (connected) {
-        const media = getCastMedia();
-        if (media) {
-          videoRef.current?.pause();
-          const success = await cast.loadMedia(media);
-          if (success) {
-            setIsCastOverlayVisible(true);
-          }
+      return;
+    }
+    
+    // Try to start a cast session
+    // This will show the device picker (Chromecast or AirPlay depending on browser)
+    const connected = await cast.requestSession();
+    if (connected) {
+      const media = getCastMedia();
+      if (media) {
+        videoRef.current?.pause();
+        const success = await cast.loadMedia(media);
+        if (success) {
+          setIsCastOverlayVisible(true);
         }
       }
     }
@@ -312,6 +354,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
       const response = await fetch(`/api/stream/extract?${params}`, {
         priority: 'high' as RequestPriority,
+        cache: 'no-store', // Don't cache - URLs change frequently
       });
       const data = await response.json();
 
@@ -335,8 +378,19 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         const actualProvider = data.provider || providerName;
         console.log(`[VideoPlayer] Found ${sources.length} sources for ${providerName} (actual: ${actualProvider})`);
 
-        // Cache the sources under the REQUESTED provider name (so each tab has its own sources)
-        // This prevents VidSrc tab from being overwritten by Videasy sources when VidSrc falls back
+        // IMPORTANT: Only cache sources if they're from the requested provider
+        // If the API fell back to a different provider, don't show those sources in this tab
+        if (actualProvider !== providerName) {
+          console.log(`[VideoPlayer] API returned ${actualProvider} sources instead of ${providerName} - not caching for this tab`);
+          // Cache empty array so UI shows "No sources from [provider]"
+          setSourcesCache(prev => ({
+            ...prev,
+            [providerName]: []
+          }));
+          return [];
+        }
+
+        // Cache the sources under the provider name
         setSourcesCache(prev => ({
           ...prev,
           [providerName]: sources
@@ -391,7 +445,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     console.log(`[VideoPlayer] Fetching from ${providerName}...`);
 
     try {
-      const response = await fetch(`/api/stream/extract?${params}`, { priority: 'high' as RequestPriority });
+      const response = await fetch(`/api/stream/extract?${params}`, { priority: 'high' as RequestPriority, cache: 'no-store' });
       const data = await response.json();
 
       if (data.sources && data.sources.length > 0) {
@@ -508,11 +562,53 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setMenuProvider(successfulProvider);
       setSourcesCache(prev => ({ ...prev, [successfulProvider]: sources }));
       setAvailableSources(sources);
-      setCurrentSourceIndex(0);
+      
+      // For AnimeKai, try to find preferred server and match dub/sub preference
+      let selectedSourceIndex = 0;
+      if (successfulProvider === 'animekai') {
+        const audioPref = getAnimeAudioPreference();
+        const preferredServer = getPreferredAnimeKaiServer();
+        
+        // First, filter sources by dub/sub preference
+        const matchingAudioSources = sources.filter((s: any) => 
+          s.title && sourceMatchesAudioPreference(s.title, audioPref)
+        );
+        
+        if (matchingAudioSources.length > 0) {
+          // Try to find the preferred server within matching audio sources
+          if (preferredServer) {
+            const preferredIndex = sources.findIndex((s: any) => 
+              s.title && 
+              s.title.toLowerCase().includes(preferredServer.toLowerCase()) &&
+              sourceMatchesAudioPreference(s.title, audioPref)
+            );
+            if (preferredIndex !== -1) {
+              selectedSourceIndex = preferredIndex;
+              console.log(`[VideoPlayer] Using preferred AnimeKai server: ${preferredServer} (${audioPref})`);
+            } else {
+              // Use first source matching audio preference
+              selectedSourceIndex = sources.findIndex((s: any) => 
+                s.title && sourceMatchesAudioPreference(s.title, audioPref)
+              );
+              console.log(`[VideoPlayer] Preferred server not found, using first ${audioPref} source`);
+            }
+          } else {
+            // No preferred server, use first source matching audio preference
+            selectedSourceIndex = sources.findIndex((s: any) => 
+              s.title && sourceMatchesAudioPreference(s.title, audioPref)
+            );
+            console.log(`[VideoPlayer] Using first ${audioPref} source`);
+          }
+        } else {
+          console.log(`[VideoPlayer] No ${audioPref} sources found, using first available`);
+        }
+      }
+      
+      setCurrentSourceIndex(selectedSourceIndex);
       lastFetchedKey.current = `${tmdbId}-${mediaType}-${season}-${episode}-${successfulProvider}`;
 
       // Setup initial stream URL
-      const initialSource = sources[0];
+      const initialSource = sources[selectedSourceIndex] || sources[0];
       console.log('[VideoPlayer] Initial source:', {
         title: initialSource.title,
         url: initialSource.url?.substring(0, 100),
@@ -531,8 +627,13 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       let finalUrl = initialSource.url;
 
       if (initialSource.requiresSegmentProxy) {
-        const isAlreadyProxied = finalUrl.includes('/api/stream-proxy') || finalUrl.includes('/stream/?url=');
-        console.log('[VideoPlayer] Proxy check:', { requiresSegmentProxy: true, isAlreadyProxied });
+        // Check if URL is already proxied (via /stream/, /animekai, or local API)
+        const isAlreadyProxied = finalUrl.includes('/api/stream-proxy') || 
+                                  finalUrl.includes('/stream/?url=') || 
+                                  finalUrl.includes('/stream?url=') ||
+                                  finalUrl.includes('/animekai?url=') ||
+                                  finalUrl.includes('/animekai/?url=');
+        console.log('[VideoPlayer] Proxy check:', { requiresSegmentProxy: true, isAlreadyProxied, url: finalUrl.substring(0, 80) });
         if (!isAlreadyProxied) {
           const targetUrl = initialSource.directUrl || initialSource.url;
           finalUrl = getStreamProxyUrl(targetUrl, successfulProvider, initialSource.referer || '');
@@ -557,7 +658,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     const video = videoRef.current;
     console.log('[VideoPlayer] Initializing HLS with URL:', streamUrl);
 
-    if (streamUrl.includes('.m3u8') || streamUrl.includes('stream-proxy') || streamUrl.includes('/stream/')) {
+    if (streamUrl.includes('.m3u8') || streamUrl.includes('stream-proxy') || streamUrl.includes('/stream/') || streamUrl.includes('/animekai')) {
       if (Hls.isSupported()) {
         const hls = new Hls({
           enableWorker: true,
@@ -645,7 +746,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             console.log('[VideoPlayer] HLS quality levels:', uniqueLevels);
           }
           
-          if (currentSubtitle && availableSubtitles.length > 0) {
+          // Restore playback position if switching sources
+          if (pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+            const seekTime = pendingSeekTimeRef.current;
+            console.log('[VideoPlayer] Restoring playback position:', seekTime);
+            video.currentTime = seekTime;
+            pendingSeekTimeRef.current = null;
+          }
+          
+          // Restore subtitles if they were active
+          if (currentSubtitleDataRef.current) {
+            console.log('[VideoPlayer] Restoring subtitle:', currentSubtitleDataRef.current.language);
+            setTimeout(() => {
+              loadSubtitle(currentSubtitleDataRef.current, subtitleOffset);
+            }, 100);
+          } else if (currentSubtitle && availableSubtitles.length > 0) {
             const currentSub = availableSubtitles.find(sub => sub.id === currentSubtitle);
             if (currentSub) {
               setTimeout(() => {
@@ -690,6 +805,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 console.error('[HLS] Fatal network error, trying next source...', data);
                 setIsLoading(true);
                 setError(null);
+                
+                // Save current playback position before trying next source
+                if (video.currentTime > 0 && pendingSeekTimeRef.current === null) {
+                  pendingSeekTimeRef.current = video.currentTime;
+                  console.log('[VideoPlayer] Saving position before fallback:', pendingSeekTimeRef.current);
+                }
                 
                 // Mark the CURRENT source as 'down' since it failed
                 // Use functional updates to avoid stale closure issues
@@ -836,12 +957,32 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
         video.src = streamUrl;
         video.addEventListener('loadedmetadata', () => {
+          // Restore playback position if switching sources
+          if (pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+            console.log('[VideoPlayer] Restoring position (Safari):', pendingSeekTimeRef.current);
+            video.currentTime = pendingSeekTimeRef.current;
+            pendingSeekTimeRef.current = null;
+          }
+          // Restore subtitles
+          if (currentSubtitleDataRef.current) {
+            setTimeout(() => loadSubtitle(currentSubtitleDataRef.current, subtitleOffset), 100);
+          }
           video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
         });
       }
     } else {
       video.src = streamUrl;
       video.addEventListener('loadedmetadata', () => {
+        // Restore playback position if switching sources
+        if (pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+          console.log('[VideoPlayer] Restoring position (native):', pendingSeekTimeRef.current);
+          video.currentTime = pendingSeekTimeRef.current;
+          pendingSeekTimeRef.current = null;
+        }
+        // Restore subtitles
+        if (currentSubtitleDataRef.current) {
+          setTimeout(() => loadSubtitle(currentSubtitleDataRef.current, subtitleOffset), 100);
+        }
         video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
       });
     }
@@ -1016,6 +1157,26 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setIsMuted(video.muted);
     };
 
+    // Resync subtitles after seeking to ensure they display correctly
+    const handleSeeked = () => {
+      if (video.textTracks && video.textTracks.length > 0) {
+        console.log('[VideoPlayer] Seek completed, resyncing subtitles at time:', video.currentTime);
+        
+        // Force subtitle track refresh by toggling mode
+        for (let i = 0; i < video.textTracks.length; i++) {
+          const track = video.textTracks[i];
+          if (track.mode === 'showing') {
+            // Toggle off and on to force browser to re-evaluate which cues to show
+            track.mode = 'hidden';
+            // Use requestAnimationFrame to ensure the mode change is processed
+            requestAnimationFrame(() => {
+              track.mode = 'showing';
+            });
+          }
+        }
+      }
+    };
+
     const handleWaiting = () => setIsBuffering(true);
     const handleCanPlay = () => {
       setIsBuffering(false);
@@ -1079,6 +1240,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('loadeddata', handleLoadedData);
     video.addEventListener('ended', handleEnded);
+    video.addEventListener('seeked', handleSeeked);
 
     return () => {
       video.removeEventListener('error', handleVideoError);
@@ -1091,6 +1253,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('loadeddata', handleLoadedData);
       video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('seeked', handleSeeked);
       // Clear watch time tracking on unmount (will sync before clearing)
       clearWatchTime(tmdbId, season, episode);
     };
@@ -1173,75 +1336,417 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     setAutoPlayCountdownState(null);
   }, []);
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts with row-based navigation
+  // Rows: 0=top row (back button + sub/dub + server), 1=timeline (progress bar), 2=control buttons (bottom)
+  // Special handling: volume control when on mute button, menu navigation when menus open
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (!videoRef.current) return;
+      if (!containerRef.current) return;
+      
+      // Only handle keys if the video player container is visible
+      const rect = containerRef.current.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      
+      // Resume prompt has its own keyboard handler, skip here
+      if (showResumePrompt) return;
+      
+      // Get bottom control buttons (row 2)
+      const controlButtons = containerRef.current?.querySelectorAll('[data-player-control]') as NodeListOf<HTMLButtonElement>;
+      const controlCount = controlButtons?.length || 0;
+      
+      // Get top row buttons (row 0): back button + sub/dub + server
+      const backButton = document.querySelector('[data-player-back="true"]') as HTMLButtonElement;
+      const topControlButtons = containerRef.current?.querySelectorAll('[data-player-top-control]') as NodeListOf<HTMLButtonElement>;
+      // Build array of all top row elements: [backButton, ...topControlButtons]
+      const topRowElements: HTMLElement[] = [];
+      if (backButton) topRowElements.push(backButton);
+      topControlButtons?.forEach(btn => topRowElements.push(btn));
+      const topRowCount = topRowElements.length;
+      
+      // Check if focused on mute/volume button (row 2)
+      const focusedButton = focusedRow === 2 && focusedControlIndex >= 0 && controlButtons ? controlButtons[focusedControlIndex] : null;
+      const isOnVolumeButton = focusedButton?.getAttribute('data-player-control') === 'mute';
+      
+      // Check if any menu is open (subtitles, settings, server)
+      const isMenuOpen = showSubtitles || showSettings || showServerMenu;
+      
+      // Handle arrow keys for player control navigation
+      const isArrowKey = ['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(e.key.toLowerCase());
+      if (isArrowKey) {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent TVNavigationProvider from handling
+      }
+      
       switch (e.key.toLowerCase()) {
         case ' ':
         case 'k':
           e.preventDefault();
-          togglePlay();
+          e.stopPropagation();
+          // If a control button is focused, activate it
+          if (focusedRow === 0 && focusedControlIndex >= 0 && topRowElements[focusedControlIndex]) {
+            topRowElements[focusedControlIndex].click();
+          } else if (focusedRow === 2 && focusedControlIndex >= 0 && controlButtons && controlButtons[focusedControlIndex]) {
+            controlButtons[focusedControlIndex].click();
+          } else {
+            togglePlay();
+          }
+          break;
+        case 'enter':
+          e.preventDefault();
+          e.stopPropagation();
+          // Activate based on current row
+          if (focusedRow === 0 && focusedControlIndex >= 0 && topRowElements[focusedControlIndex]) {
+            topRowElements[focusedControlIndex].click();
+          } else if (focusedRow === 2 && focusedControlIndex >= 0 && controlButtons && controlButtons[focusedControlIndex]) {
+            controlButtons[focusedControlIndex].click();
+          }
           break;
         case 'f':
           e.preventDefault();
+          e.stopPropagation();
           toggleFullscreen();
           break;
         case 'm':
           e.preventDefault();
+          e.stopPropagation();
           toggleMute();
           break;
         case 'arrowleft':
           e.preventDefault();
-          seek(currentTime - 10);
+          // Show controls if hidden
+          if (!showControls) {
+            setShowControls(true);
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+            return;
+          }
+          // If server menu is open, navigate tabs left
+          if (showServerMenu) {
+            // For anime content, only AnimeKai is available (no tabs to navigate)
+            if (isAnimeContent) {
+              // No tab navigation for anime - just stay on AnimeKai
+              return;
+            }
+            // For non-anime content, navigate between Videasy and VidSrc
+            const availableProviders: string[] = ['videasy'];
+            if (providerAvailability.vidsrc) availableProviders.push('vidsrc');
+            
+            const currentTabIndex = availableProviders.indexOf(menuProvider);
+            if (currentTabIndex > 0) {
+              const newProvider = availableProviders[currentTabIndex - 1];
+              setMenuProvider(newProvider);
+              fetchSources(newProvider);
+            } else {
+              // Wrap to last tab
+              const newProvider = availableProviders[availableProviders.length - 1];
+              setMenuProvider(newProvider);
+              fetchSources(newProvider);
+            }
+            return;
+          }
+          // If other menu is open (subtitles/settings), close it
+          if (showSubtitles || showSettings) {
+            setShowSubtitles(false);
+            setShowSettings(false);
+            return;
+          }
+          // Behavior depends on current row
+          if (focusedRow === 0 && topRowCount > 0) {
+            // Top row: navigate left through back button, sub/dub, server
+            if (focusedControlIndex <= 0) {
+              setFocusedControlIndex(topRowCount - 1); // Wrap to end
+            } else {
+              setFocusedControlIndex(prev => prev - 1);
+            }
+          } else if (focusedRow === 1) {
+            // Timeline row: seek backward
+            seek(currentTime - 10);
+          } else if (focusedRow === 2 && controlCount > 0) {
+            // Control buttons row: navigate left
+            if (focusedControlIndex <= 0) {
+              setFocusedControlIndex(controlCount - 1); // Wrap to end
+            } else {
+              setFocusedControlIndex(prev => prev - 1);
+            }
+          } else if (focusedRow < 0) {
+            // No focus yet, start at controls
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+          }
           break;
         case 'arrowright':
           e.preventDefault();
-          seek(currentTime + 10);
+          // Show controls if hidden
+          if (!showControls) {
+            setShowControls(true);
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+            return;
+          }
+          // If server menu is open, navigate tabs right
+          if (showServerMenu) {
+            // For anime content, only AnimeKai is available (no tabs to navigate)
+            if (isAnimeContent) {
+              // No tab navigation for anime - just stay on AnimeKai
+              return;
+            }
+            // For non-anime content, navigate between Videasy and VidSrc
+            const availableProviders: string[] = ['videasy'];
+            if (providerAvailability.vidsrc) availableProviders.push('vidsrc');
+            
+            const currentTabIndex = availableProviders.indexOf(menuProvider);
+            if (currentTabIndex < availableProviders.length - 1) {
+              const newProvider = availableProviders[currentTabIndex + 1];
+              setMenuProvider(newProvider);
+              fetchSources(newProvider);
+            } else {
+              // Wrap to first tab
+              const newProvider = availableProviders[0];
+              setMenuProvider(newProvider);
+              fetchSources(newProvider);
+            }
+            return;
+          }
+          // If other menu is open (subtitles/settings), close it
+          if (showSubtitles || showSettings) {
+            setShowSubtitles(false);
+            setShowSettings(false);
+            return;
+          }
+          // Behavior depends on current row
+          if (focusedRow === 0 && topRowCount > 0) {
+            // Top row: navigate right through back button, sub/dub, server
+            if (focusedControlIndex >= topRowCount - 1) {
+              setFocusedControlIndex(0); // Wrap to start
+            } else {
+              setFocusedControlIndex(prev => prev + 1);
+            }
+          } else if (focusedRow === 1) {
+            // Timeline row: seek forward
+            seek(currentTime + 10);
+          } else if (focusedRow === 2 && controlCount > 0) {
+            // Control buttons row: navigate right
+            if (focusedControlIndex >= controlCount - 1) {
+              setFocusedControlIndex(0); // Wrap to start
+            } else {
+              setFocusedControlIndex(prev => prev + 1);
+            }
+          } else if (focusedRow < 0) {
+            // No focus yet, start at controls
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+          }
           break;
         case 'arrowup':
           e.preventDefault();
-          handleVolumeChange(Math.min(volume * 100 + 10, 100));
+          // Show controls if hidden
+          if (!showControls) {
+            setShowControls(true);
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+            return;
+          }
+          // If on volume button, increase volume
+          if (isOnVolumeButton) {
+            handleVolumeChange(Math.min(volume * 100 + 10, 100));
+            return;
+          }
+          // If menu is open, let native focus handle menu navigation
+          if (isMenuOpen) {
+            // Focus previous menu item - use specific selector for server menu sources
+            const sourceItems = showServerMenu 
+              ? containerRef.current?.querySelectorAll('[data-server-source]') as NodeListOf<HTMLButtonElement>
+              : containerRef.current?.querySelectorAll('.settingsOption, [class*="settingsOption"]') as NodeListOf<HTMLButtonElement>;
+            if (sourceItems && sourceItems.length > 0) {
+              const currentFocus = document.activeElement;
+              const currentIndex = Array.from(sourceItems).indexOf(currentFocus as HTMLButtonElement);
+              if (currentIndex > 0) {
+                sourceItems[currentIndex - 1].focus();
+              } else if (currentIndex === -1) {
+                // No source focused yet, focus the last one
+                sourceItems[sourceItems.length - 1].focus();
+              } else {
+                sourceItems[sourceItems.length - 1].focus(); // Wrap to end
+              }
+            }
+            return;
+          }
+          // Move up through rows: controls(2) -> timeline(1) -> top row(0)
+          if (focusedRow < 0) {
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+          } else if (focusedRow === 2) {
+            setFocusedRow(1); // Move to timeline
+            setFocusedControlIndex(-1);
+          } else if (focusedRow === 1 && topRowCount > 0) {
+            setFocusedRow(0); // Move to top row
+            setFocusedControlIndex(0); // Start at back button (first element)
+          }
           break;
         case 'arrowdown':
           e.preventDefault();
-          handleVolumeChange(Math.max(volume * 100 - 10, 0));
+          // Show controls if hidden
+          if (!showControls) {
+            setShowControls(true);
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+            return;
+          }
+          // If on volume button, decrease volume
+          if (isOnVolumeButton) {
+            handleVolumeChange(Math.max(volume * 100 - 10, 0));
+            return;
+          }
+          // If menu is open, navigate through menu items
+          if (isMenuOpen) {
+            // Focus next menu item - use specific selector for server menu sources
+            const sourceItems = showServerMenu 
+              ? containerRef.current?.querySelectorAll('[data-server-source]') as NodeListOf<HTMLButtonElement>
+              : containerRef.current?.querySelectorAll('.settingsOption, [class*="settingsOption"]') as NodeListOf<HTMLButtonElement>;
+            if (sourceItems && sourceItems.length > 0) {
+              const currentFocus = document.activeElement;
+              const currentIndex = Array.from(sourceItems).indexOf(currentFocus as HTMLButtonElement);
+              if (currentIndex < sourceItems.length - 1 && currentIndex >= 0) {
+                sourceItems[currentIndex + 1].focus();
+              } else if (currentIndex === -1) {
+                // No source focused yet, focus the first one
+                sourceItems[0].focus();
+              } else {
+                sourceItems[0].focus(); // Wrap to start
+              }
+            }
+            return;
+          }
+          // Move down through rows: back(0) -> timeline(1) -> controls(2)
+          if (focusedRow < 0) {
+            setFocusedRow(2);
+            setFocusedControlIndex(0);
+          } else if (focusedRow === 0) {
+            setFocusedRow(1); // Move from back to timeline
+            setFocusedControlIndex(-1);
+          } else if (focusedRow === 1) {
+            setFocusedRow(2); // Move to controls
+            setFocusedControlIndex(0);
+          }
+          // At row 2, can't go lower
+          break;
+        case 'escape':
+        case 'backspace':
+          e.preventDefault();
+          e.stopPropagation();
+          // If menu is open, close it first
+          if (isMenuOpen) {
+            setShowSubtitles(false);
+            setShowSettings(false);
+            setShowServerMenu(false);
+            return;
+          }
+          // Clear focus or go back
+          if (focusedRow >= 0) {
+            setFocusedRow(-1);
+            setFocusedControlIndex(-1);
+          } else {
+            window.history.back();
+          }
           break;
         case 'n':
-          // Test: Trigger next episode flow (simulates video ending)
+          // Test: Trigger next episode flow
           e.preventDefault();
-          console.log('[VideoPlayer] TEST: Manually triggering next episode flow');
+          e.stopPropagation();
           const currentNextEp = nextEpisodeRef.current;
           const currentCallback = onNextEpisodeRef.current;
-          console.log('[VideoPlayer] TEST: nextEpisode:', currentNextEp, 'callback:', !!currentCallback);
           if (currentNextEp && currentCallback) {
             const prefs = getPlayerPreferences();
             if (prefs.autoPlayNextEpisode) {
-              console.log('[VideoPlayer] TEST: Starting countdown:', prefs.autoPlayCountdown);
               setAutoPlayCountdownState(prefs.autoPlayCountdown);
             }
             setShowNextEpisodeButton(true);
           }
           break;
         case 'g':
-          // Subtitle sync: delay subtitles (they appear too early)
           e.preventDefault();
-          if (currentSubtitle) {
-            adjustSubtitleOffset(0.5);
-          }
+          e.stopPropagation();
+          if (currentSubtitle) adjustSubtitleOffset(0.5);
           break;
         case 'h':
-          // Subtitle sync: advance subtitles (they appear too late)
           e.preventDefault();
-          if (currentSubtitle) {
-            adjustSubtitleOffset(-0.5);
-          }
+          e.stopPropagation();
+          if (currentSubtitle) adjustSubtitleOffset(-0.5);
           break;
       }
     };
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentTime, volume]);
+    // Use capture phase to intercept before TVNavigationProvider
+    window.addEventListener('keydown', handleKeyPress, true);
+    return () => window.removeEventListener('keydown', handleKeyPress, true);
+  }, [currentTime, volume, showResumePrompt, showControls, focusedRow, focusedControlIndex, showSubtitles, showSettings, showServerMenu]);
+
+  // Apply visual focus based on row and control index
+  useEffect(() => {
+    if (!containerRef.current) return;
+    
+    // Get bottom control buttons (row 2)
+    const controlButtons = containerRef.current.querySelectorAll('[data-player-control]') as NodeListOf<HTMLButtonElement>;
+    const progressBar = containerRef.current.querySelector('[data-player-timeline]') as HTMLElement;
+    
+    // Get top row elements (row 0): back button + sub/dub + server
+    const backButton = document.querySelector('[data-player-back="true"]') as HTMLButtonElement;
+    const topControlButtons = containerRef.current.querySelectorAll('[data-player-top-control]') as NodeListOf<HTMLButtonElement>;
+    const topRowElements: HTMLElement[] = [];
+    if (backButton) topRowElements.push(backButton);
+    topControlButtons?.forEach(btn => topRowElements.push(btn));
+    
+    // Remove all focus classes first
+    controlButtons?.forEach(btn => {
+      btn.classList.remove(styles.playerControlFocused);
+    });
+    topRowElements.forEach(el => {
+      el.classList.remove('player-back-focused');
+      el.classList.remove(styles.playerControlFocused);
+    });
+    progressBar?.classList.remove(styles.timelineFocused);
+    
+    // Apply focus based on current row
+    if (focusedRow === 0 && focusedControlIndex >= 0 && topRowElements[focusedControlIndex]) {
+      // Top row - back button, sub/dub, or server
+      const el = topRowElements[focusedControlIndex];
+      if (el === backButton) {
+        el.classList.add('player-back-focused');
+      } else {
+        el.classList.add(styles.playerControlFocused);
+      }
+      el.focus();
+    } else if (focusedRow === 1 && progressBar) {
+      // Timeline row - only highlight timeline, no button focus
+      progressBar.classList.add(styles.timelineFocused);
+    } else if (focusedRow === 2 && controlButtons && focusedControlIndex >= 0 && focusedControlIndex < controlButtons.length) {
+      // Control buttons row
+      controlButtons[focusedControlIndex].classList.add(styles.playerControlFocused);
+      controlButtons[focusedControlIndex].focus();
+    }
+  }, [focusedRow, focusedControlIndex]);
+
+  // Reset focus when controls hide
+  useEffect(() => {
+    if (!showControls) {
+      setFocusedRow(-1);
+      setFocusedControlIndex(-1);
+    }
+  }, [showControls]);
+
+  // Auto-focus first source when server menu opens
+  useEffect(() => {
+    if (showServerMenu && containerRef.current) {
+      // Small delay to ensure menu is rendered
+      const timer = setTimeout(() => {
+        const firstSource = containerRef.current?.querySelector('[data-server-source="0"]') as HTMLButtonElement;
+        if (firstSource) {
+          firstSource.focus();
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [showServerMenu, menuProvider, sourcesCache]);
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -1289,10 +1794,31 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }, 1000);
   };
 
+  // Force resync subtitles to current video time
+  const resyncSubtitles = useCallback(() => {
+    if (!videoRef.current || !videoRef.current.textTracks) return;
+    
+    const video = videoRef.current;
+    console.log('[VideoPlayer] Resyncing subtitles at time:', video.currentTime);
+    
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const track = video.textTracks[i];
+      if (track.mode === 'showing') {
+        // Toggle mode to force browser to re-evaluate which cues to display
+        track.mode = 'hidden';
+        requestAnimationFrame(() => {
+          track.mode = 'showing';
+        });
+      }
+    }
+  }, []);
+
   const seek = (time: number) => {
     if (!videoRef.current) return;
     const newTime = Math.max(0, Math.min(time, duration));
     videoRef.current.currentTime = newTime;
+    // Resync subtitles after seek completes
+    setTimeout(resyncSubtitles, 50);
     trackInteraction({
       element: 'video_player',
       action: 'click',
@@ -1408,13 +1934,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       track.addEventListener('load', () => {
         console.log('[VideoPlayer] Subtitle track loaded successfully');
         if (videoRef.current && videoRef.current.textTracks) {
+          const video = videoRef.current;
+          const currentVideoTime = video.currentTime;
+          
           // Set all tracks to showing and apply offset
-          for (let i = 0; i < videoRef.current.textTracks.length; i++) {
-            const textTrack = videoRef.current.textTracks[i];
+          for (let i = 0; i < video.textTracks.length; i++) {
+            const textTrack = video.textTracks[i];
             console.log('[VideoPlayer] Track', i, ':', textTrack.label, textTrack.mode, 'cues:', textTrack.cues?.length);
-            textTrack.mode = 'showing';
             
-            // Apply offset to all cues
+            // Apply offset to all cues if needed
             if (offset !== 0 && textTrack.cues) {
               for (let j = 0; j < textTrack.cues.length; j++) {
                 const cue = textTrack.cues[j] as VTTCue;
@@ -1423,7 +1951,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               }
               console.log('[VideoPlayer] Applied offset of', offset, 'seconds to', textTrack.cues.length, 'cues');
             }
+            
+            // Force sync: toggle mode to refresh cue display at current time
+            textTrack.mode = 'hidden';
           }
+          
+          // Use requestAnimationFrame to ensure mode change is processed before showing
+          requestAnimationFrame(() => {
+            if (video.textTracks) {
+              for (let i = 0; i < video.textTracks.length; i++) {
+                video.textTracks[i].mode = 'showing';
+              }
+              console.log('[VideoPlayer] Subtitles synced at video time:', currentVideoTime);
+            }
+          });
         }
       });
       track.addEventListener('error', (e) => {
@@ -1431,12 +1972,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       });
       videoRef.current.appendChild(track);
       
-      // Force track to show after a delay
+      // Force track to show after a delay with proper sync
       setTimeout(() => {
         if (videoRef.current && videoRef.current.textTracks) {
-          for (let i = 0; i < videoRef.current.textTracks.length; i++) {
-            const textTrack = videoRef.current.textTracks[i];
-            textTrack.mode = 'showing';
+          const video = videoRef.current;
+          console.log('[VideoPlayer] Delayed subtitle sync at time:', video.currentTime);
+          
+          // Toggle mode to force browser to re-evaluate cues at current time
+          for (let i = 0; i < video.textTracks.length; i++) {
+            const textTrack = video.textTracks[i];
+            if (textTrack.mode !== 'showing') {
+              textTrack.mode = 'hidden';
+              requestAnimationFrame(() => {
+                textTrack.mode = 'showing';
+              });
+            }
           }
         }
       }, 500);
@@ -1748,40 +2298,136 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     if (videoRef.current) {
       videoRef.current.currentTime = savedProgress;
       videoRef.current.play();
+      // Resync subtitles after a short delay to ensure seek is complete
+      setTimeout(resyncSubtitles, 100);
     }
     setShowResumePrompt(false);
   };
 
-  const resetControlsTimeout = () => {
+  // Auto-focus the Resume button and handle keyboard navigation when modal is open
+  useEffect(() => {
+    if (!showResumePrompt) return;
+
+    // Focus the Resume button immediately
+    const focusResumeButton = () => {
+      const resumeBtn = document.querySelector('[data-resume-btn="resume"]') as HTMLButtonElement;
+      if (resumeBtn) {
+        resumeBtn.focus();
+        resumeBtn.classList.add('tv-focused');
+      }
+    };
+
+    // Small delay to ensure DOM is ready
+    const focusTimer = setTimeout(focusResumeButton, 50);
+
+    // Handle keyboard navigation within the modal
+    const handleModalKeyDown = (e: KeyboardEvent) => {
+      const startBtn = document.querySelector('[data-resume-btn="start"]') as HTMLButtonElement;
+      const resumeBtn = document.querySelector('[data-resume-btn="resume"]') as HTMLButtonElement;
+      if (!startBtn || !resumeBtn) return;
+
+      const buttons = [startBtn, resumeBtn];
+      let currentIndex = buttons.findIndex(btn => document.activeElement === btn);
+      if (currentIndex === -1) currentIndex = 1; // Default to Resume button
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Remove old focus styling
+        buttons.forEach(btn => btn.classList.remove('tv-focused'));
+        
+        let newIndex = currentIndex;
+        if (e.key === 'ArrowLeft') {
+          newIndex = Math.max(0, currentIndex - 1);
+        } else {
+          newIndex = Math.min(buttons.length - 1, currentIndex + 1);
+        }
+        
+        buttons[newIndex].focus();
+        buttons[newIndex].classList.add('tv-focused');
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        e.stopPropagation();
+        buttons[currentIndex].click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleStartOver();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Block up/down and keep current focus
+        e.preventDefault();
+        e.stopPropagation();
+        // Re-apply focus styling to current button
+        buttons.forEach(btn => btn.classList.remove('tv-focused'));
+        buttons[currentIndex].classList.add('tv-focused');
+      }
+    };
+
+    // Use capture phase to intercept before other handlers
+    window.addEventListener('keydown', handleModalKeyDown, true);
+
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener('keydown', handleModalKeyDown, true);
+    };
+  }, [showResumePrompt]);
+
+  const resetControlsTimeout = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
-    if (isPlaying) {
+    // Don't auto-hide controls if keyboard navigation is active
+    if (isPlaying && focusedRow < 0 && focusedControlIndex < 0) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
       }, 3000);
     }
-  };
+  }, [isPlaying, focusedRow, focusedControlIndex]);
 
   // Handle tap to play/pause (separate from zoom gestures)
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
     // Only toggle play if clicking directly on the container or video wrapper
     // and not on controls or other interactive elements
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('[class*="settings"]') || target.closest('[class*="controls"]')) {
+    
+    // Check for any interactive elements - be very permissive to avoid blocking menu clicks
+    if (
+      target.closest('button') || 
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('[data-player-menu]') ||
+      target.closest('[class*="settings"]') || 
+      target.closest('[class*="controls"]') ||
+      target.closest('[class*="Menu"]') ||
+      target.closest('[class*="menu"]') ||
+      target.closest('[role="menu"]') ||
+      target.closest('[role="menuitem"]')
+    ) {
       return;
     }
     togglePlay();
   }, []);
 
+  // Handle mouse move - show controls and clear keyboard focus
+  const handleMouseMove = useCallback(() => {
+    resetControlsTimeout();
+    // Clear keyboard focus when mouse is used
+    if (focusedRow >= 0 || focusedControlIndex >= 0) {
+      setFocusedRow(-1);
+      setFocusedControlIndex(-1);
+    }
+  }, [resetControlsTimeout, focusedRow, focusedControlIndex]);
+
   return (
     <div
       ref={containerRef}
       className={`${styles.playerContainer} ${!showControls && isPlaying ? styles.hideCursor : ''}`}
-      onMouseMove={resetControlsTimeout}
+      onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
       onClick={handleContainerClick}
+      data-tv-skip-navigation="true"
     >
       {(isLoading || isBuffering) && (
         <div className={styles.loading}>
@@ -1846,6 +2492,52 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         </div>
       )}
 
+      {/* Cast error toast notification */}
+      {castError && (
+        <div 
+          style={{
+            position: 'absolute',
+            bottom: '100px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(220, 38, 38, 0.95)',
+            color: 'white',
+            padding: '12px 20px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            zIndex: 100,
+            maxWidth: '90%',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            animation: 'fadeIn 0.2s ease-out',
+          }}
+          onClick={() => setCastError(null)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+            <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+            <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+            <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+          </svg>
+          <span style={{ fontSize: '14px' }}>{castError}</span>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setCastError(null); }}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              padding: '4px',
+              marginLeft: '8px',
+              opacity: 0.8,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Video wrapper for pinch-to-zoom on mobile */}
       <div
         {...zoomContainerProps}
@@ -1856,6 +2548,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           className={styles.video}
           style={zoomContentStyle}
           playsInline
+          // @ts-ignore - AirPlay attributes
+          x-webkit-airplay="allow"
+          // @ts-ignore
+          webkit-playsinline="true"
         />
       </div>
 
@@ -1963,12 +2659,16 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       )}
 
       <div className={`${styles.controls} ${showControls || !isPlaying ? styles.visible : ''}`}>
-        <div className={styles.progressContainer} onClick={(e) => {
-          e.stopPropagation();
-          const rect = e.currentTarget.getBoundingClientRect();
-          const pos = (e.clientX - rect.left) / rect.width;
-          seek(pos * duration);
-        }}>
+        <div 
+          className={styles.progressContainer} 
+          data-player-timeline="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pos = (e.clientX - rect.left) / rect.width;
+            seek(pos * duration);
+          }}
+        >
           <div className={styles.progressBuffered} style={{ width: `${buffered}%` }} />
           <div className={styles.progressFilled} style={{ width: `${(currentTime / duration) * 100}%` }} />
           <div className={styles.progressThumb} style={{ left: `${(currentTime / duration) * 100}%` }} />
@@ -1976,7 +2676,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
         <div className={styles.controlsRow}>
           <div className={styles.leftControls}>
-            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className={styles.btn}>
+            <button onClick={(e) => { e.stopPropagation(); togglePlay(); }} className={styles.btn} data-player-control="play" title="Play/Pause">
               {isPlaying ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
@@ -1988,21 +2688,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               )}
             </button>
 
-            <button onClick={(e) => { e.stopPropagation(); seek(currentTime - 10); }} className={styles.btn}>
+            <button onClick={(e) => { e.stopPropagation(); seek(currentTime - 10); }} className={styles.btn} data-player-control="rewind" title="Rewind 10s">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
                 <text x="9" y="15" fontSize="8" fill="white" fontWeight="bold">10</text>
               </svg>
             </button>
 
-            <button onClick={(e) => { e.stopPropagation(); seek(currentTime + 10); }} className={styles.btn}>
+            <button onClick={(e) => { e.stopPropagation(); seek(currentTime + 10); }} className={styles.btn} data-player-control="forward" title="Forward 10s">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z" />
                 <text x="9" y="15" fontSize="8" fill="white" fontWeight="bold">10</text>
               </svg>
             </button>
 
-            <button onClick={(e) => { e.stopPropagation(); toggleMute(); }} className={styles.btn}>
+            <button onClick={(e) => { e.stopPropagation(); toggleMute(); }} className={styles.btn} data-player-control="mute" title="Mute/Unmute">
               {isMuted || volume === 0 ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
@@ -2040,6 +2740,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                   setShowSettings(false);
                 }}
                 className={`${styles.btn} ${currentSubtitle ? styles.active : ''}`}
+                data-player-control="subtitles"
                 title="Subtitles"
               >
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -2048,9 +2749,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               </button>
 
               {showSubtitles && (
-                <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.settingsMenu} data-player-menu="subtitles" onClick={(e) => e.stopPropagation()}>
                   <div className={styles.settingsSection}>
-                    <div className={styles.settingsLabel}>Subtitles</div>
+                    <div className={styles.menuHeader}>
+                      <div className={styles.settingsLabel}>Subtitles</div>
+                      <button 
+                        className={styles.menuCloseBtn}
+                        onClick={(e) => { e.stopPropagation(); setShowSubtitles(false); }}
+                        title="Close"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>
                     <button
                       className={`${styles.settingsOption} ${!currentSubtitle ? styles.active : ''}`}
                       onClick={() => loadSubtitle(null)}
@@ -2143,7 +2856,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               )}
 
               {showSubtitleCustomization && (
-                <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.settingsMenu} data-player-menu="subtitle-customization" onClick={(e) => e.stopPropagation()}>
                   <div className={styles.settingsSection}>
                     {/* Subtitle Sync Controls */}
                     <div className={styles.settingsLabel}>Subtitle Sync</div>
@@ -2356,17 +3069,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 setShowSettings(!showSettings);
                 setShowSubtitles(false);
                 setShowServerMenu(false);
-              }} className={styles.btn} title="Resolution">
+              }} className={styles.btn} data-player-control="settings" title="Resolution">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
                 </svg>
               </button>
 
               {showSettings && (
-                <div className={styles.settingsMenu} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.settingsMenu} data-player-menu="settings" onClick={(e) => e.stopPropagation()}>
                   <div className={styles.settingsSection}>
-                    <div className={styles.settingsLabel}>
-                      Resolution {currentResolution && <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({currentResolution})</span>}
+                    <div className={styles.menuHeader}>
+                      <div className={styles.settingsLabel}>
+                        Resolution {currentResolution && <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({currentResolution})</span>}
+                      </div>
+                      <button 
+                        className={styles.menuCloseBtn}
+                        onClick={(e) => { e.stopPropagation(); setShowSettings(false); }}
+                        title="Close"
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line>
+                          <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
                     </div>
                     <div className={styles.sourcesList}>
                       {hlsLevels.length > 0 ? (
@@ -2475,13 +3200,33 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               )}
             </div>
 
-            {/* Cast to TV button */}
-            {cast.isAvailable && (
-              <button 
-                onClick={handleCastClick} 
-                className={`${styles.btn} ${cast.isCasting ? styles.active : ''}`}
-                title={cast.isCasting ? 'Stop casting' : 'Cast to TV'}
-              >
+            {/* Cast to TV / AirPlay button - always visible */}
+            <button 
+              onClick={handleCastClick} 
+              className={`${styles.btn} ${cast.isCasting || cast.isAirPlayActive ? styles.active : ''}`}
+              data-player-control="cast"
+              title={cast.isCasting || cast.isAirPlayActive ? 'Stop casting' : cast.isAirPlayAvailable ? 'AirPlay' : 'Cast to TV'}
+            >
+              {cast.isAirPlayAvailable ? (
+                // AirPlay icon
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  {cast.isAirPlayActive ? (
+                    // AirPlay active
+                    <>
+                      <path d="M6 22h12l-6-6-6 6z" />
+                      <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                      <path d="M12 16l6 6H6l6-6z" opacity="0.3" />
+                    </>
+                  ) : (
+                    // AirPlay available
+                    <>
+                      <path d="M6 22h12l-6-6-6 6z" />
+                      <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                    </>
+                  )}
+                </svg>
+              ) : (
+                // Chromecast icon
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   {cast.isCasting ? (
                     <>
@@ -2500,10 +3245,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                     </>
                   )}
                 </svg>
-              </button>
-            )}
+              )}
+            </button>
 
-            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className={styles.btn}>
+            <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className={styles.btn} data-player-control="fullscreen" title="Fullscreen">
               {isFullscreen ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
@@ -2524,7 +3269,128 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           top: '2rem',
           right: '2rem',
           zIndex: 20,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          pointerEvents: 'auto',
         }}>
+          {/* Dub/Sub toggle - only show for anime content using AnimeKai */}
+          {isAnimeContent && provider === 'animekai' && (
+            <button 
+              data-player-top-control="subdub"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'rgba(0,0,0,0.6)',
+                backdropFilter: 'blur(4px)',
+                padding: '6px 10px',
+                borderRadius: '20px',
+                cursor: 'pointer',
+                border: 'none',
+              }}
+              onClick={async (e) => {
+                e.stopPropagation();
+                const newPref = animeAudioPref === 'sub' ? 'dub' : 'sub';
+                setAnimeAudioPref(newPref);
+                setAnimeAudioPreference(newPref);
+                
+                // Save current position before switching
+                if (videoRef.current && videoRef.current.currentTime > 0) {
+                  pendingSeekTimeRef.current = videoRef.current.currentTime;
+                }
+                
+                // Find a source matching the new preference
+                const sources = sourcesCache['animekai'] || availableSources;
+                const matchingSource = sources.find((s: any) => 
+                  s.title && sourceMatchesAudioPreference(s.title, newPref)
+                );
+                
+                if (matchingSource) {
+                  console.log(`[VideoPlayer] Switching to ${newPref}:`, matchingSource.title);
+                  
+                  // If source needs fetching, fetch it
+                  if (matchingSource.status === 'unknown' || !matchingSource.url) {
+                    setIsLoading(true);
+                    const sourceName = matchingSource.title?.split(' (')[0] || matchingSource.title;
+                    try {
+                      const params = new URLSearchParams({
+                        tmdbId,
+                        type: mediaType,
+                        provider: 'animekai',
+                        source: sourceName,
+                      });
+                      if (mediaType === 'tv' && season && episode) {
+                        params.append('season', season.toString());
+                        params.append('episode', episode.toString());
+                      }
+                      const response = await fetch(`/api/stream/extract?${params}`);
+                      const data = await response.json();
+                      if (data.success && data.sources?.[0]?.url) {
+                        const newIndex = sources.findIndex((s: any) => s.title === matchingSource.title);
+                        setCurrentSourceIndex(newIndex >= 0 ? newIndex : 0);
+                        setStreamUrl(data.sources[0].url);
+                        setPreferredAnimeKaiServer(sourceName);
+                      }
+                    } catch (err) {
+                      console.error('[VideoPlayer] Failed to fetch source:', err);
+                      pendingSeekTimeRef.current = null;
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  } else {
+                    // Source already has URL, switch directly
+                    const newIndex = sources.findIndex((s: any) => s.title === matchingSource.title);
+                    setCurrentSourceIndex(newIndex >= 0 ? newIndex : 0);
+                    setStreamUrl(matchingSource.url);
+                    const serverName = matchingSource.title?.split(' (')[0];
+                    if (serverName) setPreferredAnimeKaiServer(serverName);
+                  }
+                } else {
+                  console.log(`[VideoPlayer] No ${newPref} sources available`);
+                }
+              }}
+              title={`Switch to ${animeAudioPref === 'sub' ? 'Dubbed' : 'Subbed'}`}
+            >
+              <span style={{ 
+                fontSize: '0.75rem', 
+                fontWeight: 600,
+                color: animeAudioPref === 'sub' ? '#3b82f6' : 'rgba(255,255,255,0.5)',
+                transition: 'color 0.2s'
+              }}>
+                SUB
+              </span>
+              <div style={{
+                width: '36px',
+                height: '20px',
+                borderRadius: '10px',
+                backgroundColor: animeAudioPref === 'dub' ? '#8b5cf6' : '#3b82f6',
+                position: 'relative',
+                transition: 'background-color 0.2s ease'
+              }}>
+                <span style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: animeAudioPref === 'dub' ? '18px' : '2px',
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  backgroundColor: '#fff',
+                  transition: 'left 0.2s ease',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                }} />
+              </div>
+              <span style={{ 
+                fontSize: '0.75rem', 
+                fontWeight: 600,
+                color: animeAudioPref === 'dub' ? '#8b5cf6' : 'rgba(255,255,255,0.5)',
+                transition: 'color 0.2s'
+              }}>
+                DUB
+              </span>
+            </button>
+          )}
+          
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -2538,6 +3404,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               }
             }}
             className={`${styles.btn} ${highlightServerButton ? styles.serverButtonHighlight : ''}`}
+            data-player-top-control="server"
             style={{
               background: 'rgba(0,0,0,0.5)',
               backdropFilter: 'blur(4px)',
@@ -2553,56 +3420,77 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           </button>
 
           {showServerMenu && (
-            <div className={styles.settingsMenu} style={{ top: '100%', right: 0, bottom: 'auto', marginTop: '0.5rem', minWidth: '280px' }} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.settingsMenu} data-player-menu="server" style={{ top: '100%', right: 0, bottom: 'auto', marginTop: '0.5rem', minWidth: '280px', zIndex: 200 }} onClick={(e) => e.stopPropagation()}>
               <div className={styles.settingsSection}>
-                <div className={styles.settingsLabel}>Server Selection</div>
-
-                <div className={styles.tabsContainer}>
-                  {/* Show AnimeKai tab for anime content */}
-                  {isAnimeContent && providerAvailability.animekai && (
-                    <button
-                      className={`${styles.tab} ${menuProvider === 'animekai' ? styles.active : ''}`}
-                      onClick={() => {
-                        setMenuProvider('animekai');
-                        fetchSources('animekai');
-                      }}
-                    >
-                      AnimeKai
-                    </button>
-                  )}
-                  <button
-                    className={`${styles.tab} ${menuProvider === 'videasy' ? styles.active : ''}`}
-                    onClick={() => {
-                      setMenuProvider('videasy');
-                      fetchSources('videasy');
-                    }}
+                <div className={styles.menuHeader}>
+                  <div className={styles.settingsLabel}>Server Selection</div>
+                  <button 
+                    className={styles.menuCloseBtn}
+                    onClick={(e) => { e.stopPropagation(); setShowServerMenu(false); }}
+                    title="Close"
                   >
-                    Videasy
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
                   </button>
-                  {providerAvailability.vidsrc && (
-                    <button
-                      className={`${styles.tab} ${menuProvider === 'vidsrc' ? styles.active : ''}`}
-                      onClick={() => {
-                        setMenuProvider('vidsrc');
-                        fetchSources('vidsrc');
-                      }}
-                    >
-                      VidSrc
-                    </button>
-                  )}
                 </div>
 
-                <div className={styles.sourcesList}>
+                {/* Only show tabs for non-anime content (anime only uses AnimeKai) */}
+                {!isAnimeContent && (
+                  <div className={styles.tabsContainer} data-server-tabs="true">
+                    <button
+                      className={`${styles.tab} ${menuProvider === 'videasy' ? styles.active : ''}`}
+                      data-server-tab="videasy"
+                      onClick={() => {
+                        setMenuProvider('videasy');
+                        fetchSources('videasy');
+                      }}
+                    >
+                      Videasy
+                    </button>
+                    {providerAvailability.vidsrc && (
+                      <button
+                        className={`${styles.tab} ${menuProvider === 'vidsrc' ? styles.active : ''}`}
+                        data-server-tab="vidsrc"
+                        onClick={() => {
+                          setMenuProvider('vidsrc');
+                          fetchSources('vidsrc');
+                        }}
+                      >
+                        VidSrc
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className={styles.sourcesList} data-server-sources="true">
                   {loadingProviders[menuProvider] ? (
                     <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>
                       Loading sources...
                     </div>
                   ) : sourcesCache[menuProvider] && sourcesCache[menuProvider].length > 0 ? (
-                    sourcesCache[menuProvider].filter(s => s != null).map((source, index) => (
+                    sourcesCache[menuProvider]
+                      .filter(s => s != null)
+                      .filter(s => {
+                        // For AnimeKai, filter by dub/sub preference
+                        if (menuProvider === 'animekai' && s.title) {
+                          return sourceMatchesAudioPreference(s.title, animeAudioPref);
+                        }
+                        return true;
+                      })
+                      .map((source, index) => (
                       <button
                         key={index}
                         className={`${styles.settingsOption} ${provider === menuProvider && currentSourceIndex === index ? styles.active : ''}`}
+                        data-server-source={index}
                         onClick={async () => {
+                          // Save current playback position before switching sources
+                          if (videoRef.current && videoRef.current.currentTime > 0) {
+                            pendingSeekTimeRef.current = videoRef.current.currentTime;
+                            console.log('[VideoPlayer] Saving playback position:', pendingSeekTimeRef.current);
+                          }
+                          
                           // If source has "unknown" status (not yet fetched), fetch it first
                           if (source.status === 'unknown' && (menuProvider === 'videasy' || menuProvider === 'animekai')) {
                             console.log(`[VideoPlayer] Fetching unknown source: ${source.title} from ${menuProvider}`);
@@ -2635,12 +3523,18 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                                 setSourcesCache(prev => ({ ...prev, [menuProvider]: updatedSources }));
                                 setAvailableSources(updatedSources);
                                 
+                                // Save preferred AnimeKai server
+                                if (menuProvider === 'animekai') {
+                                  setPreferredAnimeKaiServer(sourceName);
+                                }
+                                
                                 // Set the stream URL
                                 setStreamUrl(fetchedSource.url);
                                 setCurrentSourceIndex(index);
                                 setProvider(menuProvider);
                               } else {
-                                // Mark as failed
+                                // Mark as failed - clear pending seek since we're not switching
+                                pendingSeekTimeRef.current = null;
                                 const updatedSources = [...sourcesCache[menuProvider]];
                                 updatedSources[index] = { ...source, status: 'down' };
                                 setSourcesCache(prev => ({ ...prev, [menuProvider]: updatedSources }));
@@ -2648,6 +3542,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                               }
                             } catch (err) {
                               console.error('[VideoPlayer] Failed to fetch source:', err);
+                              pendingSeekTimeRef.current = null; // Clear pending seek on error
                               setError('Failed to load source');
                             } finally {
                               setIsLoading(false);
@@ -2659,6 +3554,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                           if (menuProvider !== provider) {
                             setProvider(menuProvider);
                             setAvailableSources(sourcesCache[menuProvider]);
+                          }
+                          
+                          // Save preferred AnimeKai server
+                          if (menuProvider === 'animekai' && source.title) {
+                            const serverName = source.title.split(' (')[0];
+                            setPreferredAnimeKaiServer(serverName);
                           }
                           
                           // Set the stream URL directly
@@ -2752,15 +3653,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       )}
 
       {showResumePrompt && (
-        <div className={styles.resumePrompt} onClick={(e) => e.stopPropagation()}>
+        <div 
+          className={styles.resumePrompt} 
+          onClick={(e) => e.stopPropagation()}
+          data-resume-modal="true"
+        >
           <div className={styles.resumePromptContent}>
             <h3>Resume Playback?</h3>
             <p>Continue from {formatTime(savedProgress)}</p>
             <div className={styles.resumePromptButtons}>
-              <button onClick={handleStartOver} className={styles.resumeButton}>
+              <button 
+                onClick={handleStartOver} 
+                className={styles.resumeButton}
+                data-resume-btn="start"
+                data-tv-skip="true"
+              >
                 Start Over
               </button>
-              <button onClick={handleResume} className={`${styles.resumeButton} ${styles.resumeButtonPrimary}`}>
+              <button 
+                onClick={handleResume} 
+                className={`${styles.resumeButton} ${styles.resumeButtonPrimary}`}
+                data-resume-btn="resume"
+                data-tv-skip="true"
+              >
                 Resume
               </button>
             </div>

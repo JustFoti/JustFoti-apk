@@ -4,6 +4,8 @@ import { Inter, JetBrains_Mono } from 'next/font/google'
 import AnalyticsProvider from './components/analytics/AnalyticsProvider'
 import PresenceProvider from './components/analytics/PresenceProvider'
 import { RegionProvider } from './lib/context/RegionContext'
+import { TVNavigationProvider } from './components/tv/TVNavigationProvider'
+import { TVNavigationHint } from './components/tv/TVNavigationHint'
 
 // Optimized font loading with next/font (eliminates render-blocking CSS)
 const inter = Inter({
@@ -99,7 +101,10 @@ export default function RootLayout({
         <RegionProvider>
           <AnalyticsProvider>
             <PresenceProvider>
-              {children}
+              <TVNavigationProvider>
+                {children}
+                <TVNavigationHint />
+              </TVNavigationProvider>
             </PresenceProvider>
           </AnalyticsProvider>
         </RegionProvider>

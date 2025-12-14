@@ -205,6 +205,8 @@ function ContentRow({
           <button
             onClick={onSeeAll}
             className="text-xl md:text-2xl font-bold text-white flex items-center gap-3 hover:opacity-80 transition-opacity group"
+            data-tv-focusable="true"
+            data-tv-group={`anime-header-${title.toLowerCase().replace(/[^a-z]/g, '')}`}
           >
             {title}
             {isAiring && (
@@ -230,12 +232,16 @@ function ContentRow({
             <button
               onClick={() => scroll('left')}
               className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-lg font-bold"
+              data-tv-skip="true"
+              tabIndex={-1}
             >
               ‹
             </button>
             <button
               onClick={() => scroll('right')}
               className="w-9 h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-lg font-bold"
+              data-tv-skip="true"
+              tabIndex={-1}
             >
               ›
             </button>
@@ -246,6 +252,8 @@ function ContentRow({
           ref={scrollRef}
           className="flex gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2"
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          data-tv-scroll-container="true"
+          data-tv-group={`anime-${title.toLowerCase().replace(/[^a-z]/g, '')}`}
         >
           {data.items.map((item, index) => (
             <motion.div
@@ -255,7 +263,12 @@ function ContentRow({
               viewport={{ once: true, margin: '-50px' }}
               transition={{ delay: Math.min(index * 0.03, 0.3) }}
               onClick={() => onItemClick(item, title)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onItemClick(item, title); } }}
               className="flex-shrink-0 w-36 md:w-44 cursor-pointer group"
+              data-tv-focusable="true"
+              tabIndex={0}
+              role="button"
+              aria-label={item.title || item.name || ''}
             >
               <motion.div
                 whileHover={{ scale: 1.05, y: -8 }}

@@ -17,20 +17,43 @@ import { extractVidSrcStreams, VIDSRC_ENABLED } from '@/app/lib/services/vidsrc-
 import { extractVideasyStreams, fetchVideasySourceByName } from '@/app/lib/services/videasy-extractor';
 import { extractAnimeKaiStreams, fetchAnimeKaiSourceByName, isAnimeContent, ANIMEKAI_ENABLED } from '@/app/lib/services/animekai-extractor';
 import { performanceMonitor } from '@/app/lib/utils/performance-monitor';
-import { getStreamProxyUrl } from '@/app/lib/proxy-config';
+import { getStreamProxyUrl, getAnimeKaiProxyUrl, isMegaUpCdnUrl, isAnimeKaiSource } from '@/app/lib/proxy-config';
 
 // Node.js runtime (default) - required for fetch
 
 // Helper to conditionally proxy URLs based on requiresSegmentProxy flag
-// MegaUp CDN URLs MUST be proxied with noreferer mode because browser adds Origin header
+// AnimeKai sources use the /animekai route which goes through RPI residential proxy
+// Other sources use the /stream route with optional noreferer mode
 function maybeProxyUrl(source: any, provider: string): string {
   if (!source.url) return '';
   // Only proxy if requiresSegmentProxy is true (default behavior for most sources)
   if (source.requiresSegmentProxy === false) {
     return source.url; // Return direct URL - browser will fetch directly
   }
-  // Pass skipOrigin flag for MegaUp CDN - proxy will NOT send Origin/Referer headers
-  return getStreamProxyUrl(source.url, provider, source.referer, source.skipOrigin || false);
+  
+  // ALL AnimeKai sources need to go through /animekai route -> RPI residential proxy
+  // This is because ALL AnimeKai CDNs block:
+  //   1. Datacenter IPs (Cloudflare, AWS, Vercel, etc.)
+  //   2. Requests with Origin header (browser XHR always adds this)
+  // 
+  // The RPI proxy fetches from a residential IP without Origin header
+  const isAnimeKai = provider === 'animekai';
+  const isAnimeKaiSrc = isAnimeKaiSource(source);
+  const isMegaUpCdn = isMegaUpCdnUrl(source.url);
+  
+  console.log(`[maybeProxyUrl] provider=${provider}, isAnimeKai=${isAnimeKai}, isAnimeKaiSrc=${isAnimeKaiSrc}, isMegaUpCdn=${isMegaUpCdn}, url=${source.url.substring(0, 60)}`);
+  
+  if (isAnimeKai || isAnimeKaiSrc || isMegaUpCdn) {
+    const proxiedUrl = getAnimeKaiProxyUrl(source.url);
+    console.log(`[maybeProxyUrl] → Using /animekai route: ${proxiedUrl.substring(0, 80)}...`);
+    return proxiedUrl;
+  }
+  
+  // Other sources use the standard /stream route
+  // Pass skipOrigin flag for sources that block requests with Origin header
+  const proxiedUrl = getStreamProxyUrl(source.url, provider, source.referer, source.skipOrigin || false);
+  console.log(`[maybeProxyUrl] → Using /stream route: ${proxiedUrl.substring(0, 80)}...`);
+  return proxiedUrl;
 }
 
 // Enhanced in-memory cache with LRU eviction
@@ -169,6 +192,12 @@ export async function GET(request: NextRequest) {
     // Check cache
     const cacheKey = `${tmdbId}-${type}-${season || ''}-${episode || ''}-${provider}`;
     const cached = cache.get(cacheKey);
+
+    // TEMPORARY: Force clear cache for animekai to pick up new proxy routing
+    if (provider === 'animekai' && cached) {
+      console.log('[EXTRACT] Clearing animekai cache to use new /animekai route');
+      cache.delete(cacheKey);
+    }
 
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       console.log(`[EXTRACT] Cache hit (${cached.hits} hits)`);

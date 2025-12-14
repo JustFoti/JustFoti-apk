@@ -393,6 +393,115 @@ function proxyIPTVStream(targetUrl, mac, token, res, redirectCount = 0) {
 }
 
 /**
+ * AnimeKai stream proxy - fetches MegaUp CDN streams from residential IP
+ * MegaUp blocks:
+ *   1. Datacenter IPs (Cloudflare, AWS, etc.)
+ *   2. Requests with Origin header
+ *   3. Requests with Referer header (sometimes)
+ * 
+ * This proxy fetches WITHOUT Origin/Referer headers from a residential IP.
+ */
+function proxyAnimeKaiStream(targetUrl, res) {
+  // Check cache (short TTL for m3u8, longer for segments)
+  const cached = getCached(targetUrl);
+  if (cached) {
+    console.log(`[AnimeKai Cache HIT] ${targetUrl.substring(0, 60)}...`);
+    res.writeHead(200, {
+      'Content-Type': cached.contentType,
+      'Content-Length': cached.data.length,
+      'Access-Control-Allow-Origin': '*',
+      'X-Cache': 'HIT',
+    });
+    res.end(cached.data);
+    return;
+  }
+
+  const url = new URL(targetUrl);
+  const client = url.protocol === 'https:' ? https : http;
+  
+  // CRITICAL: Do NOT send Origin or Referer headers - MegaUp blocks them
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'GET',
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Encoding': 'identity', // Don't request compression for video
+      'Connection': 'keep-alive',
+    },
+    timeout: 30000,
+    rejectUnauthorized: false, // Some CDNs have cert issues
+  };
+
+  console.log(`[AnimeKai] ${targetUrl.substring(0, 100)}...`);
+
+  const proxyReq = client.request(options, (proxyRes) => {
+    const contentType = proxyRes.headers['content-type'] || 'application/octet-stream';
+    const chunks = [];
+    
+    console.log(`[AnimeKai Response] ${proxyRes.statusCode} - ${contentType}`);
+    
+    // Handle redirects
+    if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
+      const redirectUrl = proxyRes.headers.location;
+      console.log(`[AnimeKai Redirect] Following to: ${redirectUrl.substring(0, 80)}...`);
+      
+      // Resolve relative URLs
+      const absoluteUrl = redirectUrl.startsWith('http') 
+        ? redirectUrl 
+        : new URL(redirectUrl, targetUrl).toString();
+      
+      // Follow the redirect
+      proxyAnimeKaiStream(absoluteUrl, res);
+      return;
+    }
+    
+    proxyRes.on('data', chunk => chunks.push(chunk));
+    
+    proxyRes.on('end', () => {
+      const data = Buffer.concat(chunks);
+      
+      console.log(`[AnimeKai] ${proxyRes.statusCode} - ${data.length} bytes`);
+      
+      // Cache successful responses
+      if (proxyRes.statusCode === 200) {
+        setCache(targetUrl, data, contentType);
+      }
+      
+      res.writeHead(proxyRes.statusCode, {
+        'Content-Type': contentType,
+        'Content-Length': data.length,
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+        'X-Cache': 'MISS',
+        'X-Proxied-By': 'rpi-residential',
+      });
+      res.end(data);
+    });
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error(`[AnimeKai Error] ${err.message}`);
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'AnimeKai proxy error', details: err.message }));
+    }
+  });
+
+  proxyReq.on('timeout', () => {
+    proxyReq.destroy();
+    if (!res.headersSent) {
+      res.writeHead(504, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'AnimeKai stream timeout' }));
+    }
+  });
+
+  proxyReq.end();
+}
+
+/**
  * Simple proxy - uses curl for key requests, Node https for others
  */
 function proxyRequest(targetUrl, res) {
@@ -583,6 +692,26 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // AnimeKai proxy endpoint - proxies MegaUp CDN streams from residential IP
+  // MegaUp blocks datacenter IPs and requests with Origin/Referer headers
+  if (reqUrl.pathname === '/animekai') {
+    const targetUrl = reqUrl.searchParams.get('url');
+    
+    if (!targetUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    }
+
+    try {
+      const decoded = decodeURIComponent(targetUrl);
+      proxyAnimeKaiStream(decoded, res);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Invalid URL' }));
+    }
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
 });
@@ -601,6 +730,7 @@ server.listen(PORT, () => {
 ║  Endpoints:                                               ║
 ║    GET /proxy?url=<encoded_url>  - Proxy a request        ║
 ║    GET /iptv/stream?url=&mac=&token= - IPTV stream proxy  ║
+║    GET /animekai?url=<encoded_url> - AnimeKai/MegaUp CDN  ║
 ║    GET /health                   - Health check           ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Expose with:                                             ║

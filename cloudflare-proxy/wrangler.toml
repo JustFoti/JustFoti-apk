@@ -56,10 +56,15 @@ PROTECTION_MODE = "none"
 # wrangler secret put SIGNING_SECRET      # Required for all modes except 'none'
 # wrangler secret put WATERMARK_SECRET    # Required for quantum mode (watermarks video)
 #
-# RPI RESIDENTIAL PROXY (for DLHD and IPTV streaming)
-# Required to bypass datacenter IP blocking by IPTV providers
+# RPI RESIDENTIAL PROXY (for DLHD, IPTV, and AnimeKai streaming)
+# Required to bypass datacenter IP blocking by IPTV providers and MegaUp CDN
 # wrangler secret put RPI_PROXY_URL       # Your RPi proxy URL (e.g., https://xxx.trycloudflare.com)
 # wrangler secret put RPI_PROXY_KEY       # Your RPi proxy API key
+#
+# AnimeKai uses MegaUp CDN which blocks:
+#   1. Datacenter IPs (Cloudflare, AWS, etc.)
+#   2. Requests with Origin header
+# The /animekai route forwards to RPI proxy which fetches from residential IP
 #
 # OXYLABS RESIDENTIAL PROXY (alternative for DLHD streaming)
 # wrangler secret put OXYLABS_USERNAME    # Your Oxylabs username

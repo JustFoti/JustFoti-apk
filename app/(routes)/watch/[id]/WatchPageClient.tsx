@@ -326,9 +326,9 @@ function WatchContent() {
   } : null;
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} data-tv-skip-navigation="true">
       <div className={styles.playerWrapper}>
-        <button onClick={handleBack} className={styles.backButtonOverlay}>
+        <button onClick={handleBack} className={styles.backButtonOverlay} data-player-back="true">
           ← Back
         </button>
 

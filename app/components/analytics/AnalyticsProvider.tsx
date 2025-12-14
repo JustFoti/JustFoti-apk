@@ -35,6 +35,7 @@ interface AnalyticsContextType {
 
   // Watch progress management
   getWatchProgress: (contentId: string, season?: number, episode?: number) => any;
+  getAllWatchProgress: () => any[];
   getViewingHistory: () => any[];
 
   // Live activity
@@ -194,6 +195,10 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
     return userTrackingService.getWatchProgress(contentId, season, episode);
   }, []);
 
+  const getAllWatchProgress = useCallback(() => {
+    return userTrackingService.getAllWatchProgress();
+  }, []);
+
   const getViewingHistory = useCallback(() => {
     return userTrackingService.getViewingHistory();
   }, []);
@@ -312,6 +317,7 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
     updateUserPreferences,
     clearUserData,
     getWatchProgress,
+    getAllWatchProgress,
     getViewingHistory,
     updateActivity,
     trackLiveTVEvent,

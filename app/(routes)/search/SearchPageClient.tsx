@@ -315,6 +315,9 @@ export default function SearchPageClient({
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search for movies, TV shows, people..."
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
+                  data-tv-focusable="true"
+                  data-tv-primary="true"
+                  data-tv-group="search-input"
                 />
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
                   {loading ? (
@@ -341,7 +344,18 @@ export default function SearchPageClient({
                         exit={{ opacity: 0, scale: 0.9 }}
                         transition={{ duration: 0.2 }}
                         onClick={() => handleContentClick(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleContentClick(item);
+                          }
+                        }}
                         className="group cursor-pointer relative aspect-[2/3] bg-gray-900 rounded-xl overflow-hidden border border-white/5 hover:border-purple-500/50 transition-all duration-300"
+                        data-tv-focusable="true"
+                        data-tv-group="search-results"
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`${item.title || item.name}`}
                       >
                         <img
                           src={item.posterPath || (item.poster_path || item.profile_path

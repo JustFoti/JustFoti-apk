@@ -27,6 +27,7 @@ import tvProxy from './tv-proxy';
 import decoderSandbox from './decoder-sandbox';
 import { handleIPTVRequest } from './iptv-proxy';
 import { handleDLHDRequest } from './dlhd-proxy';
+import { handleAnimeKaiRequest } from './animekai-proxy';
 import { createLogger, generateRequestId, type LogLevel } from './logger';
 
 export interface Env {
@@ -64,6 +65,7 @@ const metrics = {
   tvRequests: 0,
   dlhdRequests: 0,
   decodeRequests: 0,
+  animekaiRequests: 0,
   startTime: Date.now(),
 };
 
@@ -114,6 +116,7 @@ export default {
           tvRequests: metrics.tvRequests,
           dlhdRequests: metrics.dlhdRequests,
           decodeRequests: metrics.decodeRequests,
+          animekaiRequests: metrics.animekaiRequests,
         },
         timestamp: new Date().toISOString(),
       }, null, 2), {
@@ -239,6 +242,20 @@ export default {
       }
     }
 
+    // Route to AnimeKai proxy (MegaUp CDN via RPI residential IP)
+    if (path.startsWith('/animekai')) {
+      metrics.animekaiRequests++;
+      logger.info('Routing to AnimeKai proxy (RPI)', { path });
+      
+      try {
+        return await handleAnimeKaiRequest(request, env);
+      } catch (error) {
+        metrics.errors++;
+        logger.error('AnimeKai proxy error', error as Error);
+        return errorResponse('AnimeKai proxy error', 500);
+      }
+    }
+
     // Route to IPTV proxy (Stalker portals)
     // Handle both /iptv/* and /tv/iptv/* (legacy path from NEXT_PUBLIC_CF_TV_PROXY_URL)
     if (path.startsWith('/iptv') || path.startsWith('/tv/iptv')) {
@@ -360,6 +377,17 @@ export default {
           subRoutes: {
             api: '/iptv/api?url=<encoded_url>&mac=<mac>&token=<token>',
             stream: '/iptv/stream?url=<encoded_url>&mac=<mac>&token=<token>',
+          },
+        },
+        animekai: {
+          path: '/animekai/',
+          description: 'AnimeKai stream proxy via RPI residential IP (MegaUp CDN)',
+          usage: '/animekai?url=<encoded_url>',
+          subRoutes: {
+            health: '/animekai/health',
+          },
+          config: {
+            rpiProxy: !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY) ? 'configured' : 'not configured',
           },
         },
         decode: {
