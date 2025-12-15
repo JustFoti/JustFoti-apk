@@ -431,20 +431,18 @@ export default function LiveTVClient() {
     ));
   }, [dlhdChannels, handleDLHDChannelSelect]);
 
-  // Memoize the events list - limit to 100 events to prevent performance issues
-  const eventsList = useMemo(() => {
-    const allEvents = scheduleCategories.flatMap((cat) =>
-      cat.events.map((event) => ({ ...event, sport: cat.name }))
-    );
-    // Limit to 100 events to prevent tab crashes
-    return allEvents.slice(0, 100).map((event) => (
-      <EventCard
-        key={event.id}
-        event={event}
-        onChannelSelect={handleEventChannelSelect}
-      />
-    ));
-  }, [scheduleCategories, handleEventChannelSelect]);
+  // Memoize the events list
+  const eventsList = useMemo(() => (
+    scheduleCategories.flatMap((cat) =>
+      cat.events.map((event) => (
+        <EventCard
+          key={event.id}
+          event={{ ...event, sport: cat.name }}
+          onChannelSelect={handleEventChannelSelect}
+        />
+      ))
+    )
+  ), [scheduleCategories, handleEventChannelSelect]);
 
   return (
     <div className={styles.container}>
@@ -707,12 +705,8 @@ function LiveTVPlayer({
   const [remainingAccounts, setRemainingAccounts] = useState<number>(0);
   const failedAccountsRef = useRef<string[]>([]);
   const currentAccountIdRef = useRef<string | null>(null);
-  const dlhdRetryCountRef = useRef<number>(0);
-  const dlhdLoadingRef = useRef<boolean>(false); // Prevent concurrent load attempts
-  const MAX_DLHD_RETRIES = 3;
 
   const cast = useCast({
-    videoRef: videoRef, // Pass video ref for AirPlay support
     onConnect: () => console.log('[LiveTV] Cast connected'),
     onDisconnect: () => {
       console.log('[LiveTV] Cast disconnected');
@@ -827,8 +821,6 @@ function LiveTVPlayer({
       currentAccountIdRef.current = null;
       setRemainingAccounts(0);
       setIsCycling(false);
-      dlhdRetryCountRef.current = 0; // Reset DLHD retry counter
-      dlhdLoadingRef.current = false; // Allow DLHD loading
     }
     
     setIsLoading(true);
@@ -872,33 +864,7 @@ function LiveTVPlayer({
   const loadDLHDStream = async () => {
     if (!videoRef.current) return;
     
-    // Prevent concurrent load attempts which can cause exponential retries
-    if (dlhdLoadingRef.current) {
-      console.log('[LiveTV] DLHD load already in progress, skipping');
-      return;
-    }
-    dlhdLoadingRef.current = true;
-    
-    // CRITICAL: Clean up any existing HLS instance FIRST to prevent memory leaks
-    // and multiple instances with active error handlers causing exponential retries
-    if (hlsRef.current) {
-      try {
-        hlsRef.current.destroy();
-      } catch (e) { /* ignore */ }
-      hlsRef.current = null;
-    }
-    
-    // Check retry limit to prevent infinite loops
-    if (dlhdRetryCountRef.current >= MAX_DLHD_RETRIES) {
-      console.error('[LiveTV] Max DLHD retries reached, giving up');
-      setError('Stream unavailable. Please try again later.');
-      setIsLoading(false);
-      dlhdRetryCountRef.current = 0; // Reset for next attempt
-      dlhdLoadingRef.current = false;
-      return;
-    }
-    
-    console.log('[LiveTV] Loading DLHD stream for channel:', channel.streamId, `(attempt ${dlhdRetryCountRef.current + 1}/${MAX_DLHD_RETRIES})`);
+    console.log('[LiveTV] Loading DLHD stream for channel:', channel.streamId);
     
     // Use Cloudflare Worker directly if available, otherwise fall back to Vercel API
     const cfProxyUrl = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL;
@@ -971,8 +937,6 @@ function LiveTVPlayer({
       console.log('[LiveTV] DLHD manifest parsed');
       setIsLoading(false);
       setError(null); // Clear any previous errors
-      dlhdRetryCountRef.current = 0; // Reset retry counter on success
-      dlhdLoadingRef.current = false; // Allow future loads
       videoRef.current?.play().catch(() => {});
     });
     
@@ -1035,10 +999,10 @@ function LiveTVPlayer({
         // Instead of showing error, try reloading the entire stream
         keyRetryCount = 0;
         setBufferingStatus('Refreshing stream...');
-        dlhdRetryCountRef.current++;
-        dlhdLoadingRef.current = false; // Allow the retry
-        // loadDLHDStream handles cleanup internally now
-        setTimeout(() => loadDLHDStream(), 2000);
+        setTimeout(() => {
+          hls.destroy();
+          loadDLHDStream();
+        }, 2000);
         return;
       }
       
@@ -1062,10 +1026,10 @@ function LiveTVPlayer({
               console.log('[LiveTV] Network error, reloading stream...');
               networkRetryCount = 0;
               setBufferingStatus('Refreshing stream...');
-              dlhdRetryCountRef.current++;
-              dlhdLoadingRef.current = false; // Allow the retry
-              // loadDLHDStream handles cleanup internally now
-              setTimeout(() => loadDLHDStream(), 2000);
+              setTimeout(() => {
+                hls.destroy();
+                loadDLHDStream();
+              }, 2000);
             }
             break;
           case Hls.ErrorTypes.MEDIA_ERROR:
@@ -1297,14 +1261,10 @@ function LiveTVPlayer({
       setBufferingStatus(null);
     };
     
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    
     const onEnded = () => {
       console.log('[LiveTV] Video ended - reconnecting...');
       setBufferingStatus('Reconnecting...');
-      // Debounce reconnection attempts
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      reconnectTimeout = setTimeout(() => loadStream(false), 2000);
+      setTimeout(() => loadStream(false), 2000);
     };
     
     const onError = (e: Event) => {
@@ -1312,9 +1272,7 @@ function LiveTVPlayer({
       if (videoEl.error && videoEl.error.code !== MediaError.MEDIA_ERR_ABORTED) {
         console.log('[LiveTV] Video element error:', videoEl.error?.message);
         setBufferingStatus('Reconnecting...');
-        // Debounce reconnection attempts
-        if (reconnectTimeout) clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(() => loadStream(false), 2000);
+        setTimeout(() => loadStream(false), 2000);
       }
     };
     
@@ -1329,7 +1287,6 @@ function LiveTVPlayer({
     
     return () => {
       if (bufferingTimeout) clearTimeout(bufferingTimeout);
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('volumechange', onVolumeChange);

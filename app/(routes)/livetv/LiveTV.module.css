@@ -9,8 +9,8 @@
 /* Main Layout - Sidebar + Content */
 .layout {
   display: flex;
-  min-height: calc(100vh - 72px);
-  padding-top: 72px;
+  min-height: calc(100vh - 64px);
+  padding-top: 64px;
 }
 
 /* ========== SIDEBAR ========== */
@@ -18,9 +18,9 @@
   width: 280px;
   background: #111;
   border-right: 1px solid #222;
-  padding: 16px 0;
+  padding: 20px 0;
   position: fixed;
-  top: 72px;
+  top: 64px;
   left: 0;
   bottom: 0;
   overflow-y: auto;
@@ -31,9 +31,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px 16px;
+  padding: 0 20px 20px;
   border-bottom: 1px solid #222;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .sidebarHeader h2 {
@@ -74,9 +74,9 @@
 .modeSwitch {
   display: flex;
   gap: 8px;
-  padding: 0 16px 12px;
+  padding: 0 16px 16px;
   border-bottom: 1px solid #222;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .modeSwitch .modeBtn {
@@ -105,7 +105,7 @@
 
 /* Sidebar Search */
 .sidebarSearch {
-  padding: 0 16px 12px;
+  padding: 0 16px 16px;
 }
 
 .sidebarSearch .searchInput {
@@ -193,8 +193,8 @@
 .main {
   flex: 1;
   margin-left: 280px;
-  padding: 20px 24px;
-  min-height: calc(100vh - 72px);
+  padding: 24px;
+  min-height: calc(100vh - 64px);
 }
 
 /* Loading & Error */
@@ -384,7 +384,7 @@
 .channelsGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
+  gap: 12px;
   /* Performance: contain layout calculations */
   contain: layout style;
 }
@@ -392,8 +392,8 @@
 .channelCard {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 14px;
+  padding: 14px 16px;
   background: #151515;
   border: 1px solid #252525;
   border-radius: 10px;
@@ -413,14 +413,14 @@
 
 .channelLogo {
   position: relative;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   background: linear-gradient(135deg, #8b5cf6, #ec4899);
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: white;
   flex-shrink: 0;
@@ -444,7 +444,7 @@
 
 .channelName {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: white;
   white-space: nowrap;
@@ -454,9 +454,9 @@
 
 .channelMeta {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: #666;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .coastIndicator {
