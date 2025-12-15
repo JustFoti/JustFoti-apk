@@ -431,18 +431,20 @@ export default function LiveTVClient() {
     ));
   }, [dlhdChannels, handleDLHDChannelSelect]);
 
-  // Memoize the events list
-  const eventsList = useMemo(() => (
-    scheduleCategories.flatMap((cat) =>
-      cat.events.map((event) => (
-        <EventCard
-          key={event.id}
-          event={{ ...event, sport: cat.name }}
-          onChannelSelect={handleEventChannelSelect}
-        />
-      ))
-    )
-  ), [scheduleCategories, handleEventChannelSelect]);
+  // Memoize the events list - limit to 100 events to prevent performance issues
+  const eventsList = useMemo(() => {
+    const allEvents = scheduleCategories.flatMap((cat) =>
+      cat.events.map((event) => ({ ...event, sport: cat.name }))
+    );
+    // Limit to 100 events to prevent tab crashes
+    return allEvents.slice(0, 100).map((event) => (
+      <EventCard
+        key={event.id}
+        event={event}
+        onChannelSelect={handleEventChannelSelect}
+      />
+    ));
+  }, [scheduleCategories, handleEventChannelSelect]);
 
   return (
     <div className={styles.container}>
@@ -705,6 +707,8 @@ function LiveTVPlayer({
   const [remainingAccounts, setRemainingAccounts] = useState<number>(0);
   const failedAccountsRef = useRef<string[]>([]);
   const currentAccountIdRef = useRef<string | null>(null);
+  const dlhdRetryCountRef = useRef<number>(0);
+  const MAX_DLHD_RETRIES = 3;
 
   const cast = useCast({
     videoRef: videoRef, // Pass video ref for AirPlay support
@@ -865,7 +869,16 @@ function LiveTVPlayer({
   const loadDLHDStream = async () => {
     if (!videoRef.current) return;
     
-    console.log('[LiveTV] Loading DLHD stream for channel:', channel.streamId);
+    // Check retry limit to prevent infinite loops
+    if (dlhdRetryCountRef.current >= MAX_DLHD_RETRIES) {
+      console.error('[LiveTV] Max DLHD retries reached, giving up');
+      setError('Stream unavailable. Please try again later.');
+      setIsLoading(false);
+      dlhdRetryCountRef.current = 0; // Reset for next attempt
+      return;
+    }
+    
+    console.log('[LiveTV] Loading DLHD stream for channel:', channel.streamId, `(attempt ${dlhdRetryCountRef.current + 1}/${MAX_DLHD_RETRIES})`);
     
     // Use Cloudflare Worker directly if available, otherwise fall back to Vercel API
     const cfProxyUrl = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL;
@@ -938,6 +951,7 @@ function LiveTVPlayer({
       console.log('[LiveTV] DLHD manifest parsed');
       setIsLoading(false);
       setError(null); // Clear any previous errors
+      dlhdRetryCountRef.current = 0; // Reset retry counter on success
       videoRef.current?.play().catch(() => {});
     });
     
@@ -1000,6 +1014,7 @@ function LiveTVPlayer({
         // Instead of showing error, try reloading the entire stream
         keyRetryCount = 0;
         setBufferingStatus('Refreshing stream...');
+        dlhdRetryCountRef.current++;
         setTimeout(() => {
           hls.destroy();
           loadDLHDStream();
@@ -1027,6 +1042,7 @@ function LiveTVPlayer({
               console.log('[LiveTV] Network error, reloading stream...');
               networkRetryCount = 0;
               setBufferingStatus('Refreshing stream...');
+              dlhdRetryCountRef.current++;
               setTimeout(() => {
                 hls.destroy();
                 loadDLHDStream();
