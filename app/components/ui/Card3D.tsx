@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { shouldReduceAnimations } from '@/lib/utils/performance';
 
 export interface Card3DProps {
   children: React.ReactNode;
@@ -19,10 +20,11 @@ export interface Card3DProps {
 /**
  * Card3D - A futuristic card component with 3D tilt effects
  * Features:
- * - Mouse-tracking 3D transforms
+ * - Mouse-tracking 3D transforms (disabled on low-end devices)
  * - Layered depth with parallax
  * - Glow effects on hover
  * - Keyboard accessible
+ * - Performance-optimized for older devices
  */
 export const Card3D: React.FC<Card3DProps> = ({
   children,
@@ -38,12 +40,18 @@ export const Card3D: React.FC<Card3DProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Check for reduced motion preference on mount
+  useEffect(() => {
+    setReduceMotion(shouldReduceAnimations());
+  }, []);
 
   // Motion values for smooth 3D transforms
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
-  // Spring physics for smooth, natural movement
+  // Spring physics for smooth, natural movement (only used when not reducing motion)
   const rotateX = useSpring(useTransform(mouseY, [-0.5, 0.5], [intensity, -intensity]), {
     stiffness: 150,
     damping: 20,
@@ -53,7 +61,7 @@ export const Card3D: React.FC<Card3DProps> = ({
     damping: 20,
   });
 
-  // Glow effect follows mouse
+  // Glow effect follows mouse (only used when not reducing motion)
   const glowX = useSpring(useTransform(mouseX, [-0.5, 0.5], ['0%', '100%']), {
     stiffness: 100,
     damping: 15,
@@ -64,7 +72,8 @@ export const Card3D: React.FC<Card3DProps> = ({
   });
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (disabled || !cardRef.current) return;
+    // Skip expensive calculations on low-end devices
+    if (disabled || !cardRef.current || reduceMotion) return;
 
     const rect = cardRef.current.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -80,8 +89,10 @@ export const Card3D: React.FC<Card3DProps> = ({
 
   const handleMouseLeave = () => {
     setIsHovered(false);
-    mouseX.set(0);
-    mouseY.set(0);
+    if (!reduceMotion) {
+      mouseX.set(0);
+      mouseY.set(0);
+    }
   };
 
   const handleMouseEnter = () => {
@@ -106,6 +117,36 @@ export const Card3D: React.FC<Card3DProps> = ({
     }
   };
 
+  // Simplified version for low-end devices
+  if (reduceMotion) {
+    return (
+      <div
+        ref={cardRef}
+        className={`card-3d-container ${className}`}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        tabIndex={disabled ? -1 : tabIndex}
+        role={role}
+        aria-label={ariaLabel}
+        aria-disabled={disabled}
+      >
+        <div
+          className={`card-3d-inner relative ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} transition-transform duration-200 hover:scale-[1.02] hover:-translate-y-1`}
+        >
+          <div
+            className="card-3d-content relative bg-glass-bg border border-glass-border rounded-2xl backdrop-blur-xl overflow-hidden"
+            style={{
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            <div className="relative z-10">{children}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full 3D version for capable devices
   return (
     <motion.div
       ref={cardRef}

@@ -10,6 +10,7 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import ContinueWatching from '@/components/home/ContinueWatching';
+import { shouldReduceAnimations } from '@/lib/utils/performance';
 import React from 'react';
 
 interface HomePageClientProps {
@@ -54,9 +55,15 @@ export default function HomePageClient({
   const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollY, setScrollY] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
 
   // Refs
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Check for reduced motion preference on mount
+  useEffect(() => {
+    setReduceMotion(shouldReduceAnimations());
+  }, []);
 
   // Hero carousel content - filter out duplicates
   const heroItems = React.useMemo(() => {
@@ -102,8 +109,11 @@ export default function HomePageClient({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Scroll tracking - throttled for performance
+  // Scroll tracking - throttled for performance, disabled on low-end devices
   useEffect(() => {
+    // Skip scroll tracking entirely on low-end devices (parallax is disabled anyway)
+    if (reduceMotion) return;
+    
     let ticking = false;
     const handleScroll = () => {
       if (!ticking) {
@@ -116,7 +126,7 @@ export default function HomePageClient({
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [reduceMotion]);
 
   // Hero carousel auto-rotation
   useEffect(() => {
@@ -213,12 +223,12 @@ export default function HomePageClient({
                 transition={{ duration: 1.2, ease: "easeInOut" }}
                 className="absolute inset-0"
               >
-                {/* Background Image with Parallax */}
+                {/* Background Image with Parallax (disabled on low-end devices) */}
                 <div
                   className="absolute inset-0 bg-cover bg-center"
                   style={{
                     backgroundImage: `url(https://image.tmdb.org/t/p/original${currentHero.backdrop_path || currentHero.backdropPath || ''})`,
-                    transform: `translateY(${scrollY * 0.5}px)`,
+                    transform: reduceMotion ? undefined : `translateY(${scrollY * 0.5}px)`,
                   }}
                 />
 
@@ -783,6 +793,12 @@ function ContentSection({
   onItemClick: (item: MediaItem) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Check for reduced motion preference on mount
+  useEffect(() => {
+    setReduceMotion(shouldReduceAnimations());
+  }, []);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -847,30 +863,59 @@ function ContentSection({
               <span>{title}</span>
             </h2>
             <div className="flex gap-4">
-              <motion.button
-                whileHover={{ scale: 1.1, boxShadow: "0 8px 25px rgba(120, 119, 198, 0.4)" }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => scroll('left')}
-                className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
-                data-tv-skip="true"
-                tabIndex={-1}
-              >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-                </svg>
-              </motion.button>
-              <motion.button
-                whileHover={{ scale: 1.1, boxShadow: "0 8px 25px rgba(120, 119, 198, 0.4)" }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => scroll('right')}
-                className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
-                data-tv-skip="true"
-                tabIndex={-1}
-              >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-                </svg>
-              </motion.button>
+              {reduceMotion ? (
+                // Simple buttons for low-end devices
+                <>
+                  <button
+                    onClick={() => scroll('left')}
+                    className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                    data-tv-skip="true"
+                    tabIndex={-1}
+                  >
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => scroll('right')}
+                    className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                    data-tv-skip="true"
+                    tabIndex={-1}
+                  >
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                    </svg>
+                  </button>
+                </>
+              ) : (
+                // Animated buttons for capable devices
+                <>
+                  <motion.button
+                    whileHover={{ scale: 1.1, boxShadow: "0 8px 25px rgba(120, 119, 198, 0.4)" }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => scroll('left')}
+                    className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                    data-tv-skip="true"
+                    tabIndex={-1}
+                  >
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+                    </svg>
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.1, boxShadow: "0 8px 25px rgba(120, 119, 198, 0.4)" }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => scroll('right')}
+                    className="w-20 h-20 bg-gradient-to-r from-purple-600/20 to-pink-600/20 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:from-purple-600/30 hover:to-pink-600/30 transition-all duration-300 border border-white/20 shadow-xl"
+                    data-tv-skip="true"
+                    tabIndex={-1}
+                  >
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+                    </svg>
+                  </motion.button>
+                </>
+              )}
             </div>
           </div>
 
@@ -881,69 +926,92 @@ function ContentSection({
             data-tv-scroll-container="true"
             data-tv-group={`content-${title.toLowerCase().replace(/\s+/g, '-')}`}
           >
-            {items.map((item, index) => (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, x: 50 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05 }}
-                onClick={() => onItemClick(item)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onItemClick(item);
-                  }
-                }}
-                className="flex-shrink-0 w-56 md:w-64 cursor-pointer group p-2"
-                data-tv-focusable="true"
-                tabIndex={0}
-                role="button"
-                aria-label={`${item.title || item.name}`}
-              >
-                <motion.div
-                  whileHover={{ scale: 1.05, y: -8 }}
-                  transition={{ duration: 0.3, ease: "easeOut" }}
-                  className="relative rounded-xl bg-gray-800 shadow-2xl overflow-hidden"
-                >
-                  <div className="overflow-hidden rounded-xl">
-                    <img
-                      src={`https://image.tmdb.org/t/p/w500${item.poster_path || item.posterPath || ''}`}
-                      alt={item.title || item.name || 'Content'}
-                      className="w-full h-80 md:h-96 object-cover group-hover:scale-110 transition-transform duration-500"
-                      loading="lazy"
-                    />
-                  </div>
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+            {items.map((item, index) => {
+              // Card content shared between both versions
+              const cardContent = (
+                <>
+                  <div className={`relative rounded-xl bg-gray-800 shadow-2xl overflow-hidden ${reduceMotion ? 'transition-transform duration-200 hover:scale-[1.02] hover:-translate-y-1' : ''}`}>
+                    <div className="overflow-hidden rounded-xl">
+                      <img
+                        src={`https://image.tmdb.org/t/p/w500${item.poster_path || item.posterPath || ''}`}
+                        alt={item.title || item.name || 'Content'}
+                        className={`w-full h-80 md:h-96 object-cover ${reduceMotion ? '' : 'group-hover:scale-110'} transition-transform duration-500`}
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-                  {/* Play Button Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
-                    <div className="w-20 h-20 bg-gradient-to-r from-purple-600/80 to-pink-600/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-2xl border border-white/20">
-                      <svg width="28" height="28" viewBox="0 0 24 24" fill="white" strokeWidth="0">
-                        <path d="M8 5v14l11-7z" />
+                    {/* Play Button Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none">
+                      <div className="w-20 h-20 bg-gradient-to-r from-purple-600/80 to-pink-600/80 backdrop-blur-md rounded-full flex items-center justify-center shadow-2xl border border-white/20">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="white" strokeWidth="0">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </div>
+
+                    {/* Rating Badge */}
+                    <div className="absolute top-4 right-4 px-3 py-2 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 backdrop-blur-md rounded-full text-white text-sm font-bold flex items-center gap-2 shadow-lg border border-white/20">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                       </svg>
+                      {(item.vote_average || item.rating || 0).toFixed(1)}
                     </div>
                   </div>
 
-                  {/* Rating Badge */}
-                  <div className="absolute top-4 right-4 px-3 py-2 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 backdrop-blur-md rounded-full text-white text-sm font-bold flex items-center gap-2 shadow-lg border border-white/20">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                    </svg>
-                    {(item.vote_average || item.rating || 0).toFixed(1)}
+                  <div className="p-4">
+                    <h3 className="text-white font-semibold text-lg mb-2 line-clamp-2">
+                      {item.title || item.name || 'Untitled'}
+                    </h3>
+                    <p className="text-gray-400 text-sm">
+                      {new Date(item.release_date || item.first_air_date || item.releaseDate || '').getFullYear()}
+                    </p>
                   </div>
-                </motion.div>
+                </>
+              );
 
-                <div className="p-4">
-                  <h3 className="text-white font-semibold text-lg mb-2 line-clamp-2">
-                    {item.title || item.name || 'Untitled'}
-                  </h3>
-                  <p className="text-gray-400 text-sm">
-                    {new Date(item.release_date || item.first_air_date || item.releaseDate || '').getFullYear()}
-                  </p>
+              const handleKeyDown = (e: React.KeyboardEvent) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onItemClick(item);
+                }
+              };
+
+              return reduceMotion ? (
+                // Simple version for low-end devices
+                <div
+                  key={item.id}
+                  onClick={() => onItemClick(item)}
+                  onKeyDown={handleKeyDown}
+                  className="flex-shrink-0 w-56 md:w-64 cursor-pointer group p-2"
+                  data-tv-focusable="true"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${item.title || item.name}`}
+                >
+                  {cardContent}
                 </div>
-              </motion.div>
-            ))}
+              ) : (
+                // Full animation version for capable devices
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, x: 50 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: Math.min(index * 0.05, 0.3) }}
+                  onClick={() => onItemClick(item)}
+                  onKeyDown={handleKeyDown}
+                  className="flex-shrink-0 w-56 md:w-64 cursor-pointer group p-2"
+                  data-tv-focusable="true"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${item.title || item.name}`}
+                  whileHover={{ scale: 1.02, y: -4 }}
+                >
+                  {cardContent}
+                </motion.div>
+              );
+            })}
           </div>
         </motion.div>
       </div>

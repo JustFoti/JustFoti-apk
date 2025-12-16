@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { Card3D } from '@/components/ui/Card3D';
 import type { MediaItem } from '@/types/media';
 import { useIntersection } from '@/lib/hooks/useIntersection';
+import { shouldReduceAnimations } from '@/lib/utils/performance';
 
 export interface ContentCardProps {
   item: MediaItem;
@@ -31,6 +32,12 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Check for reduced motion preference on mount
+  useEffect(() => {
+    setReduceMotion(shouldReduceAnimations());
+  }, []);
 
   // Intersection observer for lazy loading and analytics
   const { ref, isIntersecting } = useIntersection<HTMLDivElement>({
@@ -124,39 +131,70 @@ export const ContentCard: React.FC<ContentCardProps> = ({
 
             {/* Rating badge */}
             <div className="absolute top-2 right-2 z-10">
-              <motion.div
-                className="relative"
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-              >
-                {/* Circular progress background */}
-                <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="16"
-                    fill="none"
-                    stroke="rgba(255, 255, 255, 0.1)"
-                    strokeWidth="2"
-                  />
-                  <circle
-                    cx="18"
-                    cy="18"
-                    r="16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeDasharray={`${ratingPercentage} 100`}
-                    className={getRatingColor(rating)}
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className={`text-xs font-bold ${getRatingColor(rating)}`}>
-                    {formattedRating}
-                  </span>
+              {reduceMotion ? (
+                // Simple version for low-end devices
+                <div className="relative">
+                  <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="16"
+                      fill="none"
+                      stroke="rgba(255, 255, 255, 0.1)"
+                      strokeWidth="2"
+                    />
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeDasharray={`${ratingPercentage} 100`}
+                      className={getRatingColor(rating)}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className={`text-xs font-bold ${getRatingColor(rating)}`}>
+                      {formattedRating}
+                    </span>
+                  </div>
                 </div>
-              </motion.div>
+              ) : (
+                // Animated version for capable devices
+                <motion.div
+                  className="relative"
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                >
+                  <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="16"
+                      fill="none"
+                      stroke="rgba(255, 255, 255, 0.1)"
+                      strokeWidth="2"
+                    />
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="16"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeDasharray={`${ratingPercentage} 100`}
+                      className={getRatingColor(rating)}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className={`text-xs font-bold ${getRatingColor(rating)}`}>
+                      {formattedRating}
+                    </span>
+                  </div>
+                </motion.div>
+              )}
             </div>
 
             {/* Media type badge */}
@@ -198,14 +236,11 @@ export const ContentCard: React.FC<ContentCardProps> = ({
           </div>
 
           {/* Hover overlay with play button */}
-          <motion.div
+          <div
             className="absolute inset-0 bg-gradient-to-t from-purple-900/90 via-purple-900/50 to-transparent flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity duration-300"
-            initial={false}
           >
-            <motion.div
-              className="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md border-2 border-white/40 flex items-center justify-center"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
+            <div
+              className={`w-16 h-16 rounded-full bg-white/20 backdrop-blur-md border-2 border-white/40 flex items-center justify-center ${!reduceMotion ? 'hover:scale-110 active:scale-95 transition-transform' : ''}`}
             >
               <svg
                 className="w-8 h-8 text-white ml-1"
@@ -214,8 +249,8 @@ export const ContentCard: React.FC<ContentCardProps> = ({
               >
                 <path d="M8 5v14l11-7z" />
               </svg>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         </div>
       </Card3D>
     </div>

@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ContentCard } from './ContentCard';
 import type { MediaItem } from '@/types/media';
+import { shouldReduceAnimations } from '@/lib/utils/performance';
 
 export interface CategoryRowProps {
   title: string;
@@ -35,6 +36,12 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
   const [isScrolling, setIsScrolling] = useState(false);
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  // Check for reduced motion preference on mount
+  useEffect(() => {
+    setReduceMotion(shouldReduceAnimations());
+  }, []);
 
   // Check scroll position to show/hide arrows
   const checkScrollPosition = () => {
@@ -120,43 +127,73 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
 
       {/* Scrollable container */}
       <div className="relative group">
-        {/* Left arrow */}
-        <AnimatePresence>
-          {canScrollLeft && (
-            <motion.button
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
+        {/* Left arrow - simplified for low-end devices */}
+        {reduceMotion ? (
+          canScrollLeft && (
+            <button
               onClick={() => scroll('left')}
-              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90 hover:scale-110 transform"
+              className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
               aria-label="Scroll left"
               disabled={isScrolling}
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
-            </motion.button>
-          )}
-        </AnimatePresence>
+            </button>
+          )
+        ) : (
+          <AnimatePresence>
+            {canScrollLeft && (
+              <motion.button
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                onClick={() => scroll('left')}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90 hover:scale-110 transform"
+                aria-label="Scroll left"
+                disabled={isScrolling}
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        )}
 
-        {/* Right arrow */}
-        <AnimatePresence>
-          {canScrollRight && (
-            <motion.button
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+        {/* Right arrow - simplified for low-end devices */}
+        {reduceMotion ? (
+          canScrollRight && (
+            <button
               onClick={() => scroll('right')}
-              className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90 hover:scale-110 transform"
+              className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90"
               aria-label="Scroll right"
               disabled={isScrolling}
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-            </motion.button>
-          )}
-        </AnimatePresence>
+            </button>
+          )
+        ) : (
+          <AnimatePresence>
+            {canScrollRight && (
+              <motion.button
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                onClick={() => scroll('right')}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-20 w-12 h-12 rounded-full bg-black/80 backdrop-blur-sm border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/90 hover:scale-110 transform"
+                aria-label="Scroll right"
+                disabled={isScrolling}
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        )}
 
         {/* Cards container */}
         <div
@@ -168,28 +205,49 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
           }}
         >
           {items.map((item, index) => (
-            <motion.div
-              key={item.id}
-              className="flex-shrink-0 w-[160px] sm:w-[200px] md:w-[220px] snap-start"
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{
-                delay: Math.min(index * 0.05, 0.5),
-                duration: 0.4,
-              }}
-            >
-              <ContentCard
-                item={item}
-                onSelect={(id) => {
-                  if (onItemClick) {
-                    onItemClick(item);
-                  } else {
-                    onItemSelect?.(id);
-                  }
+            reduceMotion ? (
+              // Simple version for low-end devices - no staggered animations
+              <div
+                key={item.id}
+                className="flex-shrink-0 w-[160px] sm:w-[200px] md:w-[220px] snap-start"
+              >
+                <ContentCard
+                  item={item}
+                  onSelect={(id) => {
+                    if (onItemClick) {
+                      onItemClick(item);
+                    } else {
+                      onItemSelect?.(id);
+                    }
+                  }}
+                  priority={index < 6}
+                />
+              </div>
+            ) : (
+              // Full animation version for capable devices
+              <motion.div
+                key={item.id}
+                className="flex-shrink-0 w-[160px] sm:w-[200px] md:w-[220px] snap-start"
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{
+                  delay: Math.min(index * 0.05, 0.5),
+                  duration: 0.4,
                 }}
-                priority={index < 6}
-              />
-            </motion.div>
+              >
+                <ContentCard
+                  item={item}
+                  onSelect={(id) => {
+                    if (onItemClick) {
+                      onItemClick(item);
+                    } else {
+                      onItemSelect?.(id);
+                    }
+                  }}
+                  priority={index < 6}
+                />
+              </motion.div>
+            )
           ))}
         </div>
 
