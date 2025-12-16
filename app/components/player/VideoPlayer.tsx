@@ -17,6 +17,9 @@ import {
   getPreferredAnimeKaiServer,
   setPreferredAnimeKaiServer,
   sourceMatchesAudioPreference,
+  getSavedVolume,
+  getSavedMuteState,
+  saveVolumeSettings,
   type PlayerPreferences,
   type AnimeAudioPreference 
 } from '@/lib/utils/player-preferences';
@@ -100,8 +103,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(() => getSavedVolume());
+  const [isMuted, setIsMuted] = useState(() => getSavedMuteState());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -1237,6 +1240,13 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     };
     const handleLoadedData = () => {
       setIsLoading(false);
+      
+      // Apply saved volume settings to video element
+      const savedVolume = getSavedVolume();
+      const savedMuted = getSavedMuteState();
+      video.volume = savedVolume;
+      video.muted = savedMuted;
+      
       trackContentEngagement(tmdbId, mediaType, 'video_loaded', {
         title,
         season,
@@ -1846,9 +1856,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const handleVolumeChange = (value: number) => {
     if (!videoRef.current) return;
     const newVolume = value / 100;
+    const newMuted = newVolume === 0;
     videoRef.current.volume = newVolume;
     setVolume(newVolume);
-    setIsMuted(newVolume === 0);
+    setIsMuted(newMuted);
+    // Save to localStorage for persistence
+    saveVolumeSettings(newVolume, newMuted);
     setShowVolumeIndicator(true);
     if (volumeIndicatorTimeoutRef.current) {
       clearTimeout(volumeIndicatorTimeoutRef.current);
@@ -1869,8 +1882,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
   const toggleMute = () => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
+    const newMuted = !isMuted;
+    videoRef.current.muted = newMuted;
+    setIsMuted(newMuted);
+    // Save to localStorage for persistence
+    saveVolumeSettings(volume, newMuted);
     setShowVolumeIndicator(true);
     if (volumeIndicatorTimeoutRef.current) {
       clearTimeout(volumeIndicatorTimeoutRef.current);

@@ -8,6 +8,9 @@ export interface PlayerPreferences {
   autoPlayNextEpisode: boolean;
   autoPlayCountdown: number; // seconds for countdown timer before auto-playing (5-30)
   showNextEpisodeBeforeEnd: number; // seconds before video ends to show "Up Next" button (30-180)
+  // Volume settings
+  volume: number; // 0-1 range
+  isMuted: boolean;
   // Anime-specific preferences
   animeAudioPreference: AnimeAudioPreference; // 'sub' for Japanese with subtitles, 'dub' for English dub
   preferredAnimeKaiServer: string | null; // Remember last used AnimeKai server (e.g., "Yuki", "Kaido")
@@ -18,6 +21,8 @@ const DEFAULT_PREFERENCES: PlayerPreferences = {
   autoPlayNextEpisode: true,
   autoPlayCountdown: 10,
   showNextEpisodeBeforeEnd: 90, // Show 90 seconds before end by default
+  volume: 1, // Full volume by default
+  isMuted: false,
   animeAudioPreference: 'sub', // Default to subbed anime
   preferredAnimeKaiServer: null, // No preference by default
 };
@@ -117,6 +122,53 @@ export function clearPlayerPreferences(): void {
   } catch (error) {
     console.error('[PlayerPreferences] Error clearing localStorage:', error);
   }
+}
+
+// ============================================================================
+// Volume preferences
+// ============================================================================
+
+/**
+ * Get saved volume level (0-1)
+ */
+export function getSavedVolume(): number {
+  return getPlayerPreferences().volume;
+}
+
+/**
+ * Get saved mute state
+ */
+export function getSavedMuteState(): boolean {
+  return getPlayerPreferences().isMuted;
+}
+
+/**
+ * Save volume level (0-1)
+ */
+export function saveVolume(volume: number): void {
+  const preferences = getPlayerPreferences();
+  // Clamp between 0 and 1
+  preferences.volume = Math.max(0, Math.min(1, volume));
+  savePlayerPreferences(preferences);
+}
+
+/**
+ * Save mute state
+ */
+export function saveMuteState(isMuted: boolean): void {
+  const preferences = getPlayerPreferences();
+  preferences.isMuted = isMuted;
+  savePlayerPreferences(preferences);
+}
+
+/**
+ * Save both volume and mute state at once (more efficient)
+ */
+export function saveVolumeSettings(volume: number, isMuted: boolean): void {
+  const preferences = getPlayerPreferences();
+  preferences.volume = Math.max(0, Math.min(1, volume));
+  preferences.isMuted = isMuted;
+  savePlayerPreferences(preferences);
 }
 
 // ============================================================================
