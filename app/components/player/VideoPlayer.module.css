@@ -626,7 +626,7 @@
   left: 0;
   right: 0;
   padding: 2rem;
-  padding-left: 10rem;
+  padding-left: 10rem; /* Leave space for back button on desktop */
   background: linear-gradient(to bottom, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%);
   color: white;
   z-index: 5;
@@ -867,7 +867,7 @@
   }
 }
 
-/* Responsive */
+/* Responsive - Main mobile styles */
 @media (max-width: 768px) {
   .volumeContainer {
     display: none;
@@ -888,8 +888,8 @@
 
   .titleOverlay {
     padding: 1rem;
-    padding-left: 1rem;
-    padding-top: 4rem;
+    padding-left: 7rem; /* Leave space for back button */
+    padding-top: 1rem;
   }
 
   .titleOverlay h2 {
@@ -1035,126 +1035,6 @@
 
 .nextEpisodeButton:active {
   transform: translateY(-2px);
-}
-
-.nextEpisodeLabel {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: #666;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-.nextEpisodeTitle {
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(50px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .volumeContainer {
-    display: none;
-  }
-
-  .volumeIndicator {
-    right: 1rem;
-    padding: 1rem;
-  }
-
-  .volumeIndicatorBar {
-    height: 80px;
-  }
-
-  .time {
-    font-size: 0.8rem;
-  }
-
-  .titleOverlay {
-    padding: 1rem;
-    padding-left: 1rem;
-    padding-top: 4rem;
-  }
-
-  .titleOverlay h2 {
-    font-size: 1.25rem;
-  }
-
-  .episodeInfo {
-    font-size: 0.875rem;
-  }
-
-  .progressInfo {
-    font-size: 0.8rem;
-  }
-
-  .controls {
-    padding: 3rem 1rem 1rem;
-  }
-
-  .btn {
-    padding: 0.4rem;
-  }
-
-  .btn svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  .centerPlayButton {
-    width: 80px;
-    height: 80px;
-  }
-
-  .centerPlayButton svg {
-    width: 60px;
-    height: 60px;
-  }
-
-  .nextEpisodeButton {
-    bottom: 80px;
-    right: 1rem;
-    padding: 0.6rem 1rem;
-  }
-
-  .nextEpisodeLabel {
-    display: none;
-  }
-}
-
-/* Fullscreen adjustments */
-.playerContainer:fullscreen {
-  cursor: auto;
-}
-
-.playerContainer:fullscreen.hideCursor {
-  cursor: none;
-}
-
-.playerContainer:fullscreen .controls {
-  padding: 5rem 3rem 2rem;
-}
-
-.playerContainer:fullscreen .titleOverlay {
-  padding: 3rem;
-}
-
-/* Ensure subtitles are visible in fullscreen */
-.playerContainer:fullscreen video::cue {
-  background: rgba(0, 0, 0, 0.8);
-  color: white;
-  font-size: 1.2em;
 }
 
 /* Resume prompt */
@@ -1476,7 +1356,8 @@
 
   .titleOverlay {
     padding: 0.75rem;
-    padding-top: 3rem;
+    padding-left: 6rem; /* Leave space for back button in portrait */
+    padding-top: 0.75rem;
   }
 
   .titleOverlay h2 {
@@ -1878,7 +1759,7 @@ button[data-server-source]:focus-visible {
   }
 
   .titleOverlay {
-    padding-left: max(2rem, env(safe-area-inset-left));
+    padding-left: max(10rem, calc(10rem + env(safe-area-inset-left))); /* Back button + safe area */
     padding-right: max(2rem, env(safe-area-inset-right));
     padding-top: max(2rem, env(safe-area-inset-top));
   }
@@ -1901,7 +1782,7 @@ button[data-server-source]:focus-visible {
 
   .titleOverlay {
     padding: 1rem;
-    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-left: max(7rem, calc(7rem + env(safe-area-inset-left))); /* Back button + safe area */
   }
 
   .titleOverlay h2 {
