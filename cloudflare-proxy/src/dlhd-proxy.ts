@@ -1,23 +1,31 @@
 /**
- * DLHD Proxy - Direct Auth Token Method
+ * DLHD Proxy - Session-Based Authentication
  * 
- * Proxies DLHD.dad live streams directly through Cloudflare Workers.
- * No RPI proxy needed! Uses auth token method discovered via reverse engineering.
+ * Proxies DLHD.dad live streams through Cloudflare Workers with proper auth.
+ * No RPI proxy needed! Uses session-based auth discovered via reverse engineering.
  * 
- * Key Discovery (Dec 2024):
- *   - DLHD key server requires: Authorization: Bearer <token>
- *   - Token is generated server-side and embedded in player page
- *   - Token is fetched from: https://epicplayplay.cfd/premiumtv/daddyhd.php?id=<channel>
- *   - This works from ANY IP (datacenter or residential)!
+ * Authentication Flow (Dec 2024):
+ *   1. Fetch player page → Get AUTH_TOKEN and CHANNEL_KEY
+ *   2. Call heartbeat endpoint → Establish session (returns expiry timestamp)
+ *   3. Fetch key with session → Use Authorization: Bearer <token> + X-Channel-Key
+ * 
+ * Key Endpoints:
+ *   - Player: https://epicplayplay.cfd/premiumtv/daddyhd.php?id=<channel>
+ *   - Heartbeat: https://<server>.kiko2.ru/heartbeat (GET with auth headers)
+ *   - Key: https://<server>.kiko2.ru/key/premium<channel>/<key_id>
+ * 
+ * Error Codes:
+ *   - E2: "Session must be created via heartbeat first" → Call heartbeat
+ *   - E3: Token expired → Refresh from player page
  * 
  * Architecture:
- *   Cloudflare Worker → DLHD CDN (with auth token)
+ *   Browser → CF Worker → DLHD CDN (with session auth)
  * 
  * Routes:
  *   GET /?channel=<id>           - Get proxied M3U8 playlist
- *   GET /key?url=<encoded_url>   - Proxy encryption key (with auth token)
+ *   GET /key?url=<encoded_url>   - Proxy encryption key (handles auth)
  *   GET /segment?url=<encoded_url> - Proxy video segment
- *   GET /health                  - Health check
+ *   GET /health                  - Health check with session info
  */
 
 import { createLogger, type LogLevel } from './logger';

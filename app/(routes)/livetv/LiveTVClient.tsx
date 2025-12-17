@@ -902,31 +902,22 @@ function LiveTVPlayer({
       enableWorker: true,
       lowLatencyMode: false,
       backBufferLength: 30,
-      maxBufferLength: 30, // Reduced for live - don't buffer too far ahead
+      maxBufferLength: 30,
       maxMaxBufferLength: 60,
       liveSyncDurationCount: 3,
       liveMaxLatencyDurationCount: 10,
       liveDurationInfinity: true,
-      // Aggressive playlist refresh for live streams
+      // Skip problematic segments instead of failing
+      fragLoadingTimeOut: 15000,
+      fragLoadingMaxRetry: 2,
       levelLoadingTimeOut: 10000,
-      levelLoadingMaxRetry: 6, // More retries for level/playlist loading
-      levelLoadingRetryDelay: 500, // Start with 500ms delay
-      levelLoadingMaxRetryTimeout: 30000, // Max 30s between retries
-      // Fragment loading
-      fragLoadingTimeOut: 20000,
-      fragLoadingMaxRetry: 6,
-      fragLoadingRetryDelay: 500,
-      // Manifest loading
-      manifestLoadingTimeOut: 15000,
-      manifestLoadingMaxRetry: 4,
-      manifestLoadingRetryDelay: 500,
-      // Custom XHR setup for debugging and CORS handling
-      xhrSetup: (xhr: XMLHttpRequest, url: string) => {
+      levelLoadingMaxRetry: 3,
+      manifestLoadingTimeOut: 10000,
+      manifestLoadingMaxRetry: 2,
+      // Key config
+      startFragPrefetch: true,
+      xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = false;
-        // Log key loading attempts for debugging
-        if (url.includes('/key') || url.includes('wmsxx')) {
-          console.log('[LiveTV] Loading key from:', url);
-        }
       },
     });
 
@@ -936,123 +927,47 @@ function LiveTVPlayer({
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       console.log('[LiveTV] DLHD manifest parsed');
       setIsLoading(false);
-      setError(null); // Clear any previous errors
+      setError(null);
       videoRef.current?.play().catch(() => {});
     });
     
-    // Log key loading events for debugging
-    hls.on(Hls.Events.KEY_LOADING, (_event: any, data: any) => {
-      console.log('[LiveTV] Loading key:', data.frag?.decryptdata?.uri);
-    });
-    
-    hls.on(Hls.Events.KEY_LOADED, () => {
-      console.log('[LiveTV] Key loaded successfully');
-      setError(null); // Clear error when key loads successfully
-    });
-    
-    // Retry counters for error recovery
-    let keyRetryCount = 0;
-    const MAX_KEY_RETRIES = 8; // Increased - keys can fail temporarily
-    let networkRetryCount = 0;
-    const MAX_NETWORK_RETRIES = 8;
-    let lastSuccessfulLoad = Date.now();
-    
-    // Clear error and buffering status when fragments load successfully (stream recovered)
     hls.on(Hls.Events.FRAG_LOADED, () => {
-      // Reset retry counts on successful fragment load
-      keyRetryCount = 0;
-      networkRetryCount = 0;
-      lastSuccessfulLoad = Date.now();
-      // Clear any error/buffering states
       setError(null);
       setBufferingStatus(null);
     });
     
     hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
-      // Log all errors with details for debugging
-      console.log('[LiveTV] HLS error:', {
-        type: data.type,
-        details: data.details,
-        fatal: data.fatal,
-        url: data.url || data.frag?.url || data.context?.url,
-      });
+      console.log('[LiveTV] HLS error:', data.details, data.fatal ? '(fatal)' : '');
       
-      // Handle key load errors specifically - these are common with encrypted streams
-      // The server-side session should auto-refresh, so just retry
-      if (data.details === 'keyLoadError') {
-        keyRetryCount++;
-        
-        // If we had a successful load recently, be more patient with retries
-        const timeSinceSuccess = Date.now() - lastSuccessfulLoad;
-        const isRecentlyWorking = timeSinceSuccess < 60000; // Within last minute
-        const effectiveMaxRetries = isRecentlyWorking ? MAX_KEY_RETRIES * 2 : MAX_KEY_RETRIES;
-        
-        if (keyRetryCount <= effectiveMaxRetries) {
-          // Exponential backoff with jitter
-          const delay = Math.min(1000 * Math.pow(1.5, keyRetryCount - 1) + Math.random() * 500, 10000);
-          console.log(`[LiveTV] Key load error, retry ${keyRetryCount}/${effectiveMaxRetries} in ${Math.round(delay)}ms...`);
-          
-          // Only show buffering status after a few retries to avoid flicker
-          if (keyRetryCount > 2) {
-            setBufferingStatus(`Refreshing key...`);
-          }
-          setTimeout(() => hls.startLoad(), delay);
-          return;
-        }
-        
-        console.log('[LiveTV] Key load failed after retries, reloading stream...');
-        keyRetryCount = 0;
-        setBufferingStatus('Refreshing stream...');
-        setTimeout(() => {
-          hls.destroy();
-          loadDLHDStream();
-        }, 3000);
-        return;
-      }
-      
-      // Handle level/playlist load errors (common with live streams)
-      if (data.details === 'levelLoadError' || data.details === 'levelLoadTimeOut') {
-        // HLS.js handles retries automatically with our config, just show status briefly
-        if (networkRetryCount > 2) {
-          setBufferingStatus('Refreshing playlist...');
+      // Non-fatal errors: skip and continue
+      if (!data.fatal) {
+        // Just skip the problematic segment/key and move on
+        if (data.frag) {
+          console.log('[LiveTV] Skipping segment:', data.frag.sn);
         }
         return;
       }
       
-      if (data.fatal) {
-        switch (data.type) {
-          case Hls.ErrorTypes.NETWORK_ERROR:
-            networkRetryCount++;
-            if (networkRetryCount <= MAX_NETWORK_RETRIES) {
-              const delay = Math.min(1000 * Math.pow(1.5, networkRetryCount - 1), 8000);
-              console.log(`[LiveTV] Network error, retry ${networkRetryCount}/${MAX_NETWORK_RETRIES} in ${Math.round(delay)}ms...`);
-              if (networkRetryCount > 2) {
-                setBufferingStatus(`Reconnecting...`);
-              }
-              setTimeout(() => hls.startLoad(), delay);
-            } else {
-              console.log('[LiveTV] Network error, reloading stream...');
-              networkRetryCount = 0;
-              setBufferingStatus('Refreshing stream...');
-              setTimeout(() => {
-                hls.destroy();
-                loadDLHDStream();
-              }, 3000);
-            }
-            break;
-          case Hls.ErrorTypes.MEDIA_ERROR:
-            console.log('[LiveTV] Media error, attempting recovery...');
-            setBufferingStatus('Recovering...');
-            hls.recoverMediaError();
-            break;
-          default:
-            // Only show error for truly unrecoverable issues
-            setError(`Stream error: ${data.details}`);
-            setIsLoading(false);
-            break;
-        }
+      // Fatal errors: try recovery
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        console.log('[LiveTV] Media error, recovering...');
+        hls.recoverMediaError();
+        return;
       }
-      // Non-fatal errors - let HLS.js handle recovery silently
+      
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+        console.log('[LiveTV] Network error, restarting...');
+        hls.startLoad();
+        return;
+      }
+      
+      // Truly fatal - reload stream
+      console.log('[LiveTV] Fatal error, reloading stream...');
+      setBufferingStatus('Reconnecting...');
+      setTimeout(() => {
+        hls.destroy();
+        loadDLHDStream();
+      }, 2000);
     });
 
     hlsRef.current = hls;

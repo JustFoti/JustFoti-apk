@@ -121,7 +121,7 @@ export default function ReverseEngineeringPage() {
               <div className="provider-card">
                 <div className="provider-status working">✓ Working</div>
                 <h3>DLHD Live TV</h3>
-                <p>AES-128 HLS encryption with Bearer token auth. Reverse engineered the obfuscated player to extract auth tokens. December 2025.</p>
+                <p>AES-128 HLS with session-based auth. Requires heartbeat to establish session before key fetch. Updated December 2024.</p>
               </div>
               <div className="provider-card">
                 <div className="provider-status working">✓ Working</div>
@@ -233,42 +233,88 @@ const authToken = match[1];
 // Token looks like: "713384aaecd20309fbc8..."`}</code></pre>
             </div>
 
-            <h3>The Algorithm</h3>
+            <h3>The Algorithm (Updated December 2024)</h3>
+            <p>
+              DLHD added a <strong>heartbeat session requirement</strong> in December 2024. Simply having 
+              the auth token is no longer enough—you must establish a session via the heartbeat endpoint first.
+            </p>
             <div className="algorithm-flow">
               <div className="flow-step">
                 <span className="step-num">1</span>
                 <div>
                   <h4>Get Server Key</h4>
-                  <p>Call <code>server_lookup?channel_id=premium{'{channel}'}</code> to get CDN server (zeko, chevy, nfs, etc.)</p>
+                  <p>Call <code>server_lookup?channel_id=premium{'{channel}'}</code> to get CDN server (zeko, chevy, etc.)</p>
                 </div>
               </div>
               <div className="flow-step">
                 <span className="step-num">2</span>
+                <div>
+                  <h4>Fetch Auth Token</h4>
+                  <p>Get <code>AUTH_TOKEN</code> and <code>CHANNEL_KEY</code> from player page</p>
+                </div>
+              </div>
+              <div className="flow-step">
+                <span className="step-num">3</span>
+                <div>
+                  <h4>Establish Heartbeat Session</h4>
+                  <p>Call <code>https://{'{server}'}.kiko2.ru/heartbeat</code> with auth headers. Returns session expiry (~5 hours).</p>
+                </div>
+              </div>
+              <div className="flow-step">
+                <span className="step-num">4</span>
                 <div>
                   <h4>Fetch M3U8 Playlist</h4>
                   <p>Build URL: <code>https://{'{server}'}new.kiko2.ru/{'{server}'}/premium{'{channel}'}/mono.css</code></p>
                 </div>
               </div>
               <div className="flow-step">
-                <span className="step-num">3</span>
-                <div>
-                  <h4>Extract Key URL</h4>
-                  <p>Parse M3U8 for <code>#EXT-X-KEY</code> tag with URI and IV</p>
-                </div>
-              </div>
-              <div className="flow-step">
-                <span className="step-num">4</span>
-                <div>
-                  <h4>Fetch Auth Token</h4>
-                  <p>Get token from player page (cached for 30 minutes)</p>
-                </div>
-              </div>
-              <div className="flow-step">
                 <span className="step-num">5</span>
                 <div>
-                  <h4>Fetch Key with Auth</h4>
-                  <p>Request key with <code>Authorization: Bearer {'{token}'}</code> header</p>
+                  <h4>Fetch Key with Session</h4>
+                  <p>Request key with <code>Authorization: Bearer {'{token}'}</code> + <code>X-Channel-Key</code> headers</p>
                 </div>
+              </div>
+            </div>
+            
+            <h3>Heartbeat Session (New in Dec 2024)</h3>
+            <p>
+              Without calling the heartbeat endpoint first, key requests return error <code>E2: &quot;Session must be created via heartbeat first&quot;</code>.
+            </p>
+            <div className="code-block">
+              <div className="code-header"><span>Heartbeat Request</span></div>
+              <pre><code>{`// Establish session before fetching keys
+const heartbeatUrl = 'https://chevy.kiko2.ru/heartbeat';
+const response = await fetch(heartbeatUrl, {
+  method: 'GET',
+  headers: {
+    'Authorization': \`Bearer \${authToken}\`,
+    'X-Channel-Key': channelKey,  // e.g., "premium51"
+    'Origin': 'https://epicplayplay.cfd',
+    'Referer': 'https://epicplayplay.cfd/',
+  }
+});
+
+// Response: {"expiry":1765944911,"message":"Session created","status":"ok"}
+const { expiry, status } = await response.json();
+// Session valid for ~5 hours (expiry is Unix timestamp)`}</code></pre>
+            </div>
+            
+            <h3>Error Codes</h3>
+            <div className="endpoint-list">
+              <div className="endpoint">
+                <span className="method get">E2</span>
+                <code>&quot;Session must be created via heartbeat first&quot;</code>
+                <p>Call heartbeat endpoint before fetching keys</p>
+              </div>
+              <div className="endpoint">
+                <span className="method get">E3</span>
+                <code>Token expired or invalid</code>
+                <p>Refresh auth token from player page</p>
+              </div>
+              <div className="endpoint">
+                <span className="method get">400</span>
+                <code>Missing X-Channel-Key header</code>
+                <p>Add X-Channel-Key header to heartbeat/key requests</p>
               </div>
             </div>
 
@@ -290,6 +336,16 @@ const authToken = match[1];
             <div className="endpoint-list">
               <div className="endpoint">
                 <span className="method get">GET</span>
+                <code>https://epicplayplay.cfd/premiumtv/daddyhd.php?id={'{channel}'}</code>
+                <p>Player page containing AUTH_TOKEN and CHANNEL_KEY</p>
+              </div>
+              <div className="endpoint">
+                <span className="method get">GET</span>
+                <code>https://{'{server}'}.kiko2.ru/heartbeat</code>
+                <p>Establish session. Requires: <code>Authorization</code> + <code>X-Channel-Key</code> headers</p>
+              </div>
+              <div className="endpoint">
+                <span className="method get">GET</span>
                 <code>https://chevy.giokko.ru/server_lookup?channel_id=premium{'{channel}'}</code>
                 <p>Returns JSON: <code>{`{"server_key": "zeko"}`}</code></p>
               </div>
@@ -300,70 +356,86 @@ const authToken = match[1];
               </div>
               <div className="endpoint">
                 <span className="method get">GET</span>
-                <code>https://chevy.kiko2.ru/key/premium{'{channel}'}/{'{keyId}'}</code>
-                <p>Returns 16-byte AES key (requires Bearer token)</p>
-              </div>
-              <div className="endpoint">
-                <span className="method get">GET</span>
-                <code>https://epicplayplay.cfd/premiumtv/daddyhd.php?id={'{channel}'}</code>
-                <p>Player page containing AUTH_TOKEN</p>
+                <code>https://{'{server}'}.kiko2.ru/key/premium{'{channel}'}/{'{keyId}'}</code>
+                <p>Returns 16-byte AES key (requires session + auth headers)</p>
               </div>
             </div>
 
             <h3>Implementation</h3>
             <div className="code-block">
-              <div className="code-header"><span>Complete Key Fetch Function</span></div>
+              <div className="code-header"><span>Complete Session + Key Fetch</span></div>
               <pre><code>{`async function fetchDLHDKey(keyUrl, channel) {
-  // Step 1: Get auth token (cached)
-  const authToken = await fetchAuthToken(channel);
-  if (!authToken) throw new Error('Failed to get auth token');
+  // Step 1: Get auth token from player page (cached)
+  const { token, channelKey } = await getAuthToken(channel);
+  if (!token) throw new Error('Failed to get auth token');
   
-  // Step 2: Fetch key with Authorization header
-  const response = await fetch(keyUrl, {
+  // Step 2: Establish heartbeat session (required since Dec 2024)
+  const hbResponse = await fetch('https://chevy.kiko2.ru/heartbeat', {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)...',
-      'Accept': '*/*',
+      'Authorization': \`Bearer \${token}\`,
+      'X-Channel-Key': channelKey,
       'Origin': 'https://epicplayplay.cfd',
       'Referer': 'https://epicplayplay.cfd/',
-      'Authorization': \`Bearer \${authToken}\`,
-      'X-Channel-Key': \`premium\${channel}\`,
+    },
+  });
+  const { status, expiry } = await hbResponse.json();
+  if (status !== 'ok') throw new Error('Heartbeat failed');
+  
+  // Step 3: Fetch key with session
+  const response = await fetch(keyUrl, {
+    headers: {
+      'Authorization': \`Bearer \${token}\`,
+      'X-Channel-Key': channelKey,
+      'Origin': 'https://epicplayplay.cfd',
+      'Referer': 'https://epicplayplay.cfd/',
     },
   });
   
   const keyData = await response.arrayBuffer();
-  
-  // Valid key is exactly 16 bytes
   if (keyData.byteLength !== 16) {
-    throw new Error(\`Invalid key size: \${keyData.byteLength}\`);
+    const text = new TextDecoder().decode(keyData);
+    if (text.includes('E2')) throw new Error('Session not established');
+    throw new Error(\`Invalid key: \${text}\`);
   }
   
-  return keyData;
+  return keyData; // Valid 16-byte AES key
 }`}</code></pre>
             </div>
 
             <h3>Why This Works</h3>
             <p>
-              The auth token is generated server-side when the player page loads. It&apos;s tied to 
-              the channel, not the IP address. This means:
+              The auth token + heartbeat session system is tied to the token, not the IP address. This means:
             </p>
             <ul>
               <li><strong>No residential proxy needed</strong> - Works from Cloudflare Workers</li>
-              <li><strong>Token validity ~5 hours</strong> - We cache for 30 minutes to be safe</li>
-              <li><strong>Per-channel tokens</strong> - Each channel needs its own token</li>
-              <li><strong>No IP blocking</strong> - The &quot;blocking&quot; was just missing auth</li>
+              <li><strong>Session validity ~5 hours</strong> - Heartbeat returns Unix timestamp expiry</li>
+              <li><strong>Auto-refresh sessions</strong> - We refresh 2 minutes before expiry</li>
+              <li><strong>Per-channel isolation</strong> - Each channel needs its own session</li>
+              <li><strong>No IP blocking</strong> - The &quot;blocking&quot; was just missing session</li>
+            </ul>
+
+            <h3>Session Management</h3>
+            <p>
+              For long viewing sessions, the session must be kept alive. Our implementation:
+            </p>
+            <ul>
+              <li>Caches sessions per channel with expiry tracking</li>
+              <li>Refreshes 2 minutes before expiry to avoid interruption</li>
+              <li>Retries with fresh session on E2 errors</li>
+              <li>Maximum cache TTL of 20 minutes regardless of expiry</li>
             </ul>
 
             <h3>Lessons Learned</h3>
             <blockquote>
               &quot;When requests fail from code but work in browser, don&apos;t assume IP blocking. 
               Check what headers the browser is actually sending. The answer is usually in the 
-              JavaScript.&quot;
-              <cite>- Field Notes, December 2025</cite>
+              JavaScript. And when that stops working, check if they added a session requirement.&quot;
+              <cite>- Field Notes, December 2024</cite>
             </blockquote>
             <p>
-              This crack took several days of investigation. We went down rabbit holes of TLS 
-              fingerprinting and residential proxies before realizing the protection was much 
-              simpler: just a Bearer token hidden in obfuscated JavaScript.
+              This crack evolved over time. First we discovered the Bearer token (worked for months), 
+              then DLHD added the heartbeat session requirement. The key insight: always monitor for 
+              new error codes and trace them back to the player JavaScript.
             </p>
           </section>
 
