@@ -44,15 +44,15 @@ const PLAYER_DOMAINS = ['epicplayplay.cfd', 'dlhd.dad', 'daddyhd.com'];
 // Server key "zeko" → zekonew.kiko2.ru/zeko/premium51/mono.css
 // Server key "chevy" → chevynew.kiko2.ru/chevy/premium51/mono.css
 const CDN_PATTERNS = {
-  // New kiko2.ru format (current)
+  // New kiko2.ru format (current) - based on actual player page
   kiko2: (serverKey: string, channelKey: string) =>
     `https://${serverKey}new.kiko2.ru/${serverKey}/${channelKey}/mono.css`,
   // Legacy giokko.ru format (fallback)
   giokko: (serverKey: string, channelKey: string) =>
     `https://${serverKey}new.giokko.ru/${serverKey}/${channelKey}/mono.css`,
-  // top1/cdn special case
+  // top1/cdn special case - MUST use kiko2.ru (not giokko.ru!)
   top1cdn: (channelKey: string) =>
-    `https://top1.giokko.ru/top1/cdn/${channelKey}/mono.css`,
+    `https://top1.kiko2.ru/top1/cdn/${channelKey}/mono.css`,
 };
 
 // In-memory cache for server keys
@@ -137,9 +137,9 @@ async function getSessionForChannel(channel: string, logger: any): Promise<{ tok
     });
     
     // Step 2: Call heartbeat to establish session
-    // Heartbeat URL is on the same server as the key (e.g., chevy.kiko2.ru/heartbeat)
-    // We'll try known servers
-    const heartbeatServers = ['chevy', 'zeko'];
+    // Heartbeat URL is on the same server as the key (e.g., zeko.kiko2.ru/heartbeat)
+    // NOTE: As of Dec 2024, only 'zeko' is reliably working (chevy returns 404)
+    const heartbeatServers = ['zeko'];
     let sessionEstablished = false;
     let sessionExpiry = Math.floor(Date.now() / 1000) + 3600; // Default 1 hour if not provided
     
@@ -359,19 +359,31 @@ async function handlePlaylistRequest(
 ): Promise<Response> {
   const channelKey = `premium${channel}`;
   
-  // Get server key (may fall back to known keys if lookup is blocked)
+  // Get server key from lookup (may fail if blocked)
   const { serverKey: initialServerKey, playerDomain } = await getServerKey(channelKey, logger);
-  logger.info('Server key found', { serverKey: initialServerKey, playerDomain });
+  logger.info('Server key from lookup', { serverKey: initialServerKey, playerDomain });
   
-  // Try the initial server key, then fall back to other known keys
-  const serverKeysToTry = [initialServerKey, ...KNOWN_SERVER_KEYS.filter(k => k !== initialServerKey)];
+  // Build list of ALL servers to try:
+  // 1. First try the server from lookup (if we got one)
+  // 2. Then try ALL other known servers
+  // This ensures we don't give up until we've tried everything
+  const serverKeysToTry = [
+    initialServerKey,
+    ...ALL_SERVER_KEYS.filter(k => k !== initialServerKey)
+  ];
   
+  logger.info('Will try servers in order', { servers: serverKeysToTry });
+  
+  const triedServers: string[] = [];
   let lastError = '';
+  
   for (const serverKey of serverKeysToTry) {
+    triedServers.push(serverKey);
+    
     try {
       // Fetch M3U8 directly (no RPI proxy needed for M3U8)
       const m3u8Url = constructM3U8Url(serverKey, channelKey);
-      logger.info('Trying M3U8 URL', { serverKey, url: m3u8Url });
+      logger.info('Trying M3U8 URL', { serverKey, url: m3u8Url, attempt: triedServers.length });
       
       const response = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
         headers: {
@@ -389,8 +401,9 @@ async function handlePlaylistRequest(
           fetchedAt: Date.now(),
         });
         
+        logger.info('Found working server!', { serverKey, channel, triedCount: triedServers.length });
+        
         // Rewrite M3U8 to proxy key and segments
-        // Pass the M3U8 URL as base for resolving relative URLs
         const { keyUrl, iv } = parseM3U8(content);
         const proxiedM3U8 = generateProxiedM3U8(content, keyUrl, proxyOrigin, m3u8Url);
         
@@ -414,24 +427,27 @@ async function handlePlaylistRequest(
             'X-DLHD-Channel': channel,
             'X-DLHD-Server-Key': serverKey,
             'X-DLHD-IV': iv || '',
+            'X-Servers-Tried': triedServers.join(','),
           },
         });
       }
       
       lastError = `Invalid M3U8 from ${serverKey}: ${content.substring(0, 100)}`;
-      logger.warn('Invalid M3U8 content, trying next server key', { serverKey, preview: content.substring(0, 100) });
+      logger.warn('Invalid M3U8 content, trying next server', { serverKey, status: response.status, preview: content.substring(0, 50) });
     } catch (err) {
       lastError = `Error from ${serverKey}: ${(err as Error).message}`;
-      logger.warn('M3U8 fetch failed, trying next server key', { serverKey, error: (err as Error).message });
+      logger.warn('M3U8 fetch failed, trying next server', { serverKey, error: (err as Error).message });
     }
   }
   
-  // All server keys failed
-  logger.error('All server keys failed', { lastError });
+  // ALL servers failed - this is bad
+  logger.error('ALL servers failed!', { channel, triedServers, lastError });
   return jsonResponse({ 
     error: 'Failed to fetch M3U8 from any server', 
     details: lastError,
-    triedKeys: serverKeysToTry 
+    triedServers,
+    totalServersTried: triedServers.length,
+    hint: 'All known DLHD servers returned errors. The channel may be offline or DLHD infrastructure may have changed.',
   }, 502, origin);
 }
 
@@ -602,9 +618,10 @@ async function handleSegmentProxy(url: URL, env: Env, logger: any, origin: strin
   });
 }
 
-// Known server keys - based on actual browser traces
-// These are the server names returned by server_lookup.js
-const KNOWN_SERVER_KEYS = ['zeko', 'chevy', 'top1/cdn'];
+// ALL known server keys - discovered from server_lookup responses
+// Different channels are assigned to different servers, so we try them all
+// Servers discovered: zeko, wind, nfs, ddy6, chevy, top1/cdn
+const ALL_SERVER_KEYS = ['zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
 
 async function getServerKey(channelKey: string, logger: any): Promise<{ serverKey: string; playerDomain: string }> {
   // Check cache
@@ -613,47 +630,52 @@ async function getServerKey(channelKey: string, logger: any): Promise<{ serverKe
     return { serverKey: cached.serverKey, playerDomain: cached.playerDomain };
   }
 
-  // Try server lookup from each domain
-  for (const domain of PLAYER_DOMAINS) {
-    try {
-      const response = await fetch(`https://${domain}/server_lookup.js?channel_id=${channelKey}`, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': `https://${domain}/`,
-        },
-      });
+  // Server lookup endpoint is at chevy.giokko.ru (discovered via browser trace)
+  // This is the ONLY working lookup endpoint as of Dec 2024
+  const lookupUrl = `https://chevy.giokko.ru/server_lookup?channel_id=${channelKey}`;
+  
+  try {
+    logger.info('Fetching server key', { channelKey, lookupUrl });
+    
+    const response = await fetch(lookupUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://epicplayplay.cfd/',
+      },
+    });
 
-      if (response.ok) {
-        const text = await response.text();
-        
-        // Check if we got HTML (anti-bot challenge) instead of JSON
-        if (text.startsWith('<') || text.includes('<!DOCTYPE')) {
-          logger.warn('Server lookup returned HTML challenge', { domain });
-          continue;
-        }
-        
+    if (response.ok) {
+      const text = await response.text();
+      
+      // Check if we got HTML (anti-bot challenge) instead of JSON
+      if (text.startsWith('<') || text.includes('<!DOCTYPE')) {
+        logger.warn('Server lookup returned HTML challenge');
+      } else {
         try {
           const data = JSON.parse(text) as { server_key?: string };
           if (data.server_key) {
+            logger.info('Got server key from lookup', { channelKey, serverKey: data.server_key });
             serverKeyCache.set(channelKey, {
               serverKey: data.server_key,
-              playerDomain: domain,
+              playerDomain: PLAYER_DOMAINS[0],
               fetchedAt: Date.now(),
             });
-            return { serverKey: data.server_key, playerDomain: domain };
+            return { serverKey: data.server_key, playerDomain: PLAYER_DOMAINS[0] };
           }
         } catch (parseErr) {
-          logger.warn('Server lookup JSON parse failed', { domain, error: (parseErr as Error).message });
+          logger.warn('Server lookup JSON parse failed', { error: (parseErr as Error).message, response: text.substring(0, 100) });
         }
       }
-    } catch (err) {
-      logger.warn('Server lookup failed', { domain, error: (err as Error).message });
+    } else {
+      logger.warn('Server lookup HTTP error', { status: response.status });
     }
+  } catch (err) {
+    logger.warn('Server lookup failed', { error: (err as Error).message });
   }
 
-  // Fallback to known server keys (most channels use top1/cdn)
-  logger.warn('Server lookup blocked, using fallback server key', { fallback: KNOWN_SERVER_KEYS[0] });
-  return { serverKey: KNOWN_SERVER_KEYS[0], playerDomain: PLAYER_DOMAINS[0] };
+  // Fallback to zeko (most common server) - handlePlaylistRequest will try all others anyway
+  logger.warn('Server lookup failed, using fallback server key', { fallback: ALL_SERVER_KEYS[0] });
+  return { serverKey: ALL_SERVER_KEYS[0], playerDomain: PLAYER_DOMAINS[0] };
 }
 
 function constructM3U8Url(serverKey: string, channelKey: string): string {

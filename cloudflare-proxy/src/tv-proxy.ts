@@ -32,10 +32,12 @@ const ALLOWED_ORIGINS = [
 const PLAYER_DOMAINS = ['epicplayplay.cfd', 'daddyhd.com'];
 
 const CDN_PATTERNS = {
+  // Use kiko2.ru domain (current active CDN based on actual player page)
   standard: (serverKey: string, channelKey: string) =>
-    `https://${serverKey}new.giokko.ru/${serverKey}/${channelKey}/mono.css`,
+    `https://${serverKey}new.kiko2.ru/${serverKey}/${channelKey}/mono.css`,
+  // top1/cdn special case - MUST use kiko2.ru (not giokko.ru!)
   top1cdn: (channelKey: string) =>
-    `https://top1.giokko.ru/top1/cdn/${channelKey}/mono.css`,
+    `https://top1.kiko2.ru/top1/cdn/${channelKey}/mono.css`,
 };
 
 // In-memory cache for server keys
@@ -120,53 +122,96 @@ export default {
   },
 };
 
+// ALL known server keys - try them all before giving up
+const ALL_SERVER_KEYS = ['zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
+
 async function handlePlaylistRequest(channel: string, proxyOrigin: string, env: Env, logger: any): Promise<Response> {
   const channelKey = `premium${channel}`;
   
-  // Get server key
+  // Get server key from lookup
   logger.debug('Looking up server key', { channelKey });
-  const { serverKey, playerDomain } = await getServerKey(channelKey, env, logger);
-  logger.info('Server key found', { serverKey, playerDomain });
+  const { serverKey: initialServerKey, playerDomain } = await getServerKey(channelKey, env, logger);
+  logger.info('Server key from lookup', { serverKey: initialServerKey, playerDomain });
   
-  const m3u8Url = constructM3U8Url(serverKey, channelKey);
-  logger.debug('Constructed M3U8 URL', { m3u8Url });
+  // Build list of ALL servers to try
+  const serverKeysToTry = [
+    initialServerKey,
+    ...ALL_SERVER_KEYS.filter(k => k !== initialServerKey)
+  ];
   
-  // Fetch M3U8 with cache-busting
-  const cacheBustUrl = `${m3u8Url}?_t=${Date.now()}`;
-  const fetchStart = Date.now();
-  const response = await fetchViaProxy(cacheBustUrl, env, logger);
-  const content = await response.text();
-  logger.debug('M3U8 fetched', { 
-    duration: Date.now() - fetchStart,
-    contentLength: content.length,
-  });
+  logger.info('Will try servers in order', { servers: serverKeysToTry });
   
-  if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
-    logger.error('Invalid M3U8 content', { preview: content.substring(0, 200) });
-    return jsonResponse({ error: 'Invalid M3U8 content' }, 502);
+  const triedServers: string[] = [];
+  let lastError = '';
+  
+  for (const serverKey of serverKeysToTry) {
+    triedServers.push(serverKey);
+    
+    try {
+      const m3u8Url = constructM3U8Url(serverKey, channelKey);
+      logger.info('Trying M3U8 URL', { serverKey, url: m3u8Url, attempt: triedServers.length });
+      
+      const cacheBustUrl = `${m3u8Url}?_t=${Date.now()}`;
+      const fetchStart = Date.now();
+      const response = await fetchViaProxy(cacheBustUrl, env, logger);
+      const content = await response.text();
+      
+      logger.debug('M3U8 fetched', { 
+        serverKey,
+        duration: Date.now() - fetchStart,
+        contentLength: content.length,
+      });
+      
+      if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
+        // Valid M3U8 found!
+        logger.info('Found working server!', { serverKey, channel, triedCount: triedServers.length });
+        
+        // Cache this server for future requests
+        serverKeyCache.set(channelKey, {
+          serverKey,
+          playerDomain,
+          fetchedAt: Date.now(),
+        });
+        
+        // Parse and rewrite M3U8
+        const { keyUrl, iv } = parseM3U8(content);
+        const proxiedM3U8 = generateProxiedM3U8(content, keyUrl, proxyOrigin);
+
+        const res = new Response(proxiedM3U8, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            ...corsHeaders(),
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-DLHD-Channel': channel,
+            'X-DLHD-Server-Key': serverKey,
+            'X-DLHD-IV': iv || '',
+            'X-Servers-Tried': triedServers.join(','),
+          },
+        });
+
+        logger.requestEnd(res);
+        return res;
+      }
+      
+      lastError = `Invalid M3U8 from ${serverKey}: ${content.substring(0, 100)}`;
+      logger.warn('Invalid M3U8 content, trying next server', { serverKey, preview: content.substring(0, 50) });
+    } catch (err) {
+      lastError = `Error from ${serverKey}: ${(err as Error).message}`;
+      logger.warn('M3U8 fetch failed, trying next server', { serverKey, error: (err as Error).message });
+    }
   }
-
-  // Parse and rewrite M3U8
-  const { keyUrl, iv } = parseM3U8(content);
-  logger.debug('M3U8 parsed', { hasKey: !!keyUrl, hasIV: !!iv });
   
-  const proxiedM3U8 = generateProxiedM3U8(content, keyUrl, proxyOrigin);
-
-  const res = new Response(proxiedM3U8, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/vnd.apple.mpegurl',
-      ...corsHeaders(),
-      'Cache-Control': 'no-store, no-cache, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-      'X-DLHD-Channel': channel,
-      'X-DLHD-IV': iv || '',
-    },
-  });
-
-  logger.requestEnd(res);
-  return res;
+  // ALL servers failed
+  logger.error('ALL servers failed!', { channel, triedServers, lastError });
+  return jsonResponse({ 
+    error: 'Failed to fetch M3U8 from any server', 
+    details: lastError,
+    triedServers,
+    totalServersTried: triedServers.length,
+  }, 502);
 }
 
 async function handleKeyProxy(url: URL, env: Env, logger: any): Promise<Response> {
@@ -274,38 +319,52 @@ async function getServerKey(channelKey: string, env: Env, logger: any): Promise<
 
   logger.debug('Server key cache miss, fetching', { channelKey });
 
-  for (const domain of PLAYER_DOMAINS) {
-    const lookupUrl = `https://${domain}/server_lookup.js?channel_id=${channelKey}`;
-    try {
-      logger.debug('Trying server lookup', { domain, lookupUrl });
-      
-      const response = await fetch(lookupUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': `https://${domain}/`,
-          'Origin': `https://${domain}`,
-        },
-      });
+  // Server lookup endpoint is at chevy.giokko.ru (discovered via browser trace)
+  // This is the ONLY working lookup endpoint as of Dec 2024
+  const lookupUrl = `https://chevy.giokko.ru/server_lookup?channel_id=${channelKey}`;
+  
+  try {
+    logger.info('Fetching server key', { channelKey, lookupUrl });
+    
+    const response = await fetch(lookupUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://epicplayplay.cfd/',
+      },
+    });
 
-      if (response.ok) {
-        const data = await response.json() as { server_key?: string };
-        if (data.server_key) {
-          logger.info('Server key found', { domain, serverKey: data.server_key });
-          serverKeyCache.set(channelKey, {
-            serverKey: data.server_key,
-            playerDomain: domain,
-            fetchedAt: Date.now(),
-          });
-          return { serverKey: data.server_key, playerDomain: domain };
+    if (response.ok) {
+      const text = await response.text();
+      
+      // Check if we got HTML (anti-bot challenge) instead of JSON
+      if (text.startsWith('<') || text.includes('<!DOCTYPE')) {
+        logger.warn('Server lookup returned HTML challenge');
+      } else {
+        try {
+          const data = JSON.parse(text) as { server_key?: string };
+          if (data.server_key) {
+            logger.info('Got server key from lookup', { channelKey, serverKey: data.server_key });
+            serverKeyCache.set(channelKey, {
+              serverKey: data.server_key,
+              playerDomain: PLAYER_DOMAINS[0],
+              fetchedAt: Date.now(),
+            });
+            return { serverKey: data.server_key, playerDomain: PLAYER_DOMAINS[0] };
+          }
+        } catch (parseErr) {
+          logger.warn('Server lookup JSON parse failed', { error: (parseErr as Error).message, response: text.substring(0, 100) });
         }
       }
-    } catch (err) {
-      logger.warn('Server lookup failed', { domain, error: (err as Error).message });
+    } else {
+      logger.warn('Server lookup HTTP error', { status: response.status });
     }
+  } catch (err) {
+    logger.warn('Server lookup failed', { error: (err as Error).message });
   }
 
-  logger.error('All server lookups failed', { channelKey });
-  throw new Error('All server lookups failed');
+  // Fallback to zeko (most common server)
+  logger.warn('Server lookup failed, using fallback server key: zeko');
+  return { serverKey: 'zeko', playerDomain: PLAYER_DOMAINS[0] };
 }
 
 function constructM3U8Url(serverKey: string, channelKey: string): string {

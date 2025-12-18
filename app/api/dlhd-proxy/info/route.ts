@@ -70,8 +70,9 @@ async function getServerKey(channelKey: string): Promise<{ serverKey: string; pl
 }
 
 function constructM3U8Url(serverKey: string, channelKey: string): string {
-  if (serverKey === 'top1/cdn') return `https://top1.giokko.ru/top1/cdn/${channelKey}/mono.css`;
-  return `https://${serverKey}new.giokko.ru/${serverKey}/${channelKey}/mono.css`;
+  // Use kiko2.ru domain (current active CDN based on actual player page)
+  if (serverKey === 'top1/cdn') return `https://top1.kiko2.ru/top1/cdn/${channelKey}/mono.css`;
+  return `https://${serverKey}new.kiko2.ru/${serverKey}/${channelKey}/mono.css`;
 }
 
 async function fetchFreshInfo(channel: string): Promise<CachedInfo> {
