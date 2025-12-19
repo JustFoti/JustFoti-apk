@@ -389,6 +389,9 @@
     transparent 75%,
     rgba(0, 0, 0, 0.7) 100%
   );
+  will-change: opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 .controls.visible {
@@ -420,6 +423,9 @@
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   flex-shrink: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .iconButton:active {
@@ -1023,4 +1029,49 @@
 .startOverButton:active {
   background: rgba(255, 255, 255, 0.2);
   transform: scale(0.98);
+}
+
+
+/* Active icon state (for subtitle button when subtitles are on) */
+.iconButton.activeIcon {
+  color: #e50914;
+  background: rgba(229, 9, 20, 0.2);
+}
+
+/* Menu loading and empty states */
+.menuLoading,
+.menuEmpty {
+  padding: 1.5rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+
+/* Next Episode Button */
+.nextEpisodeButton {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(229, 9, 20, 0.8);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.nextEpisodeButton:active {
+  background: #e50914;
+  transform: scale(0.95);
+}
+
+.nextIcon {
+  font-size: 1rem;
 }

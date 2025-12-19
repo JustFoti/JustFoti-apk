@@ -9,6 +9,14 @@ import styles from './MobileVideoPlayer.module.css';
 
 type AudioPreference = 'sub' | 'dub';
 
+interface SubtitleTrack {
+  id: string;
+  url: string;
+  language: string;
+  langCode?: string;
+  iso639?: string;
+}
+
 interface MobileVideoPlayerProps {
   tmdbId: string;
   mediaType: 'movie' | 'tv';
@@ -29,6 +37,8 @@ interface MobileVideoPlayerProps {
   onAudioPrefChange?: (pref: AudioPreference, currentTime: number) => void;
   // Resume playback from specific time (used when switching sources/audio)
   initialTime?: number;
+  // IMDB ID for fetching subtitles
+  imdbId?: string;
 }
 
 const formatTime = (seconds: number): string => {
@@ -67,6 +77,7 @@ export default function MobileVideoPlayer({
   audioPref = 'sub',
   onAudioPrefChange,
   initialTime = 0,
+  imdbId,
 }: MobileVideoPlayerProps) {
   const mobileInfo = useIsMobile();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -111,6 +122,12 @@ export default function MobileVideoPlayer({
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [savedProgress, setSavedProgress] = useState(0);
   const hasShownResumePromptRef = useRef(false);
+
+  // Subtitle state
+  const [showSubtitleMenu, setShowSubtitleMenu] = useState(false);
+  const [availableSubtitles, setAvailableSubtitles] = useState<SubtitleTrack[]>([]);
+  const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
+  const [subtitlesLoading, setSubtitlesLoading] = useState(false);
 
   // Refs for gesture calculations
   const seekStartTimeRef = useRef(0);
@@ -623,6 +640,113 @@ export default function MobileVideoPlayer({
     triggerHaptic('light');
   }, [duration, seekTo, isLocked]);
 
+  // Fetch subtitles
+  const fetchSubtitles = useCallback(async () => {
+    if (!imdbId) return;
+    
+    setSubtitlesLoading(true);
+    try {
+      const params = new URLSearchParams({ imdbId });
+      if (mediaType === 'tv' && season && episode) {
+        params.append('season', season.toString());
+        params.append('episode', episode.toString());
+      }
+      
+      const response = await fetch(`/api/subtitles?${params}`);
+      const data = await response.json();
+      
+      if (data.success && data.subtitles && Array.isArray(data.subtitles)) {
+        setAvailableSubtitles(data.subtitles);
+      } else {
+        setAvailableSubtitles([]);
+      }
+    } catch (err) {
+      console.error('[MobilePlayer] Failed to fetch subtitles:', err);
+      setAvailableSubtitles([]);
+    } finally {
+      setSubtitlesLoading(false);
+    }
+  }, [imdbId, mediaType, season, episode]);
+
+  // Load subtitle track
+  const loadSubtitle = useCallback((subtitle: SubtitleTrack | null) => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Remove existing tracks
+    const tracks = video.querySelectorAll('track');
+    tracks.forEach(track => track.remove());
+
+    if (subtitle) {
+      const subtitleUrl = `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}&_t=${Date.now()}`;
+      
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = subtitle.language || 'Subtitles';
+      track.srclang = subtitle.iso639 || 'en';
+      track.src = subtitleUrl;
+      track.default = true;
+      
+      track.addEventListener('load', () => {
+        if (video.textTracks) {
+          for (let i = 0; i < video.textTracks.length; i++) {
+            video.textTracks[i].mode = 'showing';
+          }
+        }
+      });
+      
+      video.appendChild(track);
+      setCurrentSubtitle(subtitle.id);
+    } else {
+      setCurrentSubtitle(null);
+    }
+    
+    setShowSubtitleMenu(false);
+    triggerHaptic('light');
+  }, []);
+
+  // Fetch IMDB ID and then subtitles
+  useEffect(() => {
+    if (imdbId) {
+      fetchSubtitles();
+      return;
+    }
+    
+    // If no imdbId prop, fetch it from TMDB
+    const getImdbIdAndFetchSubtitles = async () => {
+      try {
+        const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+        if (!apiKey || !tmdbId) return;
+        
+        const url = `https://api.themoviedb.org/3/${mediaType}/${tmdbId}/external_ids?api_key=${apiKey}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.imdb_id) {
+          setSubtitlesLoading(true);
+          const params = new URLSearchParams({ imdbId: data.imdb_id });
+          if (mediaType === 'tv' && season && episode) {
+            params.append('season', season.toString());
+            params.append('episode', episode.toString());
+          }
+          
+          const subResponse = await fetch(`/api/subtitles?${params}`);
+          const subData = await subResponse.json();
+          
+          if (subData.success && subData.subtitles && Array.isArray(subData.subtitles)) {
+            setAvailableSubtitles(subData.subtitles);
+          }
+          setSubtitlesLoading(false);
+        }
+      } catch (err) {
+        console.error('[MobilePlayer] Failed to fetch IMDB ID or subtitles:', err);
+        setSubtitlesLoading(false);
+      }
+    };
+    
+    getImdbIdAndFetchSubtitles();
+  }, [imdbId, tmdbId, mediaType, season, episode, fetchSubtitles]);
+
   const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 
@@ -841,6 +965,19 @@ export default function MobileVideoPlayer({
                 <span className={audioPref === 'dub' ? styles.activeLabel : styles.inactiveLabel}>DUB</span>
               </button>
             )}
+            {/* Subtitles Button */}
+            <button 
+              className={`${styles.iconButton} ${currentSubtitle ? styles.activeIcon : ''}`}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setShowSubtitleMenu(true);
+                triggerHaptic('light');
+              }} 
+              onTouchEnd={(e) => e.stopPropagation()}
+              title="Subtitles"
+            >
+              CC
+            </button>
             {/* Help/Gesture Hints Button */}
             <button 
               className={styles.iconButton} 
@@ -898,9 +1035,19 @@ export default function MobileVideoPlayer({
               <button className={styles.speedButton} onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(true); }} onTouchEnd={(e) => e.stopPropagation()}>
                 {playbackSpeed}x
               </button>
-              {nextEpisode && (
-                <button className={styles.iconButton} onClick={(e) => { e.stopPropagation(); onNextEpisode?.(); }} onTouchEnd={(e) => e.stopPropagation()}>
-                  ⏭️
+              {nextEpisode && onNextEpisode && (
+                <button 
+                  className={styles.nextEpisodeButton} 
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    console.log('[MobilePlayer] Next episode clicked:', nextEpisode);
+                    onNextEpisode(); 
+                    triggerHaptic('light');
+                  }} 
+                  onTouchEnd={(e) => e.stopPropagation()}
+                >
+                  <span>Next</span>
+                  <span className={styles.nextIcon}>⏭️</span>
                 </button>
               )}
             </div>
@@ -964,6 +1111,45 @@ export default function MobileVideoPlayer({
                   {speed === playbackSpeed && <span className={styles.checkmark}>✓</span>}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subtitle Menu */}
+      {showSubtitleMenu && (
+        <div className={styles.menuOverlay} onClick={() => setShowSubtitleMenu(false)}>
+          <div className={styles.menuContent} onClick={e => e.stopPropagation()}>
+            <div className={styles.menuHeader}>
+              <h3>Subtitles</h3>
+              <button className={styles.menuClose} onClick={() => setShowSubtitleMenu(false)}>✕</button>
+            </div>
+            <div className={styles.menuList}>
+              {/* Off option */}
+              <button
+                className={`${styles.menuItem} ${!currentSubtitle ? styles.active : ''}`}
+                onClick={() => loadSubtitle(null)}
+              >
+                <span>Off</span>
+                {!currentSubtitle && <span className={styles.checkmark}>✓</span>}
+              </button>
+              
+              {subtitlesLoading ? (
+                <div className={styles.menuLoading}>Loading subtitles...</div>
+              ) : availableSubtitles.length > 0 ? (
+                availableSubtitles.map((subtitle) => (
+                  <button
+                    key={subtitle.id}
+                    className={`${styles.menuItem} ${currentSubtitle === subtitle.id ? styles.active : ''}`}
+                    onClick={() => loadSubtitle(subtitle)}
+                  >
+                    <span>{subtitle.language}</span>
+                    {currentSubtitle === subtitle.id && <span className={styles.checkmark}>✓</span>}
+                  </button>
+                ))
+              ) : (
+                <div className={styles.menuEmpty}>No subtitles available</div>
+              )}
             </div>
           </div>
         </div>
