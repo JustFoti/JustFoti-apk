@@ -303,7 +303,7 @@ function WatchContent() {
            (!title.includes('dub') && !title.includes('dubbed'));
   }, []);
 
-  // Fetch stream URL for mobile player
+  // Fetch stream URL for mobile player with proper provider fallback
   const fetchMobileStream = useCallback(async (audioPreference?: AnimeAudioPreference) => {
     if (!useMobilePlayer || !contentId || !mediaType) return;
     
@@ -317,8 +317,40 @@ function WatchContent() {
       const isAnime = !!malId;
       setIsAnimeContent(isAnime);
       
-      // Build provider order - use animekai for anime content
-      const providerOrder = isAnime ? ['animekai', 'videasy'] : ['videasy', '1movies'];
+      // Check provider availability first
+      let providerAvailability = { vidsrc: true, '1movies': true, videasy: true, animekai: true };
+      try {
+        const providerRes = await fetch('/api/providers');
+        const providerData = await providerRes.json();
+        providerAvailability = {
+          vidsrc: providerData.providers?.vidsrc?.enabled ?? true,
+          '1movies': providerData.providers?.['1movies']?.enabled ?? true,
+          videasy: providerData.providers?.videasy?.enabled ?? true,
+          animekai: providerData.providers?.animekai?.enabled ?? true,
+        };
+      } catch (e) {
+        console.warn('[WatchPage] Failed to fetch provider availability, using defaults');
+      }
+      
+      // Build provider order matching desktop player:
+      // For ANIME: AnimeKai first, then VidSrc, 1movies, Videasy
+      // For non-anime: VidSrc, 1movies, Videasy
+      const providerOrder: string[] = [];
+      
+      if (isAnime && providerAvailability.animekai) {
+        providerOrder.push('animekai');
+      }
+      if (providerAvailability.vidsrc) {
+        providerOrder.push('vidsrc');
+      }
+      if (providerAvailability['1movies']) {
+        providerOrder.push('1movies');
+      }
+      if (providerAvailability.videasy) {
+        providerOrder.push('videasy');
+      }
+      
+      console.log(`[WatchPage] Mobile provider order: ${providerOrder.join(' → ')} (isAnime=${isAnime})`);
       
       for (const provider of providerOrder) {
         const params = new URLSearchParams({
@@ -336,42 +368,51 @@ function WatchContent() {
         if (malTitle) params.append('malTitle', malTitle);
 
         try {
+          console.log(`[WatchPage] Trying ${provider}...`);
           const response = await fetch(`/api/stream/extract?${params}`, { cache: 'no-store' });
           const data = await response.json();
 
-          if (data.sources && data.sources.length > 0) {
-            const sources = data.sources.map((s: any) => ({
-              title: s.title || s.quality || 'Source',
-              url: s.url,
-              quality: s.quality,
-            }));
+          if (data.success && data.sources && data.sources.length > 0) {
+            // Filter out sources without valid URLs
+            const validSources = data.sources.filter((s: any) => s.url && s.url.length > 0);
             
-            setMobileSources(sources);
-            
-            // For anime, try to find a source matching the audio preference
-            let selectedIndex = 0;
-            if (isAnime && provider === 'animekai') {
-              const matchingIndex = sources.findIndex((s: any) => 
-                s.title && sourceMatchesAudioPref(s.title, currentAudioPref)
-              );
-              if (matchingIndex >= 0) {
-                selectedIndex = matchingIndex;
+            if (validSources.length > 0) {
+              const sources = validSources.map((s: any) => ({
+                title: s.title || s.quality || `${provider} Source`,
+                url: s.url,
+                quality: s.quality,
+                provider: provider,
+              }));
+              
+              setMobileSources(sources);
+              
+              // For anime, try to find a source matching the audio preference
+              let selectedIndex = 0;
+              if (isAnime && provider === 'animekai') {
+                const matchingIndex = sources.findIndex((s: any) => 
+                  s.title && sourceMatchesAudioPref(s.title, currentAudioPref)
+                );
+                if (matchingIndex >= 0) {
+                  selectedIndex = matchingIndex;
+                }
               }
+              
+              setMobileStreamUrl(sources[selectedIndex].url);
+              setMobileSourceIndex(selectedIndex);
+              setMobileLoading(false);
+              console.log(`[WatchPage] ✓ Mobile stream loaded from ${provider}:`, 
+                sources[selectedIndex].url?.substring(0, 50), 
+                isAnime ? `(${currentAudioPref})` : '');
+              return;
             }
-            
-            setMobileStreamUrl(sources[selectedIndex].url);
-            setMobileSourceIndex(selectedIndex);
-            setMobileLoading(false);
-            console.log('[WatchPage] Mobile stream loaded:', sources[selectedIndex].url?.substring(0, 50), 
-              isAnime ? `(${currentAudioPref})` : '');
-            return;
           }
+          console.log(`[WatchPage] ${provider} returned no valid sources, trying next...`);
         } catch (e) {
           console.warn(`[WatchPage] ${provider} failed:`, e);
         }
       }
 
-      setMobileError('No streams available');
+      setMobileError('No streams available from any provider');
       setMobileLoading(false);
     } catch (e) {
       console.error('[WatchPage] Error fetching mobile stream:', e);
