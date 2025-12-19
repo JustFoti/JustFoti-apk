@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { getAnimeAudioPreference, setAnimeAudioPreference, type AnimeAudioPreference } from '@/lib/utils/player-preferences';
 import styles from './WatchPage.module.css';
 
 // Desktop video player
@@ -106,6 +107,10 @@ function WatchContent() {
   const [mobileSourceIndex, setMobileSourceIndex] = useState(0);
   const [mobileLoading, setMobileLoading] = useState(true);
   const [mobileError, setMobileError] = useState<string | null>(null);
+  
+  // Anime state for mobile player
+  const [isAnimeContent, setIsAnimeContent] = useState(false);
+  const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
 
   // Fetch season data to determine next episode
   const fetchNextEpisodeInfo = useCallback(async () => {
@@ -288,16 +293,32 @@ function WatchContent() {
     fetchNextEpisodeInfo();
   }, [fetchNextEpisodeInfo]);
 
+  // Helper to check if source matches audio preference
+  const sourceMatchesAudioPref = useCallback((sourceTitle: string, pref: AnimeAudioPreference): boolean => {
+    const title = sourceTitle.toLowerCase();
+    if (pref === 'dub') {
+      return title.includes('(dub)') || title.includes('dub)') || title.includes('dubbed');
+    }
+    return title.includes('(sub)') || title.includes('sub)') || title.includes('subbed') || 
+           (!title.includes('dub') && !title.includes('dubbed'));
+  }, []);
+
   // Fetch stream URL for mobile player
-  const fetchMobileStream = useCallback(async () => {
+  const fetchMobileStream = useCallback(async (audioPreference?: AnimeAudioPreference) => {
     if (!useMobilePlayer || !contentId || !mediaType) return;
     
     setMobileLoading(true);
     setMobileError(null);
     
+    const currentAudioPref = audioPreference || audioPref;
+    
     try {
-      // Build provider order
-      const providerOrder = ['videasy', '1movies'];
+      // Check if this is anime content (has malId)
+      const isAnime = !!malId;
+      setIsAnimeContent(isAnime);
+      
+      // Build provider order - use animekai for anime content
+      const providerOrder = isAnime ? ['animekai', 'videasy'] : ['videasy', '1movies'];
       
       for (const provider of providerOrder) {
         const params = new URLSearchParams({
@@ -326,10 +347,23 @@ function WatchContent() {
             }));
             
             setMobileSources(sources);
-            setMobileStreamUrl(sources[0].url);
-            setMobileSourceIndex(0);
+            
+            // For anime, try to find a source matching the audio preference
+            let selectedIndex = 0;
+            if (isAnime && provider === 'animekai') {
+              const matchingIndex = sources.findIndex((s: any) => 
+                s.title && sourceMatchesAudioPref(s.title, currentAudioPref)
+              );
+              if (matchingIndex >= 0) {
+                selectedIndex = matchingIndex;
+              }
+            }
+            
+            setMobileStreamUrl(sources[selectedIndex].url);
+            setMobileSourceIndex(selectedIndex);
             setMobileLoading(false);
-            console.log('[WatchPage] Mobile stream loaded:', sources[0].url?.substring(0, 50));
+            console.log('[WatchPage] Mobile stream loaded:', sources[selectedIndex].url?.substring(0, 50), 
+              isAnime ? `(${currentAudioPref})` : '');
             return;
           }
         } catch (e) {
@@ -344,7 +378,15 @@ function WatchContent() {
       setMobileError('Failed to load video');
       setMobileLoading(false);
     }
-  }, [useMobilePlayer, contentId, mediaType, seasonId, episodeId, malId, malTitle]);
+  }, [useMobilePlayer, contentId, mediaType, seasonId, episodeId, malId, malTitle, audioPref, sourceMatchesAudioPref]);
+
+  // Handle audio preference change for anime
+  const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference) => {
+    setAudioPref(newPref);
+    setAnimeAudioPreference(newPref);
+    // Refetch with new preference
+    fetchMobileStream(newPref);
+  }, [fetchMobileStream]);
 
   // Fetch mobile stream when needed
   useEffect(() => {
@@ -475,7 +517,7 @@ function WatchContent() {
             <div className={styles.error}>
               <h2>Playback Error</h2>
               <p>{mobileError || 'Failed to load video'}</p>
-              <button onClick={fetchMobileStream} className={styles.backButton}>
+              <button onClick={() => fetchMobileStream()} className={styles.backButton}>
                 Retry
               </button>
               <button onClick={handleBack} className={styles.backButton}>
@@ -491,7 +533,7 @@ function WatchContent() {
       <div className={styles.container} data-tv-skip-navigation="true">
         <div className={styles.playerWrapper}>
           <MobileVideoPlayer
-            key={`mobile-${contentId}-${seasonId}-${episodeId}`}
+            key={`mobile-${contentId}-${seasonId}-${episodeId}-${audioPref}`}
             tmdbId={contentId}
             mediaType={mediaType}
             season={seasonId}
@@ -505,6 +547,9 @@ function WatchContent() {
             currentSourceIndex={mobileSourceIndex}
             nextEpisode={nextEpisodeProp}
             onNextEpisode={handleNextEpisode}
+            isAnime={isAnimeContent}
+            audioPref={audioPref}
+            onAudioPrefChange={handleAudioPrefChange}
           />
         </div>
       </div>

@@ -6,6 +6,8 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { useMobileGestures } from '@/hooks/useMobileGestures';
 import styles from './MobileVideoPlayer.module.css';
 
+type AudioPreference = 'sub' | 'dub';
+
 interface MobileVideoPlayerProps {
   tmdbId: string;
   mediaType: 'movie' | 'tv';
@@ -20,6 +22,10 @@ interface MobileVideoPlayerProps {
   currentSourceIndex?: number;
   nextEpisode?: { season: number; episode: number; title?: string } | null;
   onNextEpisode?: () => void;
+  // Anime sub/dub props
+  isAnime?: boolean;
+  audioPref?: AudioPreference;
+  onAudioPrefChange?: (pref: AudioPreference) => void;
 }
 
 const formatTime = (seconds: number): string => {
@@ -54,6 +60,9 @@ export default function MobileVideoPlayer({
   currentSourceIndex = 0,
   nextEpisode,
   onNextEpisode,
+  isAnime = false,
+  audioPref = 'sub',
+  onAudioPrefChange,
 }: MobileVideoPlayerProps) {
   const mobileInfo = useIsMobile();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -80,6 +89,10 @@ export default function MobileVideoPlayer({
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
 
+  // Orientation state
+  const [isLandscape, setIsLandscape] = useState(false);
+  const [showRotateHint, setShowRotateHint] = useState(false);
+
   // Gesture feedback state
   const [seekPreview, setSeekPreview] = useState<{ show: boolean; time: number; delta: number } | null>(null);
   const [doubleTapIndicator, setDoubleTapIndicator] = useState<{ show: boolean; side: 'left' | 'right'; x: number; y: number } | null>(null);
@@ -88,6 +101,7 @@ export default function MobileVideoPlayer({
   const [showBrightnessOverlay, setShowBrightnessOverlay] = useState(false);
   const [showVolumeOverlay, setShowVolumeOverlay] = useState(false);
   const [longPressActive, setLongPressActive] = useState(false);
+  const [showGestureHint, setShowGestureHint] = useState(false);
 
   // Refs for gesture calculations
   const seekStartTimeRef = useRef(0);
@@ -335,10 +349,22 @@ export default function MobileVideoPlayer({
     });
   }, [streamUrl, mobileInfo.isIOS, mobileInfo.supportsHLS, hlsConfig, onError]);
 
+  // Hide controls after 2 seconds when playing (stay visible when paused)
+  useEffect(() => {
+    if (isPlaying && !isLoading && showControls) {
+      const hideTimer = setTimeout(() => {
+        if (isPlaying && !showSourceMenu && !showSpeedMenu && !isLocked) {
+          setShowControls(false);
+        }
+      }, 2000);
+      return () => clearTimeout(hideTimer);
+    }
+  }, [isPlaying, isLoading, showControls, showSourceMenu, showSpeedMenu, isLocked]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const handlePlay = () => { setIsPlaying(true); resetControlsTimeout(); };
+    const handlePlay = () => { setIsPlaying(true); };
     const handlePause = () => { setIsPlaying(false); setShowControls(true); };
     const handleWaiting = () => setIsBuffering(true);
     const handleCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
@@ -369,6 +395,49 @@ export default function MobileVideoPlayer({
     };
   }, [isGestureActive, resetControlsTimeout]);
 
+  // Orientation detection
+  useEffect(() => {
+    const checkOrientation = () => {
+      // Check using multiple methods for best compatibility
+      let isLand = false;
+      if (screen.orientation) {
+        isLand = screen.orientation.type.includes('landscape');
+      } else if (typeof window !== 'undefined') {
+        // Fallback: check window dimensions
+        isLand = window.innerWidth > window.innerHeight;
+      }
+      setIsLandscape(isLand);
+      
+      // Show rotate hint briefly when in portrait and playing
+      if (!isLand && !localStorage.getItem('mobile-rotate-hint-seen')) {
+        setShowRotateHint(true);
+        setTimeout(() => {
+          setShowRotateHint(false);
+          localStorage.setItem('mobile-rotate-hint-seen', 'true');
+        }, 4000);
+      }
+    };
+
+    // Initial check
+    checkOrientation();
+
+    // Listen for orientation changes
+    if (screen.orientation) {
+      screen.orientation.addEventListener('change', checkOrientation);
+    }
+    window.addEventListener('resize', checkOrientation);
+    window.addEventListener('orientationchange', checkOrientation);
+
+    return () => {
+      if (screen.orientation) {
+        screen.orientation.removeEventListener('change', checkOrientation);
+      }
+      window.removeEventListener('resize', checkOrientation);
+      window.removeEventListener('orientationchange', checkOrientation);
+    };
+  }, []);
+
+  // Fullscreen handling
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!(
@@ -448,7 +517,7 @@ export default function MobileVideoPlayer({
   return (
     <div
       ref={containerRef}
-      className={`${styles.container} ${isFullscreen ? styles.fullscreen : ''}`}
+      className={`${styles.container} ${isFullscreen ? styles.fullscreen : ''} ${isLandscape ? styles.landscape : styles.portrait}`}
       style={{ filter: `brightness(${brightnessLevel})` }}
     >
       <video
@@ -523,6 +592,80 @@ export default function MobileVideoPlayer({
         </div>
       )}
 
+      {/* Rotate hint for portrait mode */}
+      {showRotateHint && !isLandscape && (
+        <div className={styles.rotateHint}>
+          <span className={styles.rotateIcon}>📱↻</span>
+          <span>Rotate for fullscreen</span>
+        </div>
+      )}
+
+      {/* Gesture Hints Overlay */}
+      {showGestureHint && (
+        <div className={styles.gestureHintOverlay} onClick={() => setShowGestureHint(false)}>
+          <div className={styles.gestureHintContent} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.gestureHintHeader}>
+              <h3>Gesture Controls</h3>
+              <button className={styles.gestureHintClose} onClick={() => setShowGestureHint(false)}>✕</button>
+            </div>
+            <div className={styles.gestureHintList}>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>👆</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Tap</span>
+                  <span className={styles.gestureHintDesc}>Show/hide controls</span>
+                </div>
+              </div>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>👆👆</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Double tap left/right</span>
+                  <span className={styles.gestureHintDesc}>Skip ±10 seconds</span>
+                </div>
+              </div>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>👆👆</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Double tap center</span>
+                  <span className={styles.gestureHintDesc}>Play/Pause</span>
+                </div>
+              </div>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>👆⏱️</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Long press</span>
+                  <span className={styles.gestureHintDesc}>2x speed while held</span>
+                </div>
+              </div>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>↔️</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Swipe horizontal</span>
+                  <span className={styles.gestureHintDesc}>Seek through video</span>
+                </div>
+              </div>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>↕️☀️</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Swipe up/down (left side)</span>
+                  <span className={styles.gestureHintDesc}>Adjust brightness</span>
+                </div>
+              </div>
+              <div className={styles.gestureHintItem}>
+                <span className={styles.gestureHintIcon}>↕️🔊</span>
+                <div className={styles.gestureHintText}>
+                  <span className={styles.gestureHintAction}>Swipe up/down (right side)</span>
+                  <span className={styles.gestureHintDesc}>Adjust volume</span>
+                </div>
+              </div>
+            </div>
+            <button className={styles.gestureHintDismiss} onClick={() => setShowGestureHint(false)}>
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
+
       {isLocked && showControls && (
         <div className={styles.lockIndicator} onClick={(e) => { e.stopPropagation(); toggleLock(); }}>
           <span>🔒 Tap to unlock</span>
@@ -542,6 +685,38 @@ export default function MobileVideoPlayer({
             )}
           </div>
           <div className={styles.topButtons}>
+            {/* Sub/Dub Toggle for Anime */}
+            {isAnime && onAudioPrefChange && (
+              <button 
+                className={styles.subDubToggle} 
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  const newPref = audioPref === 'sub' ? 'dub' : 'sub';
+                  onAudioPrefChange(newPref);
+                  triggerHaptic('light');
+                }} 
+                onTouchEnd={(e) => e.stopPropagation()}
+              >
+                <span className={audioPref === 'sub' ? styles.activeLabel : styles.inactiveLabel}>SUB</span>
+                <div className={styles.toggleTrack} data-active={audioPref}>
+                  <div className={styles.toggleThumb} />
+                </div>
+                <span className={audioPref === 'dub' ? styles.activeLabel : styles.inactiveLabel}>DUB</span>
+              </button>
+            )}
+            {/* Help/Gesture Hints Button */}
+            <button 
+              className={styles.iconButton} 
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setShowGestureHint(true);
+                triggerHaptic('light');
+              }} 
+              onTouchEnd={(e) => e.stopPropagation()}
+              title="Show gesture hints"
+            >
+              ❓
+            </button>
             <button className={styles.iconButton} onClick={(e) => { e.stopPropagation(); toggleLock(); }} onTouchEnd={(e) => e.stopPropagation()}>
               🔒
             </button>
@@ -576,7 +751,12 @@ export default function MobileVideoPlayer({
             <div className={styles.progressThumb} style={{ left: `${duration ? (currentTime / duration) * 100 : 0}%` }} />
           </div>
           <div className={styles.bottomControls}>
-            <span className={styles.time}>{formatTime(currentTime)}</span>
+            {/* Time on left: current / total */}
+            <span className={styles.timeDisplay}>
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+            
+            {/* Center buttons */}
             <div className={styles.bottomButtons}>
               <button className={styles.speedButton} onClick={(e) => { e.stopPropagation(); setShowSpeedMenu(true); }} onTouchEnd={(e) => e.stopPropagation()}>
                 {playbackSpeed}x
@@ -586,11 +766,12 @@ export default function MobileVideoPlayer({
                   ⏭️
                 </button>
               )}
-              <button className={styles.iconButton} onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} onTouchEnd={(e) => e.stopPropagation()}>
-                {isFullscreen ? '⛶' : '⛶'}
-              </button>
             </div>
-            <span className={styles.time}>{formatTime(duration)}</span>
+            
+            {/* Fullscreen on far right */}
+            <button className={styles.iconButton} onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} onTouchEnd={(e) => e.stopPropagation()}>
+              {isFullscreen ? '⛶' : '⛶'}
+            </button>
           </div>
         </div>
       </div>
@@ -646,8 +827,8 @@ export default function MobileVideoPlayer({
         </div>
       )}
 
-      {/* Unlock Button */}
-      {isLocked && (
+      {/* Unlock Button - only show briefly when tapped while locked */}
+      {isLocked && showControls && (
         <button className={styles.unlockButton} onClick={(e) => { e.stopPropagation(); toggleLock(); }} onTouchEnd={(e) => e.stopPropagation()}>
           🔓
         </button>
