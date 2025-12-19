@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -103,7 +103,7 @@ function WatchContent() {
   
   // Mobile player state
   const [mobileStreamUrl, setMobileStreamUrl] = useState<string | null>(null);
-  const [mobileSources, setMobileSources] = useState<Array<{ title: string; url: string; quality?: string }>>([]);
+  const [mobileSources, setMobileSources] = useState<Array<{ title: string; url: string; quality?: string; provider?: string }>>([]);
   const [mobileSourceIndex, setMobileSourceIndex] = useState(0);
   const [mobileLoading, setMobileLoading] = useState(true);
   const [mobileError, setMobileError] = useState<string | null>(null);
@@ -112,10 +112,14 @@ function WatchContent() {
   // Anime state for mobile player
   const [isAnimeContent, setIsAnimeContent] = useState(false);
   const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
+  const isAnimeDetectedRef = useRef(false); // Track if we've ever detected anime content
   
   // Debug: Log anime state changes
   useEffect(() => {
     console.log('[WatchPage] isAnimeContent changed:', isAnimeContent);
+    if (isAnimeContent) {
+      isAnimeDetectedRef.current = true;
+    }
   }, [isAnimeContent]);
 
   // Fetch season data to determine next episode
@@ -313,16 +317,18 @@ function WatchContent() {
   const fetchMobileStream = useCallback(async (audioPreference?: AnimeAudioPreference) => {
     if (!useMobilePlayer || !contentId || !mediaType) return;
     
+    console.log('[WatchPage] fetchMobileStream called, current isAnimeContent:', isAnimeDetectedRef.current);
+    
     setMobileLoading(true);
     setMobileError(null);
     
     const currentAudioPref = audioPreference || audioPref;
     
     try {
-      // Check if this is anime content (has malId)
-      // Only set to true here - don't reset to false as animekai might succeed later
-      if (malId) {
+      // Check if this is anime content (has malId) or was previously detected as anime
+      if (malId || isAnimeDetectedRef.current) {
         setIsAnimeContent(true);
+        isAnimeDetectedRef.current = true;
       }
       
       // Check provider availability first
@@ -400,6 +406,7 @@ function WatchContent() {
               if (provider === 'animekai') {
                 // If we're using animekai, this is anime content
                 console.log('[WatchPage] AnimeKai succeeded - setting isAnimeContent to TRUE');
+                isAnimeDetectedRef.current = true;
                 setIsAnimeContent(true);
                 const matchingIndex = sources.findIndex((s: any) => 
                   s.title && sourceMatchesAudioPref(s.title, currentAudioPref)
@@ -447,6 +454,7 @@ function WatchContent() {
 
   // Fetch mobile stream when needed
   useEffect(() => {
+    console.log('[WatchPage] useEffect triggered - useMobilePlayer:', useMobilePlayer, 'fetchMobileStream changed');
     if (useMobilePlayer) {
       fetchMobileStream();
     }
@@ -608,7 +616,7 @@ function WatchContent() {
             currentSourceIndex={mobileSourceIndex}
             nextEpisode={nextEpisodeProp}
             onNextEpisode={handleNextEpisode}
-            isAnime={isAnimeContent}
+            isAnime={isAnimeContent || isAnimeDetectedRef.current || mobileSources.some(s => s.provider === 'animekai')}
             audioPref={audioPref}
             onAudioPrefChange={handleAudioPrefChange}
             initialTime={mobileResumeTime}
