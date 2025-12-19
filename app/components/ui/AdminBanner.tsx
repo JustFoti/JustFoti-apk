@@ -30,29 +30,33 @@ export default function AdminBanner() {
     pathname?.startsWith('/reverse-engineering');
 
   useEffect(() => {
-    // Check if user has dismissed this banner
-    const dismissedBanners = localStorage.getItem('dismissedBanners');
-    if (dismissedBanners) {
-      const dismissed = JSON.parse(dismissedBanners);
-      if (dismissed.includes('main-banner')) {
-        // Check if dismissal is still valid (24 hours)
-        const dismissedAt = localStorage.getItem('bannerDismissedAt');
-        if (dismissedAt) {
-          const dismissedTime = new Date(dismissedAt).getTime();
-          const now = Date.now();
-          // Reset dismissal after 24 hours
-          if (now - dismissedTime > 24 * 60 * 60 * 1000) {
-            localStorage.removeItem('dismissedBanners');
-            localStorage.removeItem('bannerDismissedAt');
-          } else {
-            setDismissed(true);
-          }
-        }
-      }
-    }
-
     fetchBanner();
   }, []);
+
+  // Check if this specific banner has been dismissed
+  useEffect(() => {
+    if (!banner) return;
+    
+    const dismissedBannerId = localStorage.getItem('dismissedBannerId');
+    if (dismissedBannerId === banner.id) {
+      // Check if dismissal is still valid (24 hours)
+      const dismissedAt = localStorage.getItem('bannerDismissedAt');
+      if (dismissedAt) {
+        const dismissedTime = new Date(dismissedAt).getTime();
+        const now = Date.now();
+        // Reset dismissal after 24 hours
+        if (now - dismissedTime > 24 * 60 * 60 * 1000) {
+          localStorage.removeItem('dismissedBannerId');
+          localStorage.removeItem('bannerDismissedAt');
+        } else {
+          setDismissed(true);
+        }
+      }
+    } else {
+      // Different banner ID means it's a new banner - show it
+      setDismissed(false);
+    }
+  }, [banner]);
 
   const fetchBanner = async () => {
     try {
@@ -69,8 +73,10 @@ export default function AdminBanner() {
   };
 
   const handleDismiss = () => {
+    if (!banner) return;
     setDismissed(true);
-    localStorage.setItem('dismissedBanners', JSON.stringify(['main-banner']));
+    // Store the specific banner ID that was dismissed
+    localStorage.setItem('dismissedBannerId', banner.id);
     localStorage.setItem('bannerDismissedAt', new Date().toISOString());
   };
 

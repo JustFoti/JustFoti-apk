@@ -1,17 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
 import WorldMap from '../components/WorldMap';
-
-interface GeoStat {
-  country: string;
-  countryName?: string;
-  count: number;
-  uniqueUsers?: number;
-  sessions?: number;
-}
 
 interface GeoMetrics {
   totalCountries: number;
@@ -22,98 +14,62 @@ interface GeoMetrics {
 }
 
 export default function AdminGeographicPage() {
-  const { dateRange, setIsLoading } = useAdmin();
-  // Use unified stats for key metrics - SINGLE SOURCE OF TRUTH
-  const { stats: unifiedStats } = useStats();
+  const { setIsLoading } = useAdmin();
+  // Use unified stats - SINGLE SOURCE OF TRUTH (already cached)
+  const { stats: unifiedStats, loading: statsLoading } = useStats();
   
-  const [geographic, setGeographic] = useState<GeoStat[]>([]);
-  const [metrics, setMetrics] = useState<GeoMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'list' | 'regions'>('list');
   
-  // Prefer unified stats for geographic data when available
-  const geoData = unifiedStats.topCountries.length > 0 
-    ? unifiedStats.topCountries.map(c => ({ country: c.country, countryName: c.countryName, count: c.count }))
-    : geographic;
+  // Use geographic data from unified stats (already fetched and cached)
+  const geoData = useMemo(() => {
+    return unifiedStats.topCountries.map(c => ({ 
+      country: c.country, 
+      countryName: c.countryName, 
+      count: c.count 
+    }));
+  }, [unifiedStats.topCountries]);
 
-  useEffect(() => {
-    fetchData();
-  }, [dateRange]);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      setIsLoading(true);
-      const params = new URLSearchParams();
-
-      if (dateRange.startDate && dateRange.endDate) {
-        params.append('startDate', dateRange.startDate.toISOString());
-        params.append('endDate', dateRange.endDate.toISOString());
-      } else {
-        params.append('period', dateRange.period);
-      }
-
-      const response = await fetch(`/api/admin/analytics?${params}`);
-
-      if (response.ok) {
-        const data = await response.json();
-        const geoData = data.data?.geographic || [];
-        setGeographic(geoData);
-        
-        // Calculate metrics - always set metrics even if empty
-        if (geoData.length > 0) {
-          const total = geoData.reduce((sum: number, g: GeoStat) => sum + g.count, 0);
-          const topCountry = geoData[0];
-          
-          // Group by region (simplified) - use country code for region mapping
-          const regionMap: Record<string, number> = {};
-          geoData.forEach((g: GeoStat) => {
-            const region = getRegion(g.country);
-            regionMap[region] = (regionMap[region] || 0) + g.count;
-          });
-          
-          const regionBreakdown = Object.entries(regionMap)
-            .map(([region, count]) => ({ region, count }))
-            .sort((a, b) => b.count - a.count);
-          
-          // Use countryName from API if available, otherwise use getCountryName
-          const topCountryDisplay = topCountry?.countryName || getCountryName(topCountry?.country) || topCountry?.country || 'N/A';
-          
-          setMetrics({
-            totalCountries: geoData.filter((g: GeoStat) => g.country !== 'Unknown').length,
-            topCountry: topCountryDisplay,
-            topCountryPercentage: total > 0 ? Math.round((topCountry?.count / total) * 100) : 0,
-            internationalPercentage: total > 0 ? Math.round(((total - (geoData[0]?.count || 0)) / total) * 100) : 0,
-            regionBreakdown,
-          });
-        } else {
-          // Set empty metrics so UI still renders
-          setMetrics({
-            totalCountries: 0,
-            topCountry: 'N/A',
-            topCountryPercentage: 0,
-            internationalPercentage: 0,
-            regionBreakdown: [],
-          });
-        }
-      } else {
-        console.error('Failed to fetch geographic data:', response.status);
-        // Set empty metrics on error
-        setMetrics({
-          totalCountries: 0,
-          topCountry: 'N/A',
-          topCountryPercentage: 0,
-          internationalPercentage: 0,
-          regionBreakdown: [],
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch geographic data:', err);
-    } finally {
-      setLoading(false);
-      setIsLoading(false);
+  // Calculate metrics from unified stats data
+  const metrics = useMemo((): GeoMetrics | null => {
+    if (geoData.length === 0) {
+      return {
+        totalCountries: 0,
+        topCountry: 'N/A',
+        topCountryPercentage: 0,
+        internationalPercentage: 0,
+        regionBreakdown: [],
+      };
     }
-  };
+    
+    const total = geoData.reduce((sum, g) => sum + g.count, 0);
+    const topCountry = geoData[0];
+    
+    // Group by region
+    const regionMap: Record<string, number> = {};
+    geoData.forEach((g) => {
+      const region = getRegion(g.country);
+      regionMap[region] = (regionMap[region] || 0) + g.count;
+    });
+    
+    const regionBreakdown = Object.entries(regionMap)
+      .map(([region, count]) => ({ region, count }))
+      .sort((a, b) => b.count - a.count);
+    
+    const topCountryDisplay = topCountry?.countryName || getCountryName(topCountry?.country) || topCountry?.country || 'N/A';
+    
+    return {
+      totalCountries: geoData.filter((g) => g.country !== 'Unknown').length,
+      topCountry: topCountryDisplay,
+      topCountryPercentage: total > 0 ? Math.round((topCountry?.count / total) * 100) : 0,
+      internationalPercentage: total > 0 ? Math.round(((total - (geoData[0]?.count || 0)) / total) * 100) : 0,
+      regionBreakdown,
+    };
+  }, [geoData]);
+
+  // Sync loading state with admin context
+  useEffect(() => {
+    setIsLoading(statsLoading);
+  }, [statsLoading, setIsLoading]);
 
   const getRegion = (countryCode: string): string => {
     const regions: Record<string, string[]> = {
@@ -141,7 +97,7 @@ export default function AdminGeographicPage() {
     }
   };
 
-  if (loading) {
+  if (statsLoading) {
     return (
       <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
         Loading geographic data...

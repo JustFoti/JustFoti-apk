@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { contentTitleCache } from '../../lib/utils/content-title-cache';
 
@@ -26,6 +26,16 @@ interface ContentMetrics {
   mostCompleted: string;
 }
 
+// In-memory cache for content stats
+interface CachedContentStats {
+  data: ContentStat[];
+  timestamp: number;
+  cacheKey: string;
+}
+
+let contentStatsCache: CachedContentStats | null = null;
+const CACHE_TTL = 30000; // 30 seconds cache
+
 export default function AdminContentPage() {
   const { dateRange, setIsLoading } = useAdmin();
   const [stats, setStats] = useState<ContentStat[]>([]);
@@ -36,15 +46,32 @@ export default function AdminContentPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'chart'>('table');
+  const fetchInProgress = useRef(false);
 
-  useEffect(() => {
-    fetchStats();
-  }, [dateRange, contentType]);
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
+    // Prevent concurrent fetches
+    if (fetchInProgress.current) return;
+    
+    const cacheKey = dateRange.startDate && dateRange.endDate 
+      ? `${dateRange.startDate.toISOString()}-${dateRange.endDate.toISOString()}-${contentType}`
+      : `${dateRange.period}-${contentType}`;
+    
+    const now = Date.now();
+    
+    // Check cache first
+    if (contentStatsCache && 
+        contentStatsCache.cacheKey === cacheKey && 
+        (now - contentStatsCache.timestamp) < CACHE_TTL) {
+      setStats(contentStatsCache.data);
+      setLoading(false);
+      return;
+    }
+    
     try {
+      fetchInProgress.current = true;
       setLoading(true);
       setIsLoading(true);
+      
       const params = new URLSearchParams();
       if (dateRange.startDate && dateRange.endDate) {
         params.append('startDate', dateRange.startDate.toISOString());
@@ -55,29 +82,39 @@ export default function AdminContentPage() {
       if (contentType !== 'all') {
         params.append('contentType', contentType);
       }
+      
       const response = await fetch(`/api/admin/analytics?${params}`);
       if (response.ok) {
         const data = await response.json();
-        const rawStats = data.data.contentPerformance || [];
+        const rawStats = data.data?.contentPerformance || [];
+        
+        // Cache the raw stats
+        contentStatsCache = {
+          data: rawStats,
+          timestamp: now,
+          cacheKey,
+        };
+        
         setStats(rawStats);
+        
+        // Fetch titles in background (non-blocking)
         if (rawStats.length > 0) {
           setLoadingTitles(true);
-          try {
-            const titlesMap = await contentTitleCache.getTitles(
-              rawStats.map((stat: ContentStat) => ({
-                contentId: stat.contentId,
-                contentType: stat.contentType as 'movie' | 'tv'
-              }))
-            );
+          contentTitleCache.getTitles(
+            rawStats.map((stat: ContentStat) => ({
+              contentId: stat.contentId,
+              contentType: stat.contentType as 'movie' | 'tv'
+            }))
+          ).then(titlesMap => {
             setStats(prevStats => prevStats.map(stat => ({
               ...stat,
               displayTitle: titlesMap.get(`${stat.contentType}-${stat.contentId}`) || stat.contentTitle || `${stat.contentType === 'movie' ? 'Movie' : 'Show'} #${stat.contentId}`
             })));
-          } catch (err) {
+          }).catch(err => {
             console.error('Failed to fetch titles:', err);
-          } finally {
+          }).finally(() => {
             setLoadingTitles(false);
-          }
+          });
         }
       }
     } catch (err) {
@@ -85,8 +122,13 @@ export default function AdminContentPage() {
     } finally {
       setLoading(false);
       setIsLoading(false);
+      fetchInProgress.current = false;
     }
-  };
+  }, [dateRange, contentType, setIsLoading]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   const metrics = useMemo((): ContentMetrics | null => {
     if (stats.length === 0) return null;

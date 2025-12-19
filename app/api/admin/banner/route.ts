@@ -48,6 +48,13 @@ export async function GET() {
   }
 }
 
+// Generate a unique banner ID based on timestamp and random string
+function generateBannerId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).substring(2, 8);
+  return `banner-${timestamp}-${random}`;
+}
+
 // POST - Update banner (admin only)
 export async function POST(request: NextRequest) {
   try {
@@ -68,8 +75,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { message, type = 'info', enabled = true, dismissible = true, linkText, linkUrl, expiresAt } = body;
     
+    // Generate a new unique ID each time the banner is saved
+    // This ensures users who dismissed an old banner will see the new one
     const banner: BannerConfig = {
-      id: 'main-banner',
+      id: generateBannerId(),
       message: message || '',
       type,
       enabled,

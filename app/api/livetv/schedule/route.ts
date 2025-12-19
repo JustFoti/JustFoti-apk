@@ -324,19 +324,19 @@ async function fetchScheduleHTMLDirect(source?: string): Promise<string> {
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Accept': 'application/json, text/html',
-    'Referer': 'https://dlhd.dad/'
+    'Referer': 'https://daddyhd.com/'
   };
   
   try {
     if (source) {
-      const response = await fetch(`https://dlhd.dad/schedule-api.php?source=${source}`, { 
+      const response = await fetch(`https://daddyhd.com/schedule-api.php?source=${source}`, { 
         headers, 
         next: { revalidate: 60 } 
       });
       const json = await response.json();
       return json.success && json.html ? json.html : '';
     } else {
-      const response = await fetch('https://dlhd.dad/', { 
+      const response = await fetch('https://daddyhd.com/', { 
         headers,
         next: { revalidate: 60 }
       });

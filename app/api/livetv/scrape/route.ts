@@ -1,7 +1,7 @@
 /**
  * Live TV Channel Scraper API
  * 
- * Scrapes channel information from DLHD.dad to get real channel names and IDs.
+ * Scrapes channel information from daddyhd.com to get real channel names and IDs.
  * This is used to populate the channel list dynamically.
  */
 
@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-const DLHD_BASE_URL = 'https://dlhd.dad';
+const DLHD_BASE_URL = 'https://daddyhd.com';
 
 interface ScrapedChannel {
   id: string;

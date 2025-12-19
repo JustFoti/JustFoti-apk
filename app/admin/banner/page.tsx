@@ -384,8 +384,16 @@ export default function BannerManagementPage() {
         {banner.updatedAt && (
           <div style={{ color: '#64748b', fontSize: '12px', marginTop: '8px' }}>
             Last updated: {new Date(banner.updatedAt).toLocaleString()}
+            {banner.id && banner.id !== 'main-banner' && (
+              <span style={{ marginLeft: '12px' }}>
+                Banner ID: <code style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: '4px' }}>{banner.id}</code>
+              </span>
+            )}
           </div>
         )}
+        <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '8px', padding: '12px', background: 'rgba(120, 119, 198, 0.1)', borderRadius: '8px', border: '1px solid rgba(120, 119, 198, 0.2)' }}>
+          💡 <strong>Tip:</strong> Each time you save the banner, a new unique ID is generated. This means users who dismissed an older banner will see the new one.
+        </div>
       </div>
     </div>
   );
