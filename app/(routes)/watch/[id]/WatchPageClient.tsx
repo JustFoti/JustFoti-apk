@@ -85,12 +85,19 @@ function WatchContent() {
   const episodeId = episode ? parseInt(episode) : undefined;
 
   // Determine if we should use mobile player (mobile device OR small screen)
-  // Use a ref to lock in the initial decision and prevent switching on rotation
-  const initialUseMobilePlayerRef = useRef<boolean | null>(null);
-  if (initialUseMobilePlayerRef.current === null && mobileInfo.screenWidth > 0) {
-    initialUseMobilePlayerRef.current = mobileInfo.isMobile || mobileInfo.screenWidth < 768;
-  }
-  const useMobilePlayer = initialUseMobilePlayerRef.current ?? (mobileInfo.isMobile || mobileInfo.screenWidth < 768);
+  // Lock this decision once made to prevent player switching on rotation
+  const [useMobilePlayer, setUseMobilePlayer] = useState<boolean | null>(null);
+  const hasSetMobilePlayerRef = useRef(false);
+  
+  useEffect(() => {
+    // Only set once when we have valid screen dimensions
+    if (!hasSetMobilePlayerRef.current && mobileInfo.screenWidth > 0) {
+      const shouldUseMobile = mobileInfo.isMobile || mobileInfo.screenWidth < 768;
+      console.log('[WatchPage] Locking useMobilePlayer to:', shouldUseMobile);
+      setUseMobilePlayer(shouldUseMobile);
+      hasSetMobilePlayerRef.current = true;
+    }
+  }, [mobileInfo.isMobile, mobileInfo.screenWidth]);
   
   // Debug log for mobile detection
   useEffect(() => {
@@ -542,6 +549,18 @@ function WatchContent() {
       navigateToNextEpisode();
     }
   }, [contentId, nextEpisode, title, router, malId, malTitle]);
+
+  // Wait for mobile detection before rendering player
+  if (useMobilePlayer === null) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loading}>
+          <div className={styles.spinner} />
+          <p>Loading player...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!contentId || !mediaType) {
     return (

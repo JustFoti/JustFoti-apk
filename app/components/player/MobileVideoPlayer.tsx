@@ -80,6 +80,17 @@ export default function MobileVideoPlayer({
   imdbId,
 }: MobileVideoPlayerProps) {
   const mobileInfo = useIsMobile();
+  
+  // Lock in iOS and HLS support detection to prevent re-initialization on rotation
+  const isIOSRef = useRef<boolean | null>(null);
+  const supportsHLSRef = useRef<boolean | null>(null);
+  if (isIOSRef.current === null && typeof window !== 'undefined') {
+    isIOSRef.current = mobileInfo.isIOS;
+    supportsHLSRef.current = mobileInfo.supportsHLS;
+  }
+  const isIOS = isIOSRef.current ?? mobileInfo.isIOS;
+  const supportsHLS = supportsHLSRef.current ?? mobileInfo.supportsHLS;
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
@@ -382,7 +393,7 @@ export default function MobileVideoPlayer({
       }
     };
 
-    if (mobileInfo.isIOS && mobileInfo.supportsHLS) {
+    if (isIOS && supportsHLS) {
       video.src = streamUrl;
       const handleLoadedMetadata = () => {
         setDuration(video.duration);
@@ -453,7 +464,9 @@ export default function MobileVideoPlayer({
       setIsLoading(false);
       attemptAutoplay();
     });
-  }, [streamUrl, mobileInfo.isIOS, mobileInfo.supportsHLS, hlsConfig, onError]);
+  // Note: isIOS and supportsHLS are locked refs, so they won't cause re-runs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streamUrl, hlsConfig, onError]);
 
   // Hide controls after 2 seconds when playing (stay visible when paused)
   useEffect(() => {
