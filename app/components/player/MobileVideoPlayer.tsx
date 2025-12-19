@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import Hls from 'hls.js';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useMobileGestures } from '@/hooks/useMobileGestures';
+import { useWatchProgress } from '@/lib/hooks/useWatchProgress';
 import styles from './MobileVideoPlayer.module.css';
 
 type AudioPreference = 'sub' | 'dub';
@@ -17,7 +18,7 @@ interface MobileVideoPlayerProps {
   streamUrl: string;
   onBack?: () => void;
   onError?: (error: string) => void;
-  onSourceChange?: (sourceIndex: number) => void;
+  onSourceChange?: (sourceIndex: number, currentTime: number) => void;
   availableSources?: Array<{ title: string; url: string; quality?: string }>;
   currentSourceIndex?: number;
   nextEpisode?: { season: number; episode: number; title?: string } | null;
@@ -25,7 +26,9 @@ interface MobileVideoPlayerProps {
   // Anime sub/dub props
   isAnime?: boolean;
   audioPref?: AudioPreference;
-  onAudioPrefChange?: (pref: AudioPreference) => void;
+  onAudioPrefChange?: (pref: AudioPreference, currentTime: number) => void;
+  // Resume playback from specific time (used when switching sources/audio)
+  initialTime?: number;
 }
 
 const formatTime = (seconds: number): string => {
@@ -47,7 +50,7 @@ const triggerHaptic = (type: 'light' | 'medium' | 'heavy' = 'light') => {
 };
 
 export default function MobileVideoPlayer({
-  tmdbId: _tmdbId,
+  tmdbId,
   mediaType,
   season,
   episode,
@@ -63,6 +66,7 @@ export default function MobileVideoPlayer({
   isAnime = false,
   audioPref = 'sub',
   onAudioPrefChange,
+  initialTime = 0,
 }: MobileVideoPlayerProps) {
   const mobileInfo = useIsMobile();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -103,10 +107,33 @@ export default function MobileVideoPlayer({
   const [longPressActive, setLongPressActive] = useState(false);
   const [showGestureHint, setShowGestureHint] = useState(false);
 
+  // Resume playback state
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [savedProgress, setSavedProgress] = useState(0);
+  const hasShownResumePromptRef = useRef(false);
+
   // Refs for gesture calculations
   const seekStartTimeRef = useRef(0);
   const brightnessStartRef = useRef(1);
   const volumeStartRef = useRef(1);
+  
+  // Ref to track pending seek time (for resuming after source change)
+  const pendingSeekTimeRef = useRef<number | null>(initialTime > 0 ? initialTime : null);
+
+  // Watch progress tracking
+  const {
+    loadProgress,
+    handleProgress,
+    handleWatchStart,
+    handleWatchPause,
+    handleWatchResume,
+  } = useWatchProgress({
+    contentId: tmdbId,
+    contentType: mediaType === 'tv' ? 'episode' : 'movie',
+    contentTitle: title,
+    seasonNumber: season,
+    episodeNumber: episode,
+  });
 
   // Auto-hide controls
   const resetControlsTimeout = useCallback(() => {
@@ -282,6 +309,12 @@ export default function MobileVideoPlayer({
     setError(null);
 
     const attemptAutoplay = () => {
+      // Seek to pending time if set (resuming after source change)
+      if (pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+        console.log('[MobilePlayer] Seeking to saved position:', pendingSeekTimeRef.current);
+        video.currentTime = pendingSeekTimeRef.current;
+        pendingSeekTimeRef.current = null;
+      }
       video.muted = false;
       video.play().catch(() => {
         video.muted = true;
@@ -289,12 +322,35 @@ export default function MobileVideoPlayer({
       });
     };
 
+    // Check for saved progress and show resume prompt
+    const checkResumeProgress = () => {
+      if (hasShownResumePromptRef.current) return;
+      
+      // Skip if we have a pending seek time (source/audio change)
+      if (pendingSeekTimeRef.current !== null && pendingSeekTimeRef.current > 0) {
+        hasShownResumePromptRef.current = true;
+        return;
+      }
+      
+      const savedTime = loadProgress();
+      if (savedTime > 0 && video.duration > 0 && savedTime < video.duration - 30) {
+        console.log('[MobilePlayer] Found saved progress:', savedTime);
+        setSavedProgress(savedTime);
+        setShowResumePrompt(true);
+        video.pause();
+        hasShownResumePromptRef.current = true;
+      } else {
+        hasShownResumePromptRef.current = true;
+      }
+    };
+
     if (mobileInfo.isIOS && mobileInfo.supportsHLS) {
       video.src = streamUrl;
       const handleLoadedMetadata = () => {
         setDuration(video.duration);
         setIsLoading(false);
-        attemptAutoplay();
+        checkResumeProgress();
+        if (!showResumePrompt) attemptAutoplay();
       };
       const handleCanPlay = () => {
         setIsLoading(false);
@@ -323,7 +379,19 @@ export default function MobileVideoPlayer({
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setIsLoading(false);
-        attemptAutoplay();
+        // Check for resume after duration is available
+        const checkAndPlay = () => {
+          if (video.duration > 0) {
+            checkResumeProgress();
+            if (!hasShownResumePromptRef.current || !showResumePrompt) {
+              attemptAutoplay();
+            }
+          } else {
+            // Wait for duration
+            setTimeout(checkAndPlay, 100);
+          }
+        };
+        checkAndPlay();
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
@@ -364,36 +432,49 @@ export default function MobileVideoPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const handlePlay = () => { setIsPlaying(true); };
-    const handlePause = () => { setIsPlaying(false); setShowControls(true); };
-    const handleWaiting = () => setIsBuffering(true);
-    const handleCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
-    const handleTimeUpdate = () => {
-      if (!isGestureActive) setCurrentTime(video.currentTime);
+    const onPlay = () => { 
+      setIsPlaying(true);
+      handleWatchResume(video.currentTime, video.duration);
+    };
+    const onPause = () => { 
+      setIsPlaying(false); 
+      setShowControls(true);
+      handleWatchPause(video.currentTime, video.duration);
+    };
+    const onWaiting = () => setIsBuffering(true);
+    const onCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
+    const onTimeUpdate = () => {
+      if (!isGestureActive) {
+        setCurrentTime(video.currentTime);
+        // Track watch progress
+        if (video.duration > 0 && !showResumePrompt) {
+          handleProgress(video.currentTime, video.duration);
+        }
+      }
       if (video.buffered.length > 0) {
         setBuffered((video.buffered.end(video.buffered.length - 1) / video.duration) * 100);
       }
     };
-    const handleDurationChange = () => setDuration(video.duration);
-    const handleEnded = () => { setIsPlaying(false); setShowControls(true); };
+    const onDurationChange = () => setDuration(video.duration);
+    const onEnded = () => { setIsPlaying(false); setShowControls(true); };
 
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('waiting', handleWaiting);
-    video.addEventListener('canplay', handleCanPlay);
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('durationchange', handleDurationChange);
-    video.addEventListener('ended', handleEnded);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('timeupdate', onTimeUpdate);
+    video.addEventListener('durationchange', onDurationChange);
+    video.addEventListener('ended', onEnded);
     return () => {
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('waiting', handleWaiting);
-      video.removeEventListener('canplay', handleCanPlay);
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('durationchange', handleDurationChange);
-      video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('timeupdate', onTimeUpdate);
+      video.removeEventListener('durationchange', onDurationChange);
+      video.removeEventListener('ended', onEnded);
     };
-  }, [isGestureActive, resetControlsTimeout]);
+  }, [isGestureActive, resetControlsTimeout, handleProgress, handleWatchPause, handleWatchResume, showResumePrompt]);
 
   // Orientation detection
   useEffect(() => {
@@ -501,6 +582,37 @@ export default function MobileVideoPlayer({
     triggerHaptic('light');
   }, []);
 
+  // Resume playback handlers
+  const handleResumePlayback = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    console.log('[MobilePlayer] Resuming from:', savedProgress);
+    video.currentTime = savedProgress;
+    video.play().catch(() => {
+      video.muted = true;
+      video.play().catch(() => {});
+    });
+    setShowResumePrompt(false);
+    handleWatchResume(savedProgress, video.duration);
+    triggerHaptic('light');
+  }, [savedProgress, handleWatchResume]);
+
+  const handleStartOver = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    
+    console.log('[MobilePlayer] Starting from beginning');
+    video.currentTime = 0;
+    video.play().catch(() => {
+      video.muted = true;
+      video.play().catch(() => {});
+    });
+    setShowResumePrompt(false);
+    handleWatchStart(0, video.duration);
+    triggerHaptic('light');
+  }, [handleWatchStart]);
+
   const handleProgressTouch = useCallback((e: React.TouchEvent) => {
     e.stopPropagation();
     if (isLocked) return;
@@ -545,6 +657,30 @@ export default function MobileVideoPlayer({
           <button className={styles.retryButton} onClick={() => { setError(null); setIsLoading(true); videoRef.current?.load(); }}>
             Retry
           </button>
+        </div>
+      )}
+
+      {/* Resume Playback Prompt */}
+      {showResumePrompt && (
+        <div className={styles.resumePromptOverlay} onClick={(e) => e.stopPropagation()}>
+          <div className={styles.resumePromptContent}>
+            <h3>Resume Playback?</h3>
+            <p>Continue from {formatTime(savedProgress)}</p>
+            <div className={styles.resumePromptButtons}>
+              <button 
+                className={styles.resumeButton}
+                onClick={handleResumePlayback}
+              >
+                ▶️ Resume
+              </button>
+              <button 
+                className={styles.startOverButton}
+                onClick={handleStartOver}
+              >
+                ⏮️ Start Over
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -692,7 +828,8 @@ export default function MobileVideoPlayer({
                 onClick={(e) => { 
                   e.stopPropagation(); 
                   const newPref = audioPref === 'sub' ? 'dub' : 'sub';
-                  onAudioPrefChange(newPref);
+                  // Pass current playback time to preserve position
+                  onAudioPrefChange(newPref, currentTime);
                   triggerHaptic('light');
                 }} 
                 onTouchEnd={(e) => e.stopPropagation()}
@@ -790,7 +927,12 @@ export default function MobileVideoPlayer({
                 <button
                   key={index}
                   className={`${styles.menuItem} ${index === currentSourceIndex ? styles.active : ''}`}
-                  onClick={() => { onSourceChange?.(index); setShowSourceMenu(false); triggerHaptic('light'); }}
+                  onClick={() => { 
+                    // Pass current playback time to preserve position
+                    onSourceChange?.(index, currentTime); 
+                    setShowSourceMenu(false); 
+                    triggerHaptic('light'); 
+                  }}
                 >
                   <span>{source.title || `Source ${index + 1}`}</span>
                   {source.quality && <span className={styles.quality}>{source.quality}</span>}

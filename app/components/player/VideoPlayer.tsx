@@ -123,6 +123,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [subtitlesLoading, setSubtitlesLoading] = useState(false);
   const [subtitleStyle, setSubtitleStyleState] = useState<SubtitleStyle>(getSubtitleStyle());
   const [subtitleOffset, setSubtitleOffset] = useState<number>(0); // Subtitle sync offset in seconds
+  const [showSubtitleOffsetIndicator, setShowSubtitleOffsetIndicator] = useState(false); // Show offset change indicator
+  const subtitleOffsetIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [savedProgress, setSavedProgress] = useState<number>(0);
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
@@ -176,6 +178,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   
   // Anime-specific preferences
   const [animeAudioPref, setAnimeAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
+
+  // Videasy language filter for dub selection
+  const [videasyLanguageFilter, setVideasyLanguageFilter] = useState<string>('all');
+  const VIDEASY_LANGUAGES = [
+    { code: 'all', name: 'All Languages' },
+    { code: 'en', name: 'English' },
+    { code: 'de', name: 'German' },
+    { code: 'it', name: 'Italian' },
+    { code: 'fr', name: 'French' },
+    { code: 'es', name: 'Spanish' },
+    { code: 'es-419', name: 'Latin Spanish' },
+    { code: 'pt', name: 'Portuguese' },
+    { code: 'hi', name: 'Hindi' },
+  ];
 
   // HLS quality levels
   const [hlsLevels, setHlsLevels] = useState<{ height: number; bitrate: number; index: number }[]>([]);
@@ -1805,6 +1821,27 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     return () => window.removeEventListener('keydown', handleKeyPress, true);
   }, [currentTime, volume, showResumePrompt, showControls, focusedRow, focusedControlIndex, showSubtitles, showSettings, showServerMenu]);
 
+  // Ctrl + Scroll wheel for subtitle sync adjustment
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Only handle when Ctrl is pressed and subtitles are active
+      if (!e.ctrlKey || !currentSubtitle) return;
+      
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Scroll up = earlier subtitles (negative offset), scroll down = later subtitles (positive offset)
+      const delta = e.deltaY > 0 ? 0.5 : -0.5;
+      adjustSubtitleOffset(delta);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [currentSubtitle]);
+
   // Apply visual focus based on row and control index
   useEffect(() => {
     if (!containerRef.current) return;
@@ -2067,6 +2104,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
   const loadSubtitle = (subtitle: any | null, offset: number = 0) => {
     if (!videoRef.current) return;
+    
+    // First, disable all existing text tracks to prevent them from showing
+    if (videoRef.current.textTracks) {
+      for (let i = 0; i < videoRef.current.textTracks.length; i++) {
+        videoRef.current.textTracks[i].mode = 'disabled';
+      }
+    }
+    
+    // Remove all track elements
     const tracks = videoRef.current.querySelectorAll('track');
     tracks.forEach(track => track.remove());
     
@@ -2075,15 +2121,18 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     
     if (subtitle) {
       // For custom uploaded subtitles, use the blob URL directly
-      // For OpenSubtitles, proxy through our API
+      // For OpenSubtitles, proxy through our API with cache-busting
+      const cacheBuster = Date.now();
       const subtitleUrl = subtitle.isCustom 
         ? subtitle.url 
-        : `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}`;
+        : `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}&_t=${cacheBuster}`;
       
       console.log('[VideoPlayer] Loading subtitle:', { 
         isCustom: subtitle.isCustom, 
         url: subtitleUrl.substring(0, 100),
         language: subtitle.language,
+        langCode: subtitle.langCode,
+        id: subtitle.id,
         offset: offset
       });
       
@@ -2156,10 +2205,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setCurrentSubtitle(subtitle.id);
       setSubtitleLanguage(subtitle.langCode, subtitle.language);
       setSubtitlesEnabled(true);
+      // Reset subtitle offset when switching to a new subtitle
+      if (offset === 0) {
+        setSubtitleOffset(0);
+      }
     } else {
       currentSubtitleDataRef.current = null;
       setCurrentSubtitle(null);
       setSubtitlesEnabled(false);
+      setSubtitleOffset(0);
     }
     setShowSubtitles(false);
   };
@@ -2168,6 +2222,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const adjustSubtitleOffset = (delta: number) => {
     const newOffset = subtitleOffset + delta;
     setSubtitleOffset(newOffset);
+    
+    // Show the offset indicator briefly
+    setShowSubtitleOffsetIndicator(true);
+    if (subtitleOffsetIndicatorTimeoutRef.current) {
+      clearTimeout(subtitleOffsetIndicatorTimeoutRef.current);
+    }
+    subtitleOffsetIndicatorTimeoutRef.current = setTimeout(() => {
+      setShowSubtitleOffsetIndicator(false);
+    }, 1500);
     
     // Apply offset to current text tracks
     if (videoRef.current && videoRef.current.textTracks) {
@@ -2651,6 +2714,35 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           <div className={styles.volumeIndicatorText}>
             {Math.round((isMuted ? 0 : volume) * 100)}%
           </div>
+        </div>
+      )}
+
+      {/* Subtitle offset indicator */}
+      {showSubtitleOffsetIndicator && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '15%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            color: 'white',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            fontSize: '1rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            zIndex: 100,
+            animation: 'fadeIn 0.2s ease',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <span style={{ fontSize: '1.25rem' }}>📝</span>
+          <span>
+            Subtitle Sync: {subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}s
+          </span>
         </div>
       )}
 
@@ -3672,6 +3764,46 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                   </div>
                 )}
 
+                {/* Language filter for Videasy */}
+                {menuProvider === 'videasy' && (
+                  <div style={{ 
+                    padding: '0.5rem 1rem', 
+                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    <span style={{ 
+                      fontSize: '0.8rem', 
+                      color: 'rgba(255, 255, 255, 0.6)',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      🌐 Dub:
+                    </span>
+                    <select
+                      value={videasyLanguageFilter}
+                      onChange={(e) => setVideasyLanguageFilter(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '0.4rem 0.6rem',
+                        fontSize: '0.85rem',
+                        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        borderRadius: '4px',
+                        color: 'white',
+                        cursor: 'pointer',
+                        outline: 'none',
+                      }}
+                    >
+                      {VIDEASY_LANGUAGES.map(lang => (
+                        <option key={lang.code} value={lang.code} style={{ backgroundColor: '#1a1a1a' }}>
+                          {lang.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
                 <div className={styles.sourcesList} data-server-sources="true">
                   {loadingProviders[menuProvider] ? (
                     <div style={{ padding: '1rem', textAlign: 'center', color: 'rgba(255,255,255,0.5)', fontSize: '0.9rem' }}>
@@ -3684,6 +3816,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                         // For AnimeKai, filter by dub/sub preference
                         if (menuProvider === 'animekai' && s.title) {
                           return sourceMatchesAudioPreference(s.title, animeAudioPref);
+                        }
+                        // For Videasy, filter by language preference
+                        if (menuProvider === 'videasy' && videasyLanguageFilter !== 'all') {
+                          return s.language === videasyLanguageFilter;
                         }
                         return true;
                       })

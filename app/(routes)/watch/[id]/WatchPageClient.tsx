@@ -107,6 +107,7 @@ function WatchContent() {
   const [mobileSourceIndex, setMobileSourceIndex] = useState(0);
   const [mobileLoading, setMobileLoading] = useState(true);
   const [mobileError, setMobileError] = useState<string | null>(null);
+  const [mobileResumeTime, setMobileResumeTime] = useState(0); // Saved playback time for source/audio changes
   
   // Anime state for mobile player
   const [isAnimeContent, setIsAnimeContent] = useState(false);
@@ -422,7 +423,11 @@ function WatchContent() {
   }, [useMobilePlayer, contentId, mediaType, seasonId, episodeId, malId, malTitle, audioPref, sourceMatchesAudioPref]);
 
   // Handle audio preference change for anime
-  const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference) => {
+  const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference, currentTime: number = 0) => {
+    // Save current playback time to resume after source change
+    setMobileResumeTime(currentTime);
+    console.log('[WatchPage] Audio pref change, saving time:', currentTime);
+    
     setAudioPref(newPref);
     setAnimeAudioPreference(newPref);
     // Refetch with new preference
@@ -437,8 +442,12 @@ function WatchContent() {
   }, [useMobilePlayer, fetchMobileStream]);
 
   // Handle mobile source change
-  const handleMobileSourceChange = useCallback((index: number) => {
+  const handleMobileSourceChange = useCallback((index: number, currentTime: number = 0) => {
     if (index >= 0 && index < mobileSources.length) {
+      // Save current playback time to resume after source change
+      setMobileResumeTime(currentTime);
+      console.log('[WatchPage] Source change, saving time:', currentTime);
+      
       setMobileSourceIndex(index);
       setMobileStreamUrl(mobileSources[index].url);
     }
@@ -591,6 +600,7 @@ function WatchContent() {
             isAnime={isAnimeContent}
             audioPref={audioPref}
             onAudioPrefChange={handleAudioPrefChange}
+            initialTime={mobileResumeTime}
           />
         </div>
       </div>
