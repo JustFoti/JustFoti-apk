@@ -228,6 +228,38 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
   }, []);
 
+  // Adjust subtitle timing offset (Alt + scroll wheel)
+  const adjustSubtitleOffset = useCallback((delta: number) => {
+    setSubtitleOffset(prev => {
+      const newOffset = prev + delta;
+      
+      // Apply offset to current text tracks
+      if (videoRef.current && videoRef.current.textTracks) {
+        for (let i = 0; i < videoRef.current.textTracks.length; i++) {
+          const textTrack = videoRef.current.textTracks[i];
+          if (textTrack.cues) {
+            for (let j = 0; j < textTrack.cues.length; j++) {
+              const cue = textTrack.cues[j] as VTTCue;
+              cue.startTime = Math.max(0, cue.startTime + delta);
+              cue.endTime = Math.max(0, cue.endTime + delta);
+            }
+          }
+        }
+      }
+      console.log('[VideoPlayer] Subtitle offset adjusted to:', newOffset, 'seconds');
+      return newOffset;
+    });
+    
+    // Show the offset indicator briefly
+    setShowSubtitleOffsetIndicator(true);
+    if (subtitleOffsetIndicatorTimeoutRef.current) {
+      clearTimeout(subtitleOffsetIndicatorTimeoutRef.current);
+    }
+    subtitleOffsetIndicatorTimeoutRef.current = setTimeout(() => {
+      setShowSubtitleOffsetIndicator(false);
+    }, 1500);
+  }, []);
+
   // Single tap handler for mobile:
   // - If paused and controls visible: unpause
   // - If paused and controls hidden: show controls (don't unpause yet)
@@ -1840,7 +1872,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [currentSubtitle]);
+  }, [currentSubtitle, adjustSubtitleOffset]);
 
   // Apply visual focus based on row and control index
   useEffect(() => {
@@ -2216,36 +2248,6 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setSubtitleOffset(0);
     }
     setShowSubtitles(false);
-  };
-
-  // Adjust subtitle timing offset
-  const adjustSubtitleOffset = (delta: number) => {
-    const newOffset = subtitleOffset + delta;
-    setSubtitleOffset(newOffset);
-    
-    // Show the offset indicator briefly
-    setShowSubtitleOffsetIndicator(true);
-    if (subtitleOffsetIndicatorTimeoutRef.current) {
-      clearTimeout(subtitleOffsetIndicatorTimeoutRef.current);
-    }
-    subtitleOffsetIndicatorTimeoutRef.current = setTimeout(() => {
-      setShowSubtitleOffsetIndicator(false);
-    }, 1500);
-    
-    // Apply offset to current text tracks
-    if (videoRef.current && videoRef.current.textTracks) {
-      for (let i = 0; i < videoRef.current.textTracks.length; i++) {
-        const textTrack = videoRef.current.textTracks[i];
-        if (textTrack.cues) {
-          for (let j = 0; j < textTrack.cues.length; j++) {
-            const cue = textTrack.cues[j] as VTTCue;
-            cue.startTime = Math.max(0, cue.startTime + delta);
-            cue.endTime = Math.max(0, cue.endTime + delta);
-          }
-        }
-      }
-    }
-    console.log('[VideoPlayer] Subtitle offset adjusted to:', newOffset, 'seconds');
   };
 
   // Reset subtitle offset
