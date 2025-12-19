@@ -887,9 +887,22 @@ function LiveTVPlayer({
       // Fallback for Safari
       if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
         videoRef.current.src = m3u8Url;
-        videoRef.current.addEventListener('loadedmetadata', () => {
+        videoRef.current.addEventListener('loadedmetadata', async () => {
           setIsLoading(false);
-          videoRef.current?.play().catch(() => {});
+          if (videoRef.current) {
+            try {
+              await videoRef.current.play();
+            } catch (e) {
+              console.log('[LiveTV] Safari autoplay blocked, trying muted...');
+              try {
+                videoRef.current.muted = true;
+                setIsMuted(true);
+                await videoRef.current.play();
+              } catch (e2) {
+                console.log('[LiveTV] Safari muted autoplay also blocked');
+              }
+            }
+          }
         });
         return;
       }
@@ -924,11 +937,31 @@ function LiveTVPlayer({
     hls.loadSource(m3u8Url);
     hls.attachMedia(videoRef.current);
     
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    hls.on(Hls.Events.MANIFEST_PARSED, async () => {
       console.log('[LiveTV] DLHD manifest parsed');
       setIsLoading(false);
       setError(null);
-      videoRef.current?.play().catch(() => {});
+      
+      // Try to autoplay - handle mobile browser restrictions
+      if (videoRef.current) {
+        try {
+          // First try playing with sound
+          await videoRef.current.play();
+          console.log('[LiveTV] Autoplay succeeded');
+        } catch (e) {
+          console.log('[LiveTV] Autoplay blocked, trying muted...');
+          try {
+            // Try muted autoplay (usually allowed)
+            videoRef.current.muted = true;
+            setIsMuted(true);
+            await videoRef.current.play();
+            console.log('[LiveTV] Muted autoplay succeeded');
+          } catch (e2) {
+            // Autoplay completely blocked - user needs to tap play
+            console.log('[LiveTV] Muted autoplay also blocked, user must tap play');
+          }
+        }
+      }
     });
     
     hls.on(Hls.Events.FRAG_LOADED, () => {
@@ -1088,12 +1121,27 @@ function LiveTVPlayer({
       }
     });
 
-    player.on(mpegts.Events.MEDIA_INFO, () => {
+    player.on(mpegts.Events.MEDIA_INFO, async () => {
       console.log('[LiveTV] Media info received');
       setIsCycling(false);
       setIsLoading(false);
       setBufferingStatus(null);
-      videoRef.current?.play().catch(() => {});
+      
+      // Try to autoplay - handle mobile browser restrictions
+      if (videoRef.current) {
+        try {
+          await videoRef.current.play();
+        } catch (e) {
+          console.log('[LiveTV] Xfinity autoplay blocked, trying muted...');
+          try {
+            videoRef.current.muted = true;
+            setIsMuted(true);
+            await videoRef.current.play();
+          } catch (e2) {
+            console.log('[LiveTV] Xfinity muted autoplay also blocked');
+          }
+        }
+      }
     });
 
     playerRef.current = player;
