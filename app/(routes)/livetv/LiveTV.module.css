@@ -519,20 +519,23 @@
   height: 100%;
   background: #000;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .closeBtn {
   position: absolute;
   top: 20px;
   right: 20px;
-  width: 48px;
-  height: 48px;
-  background: rgba(0, 0, 0, 0.6);
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(12px);
-  border: 2px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   color: white;
-  font-size: 1.3rem;
+  font-size: 1.2rem;
   font-weight: bold;
   cursor: pointer;
   z-index: 100;
@@ -560,26 +563,30 @@
   right: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 24px 80px 40px 28px;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.7) 50%, rgba(0, 0, 0, 0.3) 80%, transparent 100%);
+  gap: 12px;
+  padding: 16px 70px 30px 20px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 60%, transparent 100%);
   z-index: 50;
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .channelTitle {
-  font-size: 1.3rem;
-  font-weight: 700;
+  font-size: 1.1rem;
+  font-weight: 600;
   color: white;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
   letter-spacing: 0.02em;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .video {
   width: 100%;
   height: 100%;
   background: #000;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .playerOverlay {
@@ -622,9 +629,9 @@
   right: 0;
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 30px 32px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.8) 40%, rgba(0, 0, 0, 0.4) 70%, transparent 100%);
+  gap: 12px;
+  padding: 20px 20px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.6) 60%, transparent 100%);
   z-index: 50;
   transition: opacity 0.3s ease, transform 0.3s ease;
   opacity: 1;
@@ -665,11 +672,11 @@
 }
 
 .controlBtn {
-  width: 56px;
-  height: 56px;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(10px);
-  border: 2px solid rgba(255, 255, 255, 0.25);
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 50%;
   color: white;
   cursor: pointer;
@@ -677,7 +684,8 @@
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
-  font-size: 1.4rem;
+  font-size: 1.1rem;
+  flex-shrink: 0;
 }
 
 .controlBtn:hover {
@@ -692,10 +700,10 @@
 }
 
 .volumeSlider {
-  width: 120px;
-  height: 6px;
+  width: 80px;
+  height: 4px;
   background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
+  border-radius: 2px;
   outline: none;
   cursor: pointer;
   -webkit-appearance: none;
@@ -744,18 +752,17 @@
 .controlsLive {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  background: rgba(239, 68, 68, 0.15);
-  backdrop-filter: blur(10px);
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(239, 68, 68, 0.2);
+  backdrop-filter: blur(8px);
   border: 1px solid rgba(239, 68, 68, 0.4);
-  border-radius: 24px;
-  font-size: 0.85rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #ef4444;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
 }
 
 /* Fullscreen button is now part of customControls, keeping this for backwards compat */
@@ -968,8 +975,66 @@
     grid-template-columns: 1fr;
   }
   
+  /* Mobile player styles */
   .playerModal {
-    padding: 10px;
+    padding: 0;
+  }
+  
+  .closeBtn {
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+  }
+  
+  .playerHeader {
+    padding: 12px 60px 24px 16px;
+    gap: 8px;
+  }
+  
+  .channelTitle {
+    font-size: 1rem;
+  }
+  
+  .liveTag {
+    padding: 4px 10px;
+    font-size: 0.65rem;
+  }
+  
+  .sourceTag {
+    padding: 4px 10px;
+    font-size: 0.6rem;
+  }
+  
+  .channelFlag {
+    font-size: 1.2rem;
+  }
+  
+  .customControls {
+    padding: 16px;
+    gap: 10px;
+  }
+  
+  .controlBtn {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+  }
+  
+  .volumeSlider {
+    width: 60px;
+  }
+  
+  .controlsLive {
+    padding: 6px 10px;
+    font-size: 0.65rem;
+    gap: 4px;
+  }
+  
+  .controlsLive .liveDot {
+    width: 6px;
+    height: 6px;
   }
 }
 
