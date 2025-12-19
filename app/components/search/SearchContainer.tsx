@@ -85,8 +85,12 @@ export const SearchContainer: React.FC<SearchContainerProps> = ({
       saveRecentSearch(query.trim());
     }
 
-    // Navigate to details page
-    router.push(`/details/${mediaType}/${id}`);
+    // Navigate to details page (person pages not supported, skip them)
+    if (mediaType === 'person') {
+      return;
+    }
+    
+    router.push(`/details/${id}?type=${mediaType}`);
 
     // Close search
     onClose?.();
