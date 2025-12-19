@@ -438,7 +438,9 @@ function WatchContent() {
       setMobileError('Failed to load video');
       setMobileLoading(false);
     }
-  }, [useMobilePlayer, contentId, mediaType, seasonId, episodeId, malId, malTitle, audioPref, sourceMatchesAudioPref]);
+  // Note: useMobilePlayer is intentionally NOT in dependencies to prevent refetch on orientation change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentId, mediaType, seasonId, episodeId, malId, malTitle, audioPref, sourceMatchesAudioPref]);
 
   // Handle audio preference change for anime
   const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference, currentTime: number = 0) => {
@@ -452,13 +454,23 @@ function WatchContent() {
     fetchMobileStream(newPref);
   }, [fetchMobileStream]);
 
-  // Fetch mobile stream when needed
+  // Fetch mobile stream when needed - only on initial mount or content change
+  // Using a ref to prevent refetch on orientation change
+  const hasFetchedStreamRef = useRef(false);
+  
   useEffect(() => {
-    console.log('[WatchPage] useEffect triggered - useMobilePlayer:', useMobilePlayer, 'fetchMobileStream changed');
-    if (useMobilePlayer) {
+    // Only fetch if we haven't already and we're using mobile player
+    if (useMobilePlayer && !hasFetchedStreamRef.current && !mobileStreamUrl) {
+      console.log('[WatchPage] Initial mobile stream fetch');
+      hasFetchedStreamRef.current = true;
       fetchMobileStream();
     }
-  }, [useMobilePlayer, fetchMobileStream]);
+  }, [useMobilePlayer, mobileStreamUrl, fetchMobileStream]);
+  
+  // Reset fetch flag when content changes
+  useEffect(() => {
+    hasFetchedStreamRef.current = false;
+  }, [contentId, seasonId, episodeId]);
 
   // Handle mobile source change
   const handleMobileSourceChange = useCallback((index: number, currentTime: number = 0) => {
