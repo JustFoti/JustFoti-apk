@@ -26,11 +26,15 @@ export default function AdminSidebar() {
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Overview', href: '/admin' },
+        { icon: LayoutDashboard, label: 'Dashboard v2', href: '/admin/dashboard' },
         { icon: TrendingUp, label: 'Insights', href: '/admin/insights' },
         { icon: BarChart3, label: 'Analytics', href: '/admin/analytics' },
+        { icon: BarChart3, label: 'Analytics v2', href: '/admin/analytics-v2' },
         { icon: MousePointerClick, label: 'Engagement', href: '/admin/engagement' },
         { icon: Globe, label: 'Traffic Sources', href: '/admin/traffic' },
+        { icon: Globe, label: 'Traffic v2', href: '/admin/traffic-v2' },
         { icon: Users, label: 'Users', href: '/admin/users' },
+        { icon: Users, label: 'Users v2', href: '/admin/users-v2' },
         { icon: Film, label: 'Content', href: '/admin/content' },
         { icon: Map, label: 'Geographic', href: '/admin/geographic' },
         { icon: History, label: 'Sessions', href: '/admin/sessions' },
