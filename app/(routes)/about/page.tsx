@@ -54,7 +54,7 @@ export default function AboutPage() {
 
       <header className="about-header">
         <div className="journal-badge">Journal of Questionable Software Engineering • Vol. 1, Issue 2 • December 2025</div>
-        <div className="last-updated">Last updated: December 13, 2025</div>
+        <div className="last-updated">Last updated: December 19, 2025</div>
         <h1>Flyx: A Case Study in Privacy-Respecting Streaming Architecture and Web Security Research</h1>
         <p className="subtitle">
           An academic exploration of building user-respecting streaming infrastructure, documenting 
