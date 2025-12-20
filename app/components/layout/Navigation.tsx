@@ -214,6 +214,12 @@ export const Navigation: React.FC<NavigationProps> = ({
                 Anime
               </NavLink>
               <NavLink
+                isActive={pathname === '/watchlist'}
+                onClick={() => handleNavigation('/watchlist')}
+              >
+                Watchlist
+              </NavLink>
+              <NavLink
                 isActive={pathname === '/livetv'}
                 onClick={() => handleNavigation('/livetv')}
               >
@@ -357,6 +363,12 @@ export const Navigation: React.FC<NavigationProps> = ({
               onClick={() => handleNavigation('/anime')}
             >
               Anime
+            </NavLink>
+            <NavLink
+              isActive={pathname === '/watchlist'}
+              onClick={() => handleNavigation('/watchlist')}
+            >
+              Watchlist
             </NavLink>
             <NavLink
               isActive={pathname === '/livetv'}

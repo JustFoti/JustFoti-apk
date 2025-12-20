@@ -7,6 +7,7 @@ import { RegionProvider } from './lib/context/RegionContext'
 import { TVNavigationProvider } from './components/tv/TVNavigationProvider'
 import { TVNavigationHint } from './components/tv/TVNavigationHint'
 import AdminBanner from './components/ui/AdminBanner'
+import { WatchlistProvider } from './hooks/useWatchlist'
 
 // Optimized font loading with next/font (eliminates render-blocking CSS)
 const inter = Inter({
@@ -102,11 +103,13 @@ export default function RootLayout({
         <RegionProvider>
           <AnalyticsProvider>
             <PresenceProvider>
-              <TVNavigationProvider>
-                <AdminBanner />
-                {children}
-                <TVNavigationHint />
-              </TVNavigationProvider>
+              <WatchlistProvider>
+                <TVNavigationProvider>
+                  <AdminBanner />
+                  {children}
+                  <TVNavigationHint />
+                </TVNavigationProvider>
+              </WatchlistProvider>
             </PresenceProvider>
           </AnalyticsProvider>
         </RegionProvider>

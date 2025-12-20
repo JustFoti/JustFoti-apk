@@ -8,6 +8,7 @@ import type { MALAnimeDetails } from '@/lib/services/mal';
 import { ParallaxContainer } from '@/components/ui/ParallaxContainer';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { FluidButton } from '@/components/ui/FluidButton';
+import { WatchlistButton } from '@/components/ui/WatchlistButton';
 import { SeasonSelector } from './SeasonSelector';
 import { EpisodeList } from './EpisodeList';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
@@ -771,6 +772,7 @@ export default function DetailsPageClient({
                   </svg>
                   Watch Now
                 </FluidButton>
+                <WatchlistButton item={content} variant="full" />
               </div>
             </div>
           </motion.div>

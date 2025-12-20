@@ -237,13 +237,13 @@ svg {
   }
 
   .section {
-    margin-bottom: 2.5rem;
+    margin-bottom: 2rem;
   }
 
   .sectionTitle {
-    font-size: 1.5rem;
+    font-size: 1.375rem;
     padding: 0 1rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
   }
 
   .errorPanel {
@@ -252,6 +252,213 @@ svg {
 
   .errorPanel h2 {
     font-size: 1.5rem;
+  }
+
+  .welcomeFeatures {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 0 1rem;
+  }
+
+  .featureItem {
+    padding: 0.875rem;
+    /* Better touch target */
+    min-height: 80px;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 0 1rem;
+  }
+
+  .statCard {
+    padding: 1.5rem 1rem;
+  }
+
+  .genreGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    padding: 0 1rem;
+  }
+
+  .genreCard {
+    height: 100px;
+    /* Better touch target */
+    min-height: 80px;
+  }
+
+  .featuresGrid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 0 1rem;
+  }
+
+  .featureCard {
+    padding: 2rem 1.5rem;
+  }
+
+  .ctaButtons {
+    flex-direction: column;
+    align-items: center;
+    padding: 0 1rem;
+  }
+
+  .welcomeTitle {
+    font-size: 1.75rem;
+    padding: 0 1rem;
+  }
+
+  .welcomeSubtitle {
+    font-size: 1rem;
+    padding: 0 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .ctaTitle {
+    font-size: 2rem;
+    padding: 0 1rem;
+  }
+
+  .ctaSubtitle {
+    font-size: 1rem;
+    padding: 0 1rem;
+  }
+
+  .statNumber {
+    font-size: 2rem;
+  }
+
+  .featureIconLarge {
+    font-size: 2.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .contentSections {
+    padding: 0.75rem 0;
+  }
+
+  .section {
+    margin-bottom: 1.5rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.25rem;
+    padding: 0 0.75rem;
+  }
+
+  .welcomeFeatures {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .featureItem {
+    padding: 0.75rem;
+    min-height: 70px;
+  }
+
+  .featureIcon {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .statsGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .statCard {
+    padding: 1.25rem 0.75rem;
+  }
+
+  .statNumber {
+    font-size: 1.75rem;
+  }
+
+  .statLabel {
+    font-size: 0.8125rem;
+  }
+
+  .genreGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    padding: 0 0.75rem;
+  }
+
+  .genreCard {
+    height: 90px;
+  }
+
+  .genreEmoji {
+    font-size: 2rem;
+  }
+
+  .genreName {
+    font-size: 0.9375rem;
+  }
+
+  .featuresGrid {
+    padding: 0 0.75rem;
+  }
+
+  .featureCard {
+    padding: 1.5rem 1rem;
+  }
+
+  .featureCard h3 {
+    font-size: 1.25rem;
+  }
+
+  .featureCard p {
+    font-size: 0.875rem;
+  }
+
+  .welcomeTitle {
+    font-size: 1.5rem;
+  }
+
+  .ctaTitle {
+    font-size: 1.75rem;
+  }
+}
+
+/* Extra small devices */
+@media (max-width: 375px) {
+  .sectionTitle {
+    font-size: 1.125rem;
+  }
+
+  .welcomeTitle {
+    font-size: 1.375rem;
+  }
+
+  .statNumber {
+    font-size: 1.5rem;
+  }
+
+  .genreCard {
+    height: 80px;
+  }
+
+  .genreEmoji {
+    font-size: 1.75rem;
+  }
+
+  .genreName {
+    font-size: 0.875rem;
+  }
+}
+
+/* Safe area support for notched devices */
+@supports (padding: max(0px)) {
+  @media (max-width: 768px) {
+    .contentSections {
+      padding-left: max(0.75rem, env(safe-area-inset-left));
+      padding-right: max(0.75rem, env(safe-area-inset-right));
+    }
   }
 }
 

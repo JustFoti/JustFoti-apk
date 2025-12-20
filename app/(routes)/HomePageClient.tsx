@@ -11,6 +11,7 @@ import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import ContinueWatching from '@/components/home/ContinueWatching';
 import { shouldReduceAnimations } from '@/lib/utils/performance';
+import { WatchlistButton } from '@/components/ui/WatchlistButton';
 import React from 'react';
 
 interface HomePageClientProps {
@@ -328,6 +329,8 @@ export default function HomePageClient({
                         </svg>
                         Watch Now
                       </motion.button>
+
+                      <WatchlistButton item={currentHero} variant="full" />
 
                       <motion.button
                         whileHover={{ scale: 1.05 }}
