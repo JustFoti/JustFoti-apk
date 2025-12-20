@@ -540,8 +540,13 @@
 .searchNavItem {
   position: relative;
   padding: 0;
-  min-width: auto;
-  flex: 0 0 auto;
+  min-width: 56px;
+  flex: 0 0 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  overflow: visible;
 }
 
 .searchNavIcon {
@@ -552,19 +557,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: -28px;
+  position: absolute;
+  top: -32px;
+  left: 50%;
+  transform: translateX(-50%);
   box-shadow: 0 4px 20px rgba(0, 245, 255, 0.4);
   transition: all 0.3s ease;
 }
 
 .searchNavItem:active .searchNavIcon {
-  transform: scale(0.92);
+  transform: translateX(-50%) scale(0.92);
 }
 
 .searchNavItem .searchNavIcon svg {
   stroke: white;
   width: 24px;
   height: 24px;
+  flex-shrink: 0;
 }
 
 .searchNavItem.active .searchNavIcon {
