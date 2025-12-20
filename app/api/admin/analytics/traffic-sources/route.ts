@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching medium stats:', e);
     }
 
-    // Get top referring domains from page_views
+    // Get top referring domains from page_views (grouped by domain)
     let topReferrers: any[] = [];
     try {
       topReferrers = isNeon
@@ -249,6 +249,62 @@ export async function GET(request: NextRequest) {
           `, [startTime, limit]);
     } catch (e) {
       console.error('Error fetching top referrers:', e);
+    }
+
+    // Get detailed referrer URLs (full URLs, not just domains)
+    let detailedReferrers: any[] = [];
+    try {
+      detailedReferrers = isNeon
+        ? await adapter.query(`
+            SELECT 
+              referrer as referrer_url,
+              CASE 
+                WHEN referrer LIKE 'https://%' THEN SPLIT_PART(SPLIT_PART(referrer, '://', 2), '/', 1)
+                WHEN referrer LIKE 'http://%' THEN SPLIT_PART(SPLIT_PART(referrer, '://', 2), '/', 1)
+                ELSE referrer
+              END as referrer_domain,
+              CASE 
+                WHEN referrer LIKE '%google%' OR referrer LIKE '%bing%' THEN 'organic'
+                WHEN referrer LIKE '%facebook%' OR referrer LIKE '%twitter%' OR referrer LIKE '%reddit%' THEN 'social'
+                ELSE 'referral'
+              END as referrer_medium,
+              COUNT(*) as hit_count,
+              COUNT(DISTINCT user_id) as unique_visitors,
+              MAX(entry_time) as last_hit
+            FROM page_views
+            WHERE entry_time > $1 AND referrer IS NOT NULL AND referrer != ''
+            GROUP BY referrer, referrer_domain, referrer_medium
+            ORDER BY hit_count DESC
+            LIMIT $2
+          `, [startTime, limit * 2])
+        : await adapter.query(`
+            SELECT 
+              referrer as referrer_url,
+              CASE 
+                WHEN referrer IS NULL OR referrer = '' THEN '(direct)'
+                ELSE SUBSTR(referrer, INSTR(referrer, '://') + 3, 
+                  CASE 
+                    WHEN INSTR(SUBSTR(referrer, INSTR(referrer, '://') + 3), '/') > 0 
+                    THEN INSTR(SUBSTR(referrer, INSTR(referrer, '://') + 3), '/') - 1
+                    ELSE LENGTH(referrer)
+                  END)
+              END as referrer_domain,
+              CASE 
+                WHEN referrer LIKE '%google%' OR referrer LIKE '%bing%' THEN 'organic'
+                WHEN referrer LIKE '%facebook%' OR referrer LIKE '%twitter%' OR referrer LIKE '%reddit%' THEN 'social'
+                ELSE 'referral'
+              END as referrer_medium,
+              COUNT(*) as hit_count,
+              COUNT(DISTINCT user_id) as unique_visitors,
+              MAX(entry_time) as last_hit
+            FROM page_views
+            WHERE entry_time > ? AND referrer IS NOT NULL AND referrer != ''
+            GROUP BY referrer
+            ORDER BY hit_count DESC
+            LIMIT ?
+          `, [startTime, limit * 2]);
+    } catch (e) {
+      console.error('Error fetching detailed referrers:', e);
     }
 
     // Get hourly traffic pattern from page_views
@@ -324,6 +380,7 @@ export async function GET(request: NextRequest) {
       sourceTypeStats,
       mediumStats,
       topReferrers,
+      detailedReferrers,
       botStats,
       hourlyPattern,
       geoStats,

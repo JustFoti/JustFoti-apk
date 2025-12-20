@@ -37,6 +37,7 @@ interface TrafficData {
   sourceTypeStats: Array<{ source_type: string; source_name: string; hit_count: number; unique_visitors: number }>;
   mediumStats: Array<{ referrer_medium: string; hit_count: number; unique_visitors: number }>;
   topReferrers: Array<{ referrer_domain: string; referrer_medium: string; hit_count: number; last_hit: number }>;
+  detailedReferrers: Array<{ referrer_url: string; referrer_domain: string; referrer_medium: string; hit_count: number; unique_visitors: number; last_hit: number }>;
   botStats: Array<{ source_name: string; hit_count: number }>;
   hourlyPattern: Array<{ hour: number; hit_count: number; bot_hits: number }>;
   geoStats: Array<{ country: string; hit_count: number; unique_visitors: number }>;
@@ -316,22 +317,75 @@ function SourcesTab({ trafficData }: { trafficData: TrafficData | null }) {
 }
 
 function ReferrersTab({ trafficData }: { trafficData: TrafficData | null }) {
-  const columns = [
+  const [showFullUrls, setShowFullUrls] = useState(false);
+  
+  const domainColumns = [
     { key: 'referrer_domain', header: 'Domain', render: (r: any) => <strong>{r.referrer_domain}</strong> },
     { key: 'referrer_medium', header: 'Medium', render: (r: any) => <Badge color={colors.primary}>{r.referrer_medium}</Badge> },
     { key: 'hit_count', header: 'Hits', render: (r: any) => formatNumber(r.hit_count) },
     { key: 'last_hit', header: 'Last Hit', render: (r: any) => formatDate(r.last_hit) },
   ];
 
+  const urlColumns = [
+    { 
+      key: 'referrer_url', 
+      header: 'Full URL', 
+      render: (r: any) => (
+        <div style={{ maxWidth: '400px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.referrer_url}>
+          <a href={r.referrer_url} target="_blank" rel="noopener noreferrer" style={{ color: colors.primary, textDecoration: 'none' }}>
+            {r.referrer_url}
+          </a>
+        </div>
+      ) 
+    },
+    { key: 'referrer_medium', header: 'Medium', render: (r: any) => <Badge color={colors.primary}>{r.referrer_medium}</Badge> },
+    { key: 'hit_count', header: 'Hits', render: (r: any) => formatNumber(r.hit_count) },
+    { key: 'unique_visitors', header: 'Visitors', render: (r: any) => formatNumber(r.unique_visitors) },
+    { key: 'last_hit', header: 'Last Hit', render: (r: any) => formatDate(r.last_hit) },
+  ];
+
   return (
-    <Card title="Top Referring Domains" icon="🔗">
-      <DataTable 
-        data={trafficData?.topReferrers || []} 
-        columns={columns} 
-        emptyMessage="No referrer data yet"
-        maxRows={20}
-      />
-    </Card>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => setShowFullUrls(!showFullUrls)}
+          style={{
+            padding: '8px 16px',
+            background: showFullUrls ? colors.primary : 'rgba(255,255,255,0.1)',
+            border: 'none',
+            borderRadius: '8px',
+            color: colors.text.primary,
+            cursor: 'pointer',
+            fontSize: '13px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          {showFullUrls ? '🔗 Show Domains Only' : '📋 Show Full URLs'}
+        </button>
+      </div>
+      
+      {showFullUrls ? (
+        <Card title="Detailed Referrer URLs" icon="📋">
+          <DataTable 
+            data={trafficData?.detailedReferrers || []} 
+            columns={urlColumns} 
+            emptyMessage="No referrer data yet"
+            maxRows={40}
+          />
+        </Card>
+      ) : (
+        <Card title="Top Referring Domains" icon="🔗">
+          <DataTable 
+            data={trafficData?.topReferrers || []} 
+            columns={domainColumns} 
+            emptyMessage="No referrer data yet"
+            maxRows={20}
+          />
+        </Card>
+      )}
+    </div>
   );
 }
 
