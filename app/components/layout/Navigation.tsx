@@ -446,12 +446,13 @@ export const Navigation: React.FC<NavigationProps> = ({
             onClick={toggleSearch}
             aria-label="Search"
           >
-            <div className={styles.searchNavIcon}>
+            <span className={styles.searchNavIcon}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <circle cx="11" cy="11" r="8" strokeWidth="2.5" />
                 <path d="M21 21l-4.35-4.35" strokeWidth="2.5" strokeLinecap="round" />
               </svg>
-            </div>
+            </span>
+            <span className={styles.searchLabel}>Search</span>
           </button>
           <button
             className={`${styles.bottomNavItem} ${pathname === '/series' || pathname.startsWith('/series') ? styles.active : ''}`}
