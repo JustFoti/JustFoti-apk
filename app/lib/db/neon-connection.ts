@@ -385,9 +385,9 @@ class DatabaseConnection {
       // Page performance metrics
       `CREATE TABLE IF NOT EXISTS page_metrics (
         page_path TEXT PRIMARY KEY,
-        total_views INTEGER DEFAULT 0,
-        unique_visitors INTEGER DEFAULT 0,
-        total_time_on_page INTEGER DEFAULT 0,
+        total_views BIGINT DEFAULT 0,
+        unique_visitors BIGINT DEFAULT 0,
+        total_time_on_page BIGINT DEFAULT 0,
         avg_time_on_page REAL DEFAULT 0,
         bounce_rate REAL DEFAULT 0,
         exit_rate REAL DEFAULT 0,
@@ -545,6 +545,24 @@ class DatabaseConnection {
       }
     } catch (migrationError) {
       console.warn('Behavioral migration warning (may be safe to ignore):', migrationError);
+    }
+    
+    // Migration v4: Fix integer overflow in page_metrics - change INTEGER to BIGINT
+    try {
+      const pageMetricsColumns = await this.adapter.query(`
+        SELECT data_type FROM information_schema.columns 
+        WHERE table_name = 'page_metrics' AND column_name = 'total_time_on_page'
+      `);
+      
+      if (pageMetricsColumns.length > 0 && pageMetricsColumns[0].data_type === 'integer') {
+        console.log('Running migration: Fixing integer overflow in page_metrics...');
+        await this.adapter.execute('ALTER TABLE page_metrics ALTER COLUMN total_time_on_page TYPE BIGINT');
+        await this.adapter.execute('ALTER TABLE page_metrics ALTER COLUMN total_views TYPE BIGINT');
+        await this.adapter.execute('ALTER TABLE page_metrics ALTER COLUMN unique_visitors TYPE BIGINT');
+        console.log('✓ page_metrics columns upgraded to BIGINT');
+      }
+    } catch (migrationError) {
+      console.warn('page_metrics migration warning (may be safe to ignore):', migrationError);
     }
   }
 
@@ -945,13 +963,18 @@ class DatabaseConnection {
     const adapter = this.getAdapter();
 
     if (this.isNeon) {
+      // Use ON CONFLICT to handle duplicate events gracefully (client may retry)
       await adapter.execute(
-        'INSERT INTO analytics_events (id, session_id, timestamp, event_type, metadata) VALUES ($1, $2, $3, $4, $5)',
+        `INSERT INTO analytics_events (id, session_id, timestamp, event_type, metadata) 
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (id) DO NOTHING`,
         [event.id, event.sessionId, event.timestamp, event.eventType, JSON.stringify(event.metadata)]
       );
     } else {
       await adapter.execute(
-        'INSERT INTO analytics_events (id, session_id, timestamp, event_type, metadata) VALUES (?, ?, ?, ?, ?)',
+        `INSERT INTO analytics_events (id, session_id, timestamp, event_type, metadata) 
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (id) DO NOTHING`,
         [event.id, event.sessionId, event.timestamp, event.eventType, JSON.stringify(event.metadata)]
       );
     }

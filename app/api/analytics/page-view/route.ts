@@ -26,7 +26,16 @@ function getDeviceType(userAgent: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const data = await request.json();
+    let data;
+    try {
+      data = await request.json();
+    } catch (parseError) {
+      console.error('Failed to parse request body:', parseError);
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
     
     if (!data.userId || !data.sessionId || !data.pagePath) {
       return NextResponse.json(
@@ -35,9 +44,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await initializeDB();
+    try {
+      await initializeDB();
+    } catch (dbInitError) {
+      console.error('Database initialization failed:', dbInitError);
+      // Return success to prevent client-side spam - analytics is non-critical
+      return NextResponse.json({ success: true, skipped: true });
+    }
+    
     const db = getDB();
+    if (!db) {
+      console.error('Database not available after initialization');
+      return NextResponse.json({ success: true, skipped: true });
+    }
+    
     const adapter = db.getAdapter();
+    if (!adapter) {
+      console.error('Database adapter not available');
+      return NextResponse.json({ success: true, skipped: true });
+    }
     
     const userAgent = request.headers.get('user-agent') || '';
     const deviceType = getDeviceType(userAgent);
@@ -199,11 +224,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, id: pageViewId });
   } catch (error) {
-    console.error('Failed to track page view:', error);
-    return NextResponse.json(
-      { error: 'Failed to track page view' },
-      { status: 500 }
-    );
+    // Log detailed error for debugging
+    console.error('Failed to track page view:', error instanceof Error ? error.message : error);
+    
+    // Return success to prevent client-side error spam - analytics is non-critical
+    // The client doesn't need to know about analytics failures
+    return NextResponse.json({ success: true, skipped: true });
   }
 }
 
@@ -213,9 +239,40 @@ export async function GET(request: NextRequest) {
     const days = parseInt(searchParams.get('days') || '7');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    await initializeDB();
+    try {
+      await initializeDB();
+    } catch (dbInitError) {
+      console.error('Database initialization failed for GET:', dbInitError);
+      return NextResponse.json({
+        success: true,
+        pageMetrics: [],
+        recentViews: [],
+        overallStats: {},
+        period: { days, startTime: Date.now() - (days * 24 * 60 * 60 * 1000) }
+      });
+    }
+    
     const db = getDB();
+    if (!db) {
+      return NextResponse.json({
+        success: true,
+        pageMetrics: [],
+        recentViews: [],
+        overallStats: {},
+        period: { days, startTime: Date.now() - (days * 24 * 60 * 60 * 1000) }
+      });
+    }
+    
     const adapter = db.getAdapter();
+    if (!adapter) {
+      return NextResponse.json({
+        success: true,
+        pageMetrics: [],
+        recentViews: [],
+        overallStats: {},
+        period: { days, startTime: Date.now() - (days * 24 * 60 * 60 * 1000) }
+      });
+    }
 
     const startTime = Date.now() - (days * 24 * 60 * 60 * 1000);
 
