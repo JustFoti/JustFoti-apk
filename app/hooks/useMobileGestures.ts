@@ -109,6 +109,11 @@ export function useMobileGestures(
   const initialPinchDistanceRef = useRef<number>(0);
   const velocityTrackerRef = useRef<{ x: number; y: number; time: number }[]>([]);
   const containerRectRef = useRef<DOMRect | null>(null);
+  
+  // Throttle state updates to reduce re-renders
+  const lastStateUpdateRef = useRef<number>(0);
+  const pendingStateRef = useRef<Partial<GestureState> | null>(null);
+  const stateUpdateRAFRef = useRef<number | null>(null);
 
   // Calculate velocity from recent touch points
   const calculateVelocity = useCallback(() => {
@@ -128,11 +133,9 @@ export function useMobileGestures(
     };
   }, []);
 
-  // Get touch position relative to container
+  // Get touch position relative to container - use cached rect to avoid reflow
   const getTouchPosition = useCallback((touch: Touch) => {
-    if (!containerRectRef.current) {
-      containerRectRef.current = containerRef.current?.getBoundingClientRect() || null;
-    }
+    // Use cached rect - only update on touchstart, not during move
     const rect = containerRectRef.current;
     if (!rect) return { x: touch.clientX, y: touch.clientY, relX: 0.5, relY: 0.5 };
     
@@ -142,7 +145,7 @@ export function useMobileGestures(
       relX: (touch.clientX - rect.left) / rect.width,
       relY: (touch.clientY - rect.top) / rect.height,
     };
-  }, [containerRef]);
+  }, []);
 
   // Determine which side of the screen was tapped
   const getTapSide = useCallback((relX: number): 'left' | 'center' | 'right' => {
@@ -171,7 +174,7 @@ export function useMobileGestures(
   const handleTouchStart = useCallback((e: TouchEvent) => {
     if (!opts.enabled) return;
     
-    // Update container rect
+    // Cache container rect once at start of gesture to avoid reflows during move
     containerRectRef.current = containerRef.current?.getBoundingClientRect() || null;
     
     const touches = e.touches;
@@ -270,7 +273,7 @@ export function useMobileGestures(
     });
   }, [opts, containerRef, clearLongPressTimer, getPinchDistance, getTouchPosition, getTapSide]);
 
-  // Handle touch move
+  // Handle touch move - optimized to reduce reflows and state updates
   const handleTouchMove = useCallback((e: TouchEvent) => {
     if (!opts.enabled || !touchStartRef.current) return;
     
@@ -283,10 +286,8 @@ export function useMobileGestures(
       
       opts.onPinch?.(scale);
       
-      setGestureState(prev => ({
-        ...prev,
-        scale,
-      }));
+      // Batch state update
+      pendingStateRef.current = { ...pendingStateRef.current, scale };
       
       if (opts.preventScroll) e.preventDefault();
       return;
@@ -304,8 +305,9 @@ export function useMobileGestures(
     const absX = Math.abs(deltaX);
     const absY = Math.abs(deltaY);
     
-    // Track velocity
-    velocityTrackerRef.current.push({ x: pos.x, y: pos.y, time: Date.now() });
+    // Track velocity - limit array size
+    const now = Date.now();
+    velocityTrackerRef.current.push({ x: pos.x, y: pos.y, time: now });
     if (velocityTrackerRef.current.length > 10) {
       velocityTrackerRef.current.shift();
     }
@@ -320,7 +322,7 @@ export function useMobileGestures(
           gestureTypeRef.current = 'horizontal-drag';
           opts.onGestureStart?.('horizontal-drag');
         } else if (absY > absX * 1.2) {
-          // Vertical drag - determine side
+          // Vertical drag - determine side using cached rect
           const rect = containerRectRef.current;
           if (rect) {
             const relX = (start.x - rect.left) / rect.width;
@@ -352,6 +354,33 @@ export function useMobileGestures(
       if (opts.preventScroll) e.preventDefault();
     }
     
+    // Throttle state updates to max 30fps during drag
+    const timeSinceLastUpdate = now - lastStateUpdateRef.current;
+    if (timeSinceLastUpdate < 33) {
+      // Queue update for next frame
+      pendingStateRef.current = {
+        type: gestureTypeRef.current,
+        currentX: pos.x,
+        currentY: pos.y,
+        deltaX,
+        deltaY,
+        duration: now - start.time,
+      };
+      
+      if (!stateUpdateRAFRef.current) {
+        stateUpdateRAFRef.current = requestAnimationFrame(() => {
+          if (pendingStateRef.current) {
+            setGestureState(prev => ({ ...prev, ...pendingStateRef.current }));
+            pendingStateRef.current = null;
+          }
+          stateUpdateRAFRef.current = null;
+          lastStateUpdateRef.current = Date.now();
+        });
+      }
+      return;
+    }
+    
+    lastStateUpdateRef.current = now;
     const velocity = calculateVelocity();
     
     setGestureState(prev => ({
@@ -363,7 +392,7 @@ export function useMobileGestures(
       deltaY,
       velocityX: velocity.x,
       velocityY: velocity.y,
-      duration: Date.now() - start.time,
+      duration: now - start.time,
     }));
   }, [opts, getPinchDistance, getTouchPosition, clearLongPressTimer, calculateVelocity]);
 
@@ -488,6 +517,9 @@ export function useMobileGestures(
       container.removeEventListener('touchend', touchEndHandler);
       container.removeEventListener('touchcancel', touchCancelHandler);
       clearLongPressTimer();
+      if (stateUpdateRAFRef.current) {
+        cancelAnimationFrame(stateUpdateRAFRef.current);
+      }
     };
   }, [containerRef, opts.enabled, handleTouchStart, handleTouchMove, handleTouchEnd, handleTouchCancel, clearLongPressTimer]);
 

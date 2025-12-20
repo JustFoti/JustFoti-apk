@@ -148,9 +148,6 @@ export default function MobileVideoPlayer({
   // Ref to track pending seek time (for resuming after source change)
   const pendingSeekTimeRef = useRef<number | null>(initialTime > 0 ? initialTime : null);
   
-  // Ref to track if we've attempted auto-fullscreen
-  const hasAttemptedAutoFullscreenRef = useRef(false);
-  
   // Store onError in a ref to avoid re-initialization when callback changes
   const onErrorRef = useRef(onError);
   useEffect(() => {
@@ -490,34 +487,16 @@ export default function MobileVideoPlayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+    
+    // Throttle timeupdate to reduce state updates
+    let lastTimeUpdate = 0;
+    
     const onPlay = () => { 
       setIsPlaying(true);
       handleWatchResume(video.currentTime, video.duration);
       
-      // Auto-enter fullscreen on first play for native mobile experience
-      if (!hasAttemptedAutoFullscreenRef.current && !isFullscreen) {
-        hasAttemptedAutoFullscreenRef.current = true;
-        // Small delay to ensure video is playing before requesting fullscreen
-        setTimeout(async () => {
-          try {
-            const container = containerRef.current;
-            if (!container) return;
-            
-            // Enter fullscreen - let users naturally rotate their device
-            if ((video as any).webkitEnterFullscreen) {
-              // iOS Safari - use native video fullscreen
-              (video as any).webkitEnterFullscreen();
-            } else if ((container as any).webkitRequestFullscreen) {
-              await (container as any).webkitRequestFullscreen();
-            } else if (container.requestFullscreen) {
-              await container.requestFullscreen();
-            }
-          } catch (e) {
-            // Fullscreen not allowed - continue playing inline
-            console.log('[MobilePlayer] Fullscreen not available, playing inline');
-          }
-        }, 100);
-      }
+      // Note: Auto-fullscreen removed - it requires user gesture and causes console errors
+      // Users can tap the fullscreen button or rotate their device
     };
     const onPause = () => { 
       setIsPlaying(false); 
@@ -527,6 +506,11 @@ export default function MobileVideoPlayer({
     const onWaiting = () => setIsBuffering(true);
     const onCanPlay = () => { setIsBuffering(false); setIsLoading(false); };
     const onTimeUpdate = () => {
+      // Throttle to ~4 updates per second to reduce re-renders
+      const now = Date.now();
+      if (now - lastTimeUpdate < 250) return;
+      lastTimeUpdate = now;
+      
       if (!isGestureActive) {
         setCurrentTime(video.currentTime);
         // Track watch progress
@@ -557,7 +541,7 @@ export default function MobileVideoPlayer({
       video.removeEventListener('durationchange', onDurationChange);
       video.removeEventListener('ended', onEnded);
     };
-  }, [isGestureActive, resetControlsTimeout, handleProgress, handleWatchPause, handleWatchResume, showResumePrompt, isFullscreen]);
+  }, [isGestureActive, resetControlsTimeout, handleProgress, handleWatchPause, handleWatchResume, showResumePrompt]);
 
   // Orientation detection
   useEffect(() => {
