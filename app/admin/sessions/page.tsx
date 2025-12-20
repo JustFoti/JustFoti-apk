@@ -44,12 +44,13 @@ export default function AdminSessionsPage() {
   
   const [sessions, setSessions] = useState<WatchSession[]>([]);
   const [localMetrics, setLocalMetrics] = useState<SessionMetrics | null>(null);
+  const [trafficSources, setTrafficSources] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'completed' | 'abandoned'>('all');
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'duration' | 'completion'>('recent');
   const [selectedSession, setSelectedSession] = useState<WatchSession | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'timeline'>('table');
+  const [viewMode, setViewMode] = useState<'table' | 'timeline' | 'traffic'>('table');
   const limit = 100;
   
   // Key metrics from unified stats - SINGLE SOURCE OF TRUTH
@@ -67,7 +68,22 @@ export default function AdminSessionsPage() {
 
   useEffect(() => {
     fetchSessions();
+    fetchTrafficSources();
   }, [dateRange, filter, contentTypeFilter, sortBy]);
+
+  const fetchTrafficSources = async () => {
+    try {
+      const response = await fetch('/api/admin/analytics/traffic-sources?days=7');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTrafficSources(data);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch traffic sources:', err);
+    }
+  };
 
   const fetchSessions = async () => {
     try {
@@ -297,6 +313,7 @@ export default function AdminSessionsPage() {
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={() => setViewMode('table')} style={{ ...viewButtonStyle, background: viewMode === 'table' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', color: viewMode === 'table' ? 'white' : '#94a3b8' }}>📋 Table</button>
           <button onClick={() => setViewMode('timeline')} style={{ ...viewButtonStyle, background: viewMode === 'timeline' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', color: viewMode === 'timeline' ? 'white' : '#94a3b8' }}>📈 Timeline</button>
+          <button onClick={() => setViewMode('traffic')} style={{ ...viewButtonStyle, background: viewMode === 'traffic' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', color: viewMode === 'traffic' ? 'white' : '#94a3b8' }}>🌐 Traffic</button>
           <button onClick={() => exportSessions()} style={{ ...viewButtonStyle, background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>📥 Export</button>
         </div>
       </div>
@@ -399,6 +416,106 @@ export default function AdminSessionsPage() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Traffic View */}
+      {viewMode === 'traffic' && trafficSources && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Traffic Overview */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', padding: '20px', textAlign: 'center', border: '1px solid rgba(16, 185, 129, 0.2)' }}>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#10b981' }}>{trafficSources.totals?.human_hits?.toLocaleString() || 0}</div>
+              <div style={{ color: '#94a3b8', fontSize: '13px', marginTop: '4px' }}>Human Hits</div>
+            </div>
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', padding: '20px', textAlign: 'center', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#ef4444' }}>{trafficSources.totals?.bot_hits?.toLocaleString() || 0}</div>
+              <div style={{ color: '#94a3b8', fontSize: '13px', marginTop: '4px' }}>Bot Hits</div>
+            </div>
+            <div style={{ background: 'rgba(120, 119, 198, 0.1)', borderRadius: '12px', padding: '20px', textAlign: 'center', border: '1px solid rgba(120, 119, 198, 0.2)' }}>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#7877c6' }}>{trafficSources.totals?.total_hits?.toLocaleString() || 0}</div>
+              <div style={{ color: '#94a3b8', fontSize: '13px', marginTop: '4px' }}>Total Hits</div>
+            </div>
+            <div style={{ background: 'rgba(59, 130, 246, 0.1)', borderRadius: '12px', padding: '20px', textAlign: 'center', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>{trafficSources.totals?.unique_visitors?.toLocaleString() || 0}</div>
+              <div style={{ color: '#94a3b8', fontSize: '13px', marginTop: '4px' }}>Unique Visitors</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+            {/* Traffic by Medium */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '16px' }}>📊 Traffic by Medium</h3>
+              {trafficSources.mediumStats?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {trafficSources.mediumStats.map((medium: any) => {
+                    const total = trafficSources.mediumStats.reduce((sum: number, m: any) => sum + parseInt(m.hit_count), 0);
+                    const pct = total > 0 ? Math.round((parseInt(medium.hit_count) / total) * 100) : 0;
+                    const colors: Record<string, string> = { direct: '#10b981', organic: '#3b82f6', social: '#ec4899', referral: '#f59e0b' };
+                    return (
+                      <div key={medium.referrer_medium || 'unknown'}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ color: '#f8fafc', fontSize: '13px', textTransform: 'capitalize' }}>{medium.referrer_medium || 'Unknown'}</span>
+                          <span style={{ color: '#94a3b8', fontSize: '12px' }}>{parseInt(medium.hit_count).toLocaleString()} ({pct}%)</span>
+                        </div>
+                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: colors[medium.referrer_medium] || '#7877c6', borderRadius: '4px' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No medium data</div>
+              )}
+            </div>
+
+            {/* Top Referrers */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '16px' }}>🌐 Top Referring Domains</h3>
+              {trafficSources.topReferrers?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {trafficSources.topReferrers.slice(0, 8).map((ref: any, idx: number) => (
+                    <div key={ref.referrer_domain || idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                      <span style={{ color: '#64748b', fontSize: '12px', width: '24px' }}>#{idx + 1}</span>
+                      <span style={{ color: '#f8fafc', fontSize: '13px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {ref.referrer_domain || 'Direct'}
+                      </span>
+                      <span style={{ color: '#7877c6', fontSize: '13px', fontWeight: '600' }}>{parseInt(ref.hit_count).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No referrer data</div>
+              )}
+            </div>
+
+            {/* Bot Breakdown */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '16px' }}>🤖 Bot Traffic Breakdown</h3>
+              {trafficSources.botStats?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {trafficSources.botStats.slice(0, 8).map((bot: any, idx: number) => (
+                    <div key={bot.source_name || idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(239, 68, 68, 0.05)', borderRadius: '8px' }}>
+                      <span style={{ fontSize: '14px' }}>🤖</span>
+                      <span style={{ color: '#f8fafc', fontSize: '13px', flex: 1 }}>{bot.source_name || 'Unknown Bot'}</span>
+                      <span style={{ color: '#ef4444', fontSize: '13px', fontWeight: '600' }}>{parseInt(bot.hit_count).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No bot traffic detected</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewMode === 'traffic' && !trafficSources && (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🌐</div>
+          <h3 style={{ color: '#f8fafc', margin: '0 0 8px 0' }}>Traffic Sources</h3>
+          <p>Loading traffic source data...</p>
         </div>
       )}
 

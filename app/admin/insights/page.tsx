@@ -22,24 +22,69 @@ interface ReferrerData {
   count: number;
 }
 
+interface TrafficSourceData {
+  totals: {
+    total_hits: number;
+    unique_visitors: number;
+    bot_hits: number;
+    human_hits: number;
+  };
+  sourceTypeStats: Array<{ source_type: string; hit_count: number; unique_visitors: number }>;
+  mediumStats: Array<{ referrer_medium: string; hit_count: number; unique_visitors: number }>;
+  topReferrers: Array<{ referrer_domain: string; referrer_medium: string; hit_count: number }>;
+  botStats: Array<{ source_name: string; hit_count: number }>;
+}
+
+interface PresenceStatsData {
+  totals: { total_active: number; truly_active: number; total_sessions: number };
+  activityBreakdown: Array<{ activity_type: string; user_count: number; truly_active: number }>;
+  validationScores: Array<{ trust_level: string; user_count: number; avg_score: number }>;
+  activeContent: Array<{ content_title: string; content_type: string; activity_type: string; viewer_count: number }>;
+  geoDistribution: Array<{ country: string; city: string; user_count: number }>;
+}
+
 export default function InsightsPage() {
   const { stats: unifiedStats, lastRefresh } = useStats();
   
   const [hourlyData, setHourlyData] = useState<HourlyData[]>([]);
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [referrers, setReferrers] = useState<ReferrerData[]>([]);
+  const [trafficSources, setTrafficSources] = useState<TrafficSourceData | null>(null);
+  const [presenceStats, setPresenceStats] = useState<PresenceStatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedTimeRange, setSelectedTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
 
   const fetchInsightsData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/insights?range=${selectedTimeRange}`);
-      if (response.ok) {
-        const data = await response.json();
+      const days = selectedTimeRange === '24h' ? 1 : selectedTimeRange === '7d' ? 7 : 30;
+      
+      // Fetch all data in parallel
+      const [insightsRes, trafficRes, presenceRes] = await Promise.all([
+        fetch(`/api/admin/insights?range=${selectedTimeRange}`),
+        fetch(`/api/admin/analytics/traffic-sources?days=${days}`),
+        fetch(`/api/admin/analytics/presence-stats?minutes=30`)
+      ]);
+      
+      if (insightsRes.ok) {
+        const data = await insightsRes.json();
         setHourlyData(data.hourlyActivity || []);
         setDailyData(data.dailyTrend || []);
         setReferrers(data.referrers || []);
+      }
+      
+      if (trafficRes.ok) {
+        const data = await trafficRes.json();
+        if (data.success) {
+          setTrafficSources(data);
+        }
+      }
+      
+      if (presenceRes.ok) {
+        const data = await presenceRes.json();
+        if (data.success) {
+          setPresenceStats(data);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch insights:', err);
@@ -484,6 +529,167 @@ export default function InsightsPage() {
           )}
         </div>
       </div>
+
+      {/* SERVER-SIDE TRAFFIC ANALYTICS */}
+      {trafficSources && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px', marginBottom: '28px' }}>
+          {/* Bot vs Human Traffic */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>🤖</span> Bot vs Human Traffic
+            </h3>
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ flex: 1, background: 'rgba(16, 185, 129, 0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                <div style={{ fontSize: '28px', fontWeight: '700', color: '#10b981' }}>
+                  {trafficSources.totals.human_hits?.toLocaleString() || 0}
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '4px' }}>Human Hits</div>
+              </div>
+              <div style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
+                <div style={{ fontSize: '28px', fontWeight: '700', color: '#ef4444' }}>
+                  {trafficSources.totals.bot_hits?.toLocaleString() || 0}
+                </div>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '4px' }}>Bot Hits</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ color: '#64748b', fontSize: '12px' }}>Total:</span>
+              <span style={{ color: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                {trafficSources.totals.total_hits?.toLocaleString() || 0} hits
+              </span>
+              <span style={{ color: '#64748b', fontSize: '12px', marginLeft: 'auto' }}>
+                {trafficSources.totals.unique_visitors?.toLocaleString() || 0} unique
+              </span>
+            </div>
+          </div>
+
+          {/* Traffic by Medium */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>📊</span> Traffic by Medium
+            </h3>
+            {trafficSources.mediumStats.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {trafficSources.mediumStats.slice(0, 5).map((medium) => {
+                  const total = trafficSources.mediumStats.reduce((sum, m) => sum + parseInt(String(m.hit_count)), 0);
+                  const pct = total > 0 ? (parseInt(String(medium.hit_count)) / total) * 100 : 0;
+                  const colors: Record<string, string> = { direct: '#10b981', organic: '#3b82f6', social: '#ec4899', referral: '#f59e0b' };
+                  return (
+                    <div key={medium.referrer_medium || 'unknown'}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: '#f8fafc', fontSize: '13px', textTransform: 'capitalize' }}>{medium.referrer_medium || 'Unknown'}</span>
+                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{parseInt(String(medium.hit_count)).toLocaleString()}</span>
+                      </div>
+                      <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: colors[medium.referrer_medium] || '#7877c6', borderRadius: '3px' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No medium data yet</div>
+            )}
+          </div>
+
+          {/* Top Referring Domains */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>🌐</span> Top Referring Domains
+            </h3>
+            {trafficSources.topReferrers.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {trafficSources.topReferrers.slice(0, 6).map((ref, idx) => (
+                  <div key={ref.referrer_domain || idx} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                    <span style={{ color: '#64748b', fontSize: '12px', width: '20px' }}>#{idx + 1}</span>
+                    <span style={{ color: '#f8fafc', fontSize: '13px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ref.referrer_domain || 'Direct'}
+                    </span>
+                    <span style={{ color: '#7877c6', fontSize: '13px', fontWeight: '600' }}>{parseInt(String(ref.hit_count)).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No referrer data yet</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REAL-TIME PRESENCE STATS */}
+      {presenceStats && (
+        <div style={{ 
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.05))', 
+          border: '1px solid rgba(16, 185, 129, 0.2)', 
+          borderRadius: '16px', 
+          padding: '24px',
+          marginBottom: '28px'
+        }}>
+          <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '20px' }}>🟢</span> Real-Time Presence (Last 30 min)
+            <span style={{ 
+              marginLeft: 'auto', 
+              fontSize: '12px', 
+              color: '#10b981', 
+              background: 'rgba(16, 185, 129, 0.2)', 
+              padding: '4px 10px', 
+              borderRadius: '12px' 
+            }}>
+              {presenceStats.totals.truly_active} truly active
+            </span>
+          </h3>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+            {/* Activity Breakdown */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Activity Breakdown</h4>
+              {presenceStats.activityBreakdown.map((activity) => {
+                const icons: Record<string, string> = { watching: '▶️', browsing: '🔍', livetv: '📺' };
+                return (
+                  <div key={activity.activity_type} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '16px' }}>{icons[activity.activity_type] || '👤'}</span>
+                    <span style={{ color: '#f8fafc', fontSize: '13px', flex: 1, textTransform: 'capitalize' }}>{activity.activity_type}</span>
+                    <span style={{ color: '#10b981', fontSize: '14px', fontWeight: '600' }}>{activity.user_count}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Trust Levels */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>User Trust Levels</h4>
+              {presenceStats.validationScores.map((score) => {
+                const colors: Record<string, string> = { high_trust: '#10b981', medium_trust: '#f59e0b', low_trust: '#3b82f6', suspicious: '#ef4444' };
+                return (
+                  <div key={score.trust_level} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: colors[score.trust_level] || '#64748b' }} />
+                    <span style={{ color: '#f8fafc', fontSize: '13px', flex: 1, textTransform: 'capitalize' }}>{score.trust_level.replace('_', ' ')}</span>
+                    <span style={{ color: colors[score.trust_level] || '#64748b', fontSize: '14px', fontWeight: '600' }}>{score.user_count}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Currently Watching */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', padding: '16px' }}>
+              <h4 style={{ margin: '0 0 12px 0', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>Currently Watching</h4>
+              {presenceStats.activeContent.length > 0 ? (
+                presenceStats.activeContent.slice(0, 4).map((content, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '14px' }}>{content.activity_type === 'livetv' ? '📺' : '🎬'}</span>
+                    <span style={{ color: '#f8fafc', fontSize: '12px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {content.content_title}
+                    </span>
+                    <span style={{ color: '#7877c6', fontSize: '13px', fontWeight: '600' }}>{content.viewer_count}</span>
+                  </div>
+                ))
+              ) : (
+                <div style={{ color: '#64748b', fontSize: '12px' }}>No active viewers</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* EXPORT & PROOF SECTION */}
       <div style={{ 

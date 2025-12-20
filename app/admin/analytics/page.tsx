@@ -77,9 +77,10 @@ export default function AnalyticsPage() {
   const [sessions, setSessions] = useState<WatchSession[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [liveTVAnalytics, setLiveTVAnalytics] = useState<LiveTVAnalytics | null>(null);
+  const [trafficSources, setTrafficSources] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('7d');
-  const [activeTab, setActiveTab] = useState<'vod' | 'livetv' | 'trends' | 'engagement'>('vod');
+  const [activeTab, setActiveTab] = useState<'vod' | 'livetv' | 'trends' | 'engagement' | 'traffic'>('vod');
   const [sortField, setSortField] = useState<'started_at' | 'total_watch_time' | 'completion_percentage'>('started_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [filterDevice, setFilterDevice] = useState<string>('all');
@@ -89,7 +90,23 @@ export default function AnalyticsPage() {
   useEffect(() => {
     fetchAnalytics();
     fetchLiveTVAnalytics();
+    fetchTrafficSources();
   }, [timeRange]);
+
+  const fetchTrafficSources = async () => {
+    try {
+      const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
+      const response = await fetch(`/api/admin/analytics/traffic-sources?days=${days}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setTrafficSources(data);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch traffic sources:', error);
+    }
+  };
 
   const fetchAnalytics = async () => {
     setLoading(true);
@@ -374,6 +391,7 @@ export default function AnalyticsPage() {
           { id: 'livetv', label: '📺 Live TV', count: liveTVAnalytics?.currentViewers || 0 },
           { id: 'trends', label: '📈 Trends', count: null },
           { id: 'engagement', label: '💡 Engagement', count: null },
+          { id: 'traffic', label: '🌐 Traffic', count: trafficSources?.totals?.total_hits || null },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -760,6 +778,117 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Traffic Tab */}
+      {activeTab === 'traffic' && trafficSources && (
+        <div className={styles.trafficSection}>
+          <h2>Traffic Source Analytics</h2>
+          <p style={{ color: '#94a3b8', marginBottom: '24px' }}>Server-side traffic tracking including bots, referrers, and source types</p>
+          
+          {/* Traffic Overview Stats */}
+          <div className={styles.statsGrid}>
+            <StatCard title="Total Hits" value={trafficSources.totals?.total_hits || 0} icon="📊" color="#7877c6" />
+            <StatCard title="Human Hits" value={trafficSources.totals?.human_hits || 0} icon="👤" color="#10b981" />
+            <StatCard title="Bot Hits" value={trafficSources.totals?.bot_hits || 0} icon="🤖" color="#ef4444" />
+            <StatCard title="Unique Visitors" value={trafficSources.totals?.unique_visitors || 0} icon="👥" color="#3b82f6" />
+          </div>
+
+          <div className={styles.breakdownSection}>
+            {/* Traffic by Medium */}
+            <div className={styles.breakdown}>
+              <h3>Traffic by Medium</h3>
+              <div className={styles.breakdownList}>
+                {trafficSources.mediumStats?.map((medium: any) => {
+                  const total = trafficSources.mediumStats.reduce((sum: number, m: any) => sum + parseInt(m.hit_count), 0);
+                  const percentage = total > 0 ? Math.round((parseInt(medium.hit_count) / total) * 100) : 0;
+                  const colors: Record<string, string> = { direct: '#10b981', organic: '#3b82f6', social: '#ec4899', referral: '#f59e0b' };
+                  return (
+                    <div key={medium.referrer_medium || 'unknown'} className={styles.breakdownItem}>
+                      <div className={styles.breakdownLabel}>
+                        <span style={{ textTransform: 'capitalize' }}>{medium.referrer_medium || 'Unknown'}</span>
+                      </div>
+                      <div className={styles.breakdownBar}>
+                        <div className={styles.breakdownBarFill} style={{ width: `${percentage}%`, background: colors[medium.referrer_medium] || '#7877c6' }} />
+                      </div>
+                      <span className={styles.breakdownValue}>{parseInt(medium.hit_count).toLocaleString()} ({percentage}%)</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Top Referrers */}
+            <div className={styles.breakdown}>
+              <h3>Top Referring Domains</h3>
+              <div className={styles.breakdownList}>
+                {trafficSources.topReferrers?.slice(0, 8).map((ref: any, idx: number) => (
+                  <div key={ref.referrer_domain || idx} className={styles.breakdownItem}>
+                    <div className={styles.breakdownLabel}>
+                      <span style={{ color: '#64748b', marginRight: '8px' }}>#{idx + 1}</span>
+                      <span>{ref.referrer_domain || 'Direct'}</span>
+                    </div>
+                    <span className={styles.breakdownValue}>{parseInt(ref.hit_count).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Bot Breakdown */}
+          {trafficSources.botStats?.length > 0 && (
+            <div style={{ marginTop: '24px' }}>
+              <h3 style={{ color: '#f8fafc', marginBottom: '16px' }}>🤖 Bot Traffic Breakdown</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                {trafficSources.botStats.slice(0, 12).map((bot: any, idx: number) => (
+                  <div key={bot.source_name || idx} style={{ 
+                    background: 'rgba(239, 68, 68, 0.1)', 
+                    border: '1px solid rgba(239, 68, 68, 0.2)', 
+                    borderRadius: '8px', 
+                    padding: '12px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#f8fafc', fontSize: '13px' }}>{bot.source_name || 'Unknown'}</span>
+                    <span style={{ color: '#ef4444', fontWeight: '600' }}>{parseInt(bot.hit_count).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Geographic Distribution */}
+          {trafficSources.geoStats?.length > 0 && (
+            <div style={{ marginTop: '24px' }}>
+              <h3 style={{ color: '#f8fafc', marginBottom: '16px' }}>🌍 Geographic Distribution</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px' }}>
+                {trafficSources.geoStats.slice(0, 10).map((geo: any, idx: number) => (
+                  <div key={geo.country || idx} style={{ 
+                    background: 'rgba(255, 255, 255, 0.03)', 
+                    border: '1px solid rgba(255, 255, 255, 0.1)', 
+                    borderRadius: '8px', 
+                    padding: '12px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#f8fafc', fontSize: '13px' }}>{geo.country || 'Unknown'}</span>
+                    <span style={{ color: '#7877c6', fontWeight: '600' }}>{parseInt(geo.hit_count).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'traffic' && !trafficSources && (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🌐</div>
+          <h3 style={{ color: '#f8fafc', margin: '0 0 8px 0' }}>Traffic Sources</h3>
+          <p>Loading traffic source data...</p>
         </div>
       )}
     </div>
