@@ -67,6 +67,19 @@ const HEARTBEAT_INTERVAL = intervals.heartbeat;
 const MIN_HEARTBEAT_GAP = intervals.minGap;
 const INACTIVITY_TIMEOUT = intervals.inactivity;
 
+// Polyfill for requestIdleCallback
+const requestIdleCallback = typeof window !== 'undefined' && 'requestIdleCallback' in window
+  ? window.requestIdleCallback
+  : (cb: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void, options?: { timeout?: number }) => {
+      const start = Date.now();
+      return setTimeout(() => {
+        cb({
+          didTimeout: false,
+          timeRemaining: () => Math.max(0, 50 - (Date.now() - start)),
+        });
+      }, options?.timeout ? Math.min(options.timeout, 1) : 1) as unknown as number;
+    };
+
 // Generate persistent user ID with fingerprinting
 // Deferred to avoid blocking initial render
 function getUserId(): string {
@@ -389,20 +402,18 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
     }
   }, [sendHeartbeat]);
   
-  // Initialize with enhanced bot detection - DEFERRED to avoid blocking render
+  // Initialize with enhanced bot detection
   useEffect(() => {
     if (typeof window === 'undefined' || isInitializedRef.current) return;
+    isInitializedRef.current = true;
     
-    // Defer all heavy initialization to after first paint
-    const initTimeout = setTimeout(() => {
-      if (isInitializedRef.current) return;
-      
-      // Log routing configuration
-      const usingCF = isUsingCloudflareAnalytics();
-      console.log(`[Presence] Analytics routing: ${usingCF ? 'Cloudflare Worker' : 'Vercel Edge'}`);
-      console.log(`[Presence] Heartbeat interval: ${HEARTBEAT_INTERVAL / 1000}s, Min gap: ${MIN_HEARTBEAT_GAP / 1000}s`);
-      
-      // Run comprehensive bot detection
+    // Log routing configuration
+    const usingCF = isUsingCloudflareAnalytics();
+    console.log(`[Presence] Analytics routing: ${usingCF ? 'Cloudflare Worker' : 'Vercel Edge'}`);
+    console.log(`[Presence] Heartbeat interval: ${HEARTBEAT_INTERVAL / 1000}s, Min gap: ${MIN_HEARTBEAT_GAP / 1000}s`);
+    
+    // Run bot detection asynchronously to not block render
+    requestIdleCallback(() => {
       const botResult = detectBotClient();
       botDetectionRef.current = botResult;
       
@@ -414,58 +425,53 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
       if (botResult.confidence >= 40) {
         console.log('[Presence] Suspicious activity detected:', botResult.reasons);
       }
-      
-      isInitializedRef.current = true;
-      
-      // Initialize GLOBAL behavioral tracking (tracks from page load)
-      initGlobalBehavioralTracking();
-      
-      // Initialize behavioral analyzer
-      behaviorAnalyzerRef.current = new BehaviorAnalyzer();
-      
-      // Defer canvas fingerprint to avoid forced reflow
-      requestAnimationFrame(() => {
-        getCanvasFingerprint();
-      });
-      
-      const uid = getUserId();
-      const sid = getSessionId();
-      setUserId(uid);
-      setSessionId(sid);
-      
-      // Setup event listeners for interaction tracking
-      const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-      const interactionHandler = (e: Event) => handleInteraction(e);
-      interactionEvents.forEach(e => document.addEventListener(e, interactionHandler, { passive: true }));
-      
-      // Separate mouse move handler for behavioral analysis (throttled in the handler)
-      document.addEventListener('mousemove', handleMouseMove, { passive: true });
-      
-      // Scroll tracking for behavioral analysis
-      window.addEventListener('scroll', handleScroll, { passive: true });
-      
-      document.addEventListener('visibilitychange', handleVisibility);
-      window.addEventListener('beforeunload', handleUnload);
-      window.addEventListener('pagehide', handleUnload);
-      
-      // Start heartbeat interval
-      heartbeatIntervalRef.current = setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          sendHeartbeat(isActive);
-        }
-      }, HEARTBEAT_INTERVAL);
-      
-      // Initial heartbeat (delayed to allow bot detection and page components to set their context)
-      setTimeout(() => sendHeartbeat(true), 1000);
-    }, 100); // 100ms delay to let first paint complete
+    }, { timeout: 2000 });
+    
+    // Initialize GLOBAL behavioral tracking (tracks from page load)
+    initGlobalBehavioralTracking();
+    
+    // Initialize behavioral analyzer
+    behaviorAnalyzerRef.current = new BehaviorAnalyzer();
+    
+    // Defer canvas fingerprint to avoid forced reflow
+    requestIdleCallback(() => {
+      getCanvasFingerprint();
+    }, { timeout: 5000 });
+    
+    const uid = getUserId();
+    const sid = getSessionId();
+    setUserId(uid);
+    setSessionId(sid);
+    
+    // Setup event listeners for interaction tracking
+    const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    const interactionHandler = (e: Event) => handleInteraction(e);
+    interactionEvents.forEach(e => document.addEventListener(e, interactionHandler, { passive: true }));
+    
+    // Separate mouse move handler for behavioral analysis (throttled in the handler)
+    document.addEventListener('mousemove', handleMouseMove, { passive: true });
+    
+    // Scroll tracking for behavioral analysis
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('beforeunload', handleUnload);
+    window.addEventListener('pagehide', handleUnload);
+    
+    // Start heartbeat interval
+    heartbeatIntervalRef.current = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat(isActive);
+      }
+    }, HEARTBEAT_INTERVAL);
+    
+    // Initial heartbeat (delayed to allow page components to set their context)
+    setTimeout(() => sendHeartbeat(true), 1000);
     
     return () => {
-      clearTimeout(initTimeout);
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
       if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
       
-      const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-      const interactionHandler = (e: Event) => handleInteraction(e);
       interactionEvents.forEach(e => document.removeEventListener(e, interactionHandler));
       document.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('scroll', handleScroll);
@@ -473,9 +479,7 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
       window.removeEventListener('beforeunload', handleUnload);
       window.removeEventListener('pagehide', handleUnload);
       
-      if (isInitializedRef.current) {
-        sendHeartbeat(false, true);
-      }
+      sendHeartbeat(false, true);
       isInitializedRef.current = false;
       behaviorAnalyzerRef.current = null;
     };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 interface MobileInfo {
   isMobile: boolean;
@@ -106,43 +106,23 @@ function getStaticDeviceInfo() {
 }
 
 export function useIsMobile(): MobileInfo {
-  const [mobileInfo, setMobileInfo] = useState<MobileInfo>(defaultMobileInfo);
-  const initializedRef = useRef(false);
-
-  const detectMobile = useCallback(() => {
-    if (typeof window === 'undefined') {
-      return defaultMobileInfo;
-    }
-
-    // Get cached static info (device type, browser, etc.)
+  // Initialize with actual values synchronously to avoid flash/re-render
+  const [mobileInfo, setMobileInfo] = useState<MobileInfo>(() => {
+    if (typeof window === 'undefined') return defaultMobileInfo;
+    
     const staticInfo = getStaticDeviceInfo();
     if (!staticInfo) return defaultMobileInfo;
     
-    // Only dynamic values that can change
-    const screenWidth = window.innerWidth;
-    const screenHeight = window.innerHeight;
-    const isLandscape = screenWidth > screenHeight;
-
     return {
       ...staticInfo,
       supportsHLS: checkHLSSupport(),
-      screenWidth,
-      screenHeight,
-      isLandscape,
+      screenWidth: window.innerWidth,
+      screenHeight: window.innerHeight,
+      isLandscape: window.innerWidth > window.innerHeight,
     };
-  }, []);
+  });
 
   useEffect(() => {
-    // Only run once on mount
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-    
-    // Initial detection - deferred to avoid blocking render
-    requestAnimationFrame(() => {
-      const initialInfo = detectMobile();
-      setMobileInfo(initialInfo);
-    });
-
     // Throttled resize handler - only updates dimensions, not device type
     let resizeTimeout: NodeJS.Timeout | null = null;
     const handleResize = () => {
@@ -179,7 +159,7 @@ export function useIsMobile(): MobileInfo {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('orientationchange', handleResize);
     };
-  }, [detectMobile]);
+  }, []);
 
   return mobileInfo;
 }

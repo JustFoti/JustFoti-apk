@@ -255,13 +255,14 @@ export default function TrafficSourcesPage() {
       {/* Referrers Tab */}
       {activeTab === 'referrers' && trafficData && (
         <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', overflow: 'hidden' }}>
-          <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
-            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>Top Referring Domains</h3>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>Top Referring Domains ({trafficData.topReferrers?.length || 0} domains)</h3>
           </div>
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: 'auto', maxHeight: '600px', overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
+              <thead style={{ position: 'sticky', top: 0, background: '#1e1e2e', zIndex: 1 }}>
                 <tr style={{ background: 'rgba(255, 255, 255, 0.02)' }}>
+                  <th style={thStyle}>#</th>
                   <th style={thStyle}>Domain</th>
                   <th style={thStyle}>Medium</th>
                   <th style={thStyle}>Hits</th>
@@ -269,14 +270,15 @@ export default function TrafficSourcesPage() {
                 </tr>
               </thead>
               <tbody>
-                {trafficData.topReferrers?.length > 0 ? trafficData.topReferrers.map((ref) => (
+                {trafficData.topReferrers?.length > 0 ? trafficData.topReferrers.map((ref, idx) => (
                   <tr key={ref.referrer_domain} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ ...tdStyle, color: '#64748b', width: '50px' }}>{idx + 1}</td>
                     <td style={tdStyle}><strong>{ref.referrer_domain}</strong></td>
                     <td style={tdStyle}><span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', background: 'rgba(120, 119, 198, 0.2)', color: '#a5b4fc', textTransform: 'capitalize' }}>{ref.referrer_medium}</span></td>
                     <td style={tdStyle}>{formatNumber(ref.hit_count)}</td>
                     <td style={tdStyle}>{new Date(ref.last_hit).toLocaleString()}</td>
                   </tr>
-                )) : <tr><td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No referrer data yet</td></tr>}
+                )) : <tr><td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No referrer data yet</td></tr>}
               </tbody>
             </table>
           </div>
