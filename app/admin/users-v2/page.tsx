@@ -115,7 +115,8 @@ export default function UsersV2Page() {
     { id: 'activity', label: 'Activity', icon: '📈' },
   ];
 
-  if (loading && !engagementStats) {
+  // Show loading state when either stats or user data is loading
+  if ((loading || statsLoading) && !engagementStats) {
     return <LoadingState message="Loading user data..." />;
   }
 
@@ -165,7 +166,7 @@ export default function UsersV2Page() {
           setSearchQuery={setSearchQuery}
           sortBy={sortBy}
           setSortBy={setSortBy}
-          onUserClick={(user) => router.push(`/admin/users?userId=${encodeURIComponent(user.user_id)}`)}
+          onUserClick={(user: UserEngagement) => router.push(`/admin/users?userId=${encodeURIComponent(user.user_id)}`)}
         />
       )}
 
@@ -264,6 +265,59 @@ function OverviewTab({ stats, engagementStats, engagementDistribution, visitFreq
           </Card>
         </Grid>
       </div>
+
+      {/* Engagement Distribution & Visit Frequency Summary */}
+      <div style={{ marginTop: '24px' }}>
+        <Grid cols={2} gap="24px">
+          <Card title="Engagement Distribution" icon="🎯">
+            {engagementDistribution?.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {engagementDistribution.slice(0, 4).map((seg: any) => {
+                  const total = engagementDistribution.reduce((sum: number, s: any) => sum + s.count, 0);
+                  const segColors: Record<string, string> = {
+                    highly_engaged: colors.success,
+                    engaged: colors.warning,
+                    casual: colors.info,
+                    new: colors.text.muted,
+                  };
+                  return (
+                    <div key={seg.segment}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: colors.text.primary, textTransform: 'capitalize' }}>{seg.segment.replace('_', ' ')}</span>
+                        <span style={{ color: colors.text.muted }}>{seg.count} ({getPercentage(seg.count, total)}%)</span>
+                      </div>
+                      <ProgressBar value={seg.count} max={total} color={segColors[seg.segment] || colors.primary} height={6} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ color: colors.text.muted, textAlign: 'center', padding: '20px' }}>No engagement data</div>
+            )}
+          </Card>
+
+          <Card title="Visit Frequency" icon="📊">
+            {visitFrequency?.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {visitFrequency.slice(0, 4).map((freq: any) => {
+                  const total = visitFrequency.reduce((sum: number, f: any) => sum + f.count, 0);
+                  return (
+                    <div key={freq.visits_range}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ color: colors.text.primary }}>{freq.visits_range} visits</span>
+                        <span style={{ color: colors.text.muted }}>{freq.count} ({getPercentage(freq.count, total)}%)</span>
+                      </div>
+                      <ProgressBar value={freq.count} max={total} gradient={gradients.mixed} height={6} />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ color: colors.text.muted, textAlign: 'center', padding: '20px' }}>No frequency data</div>
+            )}
+          </Card>
+        </Grid>
+      </div>
     </>
   );
 }
@@ -283,12 +337,22 @@ function UserListTab({ users, searchQuery, setSearchQuery, sortBy, setSortBy, on
     return 'New';
   };
 
+  const getUserTypeBadge = (visits: number) => {
+    if (visits >= 20) return { label: 'Power User', color: colors.pink };
+    if (visits >= 10) return { label: 'Regular', color: colors.success };
+    if (visits >= 3) return { label: 'Returning', color: colors.warning };
+    return { label: 'New', color: colors.info };
+  };
+
   const columns = [
     {
       key: 'user_id',
       header: 'User ID',
       render: (u: UserEngagement) => (
-        <code style={{ fontSize: '12px', color: colors.text.muted }}>{u.user_id.substring(0, 16)}...</code>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <code style={{ fontSize: '12px', color: colors.text.muted }}>{u.user_id.substring(0, 16)}...</code>
+          <Badge color={getUserTypeBadge(u.total_visits).color}>{getUserTypeBadge(u.total_visits).label}</Badge>
+        </div>
       ),
     },
     { key: 'total_visits', header: 'Visits', render: (u: UserEngagement) => <strong>{u.total_visits}</strong> },
