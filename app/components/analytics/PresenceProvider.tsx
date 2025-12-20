@@ -68,6 +68,7 @@ const MIN_HEARTBEAT_GAP = intervals.minGap;
 const INACTIVITY_TIMEOUT = intervals.inactivity;
 
 // Generate persistent user ID with fingerprinting
+// Deferred to avoid blocking initial render
 function getUserId(): string {
   if (typeof window === 'undefined') return '';
   
@@ -75,6 +76,7 @@ function getUserId(): string {
   if (userId) return userId;
   
   // Generate fingerprint-based ID with more components
+  // Note: Canvas fingerprint is deferred to avoid forced reflow
   const components = [
     navigator.userAgent,
     navigator.language,
@@ -82,8 +84,6 @@ function getUserId(): string {
     new Date().getTimezoneOffset(),
     navigator.hardwareConcurrency || 0,
     navigator.platform || '',
-    // Canvas fingerprint
-    getCanvasFingerprint(),
     Math.random().toString(36).substring(2, 8),
   ];
   
@@ -99,12 +99,19 @@ function getUserId(): string {
   return userId;
 }
 
-// Canvas fingerprint for user identification
+// Canvas fingerprint for user identification - DEFERRED
+// Only called after initial render to avoid forced reflow
+let cachedCanvasFingerprint: string | null = null;
 function getCanvasFingerprint(): string {
+  if (cachedCanvasFingerprint !== null) return cachedCanvasFingerprint;
+  
   try {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    if (!ctx) return 'no-canvas';
+    if (!ctx) {
+      cachedCanvasFingerprint = 'no-canvas';
+      return cachedCanvasFingerprint;
+    }
     
     ctx.textBaseline = 'top';
     ctx.font = '14px Arial';
@@ -112,9 +119,11 @@ function getCanvasFingerprint(): string {
     ctx.fillRect(125, 1, 62, 20);
     ctx.fillStyle = '#069';
     ctx.fillText('Flyx', 2, 15);
-    return canvas.toDataURL().slice(-30);
+    cachedCanvasFingerprint = canvas.toDataURL().slice(-30);
+    return cachedCanvasFingerprint;
   } catch {
-    return 'canvas-error';
+    cachedCanvasFingerprint = 'canvas-error';
+    return cachedCanvasFingerprint;
   }
 }
 
@@ -380,72 +389,83 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
     }
   }, [sendHeartbeat]);
   
-  // Initialize with enhanced bot detection
+  // Initialize with enhanced bot detection - DEFERRED to avoid blocking render
   useEffect(() => {
     if (typeof window === 'undefined' || isInitializedRef.current) return;
     
-    // Log routing configuration
-    const usingCF = isUsingCloudflareAnalytics();
-    console.log(`[Presence] Analytics routing: ${usingCF ? 'Cloudflare Worker' : 'Vercel Edge'}`);
-    console.log(`[Presence] Heartbeat interval: ${HEARTBEAT_INTERVAL / 1000}s, Min gap: ${MIN_HEARTBEAT_GAP / 1000}s`);
-    
-    // Run comprehensive bot detection
-    const botResult = detectBotClient();
-    botDetectionRef.current = botResult;
-    
-    if (botResult.isBot && botResult.confidence >= 70) {
-      console.log('[Presence] Bot detected with high confidence:', botResult.reasons);
-      return;
-    }
-    
-    if (botResult.confidence >= 40) {
-      console.log('[Presence] Suspicious activity detected:', botResult.reasons);
-      // Still track but flag as suspicious
-    }
-    
-    isInitializedRef.current = true;
-    
-    // Initialize GLOBAL behavioral tracking (tracks from page load)
-    initGlobalBehavioralTracking();
-    
-    // Initialize behavioral analyzer
-    behaviorAnalyzerRef.current = new BehaviorAnalyzer();
-    
-    const uid = getUserId();
-    const sid = getSessionId();
-    setUserId(uid);
-    setSessionId(sid);
-    
-    // Setup event listeners for interaction tracking
-    const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-    const interactionHandler = (e: Event) => handleInteraction(e);
-    interactionEvents.forEach(e => document.addEventListener(e, interactionHandler, { passive: true }));
-    
-    // Separate mouse move handler for behavioral analysis (throttled in the handler)
-    document.addEventListener('mousemove', handleMouseMove, { passive: true });
-    
-    // Scroll tracking for behavioral analysis
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('beforeunload', handleUnload);
-    window.addEventListener('pagehide', handleUnload);
-    
-    // OPTIMIZED: Start heartbeat interval at 60s (was 30s)
-    heartbeatIntervalRef.current = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        sendHeartbeat(isActive);
+    // Defer all heavy initialization to after first paint
+    const initTimeout = setTimeout(() => {
+      if (isInitializedRef.current) return;
+      
+      // Log routing configuration
+      const usingCF = isUsingCloudflareAnalytics();
+      console.log(`[Presence] Analytics routing: ${usingCF ? 'Cloudflare Worker' : 'Vercel Edge'}`);
+      console.log(`[Presence] Heartbeat interval: ${HEARTBEAT_INTERVAL / 1000}s, Min gap: ${MIN_HEARTBEAT_GAP / 1000}s`);
+      
+      // Run comprehensive bot detection
+      const botResult = detectBotClient();
+      botDetectionRef.current = botResult;
+      
+      if (botResult.isBot && botResult.confidence >= 70) {
+        console.log('[Presence] Bot detected with high confidence:', botResult.reasons);
+        return;
       }
-    }, HEARTBEAT_INTERVAL);
-    
-    // Initial heartbeat (delayed to allow bot detection and page components to set their context)
-    // 1 second delay gives pages time to call setBrowsingContext
-    setTimeout(() => sendHeartbeat(true), 1000);
+      
+      if (botResult.confidence >= 40) {
+        console.log('[Presence] Suspicious activity detected:', botResult.reasons);
+      }
+      
+      isInitializedRef.current = true;
+      
+      // Initialize GLOBAL behavioral tracking (tracks from page load)
+      initGlobalBehavioralTracking();
+      
+      // Initialize behavioral analyzer
+      behaviorAnalyzerRef.current = new BehaviorAnalyzer();
+      
+      // Defer canvas fingerprint to avoid forced reflow
+      requestAnimationFrame(() => {
+        getCanvasFingerprint();
+      });
+      
+      const uid = getUserId();
+      const sid = getSessionId();
+      setUserId(uid);
+      setSessionId(sid);
+      
+      // Setup event listeners for interaction tracking
+      const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+      const interactionHandler = (e: Event) => handleInteraction(e);
+      interactionEvents.forEach(e => document.addEventListener(e, interactionHandler, { passive: true }));
+      
+      // Separate mouse move handler for behavioral analysis (throttled in the handler)
+      document.addEventListener('mousemove', handleMouseMove, { passive: true });
+      
+      // Scroll tracking for behavioral analysis
+      window.addEventListener('scroll', handleScroll, { passive: true });
+      
+      document.addEventListener('visibilitychange', handleVisibility);
+      window.addEventListener('beforeunload', handleUnload);
+      window.addEventListener('pagehide', handleUnload);
+      
+      // Start heartbeat interval
+      heartbeatIntervalRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          sendHeartbeat(isActive);
+        }
+      }, HEARTBEAT_INTERVAL);
+      
+      // Initial heartbeat (delayed to allow bot detection and page components to set their context)
+      setTimeout(() => sendHeartbeat(true), 1000);
+    }, 100); // 100ms delay to let first paint complete
     
     return () => {
+      clearTimeout(initTimeout);
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
       if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
       
+      const interactionEvents = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+      const interactionHandler = (e: Event) => handleInteraction(e);
       interactionEvents.forEach(e => document.removeEventListener(e, interactionHandler));
       document.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('scroll', handleScroll);
@@ -453,7 +473,9 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
       window.removeEventListener('beforeunload', handleUnload);
       window.removeEventListener('pagehide', handleUnload);
       
-      sendHeartbeat(false, true);
+      if (isInitializedRef.current) {
+        sendHeartbeat(false, true);
+      }
       isInitializedRef.current = false;
       behaviorAnalyzerRef.current = null;
     };

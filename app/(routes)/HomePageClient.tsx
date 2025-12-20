@@ -424,12 +424,7 @@ export default function HomePageClient({
           {/* Search Section - smaller on mobile */}
           <section className="py-10 sm:py-20 px-4 sm:px-6">
             <div className="container mx-auto text-center">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-              >
+              <div>
                 <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">
                   What do you want to watch?
                 </h2>
@@ -473,7 +468,7 @@ export default function HomePageClient({
                     </button>
                   )}
                 </div>
-              </motion.div>
+              </div>
             </div>
           </section>
 
@@ -537,12 +532,7 @@ export default function HomePageClient({
           {/* Explore by Genre */}
           <section className="py-10 sm:py-20 px-4 sm:px-6">
             <div className="container mx-auto">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-              >
+              <div>
                 <h2 className="text-2xl sm:text-4xl font-bold text-white mb-6 sm:mb-12 text-center">
                   Explore by Genre
                 </h2>
@@ -578,50 +568,38 @@ export default function HomePageClient({
                       gradient: 'from-pink-500 to-rose-500',
                       icon: '💕'
                     },
-                  ].map((genre, index) => (
-                    <motion.button
+                  ].map((genre) => (
+                    <button
                       key={genre.name}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      whileInView={{ opacity: 1, scale: 1 }}
-                      whileHover={{ scale: 1.05, y: -5 }}
-                      whileTap={{ scale: 0.95 }}
-                      viewport={{ once: true }}
-                      transition={{ delay: index * 0.05 }}
                       onClick={() => {
                         trackEvent('genre_clicked', { genre: genre.name });
                         handleSearch(genre.name);
                       }}
-                      className={`relative p-3 sm:p-6 rounded-xl sm:rounded-2xl bg-gradient-to-br ${genre.gradient} text-white font-semibold text-center overflow-hidden group min-h-[70px] sm:min-h-0`}
+                      className={`relative p-3 sm:p-6 rounded-xl sm:rounded-2xl bg-gradient-to-br ${genre.gradient} text-white font-semibold text-center overflow-hidden group min-h-[70px] sm:min-h-0 transition-transform duration-200 hover:scale-105 active:scale-95`}
                     >
                       <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 group-active:bg-black/30 transition-all duration-300" />
                       <div className="relative z-10">
                         <div className="text-xl sm:text-3xl mb-1 sm:mb-2">{genre.icon}</div>
                         <div className="text-xs sm:text-sm font-semibold">{genre.name}</div>
                       </div>
-                    </motion.button>
+                    </button>
                   ))}
                 </div>
-              </motion.div>
+              </div>
             </div>
           </section>
 
           {/* Features Showcase - hidden on mobile for cleaner experience */}
           <section className="hidden sm:block py-12 sm:py-20 px-4 sm:px-6 bg-gradient-to-r from-purple-900/20 to-pink-900/20">
             <div className="container mx-auto">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                className="text-center mb-10 sm:mb-16"
-              >
+              <div className="text-center mb-10 sm:mb-16">
                 <h2 className="text-2xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">
                   Why Choose FlyX?
                 </h2>
                 <p className="text-base sm:text-xl text-gray-300 max-w-3xl mx-auto px-4">
                   Experience entertainment like never before with our cutting-edge platform
                 </p>
-              </motion.div>
+              </div>
 
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
                 {[
@@ -690,20 +668,15 @@ export default function HomePageClient({
                     title: 'Secure & Private',
                     description: 'Your data is protected with enterprise-grade security'
                   }
-                ].map((feature, index) => (
-                  <motion.div
+                ].map((feature) => (
+                  <div
                     key={feature.title}
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    whileHover={{ y: -10 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.1 }}
-                    className="p-8 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 hover:border-purple-500/50 transition-all duration-300"
+                    className="p-8 bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 hover:border-purple-500/50 transition-all duration-300 hover:-translate-y-2"
                   >
                     <div className="text-purple-400 mb-4">{feature.icon}</div>
                     <h3 className="text-xl font-bold text-white mb-3">{feature.title}</h3>
                     <p className="text-gray-300 leading-relaxed">{feature.description}</p>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -712,13 +685,7 @@ export default function HomePageClient({
           {/* Call to Action */}
           <section className="py-20 px-6">
             <div className="container mx-auto text-center">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                className="max-w-4xl mx-auto"
-              >
+              <div className="max-w-4xl mx-auto">
                 <h2 className="text-4xl md:text-6xl font-bold text-white mb-6">
                   Ready to Start Your Journey?
                 </h2>
@@ -726,28 +693,24 @@ export default function HomePageClient({
                   Join millions of users who have already discovered the future of entertainment
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <motion.button
-                    whileHover={{ scale: 1.05, boxShadow: "0 15px 35px rgba(120, 119, 198, 0.4)" }}
-                    whileTap={{ scale: 0.95 }}
+                  <button
                     onClick={() => {
                       trackEvent('cta_clicked', { action: 'start_exploring' });
                       handleSearch('trending');
                     }}
-                    className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-full text-lg shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 flex items-center gap-3"
+                    className="px-8 py-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold rounded-full text-lg shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                     </svg>
                     Start Exploring
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.05, boxShadow: "0 10px 25px rgba(255, 255, 255, 0.1)" }}
-                    whileTap={{ scale: 0.95 }}
+                  </button>
+                  <button
                     onClick={() => {
                       trackEvent('cta_clicked', { action: 'browse_content' });
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className="px-8 py-4 bg-white/10 backdrop-blur-md text-white font-semibold rounded-full text-lg border border-white/20 hover:bg-white/20 transition-all duration-300 flex items-center gap-3"
+                    className="px-8 py-4 bg-white/10 backdrop-blur-md text-white font-semibold rounded-full text-lg border border-white/20 hover:bg-white/20 transition-all duration-300 flex items-center justify-center gap-3 hover:scale-105 active:scale-95"
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M2 3h6l2 13h7l4-8H9" />
@@ -755,9 +718,9 @@ export default function HomePageClient({
                       <circle cx="20" cy="20" r="1" />
                     </svg>
                     Browse Content
-                  </motion.button>
+                  </button>
                 </div>
-              </motion.div>
+              </div>
             </div>
           </section>
         </main>
@@ -814,12 +777,7 @@ function ContentSection({
   return (
     <section className="py-4 sm:py-12 px-3 sm:px-6">
       <div className="container mx-auto">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-        >
+        <div>
           <div className="flex items-center justify-between mb-3 sm:mb-8">
             <h2 className="text-base sm:text-2xl md:text-3xl font-bold text-white flex items-center gap-2 sm:gap-3">
               {getIcon()}
@@ -893,7 +851,7 @@ function ContentSection({
             data-tv-scroll-container="true"
             data-tv-group={`content-${title.toLowerCase().replace(/\s+/g, '-')}`}
           >
-            {items.map((item, index) => {
+            {items.map((item) => {
               // Card content shared between both versions
               const cardContent = (
                 <>
@@ -944,13 +902,13 @@ function ContentSection({
                 }
               };
 
-              return reduceMotion ? (
-                // Simple version for low-end devices
+              // Always use simple version - no whileInView animations
+              return (
                 <div
                   key={item.id}
                   onClick={() => onItemClick(item)}
                   onKeyDown={handleKeyDown}
-                  className="flex-shrink-0 w-[120px] sm:w-56 md:w-64 cursor-pointer group"
+                  className={`flex-shrink-0 w-[120px] sm:w-56 md:w-64 cursor-pointer group ${reduceMotion ? '' : 'transition-transform duration-200 hover:scale-[1.02] hover:-translate-y-1'}`}
                   data-tv-focusable="true"
                   tabIndex={0}
                   role="button"
@@ -958,30 +916,10 @@ function ContentSection({
                 >
                   {cardContent}
                 </div>
-              ) : (
-                // Full animation version for capable devices
-                <motion.div
-                  key={item.id}
-                  initial={{ opacity: 0, x: 50 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: Math.min(index * 0.05, 0.3) }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => onItemClick(item)}
-                  onKeyDown={handleKeyDown}
-                  className="flex-shrink-0 w-[120px] sm:w-56 md:w-64 cursor-pointer group"
-                  data-tv-focusable="true"
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`${item.title || item.name}`}
-                  whileHover={{ scale: 1.02, y: -4 }}
-                >
-                  {cardContent}
-                </motion.div>
               );
             })}
           </div>
-        </motion.div>
+        </div>
       </div>
     </section>
   );
