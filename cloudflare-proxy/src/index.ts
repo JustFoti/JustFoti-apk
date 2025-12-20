@@ -30,6 +30,7 @@ import { handleIPTVRequest } from './iptv-proxy';
 import { handleDLHDRequest } from './dlhd-proxy';
 import { handleAnimeKaiRequest } from './animekai-proxy';
 import { handleAnalyticsRequest } from './analytics-proxy';
+import { handleTMDBRequest } from './tmdb-proxy';
 import { createLogger, generateRequestId, type LogLevel } from './logger';
 
 export interface Env {
@@ -37,6 +38,8 @@ export interface Env {
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
   LOG_LEVEL?: string;
+  // TMDB API key for content proxy
+  TMDB_API_KEY?: string;
   // Hetzner VPS proxy (PRIMARY for IPTV)
   HETZNER_PROXY_URL?: string;
   HETZNER_PROXY_KEY?: string;
@@ -69,6 +72,7 @@ const metrics = {
   decodeRequests: 0,
   animekaiRequests: 0,
   analyticsRequests: 0,
+  tmdbRequests: 0,
   startTime: Date.now(),
 };
 
@@ -121,6 +125,7 @@ export default {
           decodeRequests: metrics.decodeRequests,
           animekaiRequests: metrics.animekaiRequests,
           analyticsRequests: metrics.analyticsRequests,
+          tmdbRequests: metrics.tmdbRequests,
         },
         timestamp: new Date().toISOString(),
       }, null, 2), {
@@ -272,6 +277,21 @@ export default {
         metrics.errors++;
         logger.error('Analytics proxy error', error as Error);
         return errorResponse('Analytics proxy error', 500);
+      }
+    }
+
+    // Route to TMDB proxy (content API)
+    // This bypasses Vercel Edge for all TMDB API calls
+    if (path.startsWith('/tmdb')) {
+      metrics.tmdbRequests++;
+      logger.info('Routing to TMDB proxy', { path });
+      
+      try {
+        return await handleTMDBRequest(request, env as any);
+      } catch (error) {
+        metrics.errors++;
+        logger.error('TMDB proxy error', error as Error);
+        return errorResponse('TMDB proxy error', 500);
       }
     }
 

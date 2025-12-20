@@ -24,6 +24,7 @@ enabled = true
 [vars]
 LOG_LEVEL = "debug"  # debug, info, warn, error
 # API_KEY = "your-secret-key"  # Optional: for protecting the proxy
+# ALLOWED_ORIGINS = "https://tv.vynx.cc,https://localhost:3000"  # Comma-separated allowed origins for analytics CORS
 
 # =============================================================================
 # ANTI-LEECH PROTECTION SETTINGS
@@ -53,9 +54,17 @@ PROTECTION_MODE = "none"
 # =============================================================================
 # SECRETS - Set via wrangler secret put <NAME>
 # =============================================================================
-# wrangler secret put SIGNING_SECRET      # Required for all modes except 'none'
-# wrangler secret put WATERMARK_SECRET    # Required for quantum mode (watermarks video)
-# wrangler secret put DATABASE_URL        # Required for analytics proxy (Neon connection string)
+# ANALYTICS PROXY (required for /analytics/* routes):
+#   wrangler secret put DATABASE_URL        # Neon connection string
+#                                           # Format: postgresql://user:pass@host/db?sslmode=require
+#
+# TMDB PROXY (required for /tmdb/* routes):
+#   wrangler secret put TMDB_API_KEY        # Your TMDB API key (v3 auth)
+#                                           # Get from: https://www.themoviedb.org/settings/api
+#
+# ANTI-LEECH PROTECTION:
+#   wrangler secret put SIGNING_SECRET      # Required for all modes except 'none'
+#   wrangler secret put WATERMARK_SECRET    # Required for quantum mode (watermarks video)
 #
 # RPI RESIDENTIAL PROXY (for DLHD, IPTV, and AnimeKai streaming)
 # Required to bypass datacenter IP blocking by IPTV providers and MegaUp CDN

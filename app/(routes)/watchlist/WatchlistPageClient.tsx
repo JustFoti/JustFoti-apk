@@ -9,6 +9,7 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { useWatchlist, WatchlistItem } from '@/hooks/useWatchlist';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
+import { getTMDBRecommendationsUrl } from '@/lib/utils/tmdb-endpoints';
 import type { MediaItem } from '@/types/media';
 
 interface RecommendedItem extends MediaItem {
@@ -40,47 +41,43 @@ export default function WatchlistPageClient() {
     } else {
       setRecommendations([]);
     }
-  }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [items.length]); // Only re-fetch when item count changes
 
   const fetchRecommendations = async () => {
     if (items.length === 0) return;
     
     setLoadingRecs(true);
     try {
-      // Get recommendations based on ALL items (up to 5) for better results
+      // Get recommendations based on items (up to 5) for better results
       const sampleItems = items.slice(0, 5);
       const allRecs: RecommendedItem[] = [];
       const seenIds = new Set(items.map(i => String(i.id)));
       
-      // Fetch recommendations for each item in parallel
-      const fetchPromises = sampleItems.map(async (item) => {
+      // Fetch recommendations sequentially to avoid rate limiting issues
+      for (const item of sampleItems) {
         try {
-          const response = await fetch(
-            `/api/content/recommendations?id=${item.id}&type=${item.mediaType}`
-          );
+          // Use CF proxy if configured, otherwise fall back to Vercel
+          const url = getTMDBRecommendationsUrl(item.id, item.mediaType as 'movie' | 'tv');
+          const response = await fetch(url);
+          
           if (response.ok) {
             const data = await response.json();
-            return { item, recs: data.results || [] };
+            const recs = data.results || [];
+            
+            for (const rec of recs.slice(0, 8)) {
+              const recId = String(rec.id);
+              if (!seenIds.has(recId)) {
+                seenIds.add(recId);
+                allRecs.push({
+                  ...rec,
+                  mediaType: item.mediaType,
+                  matchReason: `Because you added "${item.title}"`,
+                });
+              }
+            }
           }
         } catch (err) {
           console.error('[Watchlist] Error fetching recs for', item.id, err);
-        }
-        return { item, recs: [] };
-      });
-      
-      const results = await Promise.all(fetchPromises);
-      
-      // Process all results
-      for (const { item, recs } of results) {
-        for (const rec of recs.slice(0, 10)) {
-          const recId = String(rec.id);
-          if (!seenIds.has(recId)) {
-            seenIds.add(recId);
-            allRecs.push({
-              ...rec,
-              matchReason: `Because you added "${item.title}"`,
-            });
-          }
         }
       }
       

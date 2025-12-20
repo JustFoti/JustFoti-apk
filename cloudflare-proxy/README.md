@@ -203,16 +203,85 @@ GET  /analytics/health        - Health check
 ```
 
 **Setup:**
-1. Set `DATABASE_URL` secret in Cloudflare Worker (your Neon connection string)
-2. Set `NEXT_PUBLIC_CF_ANALYTICS_URL` in your Next.js app's `.env`
 
-```bash
-# In cloudflare-proxy
-wrangler secret put DATABASE_URL
+1. **Set DATABASE_URL secret** (your Neon connection string):
+   ```bash
+   cd cloudflare-proxy
+   npx wrangler secret put DATABASE_URL
+   # Paste your Neon connection string when prompted
+   # Format: postgresql://user:password@host/database?sslmode=require
+   ```
 
-# In your Next.js .env
-NEXT_PUBLIC_CF_ANALYTICS_URL=https://media-proxy.your-subdomain.workers.dev/analytics
+2. **Set ALLOWED_ORIGINS** (optional, for CORS):
+   ```bash
+   npx wrangler secret put ALLOWED_ORIGINS
+   # Enter: https://tv.vynx.cc,https://localhost:3000
+   ```
+
+3. **Deploy the worker**:
+   ```bash
+   npx wrangler deploy
+   ```
+
+4. **Set NEXT_PUBLIC_CF_ANALYTICS_URL** in your Next.js app's `.env.local`:
+   ```bash
+   NEXT_PUBLIC_CF_ANALYTICS_URL=https://media-proxy.your-subdomain.workers.dev
+   ```
+
+5. **Test the analytics endpoint**:
+   ```bash
+   curl https://media-proxy.your-subdomain.workers.dev/analytics/health
+   # Should return: {"status":"healthy","hasDatabase":true,...}
+   ```
+
+### TMDB Proxy
+
+Routes all TMDB API calls through Cloudflare Worker instead of Vercel Edge.
+
+**Benefits:**
+- Built-in edge caching (5-60 min depending on endpoint)
+- Cloudflare free tier: 100k requests/day
+- Lower latency
+- Reduced Vercel costs
+
+**Endpoints:**
+
 ```
+GET /tmdb/search?query=<query>&type=<movie|tv|multi>&page=<n>
+GET /tmdb/trending?type=<movie|tv|all>&time=<day|week>&page=<n>
+GET /tmdb/details?id=<id>&type=<movie|tv>
+GET /tmdb/recommendations?id=<id>&type=<movie|tv>
+GET /tmdb/season?id=<id>&season=<number>
+GET /tmdb/movies?category=<popular|top_rated|upcoming|now_playing>&page=<n>
+GET /tmdb/series?category=<popular|top_rated|on_the_air|airing_today>&page=<n>
+GET /tmdb/discover?type=<movie|tv>&genres=<ids>&sort_by=<field>&year=<year>
+GET /tmdb/health
+```
+
+**Setup:**
+
+1. **Set TMDB_API_KEY secret**:
+   ```bash
+   cd cloudflare-proxy
+   npx wrangler secret put TMDB_API_KEY
+   # Paste your TMDB API key (v3 auth) when prompted
+   # Get from: https://www.themoviedb.org/settings/api
+   ```
+
+2. **Deploy the worker**:
+   ```bash
+   npx wrangler deploy
+   ```
+
+3. **Set NEXT_PUBLIC_CF_TMDB_URL** in your Next.js app's `.env.local`:
+   ```bash
+   NEXT_PUBLIC_CF_TMDB_URL=https://media-proxy.your-subdomain.workers.dev
+   ```
+
+4. **Test the TMDB endpoint**:
+   ```bash
+   curl "https://media-proxy.your-subdomain.workers.dev/tmdb/trending?type=movie&time=week"
+   ```
 
 ## Configuration
 
