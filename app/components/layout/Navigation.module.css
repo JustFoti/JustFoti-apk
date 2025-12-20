@@ -547,6 +547,9 @@
   justify-content: center;
   background: transparent;
   overflow: visible;
+  /* Extend clickable area to include the floating icon */
+  padding-top: 40px;
+  margin-top: -40px;
 }
 
 .searchNavIcon {
@@ -563,6 +566,8 @@
   transform: translateX(-50%);
   box-shadow: 0 4px 20px rgba(0, 245, 255, 0.4);
   transition: all 0.3s ease;
+  /* Ensure icon doesn't block button clicks */
+  pointer-events: none;
 }
 
 .searchNavItem:active .searchNavIcon {
