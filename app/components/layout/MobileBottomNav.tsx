@@ -84,7 +84,8 @@ export default function MobileBottomNav({ visible = true }: MobileBottomNavProps
     return pathname === path || pathname.startsWith(path + '/');
   };
 
-  const handleClick = (path: string) => {
+  const handleClick = (e: React.MouseEvent, path: string) => {
+    e.preventDefault();
     router.push(path);
   };
 
@@ -93,8 +94,9 @@ export default function MobileBottomNav({ visible = true }: MobileBottomNavProps
       {navItems.map((item) => (
         <button
           key={item.id}
+          type="button"
           className={`${styles.navItem} ${isActive(item.path) ? styles.active : ''} ${item.isSearch ? styles.searchItem : ''}`}
-          onClick={() => handleClick(item.path)}
+          onClick={(e) => handleClick(e, item.path)}
           aria-label={item.label}
           aria-current={isActive(item.path) ? 'page' : undefined}
         >

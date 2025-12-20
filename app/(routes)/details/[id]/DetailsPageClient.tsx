@@ -12,6 +12,7 @@ import { WatchlistButton } from '@/components/ui/WatchlistButton';
 import { SeasonSelector } from './SeasonSelector';
 import { EpisodeList } from './EpisodeList';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
+import { shouldReduceAnimations } from '@/lib/utils/performance';
 import type { Episode } from '@/types/media';
 
 /**
@@ -646,6 +647,7 @@ export default function DetailsPageClient({
       {/* Back Navigation */}
       <div className={styles.backNavigation}>
         <motion.button
+          type="button"
           onClick={handleGoBack}
           className={styles.backButton}
           initial={{ opacity: 0, x: -20 }}

@@ -56,14 +56,17 @@ export default function HomePageClient({
   const [currentHeroIndex, setCurrentHeroIndex] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [scrollY, setScrollY] = useState(0);
-  const [reduceMotion, setReduceMotion] = useState(false);
+  // Default to true on SSR to avoid hydration mismatch, then check on mount
+  const [reduceMotion, setReduceMotion] = useState(true);
 
   // Refs
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Check for reduced motion preference on mount
   useEffect(() => {
-    setReduceMotion(shouldReduceAnimations());
+    // Only enable full animations on desktop with good hardware
+    const shouldReduce = shouldReduceAnimations();
+    setReduceMotion(shouldReduce);
   }, []);
 
   // Hero carousel content - filter out duplicates

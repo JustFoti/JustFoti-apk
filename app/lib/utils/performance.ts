@@ -7,6 +7,22 @@
 // Cache the result to avoid repeated checks
 let cachedIsLowEndDevice: boolean | null = null;
 let cachedPrefersReducedMotion: boolean | null = null;
+let cachedIsMobile: boolean | null = null;
+
+/**
+ * Detect if the device is mobile
+ */
+export function isMobileDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  
+  if (cachedIsMobile !== null) {
+    return cachedIsMobile;
+  }
+  
+  cachedIsMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+    window.innerWidth <= 768;
+  return cachedIsMobile;
+}
 
 /**
  * Detect if the user prefers reduced motion
@@ -62,12 +78,15 @@ export function isLowEndDevice(): boolean {
     }
   }
   
+  // Mobile devices should use reduced animations for better performance
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  if (isMobile) {
+    signals.push(true);
+  }
+  
   // Check screen size (smaller screens often = mobile = potentially lower power)
-  if (window.screen.width <= 768 && window.screen.height <= 1024) {
-    // Only count as low-end if combined with other signals
-    if (signals.length > 0) {
-      signals.push(true);
-    }
+  if (window.screen.width <= 768 || window.innerWidth <= 768) {
+    signals.push(true);
   }
   
   // Check if user prefers reduced motion
@@ -75,8 +94,8 @@ export function isLowEndDevice(): boolean {
     signals.push(true);
   }
   
-  // Consider low-end if 2+ signals are true
-  cachedIsLowEndDevice = signals.length >= 2;
+  // Consider low-end if 1+ signals are true (more aggressive)
+  cachedIsLowEndDevice = signals.length >= 1;
   return cachedIsLowEndDevice;
 }
 
@@ -136,4 +155,5 @@ export function useAnimationSettings() {
 export function clearPerformanceCache(): void {
   cachedIsLowEndDevice = null;
   cachedPrefersReducedMotion = null;
+  cachedIsMobile = null;
 }
