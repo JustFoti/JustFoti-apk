@@ -9,6 +9,7 @@ A Cloudflare Worker that proxies HLS streams and live TV with proper headers and
 - **TV Proxy** (`/tv/`) - Proxies DLHD live TV streams
 - **IPTV Proxy** (`/iptv/`) - Proxies Stalker portal IPTV streams
 - **DLHD Proxy** (`/dlhd/`) - Proxies DLHD via Oxylabs residential IPs
+- **Analytics Proxy** (`/analytics/`) - Routes analytics through CF instead of Vercel Edge
 - **Decoder Sandbox** (`/decode`) - Isolated script execution environment
 - **Health Check** (`/health`) - Status and metrics endpoint
 - **Full Observability** - Structured JSON logging with request tracing
@@ -150,6 +151,69 @@ Content-Type: application/json
 }
 ```
 
+### Analytics Proxy
+
+Routes analytics through Cloudflare Worker instead of Vercel Edge functions.
+
+**Benefits:**
+- Cloudflare free tier: 100k requests/day (vs Vercel's 100k/month)
+- Lower latency (edge closer to users)
+- No cold starts
+- Reduced Vercel costs
+- More frequent real-time tracking
+
+**Tracking Intervals (when using CF):**
+- Heartbeat: Every 30 seconds (real-time presence)
+- Min gap: 10 seconds between heartbeats
+- Inactivity timeout: 5 minutes
+
+**Fallback Intervals (Vercel):**
+- Heartbeat: Every 30 minutes (conservative)
+- Min gap: 5 minutes
+- Inactivity timeout: 60 minutes
+
+**Endpoints:**
+
+```
+POST /analytics/presence      - User presence heartbeat
+POST /analytics/pageview      - Page view tracking
+POST /analytics/event         - Generic analytics event
+POST /analytics/watch-session - Video playback tracking
+GET  /analytics/health        - Health check
+```
+
+**Presence Payload:**
+```json
+{
+  "userId": "u_abc123",
+  "sessionId": "s_xyz789",
+  "activityType": "browsing|watching|livetv",
+  "contentId": "movie_123",
+  "contentTitle": "Movie Title",
+  "isActive": true,
+  "isVisible": true,
+  "validation": {
+    "isBot": false,
+    "botConfidence": 0,
+    "hasInteracted": true,
+    "mouseEntropy": 0.6
+  },
+  "timestamp": 1703001234567
+}
+```
+
+**Setup:**
+1. Set `DATABASE_URL` secret in Cloudflare Worker (your Neon connection string)
+2. Set `NEXT_PUBLIC_CF_ANALYTICS_URL` in your Next.js app's `.env`
+
+```bash
+# In cloudflare-proxy
+wrangler secret put DATABASE_URL
+
+# In your Next.js .env
+NEXT_PUBLIC_CF_ANALYTICS_URL=https://media-proxy.your-subdomain.workers.dev/analytics
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -157,6 +221,9 @@ Content-Type: application/json
 Set via `wrangler secret` or Cloudflare Dashboard:
 
 ```bash
+# Required for analytics proxy (Neon PostgreSQL connection string)
+wrangler secret put DATABASE_URL
+
 # Optional: RPI proxy for geo-restricted content
 wrangler secret put RPI_PROXY_URL
 wrangler secret put RPI_PROXY_KEY

@@ -55,6 +55,7 @@ PROTECTION_MODE = "none"
 # =============================================================================
 # wrangler secret put SIGNING_SECRET      # Required for all modes except 'none'
 # wrangler secret put WATERMARK_SECRET    # Required for quantum mode (watermarks video)
+# wrangler secret put DATABASE_URL        # Required for analytics proxy (Neon connection string)
 #
 # RPI RESIDENTIAL PROXY (for DLHD, IPTV, and AnimeKai streaming)
 # Required to bypass datacenter IP blocking by IPTV providers and MegaUp CDN

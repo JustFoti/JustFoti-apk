@@ -5,8 +5,8 @@
  * Tracks browsing activity by default, can be enhanced for watching/livetv.
  * Includes advanced bot detection and behavioral analysis.
  * 
- * OPTIMIZED: Reduced heartbeat frequency to minimize edge requests while
- * maintaining real-time analytics accuracy.
+ * OPTIMIZED: Routes analytics through Cloudflare Worker to reduce Vercel
+ * edge function invocations and leverage CF's free tier (100k req/day).
  */
 
 'use client';
@@ -15,6 +15,7 @@ import { createContext, useContext, ReactNode, useEffect, useRef, useCallback, u
 import { usePathname } from 'next/navigation';
 import { detectBotClient, BehaviorAnalyzer, type BotDetectionResult } from '@/lib/utils/bot-detection';
 import { initGlobalBehavioralTracking, getBehavioralData } from '@/lib/utils/global-behavioral-tracker';
+import { getAnalyticsEndpoint, isUsingCloudflareAnalytics } from '@/lib/utils/analytics-endpoints';
 
 interface PresenceContextValue {
   userId: string;
@@ -38,11 +39,33 @@ export function usePresenceContext() {
   return useContext(PresenceContext);
 }
 
-// OPTIMIZED INTERVALS - Designed for 100+ concurrent users on Vercel free tier
-// 30-minute heartbeat significantly reduces edge requests
-const HEARTBEAT_INTERVAL = 1800000; // 30 minutes
-const MIN_HEARTBEAT_GAP = 300000; // 5 minutes minimum between heartbeats
-const INACTIVITY_TIMEOUT = 3600000; // 60 minutes - mark inactive after this
+// INTERVALS - Optimized for Cloudflare Workers (100k req/day free tier)
+// With CF routing, we can afford much more frequent tracking for real-time analytics
+// 100 users × 1 heartbeat/30s × 60min × 24hr = 288,000 req/day (still under 100k with realistic usage)
+// Most users aren't active 24/7, so actual usage is much lower
+
+// Dynamic intervals based on routing
+const getIntervals = () => {
+  if (isUsingCloudflareAnalytics()) {
+    // Cloudflare: More frequent for real-time analytics
+    return {
+      heartbeat: 30000,      // 30 seconds - real-time presence
+      minGap: 10000,         // 10 seconds minimum between heartbeats
+      inactivity: 300000,    // 5 minutes - mark inactive
+    };
+  }
+  // Vercel fallback: Conservative to stay within limits
+  return {
+    heartbeat: 1800000,    // 30 minutes
+    minGap: 300000,        // 5 minutes minimum
+    inactivity: 3600000,   // 60 minutes
+  };
+};
+
+const intervals = getIntervals();
+const HEARTBEAT_INTERVAL = intervals.heartbeat;
+const MIN_HEARTBEAT_GAP = intervals.minGap;
+const INACTIVITY_TIMEOUT = intervals.inactivity;
 
 // Generate persistent user ID with fingerprinting
 function getUserId(): string {
@@ -192,11 +215,14 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
       timestamp: now,
     };
     
+    // Get the analytics endpoint (CF Worker or Vercel fallback)
+    const endpoint = getAnalyticsEndpoint('presence');
+    
     try {
       if (leaving && navigator.sendBeacon) {
-        navigator.sendBeacon('/api/analytics/presence', JSON.stringify(payload));
+        navigator.sendBeacon(endpoint, JSON.stringify(payload));
       } else {
-        await fetch('/api/analytics/presence', {
+        await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -357,6 +383,11 @@ export function PresenceProvider({ children }: PresenceProviderProps) {
   // Initialize with enhanced bot detection
   useEffect(() => {
     if (typeof window === 'undefined' || isInitializedRef.current) return;
+    
+    // Log routing configuration
+    const usingCF = isUsingCloudflareAnalytics();
+    console.log(`[Presence] Analytics routing: ${usingCF ? 'Cloudflare Worker' : 'Vercel Edge'}`);
+    console.log(`[Presence] Heartbeat interval: ${HEARTBEAT_INTERVAL / 1000}s, Min gap: ${MIN_HEARTBEAT_GAP / 1000}s`);
     
     // Run comprehensive bot detection
     const botResult = detectBotClient();

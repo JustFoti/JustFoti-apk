@@ -2,10 +2,11 @@
  * Combined Stream & TV Proxy Cloudflare Worker
  * 
  * Routes:
- *   /stream/*  - Anti-leech stream proxy (requires token)
- *   /tv/*      - TV proxy for DLHD live streams
- *   /decode    - Isolated decoder sandbox for untrusted scripts
- *   /health    - Health check endpoint
+ *   /stream/*    - Anti-leech stream proxy (requires token)
+ *   /tv/*        - TV proxy for DLHD live streams
+ *   /analytics/* - Analytics proxy (presence, events, pageviews)
+ *   /decode      - Isolated decoder sandbox for untrusted scripts
+ *   /health      - Health check endpoint
  * 
  * Anti-Leech Protection:
  *   - All stream requests require cryptographic tokens
@@ -28,6 +29,7 @@ import decoderSandbox from './decoder-sandbox';
 import { handleIPTVRequest } from './iptv-proxy';
 import { handleDLHDRequest } from './dlhd-proxy';
 import { handleAnimeKaiRequest } from './animekai-proxy';
+import { handleAnalyticsRequest } from './analytics-proxy';
 import { createLogger, generateRequestId, type LogLevel } from './logger';
 
 export interface Env {
@@ -66,6 +68,7 @@ const metrics = {
   dlhdRequests: 0,
   decodeRequests: 0,
   animekaiRequests: 0,
+  analyticsRequests: 0,
   startTime: Date.now(),
 };
 
@@ -117,6 +120,7 @@ export default {
           dlhdRequests: metrics.dlhdRequests,
           decodeRequests: metrics.decodeRequests,
           animekaiRequests: metrics.animekaiRequests,
+          analyticsRequests: metrics.analyticsRequests,
         },
         timestamp: new Date().toISOString(),
       }, null, 2), {
@@ -256,6 +260,21 @@ export default {
       }
     }
 
+    // Route to Analytics proxy (presence, events, pageviews)
+    // This bypasses Vercel Edge and writes directly to Neon
+    if (path.startsWith('/analytics')) {
+      metrics.analyticsRequests++;
+      logger.info('Routing to Analytics proxy', { path });
+      
+      try {
+        return await handleAnalyticsRequest(request, env as any);
+      } catch (error) {
+        metrics.errors++;
+        logger.error('Analytics proxy error', error as Error);
+        return errorResponse('Analytics proxy error', 500);
+      }
+    }
+
     // Route to IPTV proxy (Stalker portals)
     // Handle both /iptv/* and /tv/iptv/* (legacy path from NEXT_PUBLIC_CF_TV_PROXY_URL)
     if (path.startsWith('/iptv') || path.startsWith('/tv/iptv')) {
@@ -389,6 +408,22 @@ export default {
           config: {
             rpiProxy: !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY) ? 'configured' : 'not configured',
           },
+        },
+        analytics: {
+          path: '/analytics/',
+          description: 'Analytics proxy - bypasses Vercel Edge, writes directly to Neon',
+          subRoutes: {
+            presence: 'POST /analytics/presence - User presence heartbeat',
+            pageview: 'POST /analytics/pageview - Page view tracking',
+            event: 'POST /analytics/event - Generic analytics event',
+            health: 'GET /analytics/health - Health check',
+          },
+          benefits: [
+            'Cloudflare free tier: 100k requests/day',
+            'Lower latency (edge closer to users)',
+            'No cold starts',
+            'Reduced Vercel costs',
+          ],
         },
         decode: {
           path: '/decode',

@@ -4,9 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "bun --bun next build",
-    "build:analyze": "ANALYZE=true bun --bun next build",
-    "start": "bun --bun next start",
+    "build": "next build",
+    "build:bun": "bun --bun next build",
+    "build:analyze": "ANALYZE=true next build",
+    "start": "next start",
     "lint": "next lint",
     "test": "bun test",
     "test:watch": "bun test --watch",
