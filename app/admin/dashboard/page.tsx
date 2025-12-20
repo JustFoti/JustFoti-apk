@@ -19,7 +19,6 @@ import {
   LoadingState,
   LiveIndicator,
   Badge,
-  formatDuration,
   formatDurationMinutes,
   formatNumber,
   formatTimeAgo,
@@ -31,8 +30,9 @@ import {
 type DashboardTab = 'overview' | 'realtime' | 'content' | 'users';
 
 export default function DashboardPage() {
-  const { stats, loading, lastRefresh, refresh } = useStats();
+  const { stats, loading, lastRefresh } = useStats();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [timeRange, setTimeRange] = useState('24h');
 
   if (loading && !stats.lastUpdated) {
     return <LoadingState message="Loading dashboard..." />;
@@ -53,6 +53,11 @@ export default function DashboardPage() {
         icon="📈"
         actions={
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <TimeRangeSelector value={timeRange} onChange={setTimeRange} options={[
+              { value: '24h', label: '24h' },
+              { value: '7d', label: '7d' },
+              { value: '30d', label: '30d' },
+            ]} />
             <LiveIndicator active={stats.liveUsers > 0} />
             <span style={{ color: colors.text.muted, fontSize: '12px' }}>
               {lastRefresh ? `Updated ${formatTimeAgo(lastRefresh.getTime())}` : ''}
@@ -151,7 +156,7 @@ function OverviewTab({ stats }: { stats: any }) {
           <Card title="Top Countries (7d)" icon="🌍">
             {stats.topCountries?.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {stats.topCountries.slice(0, 5).map((country: any, i: number) => {
+                {stats.topCountries.slice(0, 5).map((country: any) => {
                   const total = stats.topCountries.reduce((sum: number, c: any) => sum + c.count, 0);
                   return (
                     <div key={country.country}>
@@ -358,7 +363,7 @@ function ActivityRow({ label, value, total, icon, color }: { label: string; valu
           <span style={{ color: colors.text.primary, fontSize: '14px' }}>{label}</span>
           <span style={{ color: colors.text.muted, fontSize: '13px' }}>{value} ({pct}%)</span>
         </div>
-        <ProgressBar value={value} max={total || 1} color={color} height={6} />
+        <ProgressBar value={pct} max={100} color={color} height={6} />
       </div>
     </div>
   );
@@ -372,9 +377,9 @@ function ActivityBar({ label, value, total, color, icon }: { label: string; valu
         <span style={{ color: colors.text.primary, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           {icon} {label}
         </span>
-        <span style={{ color, fontSize: '18px', fontWeight: '700' }}>{value}</span>
+        <span style={{ color, fontSize: '18px', fontWeight: '700' }}>{value} <span style={{ fontSize: '12px', fontWeight: '500', opacity: 0.7 }}>({pct}%)</span></span>
       </div>
-      <ProgressBar value={value} max={total || 1} color={color} height={12} />
+      <ProgressBar value={pct} max={100} color={color} height={12} />
     </div>
   );
 }
