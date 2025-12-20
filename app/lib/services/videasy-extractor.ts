@@ -336,8 +336,9 @@ async function getSeasonFirstEpisode(tmdbId: string, seasonNumber: number): Prom
 
 /**
  * Get title and year from TMDB
+ * Uses original_title/original_name to avoid remakes being matched incorrectly
  */
-async function getTmdbInfo(tmdbId: string, type: 'movie' | 'tv'): Promise<{ title: string; year: string } | null> {
+async function getTmdbInfo(tmdbId: string, type: 'movie' | 'tv'): Promise<{ title: string; year: string; originalTitle?: string } | null> {
   try {
     const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
     if (!apiKey) {
@@ -364,7 +365,9 @@ async function getTmdbInfo(tmdbId: string, type: 'movie' | 'tv'): Promise<{ titl
 
     const data = await response.json();
     
+    // Get both localized and original titles
     const title = type === 'movie' ? data.title : data.name;
+    const originalTitle = type === 'movie' ? data.original_title : data.original_name;
     const dateStr = type === 'movie' ? data.release_date : data.first_air_date;
     const year = dateStr ? dateStr.split('-')[0] : '';
 
@@ -373,7 +376,12 @@ async function getTmdbInfo(tmdbId: string, type: 'movie' | 'tv'): Promise<{ titl
       return null;
     }
 
-    return { title, year };
+    // Log if original title differs (helps debug remake issues)
+    if (originalTitle && originalTitle !== title) {
+      console.log(`[Videasy] Original title differs: "${originalTitle}" vs "${title}"`);
+    }
+
+    return { title, year, originalTitle };
   } catch (error) {
     console.log('[Videasy] TMDB lookup error:', error);
     return null;
@@ -521,7 +529,13 @@ export async function extractVideasyStreams(
     };
   }
 
-  console.log(`[Videasy] Title: "${tmdbInfo.title}", Year: ${tmdbInfo.year}`);
+  // Use original title if different from localized title (helps with foreign shows/remakes)
+  // For example: French "HPI" should not match American "High Potential"
+  const searchTitle = tmdbInfo.originalTitle && tmdbInfo.originalTitle !== tmdbInfo.title 
+    ? tmdbInfo.originalTitle 
+    : tmdbInfo.title;
+  
+  console.log(`[Videasy] Title: "${searchTitle}"${tmdbInfo.originalTitle !== tmdbInfo.title ? ` (localized: "${tmdbInfo.title}")` : ''}, Year: ${tmdbInfo.year}`);
 
   // For TV shows, calculate the relative episode number within the season
   // TMDB returns absolute episode numbers for some shows (e.g., One Piece S2E62)
@@ -557,7 +571,8 @@ export async function extractVideasyStreams(
     console.log(`[Videasy] Trying ${src.name} (${src.languageName})...`);
     
     // Use relative episode number for the API call
-    const result = await trySource(src, tmdbId, tmdbInfo.title, tmdbInfo.year, type, season, relativeEpisode);
+    // Use searchTitle (original title for foreign content) to avoid remake confusion
+    const result = await trySource(src, tmdbId, searchTitle, tmdbInfo.year, type, season, relativeEpisode);
     
     if (result) {
       console.log(`[Videasy] ✓ ${src.name} (${src.languageName}) WORKS! Using this source.`);
@@ -640,6 +655,11 @@ export async function fetchVideasySourceByName(
     return null;
   }
 
+  // Use original title if different from localized title (helps with foreign shows/remakes)
+  const searchTitle = tmdbInfo.originalTitle && tmdbInfo.originalTitle !== tmdbInfo.title 
+    ? tmdbInfo.originalTitle 
+    : tmdbInfo.title;
+
   // For TV shows, calculate the relative episode number within the season
   let relativeEpisode = episode;
   if (type === 'tv' && season !== undefined && episode !== undefined) {
@@ -650,8 +670,8 @@ export async function fetchVideasySourceByName(
     }
   }
 
-  // Try the source with relative episode number
-  const result = await trySource(srcConfig, tmdbId, tmdbInfo.title, tmdbInfo.year, type, season, relativeEpisode);
+  // Try the source with relative episode number and original title
+  const result = await trySource(srcConfig, tmdbId, searchTitle, tmdbInfo.year, type, season, relativeEpisode);
   
   if (result) {
     console.log(`[Videasy] ✓ ${srcConfig.name} fetched successfully`);
