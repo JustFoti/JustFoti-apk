@@ -880,8 +880,13 @@ function ContentSection({
 
           <div
             ref={scrollRef}
-            className="flex gap-2.5 sm:gap-6 overflow-x-auto scrollbar-hide pb-4 sm:pb-8 pt-2 sm:pt-4 px-1 sm:px-2 snap-x snap-mandatory sm:snap-none"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
+            className="flex gap-3 sm:gap-6 overflow-x-auto scrollbar-hide pb-4 sm:pb-8 pt-2 sm:pt-4 px-1 sm:px-2"
+            style={{ 
+              scrollbarWidth: 'none', 
+              msOverflowStyle: 'none', 
+              WebkitOverflowScrolling: 'touch',
+              scrollSnapType: 'none'
+            }}
             data-tv-scroll-container="true"
             data-tv-group={`content-${title.toLowerCase().replace(/\s+/g, '-')}`}
           >
@@ -942,7 +947,7 @@ function ContentSection({
                   key={item.id}
                   onClick={() => onItemClick(item)}
                   onKeyDown={handleKeyDown}
-                  className="flex-shrink-0 w-28 sm:w-56 md:w-64 cursor-pointer group snap-start"
+                  className="flex-shrink-0 w-[120px] sm:w-56 md:w-64 cursor-pointer group"
                   data-tv-focusable="true"
                   tabIndex={0}
                   role="button"
@@ -961,7 +966,7 @@ function ContentSection({
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onItemClick(item)}
                   onKeyDown={handleKeyDown}
-                  className="flex-shrink-0 w-28 sm:w-56 md:w-64 cursor-pointer group snap-start"
+                  className="flex-shrink-0 w-[120px] sm:w-56 md:w-64 cursor-pointer group"
                   data-tv-focusable="true"
                   tabIndex={0}
                   role="button"

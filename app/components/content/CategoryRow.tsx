@@ -198,10 +198,11 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
         {/* Cards container */}
         <div
           ref={scrollContainerRef}
-          className="flex gap-4 overflow-x-auto scrollbar-hide px-4 md:px-6 py-2 scroll-smooth snap-x snap-mandatory"
+          className="flex gap-4 overflow-x-auto scrollbar-hide px-4 md:px-6 py-2 scroll-smooth"
           style={{
             scrollbarWidth: 'none',
             msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           {items.map((item, index) => (
@@ -209,7 +210,7 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
               // Simple version for low-end devices - no staggered animations
               <div
                 key={item.id}
-                className="flex-shrink-0 w-[160px] sm:w-[200px] md:w-[220px] snap-start"
+                className="flex-shrink-0 w-[140px] sm:w-[180px] md:w-[220px]"
               >
                 <ContentCard
                   item={item}
@@ -227,9 +228,10 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
               // Full animation version for capable devices
               <motion.div
                 key={item.id}
-                className="flex-shrink-0 w-[160px] sm:w-[200px] md:w-[220px] snap-start"
+                className="flex-shrink-0 w-[140px] sm:w-[180px] md:w-[220px]"
                 initial={{ opacity: 0, x: 50 }}
                 animate={{ opacity: 1, x: 0 }}
+                whileTap={{ scale: 0.95 }}
                 transition={{
                   delay: Math.min(index * 0.05, 0.5),
                   duration: 0.4,

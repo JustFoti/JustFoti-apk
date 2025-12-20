@@ -251,7 +251,7 @@ function ContentRow({
 
         <div
           ref={scrollRef}
-          className="flex gap-2.5 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2 snap-x snap-mandatory md:snap-none"
+          className="flex gap-3 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2"
           style={{ 
             scrollbarWidth: 'none', 
             msOverflowStyle: 'none',
@@ -270,7 +270,7 @@ function ContentRow({
               whileTap={{ scale: 0.95 }}
               onClick={() => onItemClick(item, title)}
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onItemClick(item, title); } }}
-              className="flex-shrink-0 w-28 sm:w-32 md:w-36 lg:w-44 cursor-pointer group snap-start"
+              className="flex-shrink-0 w-[120px] sm:w-32 md:w-36 lg:w-44 cursor-pointer group"
               data-tv-focusable="true"
               tabIndex={0}
               role="button"

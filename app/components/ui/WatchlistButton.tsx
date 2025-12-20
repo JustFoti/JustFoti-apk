@@ -36,7 +36,7 @@ export function WatchlistButton({ item, variant = 'full', className = '' }: Watc
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         onClick={handleClick}
-        className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+        className={`w-11 h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all duration-300 text-xl md:text-2xl font-bold ${
           inWatchlist 
             ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/30' 
             : 'bg-white/10 backdrop-blur-md text-white border border-white/20 hover:bg-white/20'
@@ -46,40 +46,25 @@ export function WatchlistButton({ item, variant = 'full', className = '' }: Watc
       >
         <AnimatePresence mode="wait">
           {inWatchlist ? (
-            <motion.svg
+            <motion.span
               key="check"
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
               exit={{ scale: 0, rotate: 180 }}
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              className="leading-none"
             >
-              <polyline points="20 6 9 17 4 12" />
-            </motion.svg>
+              ✓
+            </motion.span>
           ) : (
-            <motion.svg
+            <motion.span
               key="plus"
               initial={{ scale: 0, rotate: 180 }}
               animate={{ scale: 1, rotate: 0 }}
               exit={{ scale: 0, rotate: -180 }}
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              className="leading-none"
             >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </motion.svg>
+              +
+            </motion.span>
           )}
         </AnimatePresence>
       </motion.button>

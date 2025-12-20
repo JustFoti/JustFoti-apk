@@ -283,7 +283,7 @@ export default function WatchlistPageClient() {
                 ) : recommendations.length > 0 ? (
                   <div
                     ref={scrollRef}
-                    className="flex gap-2.5 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2 snap-x snap-mandatory md:snap-none"
+                    className="flex gap-3 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2"
                     style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}
                   >
                     {recommendations.map((item, index) => (
@@ -470,7 +470,7 @@ function RecommendationCard({
       transition={{ delay: Math.min(index * 0.03, 0.3) }}
       whileTap={{ scale: 0.95 }}
       onClick={onClick}
-      className="flex-shrink-0 w-28 sm:w-32 md:w-36 lg:w-44 cursor-pointer group snap-start"
+      className="flex-shrink-0 w-[120px] sm:w-32 md:w-36 lg:w-44 cursor-pointer group"
     >
       <motion.div
         whileHover={{ scale: 1.05, y: -8 }}
