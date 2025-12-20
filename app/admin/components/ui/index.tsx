@@ -253,7 +253,7 @@ export function StatCard({
   title, 
   value, 
   icon, 
-  color = colors.primary, 
+  color = colors.primary,
   gradient,
   pulse = false,
   subtitle,
@@ -267,19 +267,30 @@ export function StatCard({
     lg: { padding: '20px', iconSize: '24px', valueSize: '32px', titleSize: '13px' },
   };
   const s = sizes[size];
+  
+  // Use gradient for border if provided, otherwise use solid color
+  const borderStyle = gradient 
+    ? { borderImage: `${gradient} 1`, borderTop: '3px solid' }
+    : { borderTop: `3px solid ${color}` };
 
   return (
     <div 
       style={{
         ...baseCardStyle,
         padding: s.padding,
-        borderTop: `3px solid ${color}`,
+        ...borderStyle,
         cursor: onClick ? 'pointer' : 'default',
       }}
       onClick={onClick}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-        <span style={{ fontSize: s.iconSize, position: 'relative' }}>
+        <span style={{ 
+          fontSize: s.iconSize, 
+          position: 'relative',
+          background: gradient || 'transparent',
+          WebkitBackgroundClip: gradient ? 'text' : undefined,
+          WebkitTextFillColor: gradient ? 'transparent' : undefined,
+        }}>
           {icon}
           {pulse && (
             <span style={{
@@ -309,7 +320,14 @@ export function StatCard({
           </span>
         )}
       </div>
-      <div style={{ fontSize: s.valueSize, fontWeight: '700', color: colors.text.primary }}>
+      <div style={{ 
+        fontSize: s.valueSize, 
+        fontWeight: '700', 
+        color: gradient ? undefined : colors.text.primary,
+        background: gradient || 'transparent',
+        WebkitBackgroundClip: gradient ? 'text' : undefined,
+        WebkitTextFillColor: gradient ? 'transparent' : undefined,
+      }}>
         {typeof value === 'number' ? formatNumber(value) : value}
       </div>
       {subtitle && (
@@ -326,10 +344,11 @@ export function MetricCard({ label, value, icon, color = colors.primary, subtitl
       display: 'flex',
       alignItems: 'center',
       gap: '12px',
+      borderLeft: `4px solid ${color}`,
     }}>
       <span style={{ fontSize: '24px' }}>{icon}</span>
       <div>
-        <div style={{ fontSize: '20px', fontWeight: '700', color: colors.text.primary }}>
+        <div style={{ fontSize: '20px', fontWeight: '700', color }}>
           {typeof value === 'number' ? formatNumber(value) : value}
         </div>
         <div style={{ fontSize: '12px', color: colors.text.muted }}>{label}</div>
