@@ -5,6 +5,7 @@ import Hls from 'hls.js';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useMobileGestures } from '@/hooks/useMobileGestures';
 import { useWatchProgress } from '@/lib/hooks/useWatchProgress';
+import { useCast, CastMedia } from '@/hooks/useCast';
 import styles from './MobileVideoPlayer.module.css';
 
 type AudioPreference = 'sub' | 'dub';
@@ -158,6 +159,99 @@ export default function MobileVideoPlayer({
   const [availableSubtitles, setAvailableSubtitles] = useState<SubtitleTrack[]>([]);
   const [currentSubtitle, setCurrentSubtitle] = useState<string | null>(null);
   const [subtitlesLoading, setSubtitlesLoading] = useState(false);
+
+  // Cast state
+  const [isCastOverlayVisible, setIsCastOverlayVisible] = useState(false);
+  const [castError, setCastError] = useState<string | null>(null);
+  const castErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cast callbacks - memoized to prevent useCast from re-initializing
+  const handleCastConnect = useCallback(() => {
+    console.log('[MobilePlayer] Cast/AirPlay connected');
+    setCastError(null);
+  }, []);
+  
+  const handleCastDisconnect = useCallback(() => {
+    console.log('[MobilePlayer] Cast/AirPlay disconnected');
+    setIsCastOverlayVisible(false);
+  }, []);
+  
+  const handleCastError = useCallback((error: string) => {
+    console.error('[MobilePlayer] Cast error:', error);
+    setCastError(error);
+    if (castErrorTimeoutRef.current) {
+      clearTimeout(castErrorTimeoutRef.current);
+    }
+    castErrorTimeoutRef.current = setTimeout(() => {
+      setCastError(null);
+    }, 5000);
+  }, []);
+
+  // Cast to TV functionality (Chromecast + AirPlay)
+  const cast = useCast({
+    videoRef: videoRef,
+    onConnect: handleCastConnect,
+    onDisconnect: handleCastDisconnect,
+    onError: handleCastError,
+  });
+
+  // Build cast media object
+  const getCastMedia = useCallback((): CastMedia | undefined => {
+    if (!streamUrl) return undefined;
+    
+    const episodeInfo = mediaType === 'tv' && season && episode 
+      ? `S${season}E${episode}` 
+      : undefined;
+    
+    return {
+      url: streamUrl.startsWith('/') ? `${window.location.origin}${streamUrl}` : streamUrl,
+      title: title || 'Unknown Title',
+      subtitle: episodeInfo,
+      contentType: 'application/x-mpegURL',
+      isLive: false,
+      startTime: currentTime > 0 ? currentTime : undefined,
+    };
+  }, [streamUrl, title, mediaType, season, episode, currentTime]);
+
+  // Handle cast button click
+  const handleCastClick = useCallback(async (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    triggerHaptic('light');
+    
+    // If already casting, stop
+    if (cast.isCasting || cast.isAirPlayActive) {
+      cast.stop();
+      setIsCastOverlayVisible(false);
+      return;
+    }
+    
+    // If already connected, load media
+    if (cast.isConnected) {
+      const media = getCastMedia();
+      if (media) {
+        videoRef.current?.pause();
+        const success = await cast.loadMedia(media);
+        if (success) {
+          setIsCastOverlayVisible(true);
+        }
+      }
+      return;
+    }
+    
+    // Try to start a cast session
+    // This will show the device picker (Chromecast or AirPlay depending on browser)
+    const connected = await cast.requestSession();
+    if (connected) {
+      const media = getCastMedia();
+      if (media) {
+        videoRef.current?.pause();
+        const success = await cast.loadMedia(media);
+        if (success) {
+          setIsCastOverlayVisible(true);
+        }
+      }
+    }
+  }, [cast, getCastMedia]);
 
   // Refs for gesture calculations
   const seekStartTimeRef = useRef(0);
@@ -859,6 +953,56 @@ export default function MobileVideoPlayer({
         </div>
       )}
 
+      {/* Cast Error Toast */}
+      {castError && (
+        <div className={styles.castErrorToast}>
+          <span className={styles.castErrorIcon}>📺</span>
+          <p>{castError}</p>
+        </div>
+      )}
+
+      {/* Cast Overlay - shown when casting to TV */}
+      {isCastOverlayVisible && (cast.isCasting || cast.isAirPlayActive) && (
+        <div className={styles.castOverlay}>
+          <div className={styles.castOverlayContent}>
+            <div className={styles.castingIndicator}>
+              {cast.isAirPlayAvailable ? (
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 22h12l-6-6-6 6z" />
+                  <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                </svg>
+              ) : (
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                  <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                  <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                  <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                </svg>
+              )}
+            </div>
+            <h3 className={styles.castTitle}>
+              {cast.isAirPlayActive ? 'AirPlaying to TV' : 'Casting to TV'}
+            </h3>
+            <p className={styles.castSubtitle}>{title}</p>
+            {mediaType === 'tv' && season && episode && (
+              <p className={styles.castEpisode}>S{season} E{episode}</p>
+            )}
+            <button 
+              className={styles.stopCastButton}
+              onClick={(e) => {
+                e.stopPropagation();
+                cast.stop();
+                setIsCastOverlayVisible(false);
+                triggerHaptic('light');
+              }}
+              onTouchEnd={(e) => e.stopPropagation()}
+            >
+              Stop {cast.isAirPlayActive ? 'AirPlay' : 'Casting'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Resume Playback Prompt */}
       {showResumePrompt && (
         <div className={styles.resumePromptOverlay} onClick={(e) => e.stopPropagation()}>
@@ -1082,6 +1226,29 @@ export default function MobileVideoPlayer({
               title="Show gesture hints"
             >
               ❓
+            </button>
+            {/* Cast / AirPlay Button */}
+            <button 
+              className={`${styles.iconButton} ${cast.isCasting || cast.isAirPlayActive ? styles.activeIcon : ''}`}
+              onClick={handleCastClick}
+              onTouchEnd={(e) => e.stopPropagation()}
+              title={cast.isAirPlayAvailable ? 'AirPlay' : 'Cast to TV'}
+            >
+              {cast.isAirPlayAvailable ? (
+                // AirPlay icon
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 22h12l-6-6-6 6z" />
+                  <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                </svg>
+              ) : (
+                // Chromecast icon
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                  <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                  <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                  <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                </svg>
+              )}
             </button>
             <button className={styles.iconButton} onClick={(e) => { e.stopPropagation(); toggleLock(); }} onTouchEnd={(e) => e.stopPropagation()}>
               🔒

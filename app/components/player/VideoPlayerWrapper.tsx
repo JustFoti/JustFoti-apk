@@ -209,7 +209,7 @@ export default function VideoPlayerWrapper(props: VideoPlayerWrapperProps) {
   }, [fetchSources]);
 
   // Handle source change
-  const handleSourceChange = useCallback((index: number) => {
+  const handleSourceChange = useCallback((index: number, currentTime?: number) => {
     if (!streamData || index >= streamData.sources.length) return;
 
     const source = streamData.sources[index];
@@ -235,6 +235,9 @@ export default function VideoPlayerWrapper(props: VideoPlayerWrapperProps) {
       url: sourceUrl,
       currentIndex: index,
     } : null);
+    
+    // Note: currentTime is passed but not used here since the player handles position restoration
+    console.log('[VideoPlayerWrapper] Source changed to index:', index, 'currentTime:', currentTime);
   }, [streamData]);
 
   // Handle errors from player
