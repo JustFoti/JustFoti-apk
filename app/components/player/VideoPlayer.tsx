@@ -2937,15 +2937,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             {/* Android Section */}
             <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
               <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                🤖 Android (Chromecast)
+                🤖 Android
               </h3>
+              <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: 'rgba(255,255,255,0.9)' }}>
+                <strong>Option 1:</strong> Tap the Cast button (works with Chromecast devices)
+              </p>
+              <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'rgba(255,255,255,0.9)' }}>
+                <strong>Option 2 (Recommended):</strong> Use Screen Mirroring:
+              </p>
               <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
-                <li>Tap the Cast button in the player</li>
-                <li>Select your Chromecast or Android TV</li>
-                <li>The stream will play natively on your TV</li>
+                <li>Swipe down for Quick Settings on your phone</li>
+                <li>Tap "Smart View" / "Screen Cast" / "Wireless Display"</li>
+                <li>Select your TV from the list</li>
               </ol>
               <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                ✅ Native casting sends the URL to your device for smooth playback.
+                💡 Screen mirroring works with all TVs and all stream types.
               </p>
             </div>
 

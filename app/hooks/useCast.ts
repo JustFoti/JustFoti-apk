@@ -448,10 +448,31 @@ export function useCast(options: UseCastOptions = {}) {
       try {
         console.log('[useCast] Trying Remote Playback API...');
         // Check if video has a source - Remote Playback requires a valid source
-        if (!video.src && !video.currentSrc) {
+        // Note: HLS.js sets currentSrc to a blob URL which won't work with Remote Playback
+        const videoSource = video.src || video.currentSrc;
+        const isBlobUrl = videoSource?.startsWith('blob:');
+        
+        console.log('[useCast] Video source check:', { 
+          src: video.src ? video.src.substring(0, 50) : 'empty',
+          currentSrc: video.currentSrc ? video.currentSrc.substring(0, 50) : 'empty',
+          isBlobUrl,
+          readyState: video.readyState
+        });
+        
+        if (!videoSource) {
           console.log('[useCast] Video has no source, skipping Remote Playback API');
-        } else {
+        } else if (isBlobUrl) {
+          // HLS.js uses MediaSource which creates blob URLs - Remote Playback can't use these
+          console.log('[useCast] Video uses blob URL (HLS.js/MediaSource), Remote Playback may not work');
+          // Still try - some browsers might handle it
+          console.log('[useCast] Attempting remote.prompt() anyway...');
           await remote.prompt();
+          console.log('[useCast] Remote Playback prompt succeeded');
+          return true;
+        } else {
+          console.log('[useCast] Calling remote.prompt()...');
+          await remote.prompt();
+          console.log('[useCast] Remote Playback prompt succeeded');
           return true;
         }
       } catch (error: any) {
@@ -461,12 +482,25 @@ export function useCast(options: UseCastOptions = {}) {
           console.log('[useCast] User cancelled cast prompt');
           return false;
         }
+        if (error.name === 'NotSupportedError') {
+          // Remote playback not supported for this media (common with HLS/blob URLs)
+          console.log('[useCast] Remote Playback not supported for this media type');
+          // Show helpful error for Android users
+          if (isAndroidRef.current) {
+            const errorMsg = 'This stream uses HLS which may not support direct casting on Android. Try using screen mirroring from your phone\'s quick settings instead.';
+            setState(prev => ({ ...prev, lastError: errorMsg }));
+            onErrorRef.current?.(errorMsg);
+            return false;
+          }
+        }
         if (error.name === 'InvalidStateError') {
           // Video source not compatible or not set
           console.log('[useCast] Remote Playback not available for this source');
         }
-        // Continue to try Google Cast SDK
+        // Continue to try Google Cast SDK (won't work on mobile but try anyway)
       }
+    } else {
+      console.log('[useCast] Remote Playback API not available:', { hasRemote: !!remote, isIOS: isIOSRef.current });
     }
 
     // Try Google Cast SDK (Chrome desktop and Android)
@@ -575,7 +609,7 @@ export function useCast(options: UseCastOptions = {}) {
     if (isIOSRef.current) {
       error = 'AirPlay is not available on this device.';
     } else if (isAndroidRef.current) {
-      error = 'Casting requires the Google Home app. Make sure your Chromecast is set up.';
+      error = 'Casting not available. Try: 1) Use Chrome browser, 2) Check your Chromecast is on the same WiFi, or 3) Use screen mirroring from your phone settings.';
     } else {
       error = 'For LG/Samsung smart TVs, use Chrome menu (⋮) → Cast → Sources → Cast tab. For Chromecast, make sure it\'s on the same network.';
     }

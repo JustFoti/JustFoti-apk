@@ -1501,13 +1501,19 @@ export default function MobileVideoPlayer({
                 <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   🤖 Android
                 </h4>
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>
+                  <strong>Option 1:</strong> Tap the Cast button above (works with Chromecast)
+                </p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>
+                  <strong>Option 2 (Recommended):</strong> Use Screen Mirroring:
+                </p>
                 <ol style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 }}>
-                  <li>Tap the Cast button above</li>
-                  <li>Select your Chromecast or Android TV</li>
-                  <li>Stream plays natively on your TV</li>
+                  <li>Swipe down for Quick Settings</li>
+                  <li>Tap "Smart View" / "Screen Cast" / "Wireless Display"</li>
+                  <li>Select your TV</li>
                 </ol>
                 <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
-                  ✅ Native casting for smooth playback
+                  💡 Screen mirroring works with all TVs and stream types
                 </p>
               </div>
 
