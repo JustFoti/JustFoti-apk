@@ -191,6 +191,7 @@ export default function MobileVideoPlayer({
   // Cast to TV functionality (Chromecast + AirPlay)
   const cast = useCast({
     videoRef: videoRef,
+    streamUrl: streamUrl, // Pass the actual m3u8 URL for Android casting
     onConnect: handleCastConnect,
     onDisconnect: handleCastDisconnect,
     onError: handleCastError,

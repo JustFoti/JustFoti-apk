@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// Extend window for Cast SDK and AirPlay detection
+// Extend window for Cast SDK, AirPlay, and Presentation API detection
 declare global {
   interface Window {
     WebKitPlaybackTargetAvailabilityEvent?: any;
@@ -21,6 +21,8 @@ declare global {
       };
     };
     __onGCastApiAvailable?: (isAvailable: boolean) => void;
+    // Presentation API
+    PresentationRequest?: any;
   }
 }
 
@@ -47,6 +49,8 @@ export interface UseCastOptions {
   onError?: (error: string) => void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   videoRef?: any;
+  // The actual stream URL (not blob URL) - needed for Android casting
+  streamUrl?: string;
 }
 
 export interface CastMedia {
@@ -441,16 +445,76 @@ export function useCast(options: UseCastOptions = {}) {
       }
     }
 
+    // On Android, try Presentation API first - this shows the native cast dialog
+    if (isAndroidRef.current && typeof window !== 'undefined' && 'PresentationRequest' in window) {
+      try {
+        console.log('[useCast] Trying Presentation API on Android...');
+        // Get the actual stream URL (not blob URL)
+        const streamUrl = options.streamUrl;
+        if (streamUrl) {
+          const presentationUrl = streamUrl.startsWith('/') 
+            ? `${window.location.origin}${streamUrl}` 
+            : streamUrl;
+          
+          console.log('[useCast] Creating PresentationRequest with URL:', presentationUrl.substring(0, 50));
+          // @ts-ignore
+          const presentationRequest = new PresentationRequest([presentationUrl]);
+          
+          // Start the presentation (shows cast dialog)
+          const connection = await presentationRequest.start();
+          console.log('[useCast] Presentation started:', connection.state);
+          
+          setState(prev => ({
+            ...prev,
+            isConnected: true,
+            isCasting: true,
+            deviceName: 'Cast Device',
+            lastError: null,
+          }));
+          onConnectRef.current?.();
+          
+          // Listen for connection state changes
+          connection.onclose = () => {
+            console.log('[useCast] Presentation connection closed');
+            setState(prev => ({
+              ...prev,
+              isConnected: false,
+              isCasting: false,
+              deviceName: null,
+            }));
+            onDisconnectRef.current?.();
+          };
+          
+          return true;
+        } else {
+          console.log('[useCast] No streamUrl provided for Presentation API');
+        }
+      } catch (e: any) {
+        console.log('[useCast] Presentation API error:', e.name, e.message);
+        if (e.name === 'NotAllowedError') {
+          // User cancelled
+          return false;
+        }
+        // Continue to try other methods
+      }
+    }
+
     // Try Remote Playback API FIRST (works with more devices including some smart TVs)
+    // BUT skip on Android if we have a blob URL - go straight to Cast SDK
     // @ts-ignore
     const remote = video.remote;
-    if (remote && !isIOSRef.current) {
+    const videoSource = video.src || video.currentSrc;
+    const isBlobUrl = videoSource?.startsWith('blob:');
+    
+    // On Android with blob URL, skip Remote Playback and try Cast SDK directly
+    if (isAndroidRef.current && isBlobUrl) {
+      console.log('[useCast] Android + blob URL - skipping Remote Playback, trying Cast SDK...');
+      // Fall through to Cast SDK section below
+    } else if (remote && !isIOSRef.current) {
       try {
         console.log('[useCast] Trying Remote Playback API...');
         // Check if video has a source - Remote Playback requires a valid source
         // Note: HLS.js sets currentSrc to a blob URL which won't work with Remote Playback
-        const videoSource = video.src || video.currentSrc;
-        const isBlobUrl = videoSource?.startsWith('blob:');
         
         console.log('[useCast] Video source check:', { 
           src: video.src ? video.src.substring(0, 50) : 'empty',
@@ -461,26 +525,7 @@ export function useCast(options: UseCastOptions = {}) {
         
         if (!videoSource) {
           console.log('[useCast] Video has no source, skipping Remote Playback API');
-          // On Android with no source, show error immediately
-          if (isAndroidRef.current) {
-            const errorMsg = 'Video not ready. Please wait for the video to load, then try again.';
-            setState(prev => ({ ...prev, lastError: errorMsg }));
-            onErrorRef.current?.(errorMsg);
-            return false;
-          }
         } else if (isBlobUrl) {
-          // HLS.js uses MediaSource which creates blob URLs - Remote Playback can't use these
-          console.log('[useCast] Video uses blob URL (HLS.js/MediaSource), Remote Playback will likely fail');
-          
-          // On Android, show the error immediately since we know it won't work
-          if (isAndroidRef.current) {
-            console.log('[useCast] Android + blob URL detected - showing screen mirror guidance');
-            const errorMsg = 'HLS streams cannot be cast directly on Android Chrome. Use screen mirroring: swipe down → tap "Smart View" or "Screen Cast" → select your TV.';
-            setState(prev => ({ ...prev, lastError: errorMsg }));
-            onErrorRef.current?.(errorMsg);
-            return false;
-          }
-          
           // On desktop, still try - some browsers might handle it
           console.log('[useCast] Attempting remote.prompt() anyway...');
           await remote.prompt();
@@ -502,35 +547,24 @@ export function useCast(options: UseCastOptions = {}) {
         if (error.name === 'NotSupportedError') {
           // Remote playback not supported for this media (common with HLS/blob URLs)
           console.log('[useCast] Remote Playback not supported for this media type');
-          // Show helpful error for Android users
+          // On Android, fall through to try Cast SDK instead of showing error
           if (isAndroidRef.current) {
-            const errorMsg = 'This stream cannot be cast directly. Use screen mirroring: swipe down for Quick Settings → tap "Smart View" / "Screen Cast" → select your TV.';
-            setState(prev => ({ ...prev, lastError: errorMsg }));
-            onErrorRef.current?.(errorMsg);
-            return false;
+            console.log('[useCast] Android - will try Cast SDK next...');
           }
         }
         if (error.name === 'InvalidStateError') {
           // Video source not compatible or not set
           console.log('[useCast] Remote Playback not available for this source');
+          // On Android, fall through to try Cast SDK
           if (isAndroidRef.current) {
-            const errorMsg = 'Cannot cast this video. Try screen mirroring from your phone\'s Quick Settings instead.';
-            setState(prev => ({ ...prev, lastError: errorMsg }));
-            onErrorRef.current?.(errorMsg);
-            return false;
+            console.log('[useCast] Android - will try Cast SDK next...');
           }
         }
-        // Continue to try Google Cast SDK (won't work on mobile but try anyway)
+        // Continue to try Google Cast SDK
       }
-    } else {
+    } else if (!isAndroidRef.current || !isBlobUrl) {
+      // Only log this if we're not on Android with blob URL (where we intentionally skipped)
       console.log('[useCast] Remote Playback API not available:', { hasRemote: !!remote, isIOS: isIOSRef.current });
-      // On Android without Remote Playback API, show guidance
-      if (isAndroidRef.current && !remote) {
-        const errorMsg = 'Cast not available in this browser. Use screen mirroring: swipe down → tap "Smart View" or "Screen Cast" → select your TV.';
-        setState(prev => ({ ...prev, lastError: errorMsg }));
-        onErrorRef.current?.(errorMsg);
-        return false;
-      }
     }
 
     // Try Google Cast SDK (Chrome desktop and Android)
@@ -634,12 +668,14 @@ export function useCast(options: UseCastOptions = {}) {
       }
     }
 
-    // No casting method available
+    // No casting method available - show platform-specific guidance
     let error: string;
     if (isIOSRef.current) {
       error = 'AirPlay is not available on this device.';
     } else if (isAndroidRef.current) {
-      error = 'Casting not available. Try: 1) Use Chrome browser, 2) Check your Chromecast is on the same WiFi, or 3) Use screen mirroring from your phone settings.';
+      // On Android, the Cast SDK doesn't work the same as desktop
+      // The best option is screen mirroring or using the Chrome cast button in the address bar
+      error = 'To cast on Android:\n\n1. Tap the 3-dot menu (⋮) in Chrome\n2. Tap "Cast..."\n3. Select your device\n\nOr use screen mirroring from Quick Settings.';
     } else {
       error = 'For LG/Samsung smart TVs, use Chrome menu (⋮) → Cast → Sources → Cast tab. For Chromecast, make sure it\'s on the same network.';
     }

@@ -324,6 +324,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   // Cast to TV functionality (Chromecast + AirPlay)
   const cast = useCast({
     videoRef: videoRef,
+    streamUrl: streamUrl || undefined, // Pass the actual m3u8 URL for casting
     onConnect: handleCastConnect,
     onDisconnect: handleCastDisconnect,
     onError: handleCastError,
