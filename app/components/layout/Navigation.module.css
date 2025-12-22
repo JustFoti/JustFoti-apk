@@ -18,7 +18,8 @@
 }
 
 .navigation.menuOpen {
-  background: rgb(8, 8, 12);
+  background: rgba(8, 8, 12, 0.98);
+  z-index: 1002;
 }
 
 .navContainer {
@@ -344,6 +345,8 @@
   border: none;
   cursor: pointer;
   padding: 0;
+  z-index: 1003;
+  position: relative;
 }
 
 .hamburgerButton span {
@@ -353,6 +356,10 @@
   background: rgba(255, 255, 255, 0.9);
   border-radius: 1px;
   transition: all 0.25s ease;
+}
+
+.hamburgerButton.open span {
+  background: #fff;
 }
 
 .hamburgerButton.open span:nth-child(1) {
@@ -450,9 +457,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgb(8, 8, 12);
+  background: rgba(8, 8, 12, 0.98);
   backdrop-filter: blur(20px);
-  z-index: 1001;
+  z-index: 1000;
   padding-top: 72px;
   opacity: 0;
   visibility: hidden;
