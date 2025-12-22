@@ -316,9 +316,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     if (castErrorTimeoutRef.current) {
       clearTimeout(castErrorTimeoutRef.current);
     }
-    castErrorTimeoutRef.current = setTimeout(() => {
-      setCastError(null);
-    }, 5000);
+    // For LG/Samsung TV help messages (blue popup), don't auto-dismiss
+    // These are informational and should stay until user closes or resumes video
+    const isHelpMessage = error.includes('LG') || error.includes('Samsung') || 
+                          error.includes('Cast tab') || error.includes('screen mirroring') ||
+                          error.includes('Win + K');
+    if (!isHelpMessage) {
+      // Only auto-dismiss regular error messages
+      castErrorTimeoutRef.current = setTimeout(() => {
+        setCastError(null);
+      }, 5000);
+    }
   }, []);
 
   // Cast to TV functionality (Chromecast + AirPlay)
@@ -411,9 +419,15 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       if (castErrorTimeoutRef.current) {
         clearTimeout(castErrorTimeoutRef.current);
       }
-      castErrorTimeoutRef.current = setTimeout(() => {
-        setCastError(null);
-      }, 8000);
+      // For LG/Samsung TV help messages (blue popup), don't auto-dismiss
+      const isHelpMessage = cast.lastError.includes('LG') || cast.lastError.includes('Samsung') || 
+                            cast.lastError.includes('Cast tab') || cast.lastError.includes('screen mirroring') ||
+                            cast.lastError.includes('Win + K');
+      if (!isHelpMessage) {
+        castErrorTimeoutRef.current = setTimeout(() => {
+          setCastError(null);
+        }, 8000);
+      }
     }
   }, [cast, getCastMedia, castError, streamUrl]);
 
@@ -1155,6 +1169,13 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
 
     const handlePlay = () => {
       setIsPlaying(true);
+      // Clear cast error when video resumes playing locally
+      if (castError) {
+        setCastError(null);
+        if (castErrorTimeoutRef.current) {
+          clearTimeout(castErrorTimeoutRef.current);
+        }
+      }
       if (video.currentTime === 0) {
         handleWatchStart(video.currentTime, video.duration);
         trackWatchStart(tmdbId, title || 'Unknown Title', mediaType, season, episode);
