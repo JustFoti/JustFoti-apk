@@ -127,7 +127,10 @@ export default {
     }
 
     try {
-      switch (url.pathname) {
+      // Support both /endpoint and /analytics/endpoint paths
+      const path = url.pathname.replace(/^\/analytics/, '');
+      
+      switch (path) {
         case '/presence':
           if (request.method !== 'POST') {
             return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
@@ -159,7 +162,7 @@ export default {
           return await handleGetStats(url, env, corsHeaders);
 
         default:
-          return Response.json({ error: 'Not found' }, { status: 404, headers: corsHeaders });
+          return Response.json({ error: 'Not found', path: url.pathname }, { status: 404, headers: corsHeaders });
       }
     } catch (error) {
       console.error('[Analytics Worker] Error:', error);

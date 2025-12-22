@@ -88,7 +88,7 @@ function getCorsHeaders(request: Request, env: Env): HeadersInit {
   return {
     'Access-Control-Allow-Origin': isAllowed ? origin || '*' : '',
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Sync-Code',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Sync-Code, X-Sync-Passphrase',
     'Access-Control-Max-Age': '86400',
   };
 }
@@ -135,8 +135,9 @@ export default {
       }, { headers: corsHeaders });
     }
 
-    // Sync endpoints
-    if (url.pathname === '/sync') {
+    // Sync endpoints - support both /sync and /analytics/sync paths
+    const syncPath = url.pathname.replace(/^\/analytics/, '');
+    if (syncPath === '/sync') {
       try {
         const syncCode = request.headers.get('X-Sync-Code');
         
