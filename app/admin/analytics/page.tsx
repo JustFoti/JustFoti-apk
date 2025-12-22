@@ -121,10 +121,6 @@ export default function AnalyticsPage() {
       };
 
       const startDate = ranges[timeRange] ? now - ranges[timeRange] : 0;
-      const params = new URLSearchParams({
-        limit: '200',
-        ...(startDate && { startDate: startDate.toString() }),
-      });
 
       const response = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '200', ...(startDate && { startDate: startDate.toString() }) }));
       const data = await response.json();
@@ -209,12 +205,6 @@ export default function AnalyticsPage() {
         // Calculate previous period: from (now - 2*period) to (now - period)
         const prevEndDate = now - periodLength;
         const prevStartDate = now - (2 * periodLength);
-
-        const params = new URLSearchParams({
-          limit: '200',
-          startDate: prevStartDate.toString(),
-          endDate: prevEndDate.toString(),
-        });
 
         const response = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '200', startDate: prevStartDate.toString(), endDate: prevEndDate.toString() }));
         const data = await response.json();

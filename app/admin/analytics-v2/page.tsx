@@ -99,10 +99,6 @@ export default function AnalyticsV2Page() {
       };
 
       const startDate = ranges[timeRange] ? now - ranges[timeRange] : 0;
-      const params = new URLSearchParams({
-        limit: '200',
-        ...(startDate && { startDate: startDate.toString() }),
-      });
 
       const response = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '200', ...(startDate && { startDate: startDate.toString() }) }));
       const data = await response.json();
