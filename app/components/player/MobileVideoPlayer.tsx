@@ -1573,13 +1573,24 @@ export default function MobileVideoPlayer({
                 </p>
               </div>
 
-              {/* Smart TV Section */}
-              <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '10px' }}>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: 'white', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  📺 LG / Samsung TVs
+              {/* Smart TV Section - IMPORTANT WARNING */}
+              <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '10px', border: '1px solid rgba(255, 193, 7, 0.4)' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: '#ffc107', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  ⚠️ LG / Samsung Smart TVs
                 </h4>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>
-                  These don't support native Chromecast. Use screen mirroring (Windows + K) or a Chromecast device.
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.9)', fontWeight: 500 }}>
+                  These TVs do NOT support native Chromecast!
+                </p>
+                <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)' }}>
+                  The cast button won't work properly. You must use screen mirroring:
+                </p>
+                <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.5 }}>
+                  <li><strong>Android:</strong> Quick Settings → Smart View / Screen Cast</li>
+                  <li><strong>Windows:</strong> Press Win + K</li>
+                  <li><strong>Chrome:</strong> Menu (⋮) → Cast → Sources → Cast tab</li>
+                </ul>
+                <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: 'rgba(255,255,255,0.6)' }}>
+                  💡 For smooth casting, buy a Chromecast device (~$30)
                 </p>
               </div>
 

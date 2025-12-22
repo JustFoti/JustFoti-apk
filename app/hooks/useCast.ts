@@ -709,15 +709,37 @@ export function useCast(options: UseCastOptions = {}) {
         loadRequest.autoplay = true;
         
         return new Promise<boolean>((resolve) => {
+          // Set up a timeout to detect when media fails to start playing
+          // This catches cases where the cast device receives the URL but can't play it
+          // (e.g., LG/Samsung TVs that don't support HLS natively)
+          let playbackStarted = false;
+          let idleCount = 0;
+          const playbackTimeout = setTimeout(() => {
+            if (!playbackStarted) {
+              console.warn('[useCast] Media playback timeout - device may not support HLS');
+              const errorMessage = 'Stream failed to start. Your TV may not support this stream format.\n\nLG/Samsung TVs don\'t have native Chromecast - use "Cast tab" from Chrome menu (⋮ → Cast → Sources → Cast tab) for screen mirroring instead.';
+              setState(prev => ({ ...prev, lastError: errorMessage, isCasting: false, playerState: 'IDLE' }));
+              onErrorRef.current?.(errorMessage);
+              // Don't resolve false here - let the normal flow continue
+            }
+          }, 15000); // 15 second timeout
+          
           castSessionRef.current.loadMedia(
             loadRequest,
             (mediaSession: any) => {
-              console.log('[useCast] Media loaded successfully on Chromecast');
+              console.log('[useCast] Media loaded on cast device, initial state:', mediaSession.playerState);
               castMediaRef.current = mediaSession;
+              
+              // Check initial state - if already IDLE, the device might not support the format
+              if (mediaSession.playerState === 'IDLE' && !mediaSession.media?.duration) {
+                idleCount++;
+              }
+              
               setState(prev => ({
                 ...prev,
                 isCasting: true,
-                playerState: 'PLAYING',
+                playerState: mediaSession.playerState === 'PLAYING' ? 'PLAYING' : 
+                             mediaSession.playerState === 'BUFFERING' ? 'BUFFERING' : 'IDLE',
                 duration: mediaSession.media?.duration || 0,
               }));
               
@@ -725,22 +747,66 @@ export function useCast(options: UseCastOptions = {}) {
               mediaSession.addUpdateListener((isAlive: boolean) => {
                 if (isAlive && castMediaRef.current) {
                   const playerState = castMediaRef.current.playerState;
+                  const currentTime = castMediaRef.current.currentTime || 0;
+                  
+                  // Track if playback actually started
+                  if (playerState === 'PLAYING' || playerState === 'BUFFERING' || currentTime > 0) {
+                    if (!playbackStarted) {
+                      playbackStarted = true;
+                      clearTimeout(playbackTimeout);
+                      console.log('[useCast] Playback confirmed started');
+                    }
+                  }
+                  
+                  // Detect repeated IDLE state which indicates playback failure
+                  if (playerState === 'IDLE' && !playbackStarted) {
+                    idleCount++;
+                    console.log('[useCast] Media in IDLE state, count:', idleCount);
+                    
+                    // If we get multiple IDLE states without ever playing, the device can't play this
+                    if (idleCount >= 3) {
+                      clearTimeout(playbackTimeout);
+                      const errorMessage = 'Your TV cannot play this stream format.\n\nLG/Samsung Smart TVs don\'t support native casting. Use screen mirroring:\n• Chrome: ⋮ → Cast → Sources → Cast tab\n• Windows: Press Win + K';
+                      setState(prev => ({ ...prev, lastError: errorMessage, isCasting: false }));
+                      onErrorRef.current?.(errorMessage);
+                    }
+                  }
+                  
                   setState(prev => ({
                     ...prev,
-                    currentTime: castMediaRef.current.currentTime || 0,
+                    currentTime: currentTime,
                     duration: castMediaRef.current.media?.duration || prev.duration,
                     playerState: playerState === 'PLAYING' ? 'PLAYING' : 
                                  playerState === 'PAUSED' ? 'PAUSED' :
                                  playerState === 'BUFFERING' ? 'BUFFERING' : 'IDLE',
                   }));
+                } else if (!isAlive) {
+                  // Media session ended unexpectedly
+                  clearTimeout(playbackTimeout);
+                  if (!playbackStarted) {
+                    const errorMessage = 'Cast session ended. Your TV may not support this stream.\n\nTry screen mirroring instead:\n• Chrome: ⋮ → Cast → Sources → Cast tab\n• Windows: Press Win + K';
+                    setState(prev => ({ ...prev, lastError: errorMessage }));
+                    onErrorRef.current?.(errorMessage);
+                  }
                 }
               });
               
               resolve(true);
             },
             (error: any) => {
-              console.error('[useCast] Failed to load media on Chromecast:', error);
-              const errorMessage = error.description || 'Failed to load media on Chromecast';
+              clearTimeout(playbackTimeout);
+              console.error('[useCast] Failed to load media on cast device:', error);
+              
+              // Provide more helpful error messages based on error type
+              let errorMessage: string;
+              if (error.code === 'LOAD_FAILED' || error.description?.includes('LOAD_FAILED')) {
+                errorMessage = 'Failed to load stream on your TV.\n\nLG/Samsung TVs don\'t support native Chromecast. Use screen mirroring:\n• Chrome: ⋮ → Cast → Sources → Cast tab\n• Windows: Press Win + K';
+              } else if (error.description?.includes('NOT_SUPPORTED')) {
+                errorMessage = 'Your TV doesn\'t support this stream format.\n\nUse screen mirroring instead:\n• Chrome: ⋮ → Cast → Sources → Cast tab\n• Windows: Press Win + K';
+              } else {
+                errorMessage = error.description || 'Failed to load media on cast device';
+              }
+              
               setState(prev => ({ ...prev, lastError: errorMessage }));
               onErrorRef.current?.(errorMessage);
               resolve(false);

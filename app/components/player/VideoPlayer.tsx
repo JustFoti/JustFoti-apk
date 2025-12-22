@@ -2970,20 +2970,24 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               </p>
             </div>
 
-            {/* Smart TV Section */}
-            <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: 'white', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                📺 LG / Samsung Smart TVs
+            {/* Smart TV Section - IMPORTANT WARNING */}
+            <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'rgba(255, 193, 7, 0.15)', borderRadius: '12px', border: '1px solid rgba(255, 193, 7, 0.4)' }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem', color: '#ffc107', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚠️ LG / Samsung Smart TVs - IMPORTANT
               </h3>
-              <p style={{ margin: '0 0 8px 0', fontSize: '13px', color: 'rgba(255,255,255,0.8)' }}>
-                These TVs don't support native Chromecast. Use screen mirroring instead:
+              <p style={{ margin: '0 0 10px 0', fontSize: '14px', color: 'rgba(255,255,255,0.95)', fontWeight: 500 }}>
+                These TVs do NOT have native Chromecast support!
               </p>
-              <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
-                <li>Chrome menu (⋮) → Cast → Sources → Cast tab</li>
-                <li>Or use Windows + K (recommended)</li>
-              </ol>
-              <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
-                ⚠️ Screen mirroring may have some lag. For best results, use a Chromecast device.
+              <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: 'rgba(255,255,255,0.85)' }}>
+                The cast button will connect but video won't play. You must use screen mirroring instead:
+              </p>
+              <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                <li><strong>Best:</strong> Press <kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>Win</kbd> + <kbd style={{ background: '#333', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>K</kbd> (Windows wireless display)</li>
+                <li><strong>Chrome:</strong> Menu (⋮) → Cast → Sources → <strong>Cast tab</strong></li>
+                <li><strong>Android:</strong> Quick Settings → Smart View / Screen Cast</li>
+              </ul>
+              <p style={{ margin: '12px 0 0 0', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
+                💡 For smooth native casting, consider buying a Chromecast device (~$30). It plugs into your TV's HDMI port and enables true Chromecast support.
               </p>
             </div>
 
