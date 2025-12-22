@@ -66,11 +66,14 @@ export async function GET(request: NextRequest) {
     // Uses heartbeat to track active users in real-time
     // 
     // Time windows:
-    // - "totalActive": Users with heartbeat in last 2 minutes
-    // - "trulyActive": Users with heartbeat in last 60 seconds (stricter)
+    // - "totalActive": Users with heartbeat in last 5 minutes (increased from 2 min)
+    // - "trulyActive": Users with heartbeat in last 2 minutes (stricter)
+    // 
+    // NOTE: PresenceProvider sends heartbeats every 30s with CF, 30min without CF
+    // We use 5 min window to catch users who might have slower heartbeat intervals
     // ============================================
+    const fiveMinutesAgo = now - 5 * 60 * 1000;
     const twoMinutesAgo = now - 2 * 60 * 1000;
-    const oneMinuteAgo = now - 60 * 1000;
     let realtime = { totalActive: 0, trulyActive: 0, watching: 0, browsing: 0, livetv: 0, unknown: 0 };
     
     try {
@@ -94,7 +97,7 @@ export async function GET(request: NextRequest) {
            GROUP BY COALESCE(activity_type, 'unknown')`;
       
       const liveResult = await adapter.query(liveQuery, 
-        isNeon ? [twoMinutesAgo, oneMinuteAgo] : [oneMinuteAgo, twoMinutesAgo]
+        isNeon ? [fiveMinutesAgo, twoMinutesAgo] : [twoMinutesAgo, fiveMinutesAgo]
       );
       
       let total = 0;
@@ -420,7 +423,7 @@ export async function GET(request: NextRequest) {
       peakStats,
       // Include time ranges for transparency
       timeRanges: {
-        realtime: '2 minutes (from live_activity heartbeat, 1 min for truly active)',
+        realtime: '5 minutes (from live_activity heartbeat, 2 min for truly active)',
         dau: '24 hours',
         wau: '7 days',
         mau: '30 days',

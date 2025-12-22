@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const days = parseInt(searchParams.get('days') || '7');
-    const limit = parseInt(searchParams.get('limit') || '100'); // Increased default to 100
+    const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 10000); // Cap at 10000 max
 
     await initializeDB();
     const db = getDB();

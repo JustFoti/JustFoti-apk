@@ -83,6 +83,7 @@ export default function TrafficSourcesPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'sources' | 'referrers' | 'bots' | 'presence'>('sources');
   const [timeRange, setTimeRange] = useState('7d');
+  const [referrerLimit, setReferrerLimit] = useState(100); // Default limit for referrers
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -90,7 +91,7 @@ export default function TrafficSourcesPage() {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
       
       const [trafficRes, presenceRes] = await Promise.all([
-        fetch(`/api/admin/analytics/traffic-sources?days=${days}`),
+        fetch(`/api/admin/analytics/traffic-sources?days=${days}&limit=${referrerLimit}`),
         fetch('/api/admin/analytics/presence-stats?minutes=30'),
       ]);
       
@@ -108,7 +109,7 @@ export default function TrafficSourcesPage() {
     } finally {
       setLoading(false);
     }
-  }, [timeRange]);
+  }, [timeRange, referrerLimit]);
 
   useEffect(() => {
     fetchData();
@@ -265,6 +266,45 @@ export default function TrafficSourcesPage() {
       {/* Referrers Tab */}
       {activeTab === 'referrers' && trafficData && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Limit Controls */}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ color: '#94a3b8', fontSize: '14px' }}>Show:</span>
+            {[50, 100, 250, 500, 1000].map((limit) => (
+              <button 
+                key={limit} 
+                onClick={() => setReferrerLimit(limit)} 
+                style={{ 
+                  padding: '6px 12px', 
+                  background: referrerLimit === limit ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', 
+                  border: '1px solid', 
+                  borderColor: referrerLimit === limit ? '#7877c6' : 'rgba(255, 255, 255, 0.1)', 
+                  borderRadius: '6px', 
+                  color: referrerLimit === limit ? 'white' : '#94a3b8', 
+                  cursor: 'pointer', 
+                  fontSize: '13px' 
+                }}
+              >
+                {limit}
+              </button>
+            ))}
+            <button 
+              onClick={() => setReferrerLimit(10000)} 
+              style={{ 
+                padding: '6px 12px', 
+                background: referrerLimit === 10000 ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', 
+                border: '1px solid', 
+                borderColor: referrerLimit === 10000 ? '#7877c6' : 'rgba(255, 255, 255, 0.1)', 
+                borderRadius: '6px', 
+                color: referrerLimit === 10000 ? 'white' : '#94a3b8', 
+                cursor: 'pointer', 
+                fontSize: '13px',
+                fontWeight: '600'
+              }}
+            >
+              All
+            </button>
+          </div>
+
           {/* Top Referring Domains */}
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

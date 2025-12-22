@@ -83,8 +83,9 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    // Default to 2 minutes for more stable counts (was 5)
-    const maxAge = parseInt(searchParams.get('maxAge') || '2');
+    // Default to 5 minutes for more stable counts (increased from 2)
+    // This matches the unified-stats API and accounts for users with slower heartbeat intervals
+    const maxAge = parseInt(searchParams.get('maxAge') || '5');
 
     console.log('[Live Activity] Fetching activities, maxAge:', maxAge);
 
@@ -96,7 +97,7 @@ export async function GET(request: NextRequest) {
 
     console.log('[Live Activity] Found', activities.length, 'active users');
 
-    // Clean up stale activities
+    // Clean up stale activities (use 10 min = 2x the maxAge window)
     const cleaned = await db.cleanupStaleActivities(maxAge * 2);
     if (cleaned > 0) {
       console.log('[Live Activity] Cleaned up', cleaned, 'stale activities');
