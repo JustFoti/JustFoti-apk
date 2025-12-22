@@ -14,6 +14,7 @@ import type { MediaItem } from '@/types/media';
 
 interface RecommendedItem extends MediaItem {
   matchReason?: string;
+  matchScore?: number;
 }
 
 export default function WatchlistPageClient() {
@@ -24,6 +25,7 @@ export default function WatchlistPageClient() {
   
   const [recommendations, setRecommendations] = useState<RecommendedItem[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(false);
+  const [recProfile, setRecProfile] = useState<{ topGenres: Array<{ name: string; count: number }>; itemCount: number } | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +42,7 @@ export default function WatchlistPageClient() {
       fetchRecommendations();
     } else {
       setRecommendations([]);
+      setRecProfile(null);
     }
   }, [items.length]); // Only re-fetch when item count changes
 
@@ -48,15 +51,66 @@ export default function WatchlistPageClient() {
     
     setLoadingRecs(true);
     try {
-      // Get recommendations based on items (up to 5) for better results
+      // Use the intelligent recommendations API
+      const response = await fetch('/api/recommendations/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map(item => ({
+            id: item.id,
+            mediaType: item.mediaType,
+            title: item.title,
+          })),
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.recommendations) {
+          // Transform recommendations to match our interface
+          const recs: RecommendedItem[] = data.recommendations.map((rec: any) => ({
+            id: rec.id,
+            title: rec.title || rec.name,
+            name: rec.name,
+            posterPath: rec.poster_path ? `https://image.tmdb.org/t/p/w500${rec.poster_path}` : null,
+            poster_path: rec.poster_path,
+            backdrop_path: rec.backdrop_path,
+            overview: rec.overview,
+            vote_average: rec.vote_average,
+            rating: rec.vote_average,
+            release_date: rec.release_date,
+            first_air_date: rec.first_air_date,
+            releaseDate: rec.release_date || rec.first_air_date,
+            mediaType: rec.mediaType,
+            media_type: rec.mediaType,
+            matchReason: rec.primaryReason,
+            matchScore: rec.matchScore,
+          }));
+          setRecommendations(recs);
+          setRecProfile(data.profile || null);
+        }
+      } else {
+        // Fallback to simple recommendations if API fails
+        await fetchSimpleRecommendations();
+      }
+    } catch (err) {
+      console.error('[Watchlist] Error fetching smart recommendations:', err);
+      // Fallback to simple recommendations
+      await fetchSimpleRecommendations();
+    } finally {
+      setLoadingRecs(false);
+    }
+  };
+
+  // Fallback simple recommendations (original implementation)
+  const fetchSimpleRecommendations = async () => {
+    try {
       const sampleItems = items.slice(0, 5);
       const allRecs: RecommendedItem[] = [];
       const seenIds = new Set(items.map(i => String(i.id)));
       
-      // Fetch recommendations sequentially to avoid rate limiting issues
       for (const item of sampleItems) {
         try {
-          // Use CF proxy if configured, otherwise fall back to Vercel
           const url = getTMDBRecommendationsUrl(item.id, item.mediaType as 'movie' | 'tv');
           const response = await fetch(url);
           
@@ -81,13 +135,10 @@ export default function WatchlistPageClient() {
         }
       }
       
-      // Shuffle and limit recommendations
       const shuffled = allRecs.sort(() => Math.random() - 0.5).slice(0, 20);
       setRecommendations(shuffled);
     } catch (err) {
-      console.error('[Watchlist] Error fetching recommendations:', err);
-    } finally {
-      setLoadingRecs(false);
+      console.error('[Watchlist] Error in fallback recommendations:', err);
     }
   };
 
@@ -249,9 +300,23 @@ export default function WatchlistPageClient() {
             <section className="py-4 md:py-6 px-3 md:px-6 mt-8">
               <div className="container mx-auto">
                 <div className="flex items-center justify-between mb-3 md:mb-5">
-                  <h2 className="text-base sm:text-lg md:text-2xl font-bold text-white flex items-center gap-2 md:gap-3">
-                    <span>✨</span> Based on Your List
-                  </h2>
+                  <div>
+                    <h2 className="text-base sm:text-lg md:text-2xl font-bold text-white flex items-center gap-2 md:gap-3">
+                      <span>✨</span> Based on Your List
+                    </h2>
+                    {recProfile && recProfile.topGenres.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {recProfile.topGenres.slice(0, 4).map((genre) => (
+                          <span 
+                            key={genre.name}
+                            className="px-2 py-0.5 text-[10px] sm:text-xs rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                          >
+                            {genre.name} ({genre.count})
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {recommendations.length > 0 && (
                     <div className="hidden sm:flex gap-2">
                       <button
@@ -274,7 +339,7 @@ export default function WatchlistPageClient() {
                   <div className="flex items-center justify-center py-12">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
-                      <p className="text-gray-400 text-sm">Finding recommendations...</p>
+                      <p className="text-gray-400 text-sm">Analyzing your taste...</p>
                     </div>
                   </div>
                 ) : recommendations.length > 0 ? (
@@ -285,7 +350,7 @@ export default function WatchlistPageClient() {
                   >
                     {recommendations.map((item, index) => (
                       <RecommendationCard
-                        key={item.id}
+                        key={`${item.mediaType}-${item.id}`}
                         item={item}
                         index={index}
                         onClick={() => handleContentClick(item)}
