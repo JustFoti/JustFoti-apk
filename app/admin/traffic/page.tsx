@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../context/AdminContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface SourceStats {
   source_type: string;
@@ -91,8 +92,8 @@ export default function TrafficSourcesPage() {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
       
       const [trafficRes, presenceRes] = await Promise.all([
-        fetch(`/api/admin/analytics/traffic-sources?days=${days}&limit=${referrerLimit}`),
-        fetch('/api/admin/analytics/presence-stats?minutes=30'),
+        fetch(getAdminAnalyticsUrl('traffic-sources', { days, limit: referrerLimit })),
+        fetch(getAdminAnalyticsUrl('presence-stats', { minutes: 30 })),
       ]);
       
       if (trafficRes.ok) {

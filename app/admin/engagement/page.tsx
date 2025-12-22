@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface PageMetric {
   page_path: string;
@@ -80,9 +81,9 @@ export default function EngagementPage() {
       
       // Fetch all data in parallel
       const [pageRes, userRes, presenceRes] = await Promise.all([
-        fetch(`/api/analytics/page-view?days=${days}`),
-        fetch(`/api/analytics/user-engagement?days=${days}&sortBy=${sortBy}`),
-        fetch(`/api/admin/analytics/presence-stats?minutes=30`)
+        fetch(getAdminAnalyticsUrl('page-view', { days })),
+        fetch(getAdminAnalyticsUrl('user-engagement', { days, sortBy })),
+        fetch(getAdminAnalyticsUrl('presence-stats', { minutes: 30 }))
       ]);
       
       if (pageRes.ok) {

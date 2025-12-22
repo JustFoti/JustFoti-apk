@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../context/AdminContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import styles from './analytics.module.css';
 
 interface WatchSession {
@@ -96,7 +97,7 @@ export default function AnalyticsPage() {
   const fetchTrafficSources = async () => {
     try {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
-      const response = await fetch(`/api/admin/analytics/traffic-sources?days=${days}`);
+      const response = await fetch(getAdminAnalyticsUrl('traffic-sources', { days }));
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -125,7 +126,7 @@ export default function AnalyticsPage() {
         ...(startDate && { startDate: startDate.toString() }),
       });
 
-      const response = await fetch(`/api/analytics/watch-session?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '200', ...(startDate && { startDate: startDate.toString() }) }));
       const data = await response.json();
 
       if (data.success) {
@@ -141,7 +142,7 @@ export default function AnalyticsPage() {
 
   const fetchLiveTVAnalytics = async () => {
     try {
-      const response = await fetch('/api/analytics/livetv-session?history=true');
+      const response = await fetch(getAdminAnalyticsUrl('livetv-session', { history: 'true' }));
       const data = await response.json();
       if (data.success !== false) {
         setLiveTVAnalytics(data);
@@ -215,7 +216,7 @@ export default function AnalyticsPage() {
           endDate: prevEndDate.toString(),
         });
 
-        const response = await fetch(`/api/analytics/watch-session?${params}`);
+        const response = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '200', startDate: prevStartDate.toString(), endDate: prevEndDate.toString() }));
         const data = await response.json();
 
         if (data.success && data.analytics) {

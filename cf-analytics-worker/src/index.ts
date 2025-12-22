@@ -1,24 +1,25 @@
 /**
- * Flyx Analytics Worker
+ * Flyx Analytics Worker - D1 Version
  * 
- * Cloudflare Worker for analytics tracking.
+ * Cloudflare Worker for analytics tracking using D1 SQLite database.
  * Handles: presence/heartbeat, page views, watch sessions, live activity
  * 
  * Endpoints:
  *   POST /presence      - Heartbeat for presence tracking
  *   POST /page-view     - Track page views
  *   POST /watch-session - Track watch sessions
+ *   POST /livetv-session - Track Live TV sessions
+ *   POST /live-activity - Track live activity from client
  *   GET  /live-activity - Get current live activity (admin)
  *   GET  /stats         - Get analytics stats (admin)
  *   GET  /health        - Health check
  */
 
 export interface Env {
-  DATABASE_URL?: string;
+  DB: D1Database;
   ALLOWED_ORIGINS?: string;
   LOG_LEVEL?: string;
   HEARTBEAT_INTERVAL?: string;
-  // KV for rate limiting
   ANALYTICS_KV?: KVNamespace;
 }
 
@@ -40,48 +41,14 @@ interface PresencePayload {
     isBot?: boolean;
     botConfidence?: number;
     hasInteracted?: boolean;
-    mouseEntropy?: number;
-    screenResolution?: string;
-    timezone?: string;
-    language?: string;
   };
   timestamp: number;
-}
-
-interface PageViewPayload {
-  userId: string;
-  sessionId: string;
-  pagePath: string;
-  pageTitle?: string;
-  referrer?: string;
-  entryTime: number;
-  exitTime?: number;
-  timeOnPage?: number;
-  scrollDepth?: number;
-  interactions?: number;
-  deviceType?: string;
-  country?: string;
-}
-
-interface WatchSessionPayload {
-  userId: string;
-  sessionId: string;
-  contentId: string;
-  contentType: 'movie' | 'tv';
-  contentTitle?: string;
-  seasonNumber?: number;
-  episodeNumber?: number;
-  action: 'start' | 'progress' | 'pause' | 'complete';
-  currentTime: number;
-  duration: number;
-  quality?: string;
 }
 
 // CORS headers
 function getCorsHeaders(request: Request, env: Env): HeadersInit {
   const origin = request.headers.get('Origin') || '';
   const allowedOrigins = env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || ['*'];
-  
   const isAllowed = allowedOrigins.includes('*') || allowedOrigins.includes(origin);
   
   return {
@@ -118,12 +85,30 @@ export default {
 
     // Health check
     if (url.pathname === '/health') {
+      let dbOk = false;
+      try {
+        await env.DB.prepare('SELECT 1').first();
+        dbOk = true;
+      } catch (e) {
+        console.error('[Health] DB check failed:', e);
+      }
       return Response.json({ 
-        status: 'ok', 
+        status: dbOk ? 'ok' : 'degraded', 
         service: 'flyx-analytics',
+        database: dbOk ? 'connected' : 'error',
         timestamp: Date.now(),
-        hasDatabase: !!env.DATABASE_URL,
       }, { headers: corsHeaders });
+    }
+
+    // Initialize database tables if needed
+    if (url.pathname === '/init') {
+      try {
+        await initDatabase(env.DB);
+        return Response.json({ success: true, message: 'Database initialized' }, { headers: corsHeaders });
+      } catch (error) {
+        console.error('[Init] Error:', error);
+        return Response.json({ error: 'Failed to initialize database' }, { status: 500, headers: corsHeaders });
+      }
     }
 
     try {
@@ -138,36 +123,76 @@ export default {
           return await handlePresence(request, env, corsHeaders);
 
         case '/page-view':
-          if (request.method !== 'POST') {
-            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          if (request.method === 'POST') {
+            return await handlePageView(request, env, corsHeaders);
+          } else if (request.method === 'GET') {
+            return await handleGetPageViews(url, env, corsHeaders);
           }
-          return await handlePageView(request, env, corsHeaders);
+          return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
 
         case '/watch-session':
-          if (request.method !== 'POST') {
-            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          if (request.method === 'POST') {
+            return await handleWatchSession(request, env, corsHeaders);
+          } else if (request.method === 'GET') {
+            return await handleGetWatchSessions(url, env, corsHeaders);
           }
-          return await handleWatchSession(request, env, corsHeaders);
+          return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
 
         case '/livetv-session':
-          if (request.method !== 'POST') {
-            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          if (request.method === 'POST') {
+            return await handleLiveTVSession(request, env, corsHeaders);
+          } else if (request.method === 'GET') {
+            return await handleGetLiveTVSessions(url, env, corsHeaders);
           }
-          return await handleLiveTVSession(request, env, corsHeaders);
+          return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
 
         case '/live-activity':
           if (request.method === 'GET') {
-            return await handleGetLiveActivity(env, corsHeaders);
+            return await handleGetLiveActivity(url, env, corsHeaders);
           } else if (request.method === 'POST') {
             return await handlePostLiveActivity(request, env, corsHeaders);
           }
           return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
 
         case '/stats':
+        case '/admin/analytics':
           if (request.method !== 'GET') {
             return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
           }
           return await handleGetStats(url, env, corsHeaders);
+
+        case '/admin/traffic-sources':
+        case '/traffic-sources':
+          if (request.method !== 'GET') {
+            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          }
+          return await handleGetTrafficSources(url, env, corsHeaders);
+
+        case '/admin/presence-stats':
+        case '/presence-stats':
+          if (request.method !== 'GET') {
+            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          }
+          return await handleGetPresenceStats(url, env, corsHeaders);
+
+        case '/admin/users':
+        case '/users':
+          if (request.method !== 'GET') {
+            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          }
+          return await handleGetUsers(url, env, corsHeaders);
+
+        case '/user-engagement':
+          if (request.method !== 'GET') {
+            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          }
+          return await handleGetUserEngagement(url, env, corsHeaders);
+
+        case '/unified-stats':
+          if (request.method !== 'GET') {
+            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          }
+          return await handleGetUnifiedStats(url, env, corsHeaders);
 
         default:
           return Response.json({ error: 'Not found', path: url.pathname }, { status: 404, headers: corsHeaders });
@@ -175,12 +200,118 @@ export default {
     } catch (error) {
       console.error('[Analytics Worker] Error:', error);
       return Response.json(
-        { error: 'Internal server error' },
+        { error: 'Internal server error', details: String(error) },
         { status: 500, headers: corsHeaders }
       );
     }
   },
 };
+
+// Initialize D1 database tables
+async function initDatabase(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS live_activity (
+        id TEXT PRIMARY KEY,
+        user_id TEXT UNIQUE NOT NULL,
+        session_id TEXT,
+        activity_type TEXT DEFAULT 'browsing',
+        content_id TEXT,
+        content_title TEXT,
+        content_type TEXT,
+        season_number INTEGER,
+        episode_number INTEGER,
+        country TEXT,
+        city TEXT,
+        region TEXT,
+        started_at INTEGER,
+        last_heartbeat INTEGER,
+        is_active INTEGER DEFAULT 1,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_live_activity_user ON live_activity(user_id)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_live_activity_heartbeat ON live_activity(last_heartbeat)`),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_activity (
+        id TEXT PRIMARY KEY,
+        user_id TEXT UNIQUE NOT NULL,
+        session_id TEXT,
+        first_seen INTEGER,
+        last_seen INTEGER,
+        total_sessions INTEGER DEFAULT 1,
+        country TEXT,
+        city TEXT,
+        region TEXT,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_user_activity_user ON user_activity(user_id)`),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS page_views (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        session_id TEXT,
+        page_path TEXT,
+        page_title TEXT,
+        referrer TEXT,
+        entry_time INTEGER,
+        time_on_page INTEGER DEFAULT 0,
+        scroll_depth INTEGER DEFAULT 0,
+        interactions INTEGER DEFAULT 0,
+        device_type TEXT,
+        country TEXT,
+        created_at INTEGER
+      )
+    `),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_page_views_time ON page_views(entry_time)`),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS watch_sessions (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        user_id TEXT,
+        content_id TEXT,
+        content_type TEXT,
+        content_title TEXT,
+        season_number INTEGER,
+        episode_number INTEGER,
+        started_at INTEGER,
+        ended_at INTEGER,
+        last_position INTEGER DEFAULT 0,
+        duration INTEGER DEFAULT 0,
+        completion_percentage INTEGER DEFAULT 0,
+        quality TEXT,
+        is_completed INTEGER DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_watch_sessions_user ON watch_sessions(user_id)`),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_watch_sessions_content ON watch_sessions(content_id)`),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS livetv_sessions (
+        id TEXT PRIMARY KEY,
+        session_id TEXT,
+        user_id TEXT,
+        channel_id TEXT,
+        channel_name TEXT,
+        category TEXT,
+        country TEXT,
+        started_at INTEGER,
+        ended_at INTEGER,
+        watch_duration INTEGER DEFAULT 0,
+        quality TEXT,
+        buffer_count INTEGER DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER
+      )
+    `),
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_livetv_sessions_user ON livetv_sessions(user_id)`),
+  ]);
+}
+
 
 // POST /presence - Heartbeat for presence tracking
 async function handlePresence(
@@ -191,12 +322,8 @@ async function handlePresence(
   const payload = await request.json() as PresencePayload;
   const geo = getGeoInfo(request);
   
-  // Validate required fields
   if (!payload.userId || !payload.sessionId) {
-    return Response.json(
-      { error: 'Missing userId or sessionId' },
-      { status: 400, headers: corsHeaders }
-    );
+    return Response.json({ error: 'Missing userId or sessionId' }, { status: 400, headers: corsHeaders });
   }
 
   // Skip obvious bots
@@ -204,80 +331,81 @@ async function handlePresence(
     return Response.json({ success: true, skipped: 'bot' }, { headers: corsHeaders });
   }
 
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-
   const now = Date.now();
   const id = `la_${generateId()}`;
 
-  // Upsert live activity
-  await neonQuery(env.DATABASE_URL, `
-    INSERT INTO live_activity (
-      id, user_id, session_id, activity_type, content_id, content_title, 
-      content_type, season_number, episode_number, country, city, region,
-      started_at, last_heartbeat, is_active, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-    ON CONFLICT (user_id) DO UPDATE SET
-      session_id = EXCLUDED.session_id,
-      activity_type = EXCLUDED.activity_type,
-      content_id = EXCLUDED.content_id,
-      content_title = EXCLUDED.content_title,
-      content_type = EXCLUDED.content_type,
-      season_number = EXCLUDED.season_number,
-      episode_number = EXCLUDED.episode_number,
-      last_heartbeat = EXCLUDED.last_heartbeat,
-      is_active = EXCLUDED.is_active,
-      updated_at = EXCLUDED.updated_at
-  `, [
-    id,
-    payload.userId,
-    payload.sessionId,
-    payload.activityType,
-    payload.contentId || null,
-    payload.contentTitle || null,
-    payload.contentType || null,
-    payload.seasonNumber || null,
-    payload.episodeNumber || null,
-    geo.country || null,
-    geo.city || null,
-    geo.region || null,
-    now,
-    now,
-    payload.isActive && !payload.isLeaving,
-    now,
-    now,
-  ]);
+  try {
+    // Upsert live activity
+    await env.DB.prepare(`
+      INSERT INTO live_activity (
+        id, user_id, session_id, activity_type, content_id, content_title, 
+        content_type, season_number, episode_number, country, city, region,
+        started_at, last_heartbeat, is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        session_id = excluded.session_id,
+        activity_type = excluded.activity_type,
+        content_id = excluded.content_id,
+        content_title = excluded.content_title,
+        content_type = excluded.content_type,
+        season_number = excluded.season_number,
+        episode_number = excluded.episode_number,
+        last_heartbeat = excluded.last_heartbeat,
+        is_active = excluded.is_active,
+        updated_at = excluded.updated_at
+    `).bind(
+      id,
+      payload.userId,
+      payload.sessionId,
+      payload.activityType || 'browsing',
+      payload.contentId || null,
+      payload.contentTitle || null,
+      payload.contentType || null,
+      payload.seasonNumber || null,
+      payload.episodeNumber || null,
+      geo.country || null,
+      geo.city || null,
+      geo.region || null,
+      now,
+      now,
+      payload.isActive && !payload.isLeaving ? 1 : 0,
+      now,
+      now
+    ).run();
 
-  // Also update user_activity for long-term tracking
-  await neonQuery(env.DATABASE_URL, `
-    INSERT INTO user_activity (
-      id, user_id, session_id, first_seen, last_seen, total_sessions,
-      country, city, region, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, 1, $6, $7, $8, $9, $10)
-    ON CONFLICT (user_id) DO UPDATE SET
-      session_id = EXCLUDED.session_id,
-      last_seen = EXCLUDED.last_seen,
-      total_sessions = user_activity.total_sessions + 
-        CASE WHEN user_activity.session_id != EXCLUDED.session_id THEN 1 ELSE 0 END,
-      updated_at = EXCLUDED.updated_at
-  `, [
-    `ua_${generateId()}`,
-    payload.userId,
-    payload.sessionId,
-    now,
-    now,
-    geo.country || null,
-    geo.city || null,
-    geo.region || null,
-    now,
-    now,
-  ]);
+    // Upsert user activity
+    await env.DB.prepare(`
+      INSERT INTO user_activity (
+        id, user_id, session_id, first_seen, last_seen, total_sessions,
+        country, city, region, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        session_id = excluded.session_id,
+        last_seen = excluded.last_seen,
+        total_sessions = CASE 
+          WHEN user_activity.session_id != excluded.session_id 
+          THEN user_activity.total_sessions + 1 
+          ELSE user_activity.total_sessions 
+        END,
+        updated_at = excluded.updated_at
+    `).bind(
+      `ua_${generateId()}`,
+      payload.userId,
+      payload.sessionId,
+      now,
+      now,
+      geo.country || null,
+      geo.city || null,
+      geo.region || null,
+      now,
+      now
+    ).run();
 
-  return Response.json({ success: true }, { headers: corsHeaders });
+    return Response.json({ success: true }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[Presence] DB error:', error);
+    return Response.json({ error: 'Database error', details: String(error) }, { status: 500, headers: corsHeaders });
+  }
 }
 
 // POST /page-view - Track page views
@@ -286,58 +414,44 @@ async function handlePageView(
   env: Env,
   corsHeaders: HeadersInit
 ): Promise<Response> {
-  const payload = await request.json() as PageViewPayload;
+  const payload = await request.json() as any;
   const geo = getGeoInfo(request);
 
-  if (!payload.userId || !payload.sessionId || !payload.pagePath) {
-    return Response.json(
-      { error: 'Missing required fields' },
-      { status: 400, headers: corsHeaders }
-    );
-  }
-
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
+  if (!payload.userId || !payload.pagePath) {
+    return Response.json({ error: 'Missing required fields' }, { status: 400, headers: corsHeaders });
   }
 
   const now = Date.now();
-  const id = `pv_${generateId()}`;
+  const id = payload.id || `pv_${generateId()}`;
 
-  await neonQuery(env.DATABASE_URL, `
-    INSERT INTO page_views (
-      id, user_id, session_id, page_path, page_title, referrer,
-      entry_time, time_on_page, scroll_depth, interactions,
-      device_type, country, created_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-  `, [
-    id,
-    payload.userId,
-    payload.sessionId,
-    payload.pagePath,
-    payload.pageTitle || null,
-    payload.referrer || null,
-    payload.entryTime || now,
-    payload.timeOnPage || 0,
-    payload.scrollDepth || 0,
-    payload.interactions || 0,
-    payload.deviceType || null,
-    geo.country || payload.country || null,
-    now,
-  ]);
+  try {
+    await env.DB.prepare(`
+      INSERT INTO page_views (
+        id, user_id, session_id, page_path, page_title, referrer,
+        entry_time, time_on_page, scroll_depth, interactions,
+        device_type, country, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      payload.userId,
+      payload.sessionId || null,
+      payload.pagePath,
+      payload.pageTitle || null,
+      payload.referrer || null,
+      payload.entryTime || now,
+      payload.timeOnPage || 0,
+      payload.scrollDepth || 0,
+      payload.interactions || 0,
+      payload.deviceType || null,
+      geo.country || payload.country || null,
+      now
+    ).run();
 
-  // Update page metrics
-  await neonQuery(env.DATABASE_URL, `
-    INSERT INTO page_metrics (page_path, total_views, unique_visitors, updated_at)
-    VALUES ($1, 1, 1, $2)
-    ON CONFLICT (page_path) DO UPDATE SET
-      total_views = page_metrics.total_views + 1,
-      updated_at = EXCLUDED.updated_at
-  `, [payload.pagePath, now]);
-
-  return Response.json({ success: true }, { headers: corsHeaders });
+    return Response.json({ success: true }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[PageView] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
 }
 
 // POST /watch-session - Track watch sessions
@@ -346,89 +460,54 @@ async function handleWatchSession(
   env: Env,
   corsHeaders: HeadersInit
 ): Promise<Response> {
-  const payload = await request.json() as WatchSessionPayload;
+  const payload = await request.json() as any;
 
-  if (!payload.userId || !payload.sessionId || !payload.contentId) {
-    return Response.json(
-      { error: 'Missing required fields' },
-      { status: 400, headers: corsHeaders }
-    );
-  }
-
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
+  if (!payload.userId || !payload.contentId) {
+    return Response.json({ error: 'Missing required fields' }, { status: 400, headers: corsHeaders });
   }
 
   const now = Date.now();
-  const watchSessionId = `ws_${payload.userId}_${payload.contentId}`;
-  const progress = payload.duration > 0 ? (payload.currentTime / payload.duration) * 100 : 0;
+  const id = payload.id || `ws_${payload.userId}_${payload.contentId}`;
 
-  if (payload.action === 'start') {
-    // Create or update watch session
-    await neonQuery(env.DATABASE_URL, `
+  try {
+    await env.DB.prepare(`
       INSERT INTO watch_sessions (
         id, session_id, user_id, content_id, content_type, content_title,
-        season_number, episode_number, started_at, last_position, duration,
-        completion_percentage, quality, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-      ON CONFLICT (id) DO UPDATE SET
-        last_position = EXCLUDED.last_position,
-        duration = EXCLUDED.duration,
-        completion_percentage = EXCLUDED.completion_percentage,
-        updated_at = EXCLUDED.updated_at
-    `, [
-      watchSessionId,
-      payload.sessionId,
+        season_number, episode_number, started_at, ended_at, last_position, 
+        duration, completion_percentage, quality, is_completed, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        last_position = excluded.last_position,
+        duration = excluded.duration,
+        completion_percentage = excluded.completion_percentage,
+        is_completed = excluded.is_completed,
+        ended_at = excluded.ended_at,
+        updated_at = excluded.updated_at
+    `).bind(
+      id,
+      payload.sessionId || null,
       payload.userId,
       payload.contentId,
-      payload.contentType,
+      payload.contentType || null,
       payload.contentTitle || null,
       payload.seasonNumber || null,
       payload.episodeNumber || null,
-      now,
-      payload.currentTime,
-      payload.duration,
-      progress,
+      payload.startedAt || now,
+      payload.endedAt || null,
+      payload.lastPosition || 0,
+      payload.duration || 0,
+      payload.completionPercentage || 0,
       payload.quality || null,
+      payload.isCompleted ? 1 : 0,
       now,
-      now,
-    ]);
-  } else {
-    // Update existing session
-    await neonQuery(env.DATABASE_URL, `
-      UPDATE watch_sessions SET
-        last_position = $1,
-        duration = $2,
-        completion_percentage = $3,
-        is_completed = $4,
-        ended_at = $5,
-        updated_at = $6
-      WHERE id = $7
-    `, [
-      payload.currentTime,
-      payload.duration,
-      progress,
-      payload.action === 'complete',
-      payload.action === 'complete' ? now : null,
-      now,
-      watchSessionId,
-    ]);
+      now
+    ).run();
+
+    return Response.json({ success: true }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[WatchSession] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
   }
-
-  // Update content stats
-  await neonQuery(env.DATABASE_URL, `
-    INSERT INTO content_stats (content_id, content_type, view_count, last_viewed, updated_at)
-    VALUES ($1, $2, 1, $3, $4)
-    ON CONFLICT (content_id) DO UPDATE SET
-      view_count = content_stats.view_count + CASE WHEN $5 = 'start' THEN 1 ELSE 0 END,
-      last_viewed = EXCLUDED.last_viewed,
-      updated_at = EXCLUDED.updated_at
-  `, [payload.contentId, payload.contentType, now, now, payload.action]);
-
-  return Response.json({ success: true }, { headers: corsHeaders });
 }
 
 // POST /livetv-session - Track Live TV sessions
@@ -440,68 +519,47 @@ async function handleLiveTVSession(
   const payload = await request.json() as any;
 
   if (!payload.userId || !payload.channelId) {
-    return Response.json(
-      { error: 'Missing required fields' },
-      { status: 400, headers: corsHeaders }
-    );
-  }
-
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
+    return Response.json({ error: 'Missing required fields' }, { status: 400, headers: corsHeaders });
   }
 
   const now = Date.now();
-  const sessionId = `ltv_${payload.userId}_${payload.channelId}`;
+  const id = `ltv_${payload.userId}_${payload.channelId}`;
 
-  if (payload.action === 'start') {
-    await neonQuery(env.DATABASE_URL, `
+  try {
+    await env.DB.prepare(`
       INSERT INTO livetv_sessions (
         id, session_id, user_id, channel_id, channel_name, category,
-        country, started_at, watch_duration, quality, buffer_count, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      ON CONFLICT (id) DO UPDATE SET
-        watch_duration = EXCLUDED.watch_duration,
-        quality = EXCLUDED.quality,
-        buffer_count = EXCLUDED.buffer_count,
-        updated_at = EXCLUDED.updated_at
-    `, [
-      sessionId,
-      payload.sessionId,
+        country, started_at, ended_at, watch_duration, quality, buffer_count, 
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        watch_duration = excluded.watch_duration,
+        quality = excluded.quality,
+        buffer_count = excluded.buffer_count,
+        ended_at = excluded.ended_at,
+        updated_at = excluded.updated_at
+    `).bind(
+      id,
+      payload.sessionId || null,
       payload.userId,
       payload.channelId,
       payload.channelName || null,
       payload.category || null,
       payload.country || null,
-      now,
-      0,
-      payload.quality || null,
-      0,
-      now,
-      now,
-    ]);
-  } else {
-    await neonQuery(env.DATABASE_URL, `
-      UPDATE livetv_sessions SET
-        watch_duration = $1,
-        quality = $2,
-        buffer_count = $3,
-        ended_at = $4,
-        updated_at = $5
-      WHERE id = $6
-    `, [
+      payload.startedAt || now,
+      payload.action === 'stop' ? now : null,
       payload.watchDuration || 0,
       payload.quality || null,
       payload.bufferCount || 0,
-      payload.action === 'stop' ? now : null,
       now,
-      sessionId,
-    ]);
-  }
+      now
+    ).run();
 
-  return Response.json({ success: true }, { headers: corsHeaders });
+    return Response.json({ success: true }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[LiveTVSession] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
 }
 
 // POST /live-activity - Track live activity from client
@@ -513,102 +571,90 @@ async function handlePostLiveActivity(
   const payload = await request.json() as any;
 
   if (!payload.contentId) {
-    return Response.json(
-      { error: 'Missing contentId' },
-      { status: 400, headers: corsHeaders }
-    );
-  }
-
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
+    return Response.json({ error: 'Missing contentId' }, { status: 400, headers: corsHeaders });
   }
 
   const now = Date.now();
   const userId = payload.userId || `anon_${Date.now()}`;
   const id = `la_${generateId()}`;
 
-  await neonQuery(env.DATABASE_URL, `
-    INSERT INTO live_activity (
-      id, user_id, session_id, activity_type, content_id, content_title, 
-      content_type, season_number, episode_number, started_at, last_heartbeat, 
-      is_active, created_at, updated_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-    ON CONFLICT (user_id) DO UPDATE SET
-      activity_type = EXCLUDED.activity_type,
-      content_id = EXCLUDED.content_id,
-      content_title = EXCLUDED.content_title,
-      content_type = EXCLUDED.content_type,
-      season_number = EXCLUDED.season_number,
-      episode_number = EXCLUDED.episode_number,
-      last_heartbeat = EXCLUDED.last_heartbeat,
-      is_active = EXCLUDED.is_active,
-      updated_at = EXCLUDED.updated_at
-  `, [
-    id,
-    userId,
-    payload.sessionId || null,
-    payload.action === 'completed' ? 'browsing' : 'watching',
-    payload.contentId,
-    payload.contentTitle || null,
-    payload.contentType || null,
-    payload.season || null,
-    payload.episode || null,
-    now,
-    now,
-    payload.action !== 'completed' && payload.action !== 'paused',
-    now,
-    now,
-  ]);
+  try {
+    await env.DB.prepare(`
+      INSERT INTO live_activity (
+        id, user_id, session_id, activity_type, content_id, content_title, 
+        content_type, season_number, episode_number, started_at, last_heartbeat, 
+        is_active, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        activity_type = excluded.activity_type,
+        content_id = excluded.content_id,
+        content_title = excluded.content_title,
+        content_type = excluded.content_type,
+        season_number = excluded.season_number,
+        episode_number = excluded.episode_number,
+        last_heartbeat = excluded.last_heartbeat,
+        is_active = excluded.is_active,
+        updated_at = excluded.updated_at
+    `).bind(
+      id,
+      userId,
+      payload.sessionId || null,
+      payload.action === 'completed' ? 'browsing' : 'watching',
+      payload.contentId,
+      payload.contentTitle || null,
+      payload.contentType || null,
+      payload.season || null,
+      payload.episode || null,
+      now,
+      now,
+      payload.action !== 'completed' && payload.action !== 'paused' ? 1 : 0,
+      now,
+      now
+    ).run();
 
-  return Response.json({ success: true }, { headers: corsHeaders });
+    return Response.json({ success: true }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[PostLiveActivity] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
 }
 
 // GET /live-activity - Get current live activity
 async function handleGetLiveActivity(
+  url: URL,
   env: Env,
   corsHeaders: HeadersInit
 ): Promise<Response> {
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
+  // Get activities from last X minutes (default 5)
+  const maxAge = parseInt(url.searchParams.get('maxAge') || '5');
+  const cutoff = Date.now() - maxAge * 60 * 1000;
+
+  try {
+    const result = await env.DB.prepare(`
+      SELECT 
+        user_id, activity_type, content_id, content_title, content_type,
+        season_number, episode_number, country, city, last_heartbeat
+      FROM live_activity
+      WHERE is_active = 1 AND last_heartbeat >= ?
+      ORDER BY last_heartbeat DESC
+      LIMIT 200
+    `).bind(cutoff).all();
+
+    const activities = result.results || [];
+    const watching = activities.filter((a: any) => a.activity_type === 'watching').length;
+    const browsing = activities.filter((a: any) => a.activity_type === 'browsing').length;
+    const livetv = activities.filter((a: any) => a.activity_type === 'livetv').length;
+
+    return Response.json({
+      success: true,
+      summary: { total: activities.length, watching, browsing, livetv },
+      activities,
+      timestamp: Date.now(),
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetLiveActivity] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
   }
-
-  // Get activities from last 5 minutes
-  const cutoff = Date.now() - 5 * 60 * 1000;
-
-  const result = await neonQuery(env.DATABASE_URL, `
-    SELECT 
-      user_id, activity_type, content_id, content_title, content_type,
-      season_number, episode_number, country, city, last_heartbeat
-    FROM live_activity
-    WHERE is_active = true AND last_heartbeat >= $1
-    ORDER BY last_heartbeat DESC
-    LIMIT 100
-  `, [cutoff]);
-
-  const data = await result.json() as { rows: any[] };
-
-  // Calculate summary
-  const activities = data.rows || [];
-  const watching = activities.filter(a => a.activity_type === 'watching').length;
-  const browsing = activities.filter(a => a.activity_type === 'browsing').length;
-  const livetv = activities.filter(a => a.activity_type === 'livetv').length;
-
-  return Response.json({
-    success: true,
-    summary: {
-      total: activities.length,
-      watching,
-      browsing,
-      livetv,
-    },
-    activities,
-  }, { headers: corsHeaders });
 }
 
 // GET /stats - Get analytics stats
@@ -617,92 +663,453 @@ async function handleGetStats(
   env: Env,
   corsHeaders: HeadersInit
 ): Promise<Response> {
-  if (!env.DATABASE_URL) {
-    return Response.json(
-      { error: 'No database configured' },
-      { status: 500, headers: corsHeaders }
-    );
-  }
-
   const period = url.searchParams.get('period') || '24h';
   let cutoff: number;
 
   switch (period) {
-    case '1h':
-      cutoff = Date.now() - 60 * 60 * 1000;
-      break;
-    case '24h':
-      cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      break;
-    case '7d':
-      cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      break;
-    case '30d':
-      cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-      break;
-    default:
-      cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    case '1h': cutoff = Date.now() - 60 * 60 * 1000; break;
+    case '24h': cutoff = Date.now() - 24 * 60 * 60 * 1000; break;
+    case '7d': cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000; break;
+    case '30d': cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000; break;
+    default: cutoff = Date.now() - 24 * 60 * 60 * 1000;
   }
 
-  // Get user stats
-  const userStats = await neonQuery(env.DATABASE_URL, `
-    SELECT 
-      COUNT(DISTINCT user_id) as unique_users,
-      COUNT(DISTINCT session_id) as total_sessions
-    FROM user_activity
-    WHERE last_seen >= $1
-  `, [cutoff]);
+  try {
+    const [userStats, pageStats, watchStats] = await Promise.all([
+      env.DB.prepare(`
+        SELECT COUNT(DISTINCT user_id) as unique_users, COUNT(DISTINCT session_id) as total_sessions
+        FROM user_activity WHERE last_seen >= ?
+      `).bind(cutoff).first(),
+      env.DB.prepare(`
+        SELECT COUNT(*) as total_views, COUNT(DISTINCT user_id) as unique_visitors
+        FROM page_views WHERE entry_time >= ?
+      `).bind(cutoff).first(),
+      env.DB.prepare(`
+        SELECT COUNT(*) as total_watches, COUNT(DISTINCT user_id) as unique_watchers, AVG(completion_percentage) as avg_completion
+        FROM watch_sessions WHERE started_at >= ?
+      `).bind(cutoff).first(),
+    ]);
 
-  // Get page view stats
-  const pageStats = await neonQuery(env.DATABASE_URL, `
-    SELECT 
-      COUNT(*) as total_views,
-      COUNT(DISTINCT user_id) as unique_visitors
-    FROM page_views
-    WHERE entry_time >= $1
-  `, [cutoff]);
-
-  // Get watch stats
-  const watchStats = await neonQuery(env.DATABASE_URL, `
-    SELECT 
-      COUNT(*) as total_watches,
-      COUNT(DISTINCT user_id) as unique_watchers,
-      AVG(completion_percentage) as avg_completion
-    FROM watch_sessions
-    WHERE started_at >= $1
-  `, [cutoff]);
-
-  const [userData, pageData, watchData] = await Promise.all([
-    userStats.json() as Promise<{ rows: any[] }>,
-    pageStats.json() as Promise<{ rows: any[] }>,
-    watchStats.json() as Promise<{ rows: any[] }>,
-  ]);
-
-  return Response.json({
-    success: true,
-    period,
-    stats: {
-      users: userData.rows?.[0] || { unique_users: 0, total_sessions: 0 },
-      pageViews: pageData.rows?.[0] || { total_views: 0, unique_visitors: 0 },
-      watching: watchData.rows?.[0] || { total_watches: 0, unique_watchers: 0, avg_completion: 0 },
-    },
-  }, { headers: corsHeaders });
+    return Response.json({
+      success: true,
+      period,
+      stats: {
+        users: userStats || { unique_users: 0, total_sessions: 0 },
+        pageViews: pageStats || { total_views: 0, unique_visitors: 0 },
+        watching: watchStats || { total_watches: 0, unique_watchers: 0, avg_completion: 0 },
+      },
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetStats] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
 }
 
-// Neon HTTP API helper
-async function neonQuery(databaseUrl: string, query: string, params: any[]): Promise<Response> {
-  const url = new URL(databaseUrl.replace('postgresql://', 'https://').replace('postgres://', 'https://'));
-  const host = url.hostname;
-  const password = url.password;
 
-  const response = await fetch(`https://${host}/sql`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${password}`,
-    },
-    body: JSON.stringify({ query, params }),
-  });
+// GET /watch-session - Get watch sessions for admin
+async function handleGetWatchSessions(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 500);
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+  const userId = url.searchParams.get('userId');
+  const contentId = url.searchParams.get('contentId');
+  const days = parseInt(url.searchParams.get('days') || '7');
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
-  return response;
+  try {
+    let query = `SELECT * FROM watch_sessions WHERE started_at >= ?`;
+    const params: any[] = [cutoff];
+
+    if (userId) {
+      query += ` AND user_id = ?`;
+      params.push(userId);
+    }
+    if (contentId) {
+      query += ` AND content_id = ?`;
+      params.push(contentId);
+    }
+
+    query += ` ORDER BY started_at DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    const result = await env.DB.prepare(query).bind(...params).all();
+    
+    // Get total count
+    let countQuery = `SELECT COUNT(*) as total FROM watch_sessions WHERE started_at >= ?`;
+    const countParams: any[] = [cutoff];
+    if (userId) { countQuery += ` AND user_id = ?`; countParams.push(userId); }
+    if (contentId) { countQuery += ` AND content_id = ?`; countParams.push(contentId); }
+    
+    const countResult = await env.DB.prepare(countQuery).bind(...countParams).first();
+
+    return Response.json({
+      success: true,
+      sessions: result.results || [],
+      total: (countResult as any)?.total || 0,
+      limit,
+      offset,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetWatchSessions] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /page-view - Get page views for admin
+async function handleGetPageViews(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const days = parseInt(url.searchParams.get('days') || '7');
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  try {
+    // Get page view stats grouped by path
+    const pageStats = await env.DB.prepare(`
+      SELECT 
+        page_path,
+        COUNT(*) as views,
+        COUNT(DISTINCT user_id) as unique_visitors,
+        AVG(time_on_page) as avg_time_on_page,
+        AVG(scroll_depth) as avg_scroll_depth
+      FROM page_views 
+      WHERE entry_time >= ?
+      GROUP BY page_path
+      ORDER BY views DESC
+      LIMIT 100
+    `).bind(cutoff).all();
+
+    // Get total stats
+    const totals = await env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_views,
+        COUNT(DISTINCT user_id) as unique_visitors,
+        AVG(time_on_page) as avg_time_on_page
+      FROM page_views WHERE entry_time >= ?
+    `).bind(cutoff).first();
+
+    return Response.json({
+      success: true,
+      pages: pageStats.results || [],
+      totals: totals || { total_views: 0, unique_visitors: 0, avg_time_on_page: 0 },
+      days,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetPageViews] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /livetv-session - Get Live TV sessions for admin
+async function handleGetLiveTVSessions(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const history = url.searchParams.get('history') === 'true';
+  const days = parseInt(url.searchParams.get('days') || '7');
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  try {
+    if (history) {
+      // Get historical stats
+      const stats = await env.DB.prepare(`
+        SELECT 
+          channel_name,
+          category,
+          COUNT(*) as session_count,
+          SUM(watch_duration) as total_watch_time,
+          AVG(watch_duration) as avg_watch_time,
+          COUNT(DISTINCT user_id) as unique_viewers
+        FROM livetv_sessions 
+        WHERE started_at >= ?
+        GROUP BY channel_name, category
+        ORDER BY session_count DESC
+        LIMIT 50
+      `).bind(cutoff).all();
+
+      return Response.json({
+        success: true,
+        channels: stats.results || [],
+        days,
+      }, { headers: corsHeaders });
+    }
+
+    // Get current/recent sessions
+    const sessions = await env.DB.prepare(`
+      SELECT * FROM livetv_sessions 
+      WHERE started_at >= ? 
+      ORDER BY started_at DESC 
+      LIMIT 100
+    `).bind(cutoff).all();
+
+    return Response.json({
+      success: true,
+      sessions: sessions.results || [],
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetLiveTVSessions] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /traffic-sources - Get traffic source analytics
+async function handleGetTrafficSources(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const days = parseInt(url.searchParams.get('days') || '7');
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 10000);
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  try {
+    // Get referrer stats
+    const referrers = await env.DB.prepare(`
+      SELECT 
+        referrer,
+        COUNT(*) as visits,
+        COUNT(DISTINCT user_id) as unique_visitors
+      FROM page_views 
+      WHERE entry_time >= ? AND referrer IS NOT NULL AND referrer != ''
+      GROUP BY referrer
+      ORDER BY visits DESC
+      LIMIT ?
+    `).bind(cutoff, limit).all();
+
+    // Get country stats
+    const countries = await env.DB.prepare(`
+      SELECT 
+        country,
+        COUNT(*) as visits,
+        COUNT(DISTINCT user_id) as unique_visitors
+      FROM page_views 
+      WHERE entry_time >= ? AND country IS NOT NULL
+      GROUP BY country
+      ORDER BY visits DESC
+      LIMIT 50
+    `).bind(cutoff).all();
+
+    // Get device stats (from user_activity)
+    const totals = await env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total_visits,
+        COUNT(DISTINCT user_id) as unique_visitors
+      FROM page_views WHERE entry_time >= ?
+    `).bind(cutoff).first();
+
+    return Response.json({
+      success: true,
+      referrers: referrers.results || [],
+      countries: countries.results || [],
+      totals: totals || { total_visits: 0, unique_visitors: 0 },
+      days,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetTrafficSources] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /presence-stats - Get presence/active user stats
+async function handleGetPresenceStats(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const minutes = parseInt(url.searchParams.get('minutes') || '30');
+  const cutoff = Date.now() - minutes * 60 * 1000;
+
+  try {
+    // Get active users
+    const activeUsers = await env.DB.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN activity_type = 'watching' THEN 1 ELSE 0 END) as watching,
+        SUM(CASE WHEN activity_type = 'browsing' THEN 1 ELSE 0 END) as browsing,
+        SUM(CASE WHEN activity_type = 'livetv' THEN 1 ELSE 0 END) as livetv
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ?
+    `).bind(cutoff).first();
+
+    // Get country breakdown
+    const byCountry = await env.DB.prepare(`
+      SELECT country, COUNT(*) as count
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ? AND country IS NOT NULL
+      GROUP BY country
+      ORDER BY count DESC
+      LIMIT 20
+    `).bind(cutoff).all();
+
+    return Response.json({
+      success: true,
+      activeUsers: activeUsers || { total: 0, watching: 0, browsing: 0, livetv: 0 },
+      byCountry: byCountry.results || [],
+      minutes,
+      timestamp: Date.now(),
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetPresenceStats] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /users - Get user list for admin
+async function handleGetUsers(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 500);
+  const offset = parseInt(url.searchParams.get('offset') || '0');
+  const userId = url.searchParams.get('userId');
+
+  try {
+    if (userId) {
+      // Get specific user
+      const user = await env.DB.prepare(`
+        SELECT * FROM user_activity WHERE user_id = ?
+      `).bind(userId).first();
+
+      if (!user) {
+        return Response.json({ success: false, error: 'User not found' }, { status: 404, headers: corsHeaders });
+      }
+
+      // Get user's watch sessions
+      const sessions = await env.DB.prepare(`
+        SELECT * FROM watch_sessions WHERE user_id = ? ORDER BY started_at DESC LIMIT 50
+      `).bind(userId).all();
+
+      return Response.json({
+        success: true,
+        user,
+        watchSessions: sessions.results || [],
+      }, { headers: corsHeaders });
+    }
+
+    // Get user list
+    const users = await env.DB.prepare(`
+      SELECT * FROM user_activity ORDER BY last_seen DESC LIMIT ? OFFSET ?
+    `).bind(limit, offset).all();
+
+    const countResult = await env.DB.prepare(`SELECT COUNT(*) as total FROM user_activity`).first();
+
+    return Response.json({
+      success: true,
+      users: users.results || [],
+      total: (countResult as any)?.total || 0,
+      limit,
+      offset,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetUsers] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /user-engagement - Get user engagement metrics
+async function handleGetUserEngagement(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const days = parseInt(url.searchParams.get('days') || '7');
+  const sortBy = url.searchParams.get('sortBy') || 'lastSeen';
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  try {
+    // Get engagement stats
+    const stats = await env.DB.prepare(`
+      SELECT 
+        COUNT(DISTINCT ua.user_id) as total_users,
+        AVG(ua.total_sessions) as avg_sessions_per_user
+      FROM user_activity ua
+      WHERE ua.last_seen >= ?
+    `).bind(cutoff).first();
+
+    // Get top users by watch time
+    const topUsers = await env.DB.prepare(`
+      SELECT 
+        ws.user_id,
+        COUNT(*) as session_count,
+        SUM(ws.duration) as total_watch_time,
+        MAX(ws.started_at) as last_watched
+      FROM watch_sessions ws
+      WHERE ws.started_at >= ?
+      GROUP BY ws.user_id
+      ORDER BY total_watch_time DESC
+      LIMIT 50
+    `).bind(cutoff).all();
+
+    return Response.json({
+      success: true,
+      stats: stats || { total_users: 0, avg_sessions_per_user: 0 },
+      topUsers: topUsers.results || [],
+      days,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetUserEngagement] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// GET /unified-stats - Get unified stats for admin dashboard
+async function handleGetUnifiedStats(
+  url: URL,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const now = Date.now();
+  const fiveMinAgo = now - 5 * 60 * 1000;
+  const twoMinAgo = now - 2 * 60 * 1000;
+  const oneDayAgo = now - 24 * 60 * 60 * 1000;
+
+  try {
+    const [liveActivity, todayStats, watchStats] = await Promise.all([
+      // Live activity (5 min window)
+      env.DB.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          SUM(CASE WHEN activity_type = 'watching' THEN 1 ELSE 0 END) as watching,
+          SUM(CASE WHEN activity_type = 'browsing' THEN 1 ELSE 0 END) as browsing,
+          SUM(CASE WHEN activity_type = 'livetv' THEN 1 ELSE 0 END) as livetv,
+          SUM(CASE WHEN last_heartbeat >= ? THEN 1 ELSE 0 END) as truly_active
+        FROM live_activity 
+        WHERE is_active = 1 AND last_heartbeat >= ?
+      `).bind(twoMinAgo, fiveMinAgo).first(),
+
+      // Today's stats
+      env.DB.prepare(`
+        SELECT 
+          COUNT(DISTINCT user_id) as unique_users,
+          COUNT(*) as page_views
+        FROM page_views WHERE entry_time >= ?
+      `).bind(oneDayAgo).first(),
+
+      // Watch stats
+      env.DB.prepare(`
+        SELECT 
+          COUNT(*) as total_sessions,
+          COUNT(DISTINCT user_id) as unique_watchers,
+          AVG(completion_percentage) as avg_completion
+        FROM watch_sessions WHERE started_at >= ?
+      `).bind(oneDayAgo).first(),
+    ]);
+
+    return Response.json({
+      success: true,
+      live: liveActivity || { total: 0, watching: 0, browsing: 0, livetv: 0, truly_active: 0 },
+      today: todayStats || { unique_users: 0, page_views: 0 },
+      watching: watchStats || { total_sessions: 0, unique_watchers: 0, avg_completion: 0 },
+      timestamp: now,
+    }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[GetUnifiedStats] DB error:', error);
+    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+  }
 }

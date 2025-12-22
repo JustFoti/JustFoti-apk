@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import {
   StatCard,
   Card,
@@ -103,7 +104,7 @@ export default function AnalyticsV2Page() {
         ...(startDate && { startDate: startDate.toString() }),
       });
 
-      const response = await fetch(`/api/analytics/watch-session?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '200', ...(startDate && { startDate: startDate.toString() }) }));
       const data = await response.json();
 
       if (data.success) {

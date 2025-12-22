@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface ContentStat {
   content_id: string;
@@ -27,7 +28,7 @@ export default function ContentStats() {
         params.append('contentType', contentType);
       }
       
-      const response = await fetch(`/api/admin/analytics?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('admin-analytics', Object.fromEntries(params)));
       if (response.ok) {
         const data = await response.json();
         setStats(data.data.topContent || []);

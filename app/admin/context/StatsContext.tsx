@@ -7,6 +7,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 // Peak stats interface
 interface PeakStats {
@@ -164,7 +165,7 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     
     try {
       // Fetch all data in parallel from a single unified endpoint
-      const response = await fetch('/api/admin/unified-stats');
+      const response = await fetch(getAdminAnalyticsUrl('unified-stats'));
       
       if (!response.ok) {
         throw new Error('Failed to fetch stats');

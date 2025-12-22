@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
 import { Eye, Clock, Users, Activity } from 'lucide-react';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface Stats {
   totalViews: number;
@@ -91,7 +92,7 @@ export default function OverviewStats() {
       } else {
         params.append('period', dateRange.period);
       }
-      const response = await fetch(`/api/admin/analytics?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('admin-analytics', { period: dateRange.period }));
       if (response.ok) {
         const data = await response.json();
         setFullAnalytics(data.data);
@@ -107,7 +108,7 @@ export default function OverviewStats() {
 
   const fetchLiveTVStats = async () => {
     try {
-      const response = await fetch('/api/analytics/livetv-session');
+      const response = await fetch(getAdminAnalyticsUrl('livetv-session'));
       if (response.ok) {
         const data = await response.json();
         setLiveTVStats({

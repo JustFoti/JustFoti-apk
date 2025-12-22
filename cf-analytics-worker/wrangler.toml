@@ -18,27 +18,15 @@ LOG_LEVEL = "info"
 HEARTBEAT_INTERVAL = "30"
 
 # =============================================================================
-# SECRETS - Set via wrangler secret put <NAME>
+# D1 DATABASE - Create with: wrangler d1 create flyx-analytics-db
 # =============================================================================
-# DATABASE_URL - Neon PostgreSQL connection string
-#   wrangler secret put DATABASE_URL
-#   Format: postgresql://user:pass@host/db?sslmode=require
+[[d1_databases]]
+binding = "DB"
+database_name = "flyx-analytics-db"
+database_id = "a80ef8c6-3d7a-4847-baa7-b535af4e4402"
 
 # =============================================================================
-# ANALYTICS QUEUE (Optional - for high-volume batching)
-# =============================================================================
-# Uncomment to use Queues for batching writes:
-# [[queues.producers]]
-# queue = "analytics-events"
-# binding = "ANALYTICS_QUEUE"
-#
-# [[queues.consumers]]
-# queue = "analytics-events"
-# max_batch_size = 100
-# max_batch_timeout = 30
-
-# =============================================================================
-# KV NAMESPACE - For rate limiting and deduplication
+# KV NAMESPACE - For rate limiting and deduplication (optional)
 # =============================================================================
 # Create with: wrangler kv:namespace create "ANALYTICS_KV"
 # [[kv_namespaces]]

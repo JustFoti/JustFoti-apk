@@ -8,6 +8,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import {
   StatCard,
   Card,
@@ -84,7 +85,7 @@ export default function UsersV2Page() {
     setLoading(true);
     try {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
-      const response = await fetch(`/api/analytics/user-engagement?days=${days}&sortBy=${sortBy}`);
+      const response = await fetch(getAdminAnalyticsUrl('user-engagement', { days, sortBy }));
       
       if (response.ok) {
         const data = await response.json();

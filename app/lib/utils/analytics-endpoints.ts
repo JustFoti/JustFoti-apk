@@ -44,7 +44,7 @@ function getCfAnalyticsUrl(): string | null {
  * @param endpoint - The endpoint name (presence, pageview, event, watch-session, live-activity, page-view, stats)
  * @returns The full URL to use for the analytics request
  */
-export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-view' | 'event' | 'watch-session' | 'live-activity' | 'livetv-session' | 'stats'): string {
+export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-view' | 'event' | 'watch-session' | 'live-activity' | 'livetv-session' | 'stats' | 'traffic-sources' | 'presence-stats' | 'users' | 'user-engagement' | 'unified-stats' | 'admin-analytics'): string {
   const dedicatedWorkerUrl = getCfAnalyticsDedicatedWorkerUrl();
   const cfUrl = getCfAnalyticsUrl();
   
@@ -60,6 +60,12 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'live-activity': '/live-activity',
       'livetv-session': '/livetv-session',
       'stats': '/stats',
+      'traffic-sources': '/traffic-sources',
+      'presence-stats': '/presence-stats',
+      'users': '/users',
+      'user-engagement': '/user-engagement',
+      'unified-stats': '/unified-stats',
+      'admin-analytics': '/stats',
     };
     return `${dedicatedWorkerUrl}${workerEndpoints[endpoint] || `/${endpoint}`}`;
   }
@@ -77,6 +83,12 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'live-activity': '/live-activity',
       'livetv-session': '/livetv-session',
       'stats': '/stats',
+      'traffic-sources': '/traffic-sources',
+      'presence-stats': '/presence-stats',
+      'users': '/users',
+      'user-engagement': '/user-engagement',
+      'unified-stats': '/unified-stats',
+      'admin-analytics': '/stats',
     };
     return `${cfUrl}${cfEndpoints[endpoint] || `/${endpoint}`}`;
   }
@@ -91,6 +103,12 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
     'live-activity': '/api/analytics/live-activity',
     'livetv-session': '/api/analytics/livetv-session',
     'stats': '/api/admin/analytics',
+    'traffic-sources': '/api/admin/analytics/traffic-sources',
+    'presence-stats': '/api/admin/analytics/presence-stats',
+    'users': '/api/admin/users',
+    'user-engagement': '/api/analytics/user-engagement',
+    'unified-stats': '/api/admin/unified-stats',
+    'admin-analytics': '/api/admin/analytics',
   };
   return vercelEndpoints[endpoint] || `/api/analytics/${endpoint}`;
 }

@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getAdminAnalyticsUrl } from './useAnalyticsApi';
 
 // ============================================
 // TYPES
@@ -138,7 +139,7 @@ export function useWatchSessions(timeRange: string = '7d', limit: number = 200) 
         ...(startDate && { startDate: startDate.toString() }),
       });
 
-      const response = await fetch(`/api/analytics/watch-session?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('watch-session', Object.fromEntries(params)));
       const data = await response.json();
 
       if (data.success) {
@@ -205,7 +206,7 @@ export function useUserEngagement(timeRange: string = '7d', sortBy: string = 'la
       setError(null);
       
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
-      const response = await fetch(`/api/analytics/user-engagement?days=${days}&sortBy=${sortBy}`);
+      const response = await fetch(getAdminAnalyticsUrl('user-engagement', { days, sortBy }));
       
       if (response.ok) {
         const data = await response.json();
@@ -253,7 +254,7 @@ export interface TrafficData {
 
 export function useTrafficSources(timeRange: string = '7d') {
   const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
-  const url = `/api/admin/analytics/traffic-sources?days=${days}`;
+  const url = getAdminAnalyticsUrl('traffic-sources', { days });
   
   const { data, loading, error, refresh, lastUpdated } = useFetch<{ success: boolean } & TrafficData>(url, {
     refreshInterval: 30000,
@@ -282,7 +283,7 @@ export interface PresenceStats {
 }
 
 export function usePresenceStats(minutes: number = 30) {
-  const url = `/api/admin/analytics/presence-stats?minutes=${minutes}`;
+  const url = getAdminAnalyticsUrl('presence-stats', { minutes });
   
   const { data, loading, error, refresh, lastUpdated } = useFetch<{ success: boolean } & PresenceStats>(url, {
     refreshInterval: 15000,
@@ -323,7 +324,7 @@ export interface LiveTVStats {
 }
 
 export function useLiveTVStats() {
-  const url = '/api/analytics/livetv-session?history=true';
+  const url = getAdminAnalyticsUrl('livetv-session', { history: 'true' });
   
   const { data, loading, error, refresh, lastUpdated } = useFetch<LiveTVStats>(url, {
     refreshInterval: 30000,

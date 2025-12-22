@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import LiveActivityTracker from '../components/LiveActivityTracker';
 import ImprovedLiveDashboard from '../components/ImprovedLiveDashboard';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 // Helper function to get country name from ISO code
 function getCountryNameFromCode(code: string): string {
@@ -72,7 +73,7 @@ export default function AdminLivePage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      const response = await fetch(`/api/analytics/live-activity?maxAge=${refreshRate}`);
+      const response = await fetch(getAdminAnalyticsUrl('live-activity', { maxAge: refreshRate }));
       const data = await response.json();
       if (data.success) {
         setActivities(data.activities || []);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface WatchSession {
   id: string;
@@ -73,7 +74,7 @@ export default function AdminSessionsPage() {
 
   const fetchTrafficSources = async () => {
     try {
-      const response = await fetch('/api/admin/analytics/traffic-sources?days=7');
+      const response = await fetch(getAdminAnalyticsUrl('traffic-sources', { days: 7 }));
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
@@ -97,7 +98,7 @@ export default function AdminSessionsPage() {
         params.append('endDate', dateRange.endDate.getTime().toString());
       }
 
-      const response = await fetch(`/api/analytics/watch-session?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('watch-session', Object.fromEntries(params)));
       if (response.ok) {
         const data = await response.json();
         let sessionData = data.sessions || [];

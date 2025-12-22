@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface SystemHealth {
   database: { status: string; latency: number };
@@ -83,7 +84,7 @@ export default function AdminSettingsPage() {
     try {
       // Check API health with real latency measurement
       const apiStart = Date.now();
-      const apiResponse = await fetch('/api/admin/analytics?period=day');
+      const apiResponse = await fetch(getAdminAnalyticsUrl('admin-analytics', { period: 'day' }));
       const apiLatency = Date.now() - apiStart;
       const apiHealthy = apiResponse.ok;
       
@@ -92,7 +93,7 @@ export default function AdminSettingsPage() {
       let dbHealthy = false;
       let dbLatency = 0;
       try {
-        const dbResponse = await fetch('/api/analytics/watch-session?limit=1');
+        const dbResponse = await fetch(getAdminAnalyticsUrl('watch-session', { limit: '1' }));
         dbLatency = Date.now() - dbStart;
         dbHealthy = dbResponse.ok;
       } catch {

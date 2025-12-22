@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import { contentTitleCache } from '../../lib/utils/content-title-cache';
 import { Users } from 'lucide-react';
 
@@ -42,7 +43,7 @@ export default function ContentStats() {
                 params.append('contentType', contentType);
             }
 
-            const response = await fetch(`/api/admin/analytics?${params}`);
+            const response = await fetch(getAdminAnalyticsUrl('admin-analytics', Object.fromEntries(params)));
             if (response.ok) {
                 const data = await response.json();
                 const rawStats = data.data.contentPerformance || []; // Updated from topContent

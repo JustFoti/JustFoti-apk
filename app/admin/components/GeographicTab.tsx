@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import WorldMap from './WorldMap';
 
 interface GeographicData {
@@ -20,7 +21,7 @@ export default function GeographicTab() {
         try {
             setLoading(true);
             // Reusing the analytics endpoint which returns geographic data
-            const response = await fetch('/api/admin/analytics?period=month');
+            const response = await fetch(getAdminAnalyticsUrl('admin-analytics', { period: 'month' }));
             if (response.ok) {
                 const result = await response.json();
                 setData(result.data.geographic || []);

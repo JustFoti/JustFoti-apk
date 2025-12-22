@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
+import { getAdminAnalyticsUrl } from '../../hooks/useAnalyticsApi';
 
 export default function LiveActivityDebug() {
   const { getUserSession, updateActivity } = useAnalytics();
@@ -34,7 +35,7 @@ export default function LiveActivityDebug() {
   const testAPI = async () => {
     try {
       // Test GET
-      const getResponse = await fetch('/api/analytics/live-activity?maxAge=5');
+      const getResponse = await fetch(getAdminAnalyticsUrl('live-activity', { maxAge: 5 }));
       const getData = await getResponse.json();
       
       setApiTest({

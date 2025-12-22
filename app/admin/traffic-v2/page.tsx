@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import {
   StatCard,
   Card,
@@ -70,8 +71,8 @@ export default function TrafficV2Page() {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
       
       const [trafficRes, presenceRes] = await Promise.all([
-        fetch(`/api/admin/analytics/traffic-sources?days=${days}&limit=${referrerLimit}`),
-        fetch('/api/admin/analytics/presence-stats?minutes=30'),
+        fetch(getAdminAnalyticsUrl('traffic-sources', { days, limit: referrerLimit })),
+        fetch(getAdminAnalyticsUrl('presence-stats', { minutes: 30 })),
       ]);
       
       if (trafficRes.ok) {

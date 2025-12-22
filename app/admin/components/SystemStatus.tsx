@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface SystemHealth {
   database: boolean;
@@ -29,7 +30,7 @@ export default function SystemStatus() {
       const apiHealthy = apiResponse.status !== 500;
 
       // Check analytics API
-      const analyticsResponse = await fetch('/api/admin/analytics?period=day');
+      const analyticsResponse = await fetch(getAdminAnalyticsUrl('admin-analytics', { period: 'day' }));
       const analyticsHealthy = analyticsResponse.status !== 500;
 
       // Database health is implied by successful API calls

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAdmin } from '../context/AdminContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import {
   Area,
   XAxis,
@@ -91,7 +92,7 @@ export default function AnalyticsCharts() {
         params.append('period', dateRange.period);
       }
 
-      const response = await fetch(`/api/admin/analytics?${params}`);
+      const response = await fetch(getAdminAnalyticsUrl('admin-analytics', Object.fromEntries(params)));
 
       if (response.ok) {
         const data = await response.json();

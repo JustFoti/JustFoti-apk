@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 // Helper function to get country name from ISO code
 function getCountryNameFromCode(code: string): string {
@@ -130,7 +131,7 @@ export default function LiveActivityTracker() {
       if (!isInitial) {
         setRefreshing(true);
       }
-      const response = await fetch('/api/analytics/live-activity?maxAge=5');
+      const response = await fetch(getAdminAnalyticsUrl('live-activity', { maxAge: 5 }));
       const data = await response.json();
 
       if (data.success) {
@@ -153,7 +154,7 @@ export default function LiveActivityTracker() {
 
   const fetchLiveTVStats = async () => {
     try {
-      const response = await fetch('/api/analytics/livetv-session');
+      const response = await fetch(getAdminAnalyticsUrl('livetv-session'));
       const data = await response.json();
       if (data.success !== false) {
         setLiveTVStats(data);
