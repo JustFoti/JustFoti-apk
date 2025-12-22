@@ -194,6 +194,13 @@ export default {
           }
           return await handleGetUnifiedStats(url, env, corsHeaders);
 
+        case '/events':
+        case '/event':
+          if (request.method !== 'POST') {
+            return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
+          }
+          return await handleEvents(request, env, corsHeaders);
+
         default:
           return Response.json({ error: 'Not found', path: url.pathname }, { status: 404, headers: corsHeaders });
       }
@@ -405,6 +412,31 @@ async function handlePresence(
   } catch (error) {
     console.error('[Presence] DB error:', error);
     return Response.json({ error: 'Database error', details: String(error) }, { status: 500, headers: corsHeaders });
+  }
+}
+
+// POST /events - Handle batch events (generic analytics events)
+async function handleEvents(
+  request: Request,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  try {
+    const payload = await request.json() as any;
+    const events = payload.events || [];
+    
+    // Just acknowledge the events - we don't need to store generic events in D1
+    // The important data (page views, watch sessions, presence) is tracked separately
+    // This endpoint exists to prevent 400 errors from the client's flushEvents
+    
+    if (env.LOG_LEVEL === 'debug') {
+      console.log(`[Events] Received ${events.length} events`);
+    }
+    
+    return Response.json({ success: true, received: events.length }, { headers: corsHeaders });
+  } catch (error) {
+    console.error('[Events] Error:', error);
+    return Response.json({ error: 'Invalid request', details: String(error) }, { status: 400, headers: corsHeaders });
   }
 }
 

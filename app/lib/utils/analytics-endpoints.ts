@@ -50,7 +50,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'presence': '/presence',
       'pageview': '/page-view',
       'page-view': '/page-view',
-      'event': '/page-view', // Events tracked as page views
+      'event': '/events', // Generic events endpoint
       'watch-session': '/watch-session',
       'live-activity': '/live-activity',
       'livetv-session': '/livetv-session',
