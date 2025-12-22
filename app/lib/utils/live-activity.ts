@@ -3,6 +3,8 @@
  * Helper functions for sending activity data to the live tracker
  */
 
+import { getAnalyticsEndpoint } from '@/lib/utils/analytics-endpoints';
+
 interface LiveActivityData {
   userId?: string;
   contentId: string;
@@ -74,7 +76,7 @@ class LiveActivityManager {
    */
   private async sendActivityToAPI(data: LiveActivityData): Promise<void> {
     try {
-      const response = await fetch('/api/admin/live-activity', {
+      const response = await fetch(getAnalyticsEndpoint('live-activity'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

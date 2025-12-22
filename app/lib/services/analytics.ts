@@ -4,6 +4,7 @@
  */
 
 import { userTrackingService, type UserSession } from './user-tracking';
+import { getAnalyticsEndpoint } from '@/lib/utils/analytics-endpoints';
 
 export interface AnalyticsEvent {
   id: string;
@@ -379,7 +380,7 @@ class AnalyticsService {
     if (timeOnPage < 1) return;
     
     try {
-      await fetch('/api/analytics/page-view', {
+      await fetch(getAnalyticsEndpoint('page-view'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -550,7 +551,7 @@ class AnalyticsService {
         ? Math.round((event.currentTime / event.duration) * 100) 
         : 0;
 
-      await fetch('/api/analytics/watch-session', {
+      await fetch(getAnalyticsEndpoint('watch-session'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -677,7 +678,7 @@ class AnalyticsService {
     this.eventQueue = [];
     
     try {
-      const response = await fetch('/api/analytics/track', {
+      const response = await fetch(getAnalyticsEndpoint('event'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -863,7 +864,7 @@ class AnalyticsService {
     if (!this.userSession) return;
     
     try {
-      await fetch('/api/analytics/track', {
+      await fetch(getAnalyticsEndpoint('event'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -915,7 +916,7 @@ class AnalyticsService {
         const isCompleted = completionPercentage >= 90;
         const now = Date.now();
 
-        await fetch('/api/analytics/watch-session', {
+        await fetch(getAnalyticsEndpoint('watch-session'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1103,7 +1104,7 @@ class AnalyticsService {
     if (!this.liveTVSession || !this.userSession) return;
     
     try {
-      await fetch('/api/analytics/livetv-session', {
+      await fetch(getAnalyticsEndpoint('livetv-session'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

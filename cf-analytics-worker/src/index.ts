@@ -149,11 +149,19 @@ export default {
           }
           return await handleWatchSession(request, env, corsHeaders);
 
-        case '/live-activity':
-          if (request.method !== 'GET') {
+        case '/livetv-session':
+          if (request.method !== 'POST') {
             return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
           }
-          return await handleGetLiveActivity(env, corsHeaders);
+          return await handleLiveTVSession(request, env, corsHeaders);
+
+        case '/live-activity':
+          if (request.method === 'GET') {
+            return await handleGetLiveActivity(env, corsHeaders);
+          } else if (request.method === 'POST') {
+            return await handlePostLiveActivity(request, env, corsHeaders);
+          }
+          return Response.json({ error: 'Method not allowed' }, { status: 405, headers: corsHeaders });
 
         case '/stats':
           if (request.method !== 'GET') {
@@ -419,6 +427,141 @@ async function handleWatchSession(
       last_viewed = EXCLUDED.last_viewed,
       updated_at = EXCLUDED.updated_at
   `, [payload.contentId, payload.contentType, now, now, payload.action]);
+
+  return Response.json({ success: true }, { headers: corsHeaders });
+}
+
+// POST /livetv-session - Track Live TV sessions
+async function handleLiveTVSession(
+  request: Request,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const payload = await request.json() as any;
+
+  if (!payload.userId || !payload.channelId) {
+    return Response.json(
+      { error: 'Missing required fields' },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+
+  if (!env.DATABASE_URL) {
+    return Response.json(
+      { error: 'No database configured' },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+
+  const now = Date.now();
+  const sessionId = `ltv_${payload.userId}_${payload.channelId}`;
+
+  if (payload.action === 'start') {
+    await neonQuery(env.DATABASE_URL, `
+      INSERT INTO livetv_sessions (
+        id, session_id, user_id, channel_id, channel_name, category,
+        country, started_at, watch_duration, quality, buffer_count, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ON CONFLICT (id) DO UPDATE SET
+        watch_duration = EXCLUDED.watch_duration,
+        quality = EXCLUDED.quality,
+        buffer_count = EXCLUDED.buffer_count,
+        updated_at = EXCLUDED.updated_at
+    `, [
+      sessionId,
+      payload.sessionId,
+      payload.userId,
+      payload.channelId,
+      payload.channelName || null,
+      payload.category || null,
+      payload.country || null,
+      now,
+      0,
+      payload.quality || null,
+      0,
+      now,
+      now,
+    ]);
+  } else {
+    await neonQuery(env.DATABASE_URL, `
+      UPDATE livetv_sessions SET
+        watch_duration = $1,
+        quality = $2,
+        buffer_count = $3,
+        ended_at = $4,
+        updated_at = $5
+      WHERE id = $6
+    `, [
+      payload.watchDuration || 0,
+      payload.quality || null,
+      payload.bufferCount || 0,
+      payload.action === 'stop' ? now : null,
+      now,
+      sessionId,
+    ]);
+  }
+
+  return Response.json({ success: true }, { headers: corsHeaders });
+}
+
+// POST /live-activity - Track live activity from client
+async function handlePostLiveActivity(
+  request: Request,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  const payload = await request.json() as any;
+
+  if (!payload.contentId) {
+    return Response.json(
+      { error: 'Missing contentId' },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+
+  if (!env.DATABASE_URL) {
+    return Response.json(
+      { error: 'No database configured' },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+
+  const now = Date.now();
+  const userId = payload.userId || `anon_${Date.now()}`;
+  const id = `la_${generateId()}`;
+
+  await neonQuery(env.DATABASE_URL, `
+    INSERT INTO live_activity (
+      id, user_id, session_id, activity_type, content_id, content_title, 
+      content_type, season_number, episode_number, started_at, last_heartbeat, 
+      is_active, created_at, updated_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    ON CONFLICT (user_id) DO UPDATE SET
+      activity_type = EXCLUDED.activity_type,
+      content_id = EXCLUDED.content_id,
+      content_title = EXCLUDED.content_title,
+      content_type = EXCLUDED.content_type,
+      season_number = EXCLUDED.season_number,
+      episode_number = EXCLUDED.episode_number,
+      last_heartbeat = EXCLUDED.last_heartbeat,
+      is_active = EXCLUDED.is_active,
+      updated_at = EXCLUDED.updated_at
+  `, [
+    id,
+    userId,
+    payload.sessionId || null,
+    payload.action === 'completed' ? 'browsing' : 'watching',
+    payload.contentId,
+    payload.contentTitle || null,
+    payload.contentType || null,
+    payload.season || null,
+    payload.episode || null,
+    now,
+    now,
+    payload.action !== 'completed' && payload.action !== 'paused',
+    now,
+    now,
+  ]);
 
   return Response.json({ success: true }, { headers: corsHeaders });
 }

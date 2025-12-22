@@ -44,7 +44,7 @@ function getCfAnalyticsUrl(): string | null {
  * @param endpoint - The endpoint name (presence, pageview, event, watch-session, live-activity, page-view, stats)
  * @returns The full URL to use for the analytics request
  */
-export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-view' | 'event' | 'watch-session' | 'live-activity' | 'stats'): string {
+export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-view' | 'event' | 'watch-session' | 'live-activity' | 'livetv-session' | 'stats'): string {
   const dedicatedWorkerUrl = getCfAnalyticsDedicatedWorkerUrl();
   const cfUrl = getCfAnalyticsUrl();
   
@@ -58,6 +58,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'event': '/page-view', // Events tracked as page views
       'watch-session': '/watch-session',
       'live-activity': '/live-activity',
+      'livetv-session': '/livetv-session',
       'stats': '/stats',
     };
     return `${dedicatedWorkerUrl}${workerEndpoints[endpoint] || `/${endpoint}`}`;
@@ -74,6 +75,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'event': '/event',
       'watch-session': '/watch-session',
       'live-activity': '/live-activity',
+      'livetv-session': '/livetv-session',
       'stats': '/stats',
     };
     return `${cfUrl}${cfEndpoints[endpoint] || `/${endpoint}`}`;
@@ -87,6 +89,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
     'event': '/api/analytics/track',
     'watch-session': '/api/analytics/watch-session',
     'live-activity': '/api/analytics/live-activity',
+    'livetv-session': '/api/analytics/livetv-session',
     'stats': '/api/admin/analytics',
   };
   return vercelEndpoints[endpoint] || `/api/analytics/${endpoint}`;
