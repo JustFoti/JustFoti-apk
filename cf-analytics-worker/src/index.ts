@@ -900,45 +900,106 @@ async function handleGetTrafficSources(
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
 
   try {
-    // Get referrer stats
-    const referrers = await env.DB.prepare(`
-      SELECT 
-        referrer,
-        COUNT(*) as visits,
-        COUNT(DISTINCT user_id) as unique_visitors
-      FROM page_views 
-      WHERE entry_time >= ? AND referrer IS NOT NULL AND referrer != ''
-      GROUP BY referrer
-      ORDER BY visits DESC
-      LIMIT ?
-    `).bind(cutoff, limit).all();
-
-    // Get country stats
-    const countries = await env.DB.prepare(`
-      SELECT 
-        country,
-        COUNT(*) as visits,
-        COUNT(DISTINCT user_id) as unique_visitors
-      FROM page_views 
-      WHERE entry_time >= ? AND country IS NOT NULL
-      GROUP BY country
-      ORDER BY visits DESC
-      LIMIT 50
-    `).bind(cutoff).all();
-
-    // Get device stats (from user_activity)
+    // Get totals
     const totals = await env.DB.prepare(`
       SELECT 
-        COUNT(*) as total_visits,
+        COUNT(*) as total_hits,
         COUNT(DISTINCT user_id) as unique_visitors
       FROM page_views WHERE entry_time >= ?
     `).bind(cutoff).first();
 
+    // Get referrer stats (top referrers)
+    const topReferrers = await env.DB.prepare(`
+      SELECT 
+        referrer as referrer_domain,
+        'referral' as referrer_medium,
+        COUNT(*) as hit_count,
+        MAX(entry_time) as last_hit
+      FROM page_views 
+      WHERE entry_time >= ? AND referrer IS NOT NULL AND referrer != ''
+      GROUP BY referrer
+      ORDER BY hit_count DESC
+      LIMIT ?
+    `).bind(cutoff, limit).all();
+
+    // Get detailed referrers
+    const detailedReferrers = await env.DB.prepare(`
+      SELECT 
+        referrer as referrer_url,
+        referrer as referrer_domain,
+        'referral' as referrer_medium,
+        COUNT(*) as hit_count,
+        COUNT(DISTINCT user_id) as unique_visitors,
+        MAX(entry_time) as last_hit
+      FROM page_views 
+      WHERE entry_time >= ? AND referrer IS NOT NULL AND referrer != ''
+      GROUP BY referrer
+      ORDER BY hit_count DESC
+      LIMIT ?
+    `).bind(cutoff, limit).all();
+
+    // Get country stats (geoStats)
+    const geoStats = await env.DB.prepare(`
+      SELECT 
+        country,
+        COUNT(*) as hit_count,
+        COUNT(DISTINCT user_id) as unique_visitors
+      FROM page_views 
+      WHERE entry_time >= ? AND country IS NOT NULL
+      GROUP BY country
+      ORDER BY hit_count DESC
+      LIMIT 50
+    `).bind(cutoff).all();
+
+    // Get hourly pattern
+    const hourlyPattern = await env.DB.prepare(`
+      SELECT 
+        CAST(strftime('%H', datetime(entry_time/1000, 'unixepoch')) AS INTEGER) as hour,
+        COUNT(*) as hit_count,
+        0 as bot_hits
+      FROM page_views 
+      WHERE entry_time >= ?
+      GROUP BY hour
+      ORDER BY hour
+    `).bind(cutoff).all();
+
+    // Get medium stats (derive from referrers)
+    const mediumStats = await env.DB.prepare(`
+      SELECT 
+        CASE 
+          WHEN referrer IS NULL OR referrer = '' THEN 'direct'
+          WHEN referrer LIKE '%google%' OR referrer LIKE '%bing%' OR referrer LIKE '%duckduckgo%' THEN 'organic'
+          WHEN referrer LIKE '%facebook%' OR referrer LIKE '%twitter%' OR referrer LIKE '%instagram%' OR referrer LIKE '%t.co%' OR referrer LIKE '%telegram%' THEN 'social'
+          ELSE 'referral'
+        END as referrer_medium,
+        COUNT(*) as hit_count,
+        COUNT(DISTINCT user_id) as unique_visitors
+      FROM page_views 
+      WHERE entry_time >= ?
+      GROUP BY referrer_medium
+      ORDER BY hit_count DESC
+    `).bind(cutoff).all();
+
+    // Source type stats (simplified - we don't track bots separately)
+    const sourceTypeStats = [
+      { source_type: 'browser', source_name: 'Web Browser', hit_count: totals?.total_hits || 0, unique_visitors: totals?.unique_visitors || 0 }
+    ];
+
     return Response.json({
       success: true,
-      referrers: referrers.results || [],
-      countries: countries.results || [],
-      totals: totals || { total_visits: 0, unique_visitors: 0 },
+      totals: {
+        total_hits: totals?.total_hits || 0,
+        unique_visitors: totals?.unique_visitors || 0,
+        bot_hits: 0,
+        human_hits: totals?.total_hits || 0,
+      },
+      sourceTypeStats,
+      mediumStats: mediumStats.results || [],
+      topReferrers: topReferrers.results || [],
+      detailedReferrers: detailedReferrers.results || [],
+      botStats: [],
+      hourlyPattern: hourlyPattern.results || [],
+      geoStats: geoStats.results || [],
       days,
     }, { headers: corsHeaders });
   } catch (error) {
@@ -955,33 +1016,70 @@ async function handleGetPresenceStats(
 ): Promise<Response> {
   const minutes = parseInt(url.searchParams.get('minutes') || '30');
   const cutoff = Date.now() - minutes * 60 * 1000;
+  const strictCutoff = Date.now() - 2 * 60 * 1000; // 2 minutes for "truly active"
 
   try {
-    // Get active users
-    const activeUsers = await env.DB.prepare(`
+    // Get active users totals
+    const totals = await env.DB.prepare(`
       SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN activity_type = 'watching' THEN 1 ELSE 0 END) as watching,
-        SUM(CASE WHEN activity_type = 'browsing' THEN 1 ELSE 0 END) as browsing,
-        SUM(CASE WHEN activity_type = 'livetv' THEN 1 ELSE 0 END) as livetv
+        COUNT(*) as total_active,
+        SUM(CASE WHEN last_heartbeat >= ? THEN 1 ELSE 0 END) as truly_active,
+        COUNT(DISTINCT session_id) as total_sessions
       FROM live_activity 
       WHERE is_active = 1 AND last_heartbeat >= ?
-    `).bind(cutoff).first();
+    `).bind(strictCutoff, cutoff).first();
 
-    // Get country breakdown
-    const byCountry = await env.DB.prepare(`
-      SELECT country, COUNT(*) as count
+    // Get activity breakdown
+    const activityBreakdown = await env.DB.prepare(`
+      SELECT 
+        activity_type,
+        COUNT(*) as user_count,
+        SUM(CASE WHEN last_heartbeat >= ? THEN 1 ELSE 0 END) as truly_active
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ?
+      GROUP BY activity_type
+    `).bind(strictCutoff, cutoff).all();
+
+    // Get geo distribution
+    const geoDistribution = await env.DB.prepare(`
+      SELECT 
+        country,
+        city,
+        COUNT(*) as user_count
       FROM live_activity 
       WHERE is_active = 1 AND last_heartbeat >= ? AND country IS NOT NULL
-      GROUP BY country
-      ORDER BY count DESC
+      GROUP BY country, city
+      ORDER BY user_count DESC
+      LIMIT 20
+    `).bind(cutoff).all();
+
+    // Get active content
+    const activeContent = await env.DB.prepare(`
+      SELECT 
+        content_title,
+        content_type,
+        activity_type,
+        COUNT(*) as viewer_count
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ? AND content_title IS NOT NULL
+      GROUP BY content_title, content_type, activity_type
+      ORDER BY viewer_count DESC
       LIMIT 20
     `).bind(cutoff).all();
 
     return Response.json({
       success: true,
-      activeUsers: activeUsers || { total: 0, watching: 0, browsing: 0, livetv: 0 },
-      byCountry: byCountry.results || [],
+      totals: {
+        total_active: totals?.total_active || 0,
+        truly_active: totals?.truly_active || 0,
+        total_sessions: totals?.total_sessions || 0,
+      },
+      activityBreakdown: activityBreakdown.results || [],
+      validationScores: [],
+      entropyStats: [],
+      geoDistribution: geoDistribution.results || [],
+      deviceDistribution: [],
+      activeContent: activeContent.results || [],
       minutes,
       timestamp: Date.now(),
     }, { headers: corsHeaders });
