@@ -1197,11 +1197,21 @@ async function handleGetUnifiedStats(
   const now = Date.now();
   const fiveMinAgo = now - 5 * 60 * 1000;
   const twoMinAgo = now - 2 * 60 * 1000;
+  const oneMinAgo = now - 60 * 1000;
   const oneDayAgo = now - 24 * 60 * 60 * 1000;
+  const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
 
   try {
-    const [liveActivity, todayStats, watchStats] = await Promise.all([
-      // Live activity (5 min window)
+    const [
+      liveActivity,
+      userStats,
+      contentStats,
+      pageViewStats,
+      geoStats,
+      topContent
+    ] = await Promise.all([
+      // Real-time activity (5 min window, truly active = 1 min)
       env.DB.prepare(`
         SELECT 
           COUNT(*) as total,
@@ -1211,35 +1221,128 @@ async function handleGetUnifiedStats(
           SUM(CASE WHEN last_heartbeat >= ? THEN 1 ELSE 0 END) as truly_active
         FROM live_activity 
         WHERE is_active = 1 AND last_heartbeat >= ?
-      `).bind(twoMinAgo, fiveMinAgo).first(),
+      `).bind(oneMinAgo, fiveMinAgo).first(),
 
-      // Today's stats
+      // User stats (DAU, WAU, MAU, total)
       env.DB.prepare(`
         SELECT 
-          COUNT(DISTINCT user_id) as unique_users,
-          COUNT(*) as page_views
-        FROM page_views WHERE entry_time >= ?
-      `).bind(oneDayAgo).first(),
+          COUNT(DISTINCT user_id) as total,
+          COUNT(DISTINCT CASE WHEN last_seen >= ? THEN user_id END) as dau,
+          COUNT(DISTINCT CASE WHEN last_seen >= ? THEN user_id END) as wau,
+          COUNT(DISTINCT CASE WHEN last_seen >= ? THEN user_id END) as mau,
+          COUNT(DISTINCT CASE WHEN first_seen >= ? THEN user_id END) as new_today,
+          COUNT(DISTINCT CASE WHEN first_seen < ? AND last_seen >= ? THEN user_id END) as returning_users
+        FROM user_activity
+      `).bind(oneDayAgo, sevenDaysAgo, thirtyDaysAgo, oneDayAgo, oneDayAgo, oneDayAgo).first(),
 
-      // Watch stats
+      // Content/watch stats (last 24h)
       env.DB.prepare(`
         SELECT 
           COUNT(*) as total_sessions,
-          COUNT(DISTINCT user_id) as unique_watchers,
-          AVG(completion_percentage) as avg_completion
+          COALESCE(SUM(duration), 0) / 60 as total_watch_time,
+          COALESCE(AVG(duration), 0) / 60 as avg_duration,
+          COALESCE(AVG(completion_percentage), 0) as completion_rate,
+          SUM(CASE WHEN is_completed = 1 THEN 1 ELSE 0 END) as completed_sessions,
+          SUM(CASE WHEN content_type = 'movie' THEN 1 ELSE 0 END) as movie_sessions,
+          SUM(CASE WHEN content_type = 'tv' THEN 1 ELSE 0 END) as tv_sessions,
+          COUNT(DISTINCT content_id) as unique_content
         FROM watch_sessions WHERE started_at >= ?
       `).bind(oneDayAgo).first(),
+
+      // Page views (last 24h)
+      env.DB.prepare(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(DISTINCT user_id) as unique_visitors
+        FROM page_views WHERE entry_time >= ?
+      `).bind(oneDayAgo).first(),
+
+      // Geographic stats (last 7 days)
+      env.DB.prepare(`
+        SELECT 
+          country,
+          COUNT(DISTINCT user_id) as count
+        FROM page_views 
+        WHERE entry_time >= ? AND country IS NOT NULL
+        GROUP BY country
+        ORDER BY count DESC
+        LIMIT 10
+      `).bind(sevenDaysAgo).all(),
+
+      // Top content (last 7 days)
+      env.DB.prepare(`
+        SELECT 
+          content_id as contentId,
+          content_title as contentTitle,
+          content_type as contentType,
+          COUNT(*) as watchCount,
+          SUM(duration) / 60 as totalWatchTime
+        FROM watch_sessions 
+        WHERE started_at >= ? AND content_title IS NOT NULL
+        GROUP BY content_id, content_title, content_type
+        ORDER BY watchCount DESC
+        LIMIT 10
+      `).bind(sevenDaysAgo).all(),
     ]);
+
+    // All-time watch time
+    const allTimeWatch = await env.DB.prepare(`
+      SELECT COALESCE(SUM(duration), 0) / 60 as total FROM watch_sessions
+    `).first();
 
     return Response.json({
       success: true,
-      live: liveActivity || { total: 0, watching: 0, browsing: 0, livetv: 0, truly_active: 0 },
-      today: todayStats || { unique_users: 0, page_views: 0 },
-      watching: watchStats || { total_sessions: 0, unique_watchers: 0, avg_completion: 0 },
+      realtime: {
+        totalActive: liveActivity?.total || 0,
+        trulyActive: liveActivity?.truly_active || 0,
+        watching: liveActivity?.watching || 0,
+        browsing: liveActivity?.browsing || 0,
+        livetv: liveActivity?.livetv || 0,
+      },
+      users: {
+        total: userStats?.total || 0,
+        dau: userStats?.dau || 0,
+        wau: userStats?.wau || 0,
+        mau: userStats?.mau || 0,
+        newToday: userStats?.new_today || 0,
+        returning: userStats?.returning_users || 0,
+      },
+      content: {
+        totalSessions: contentStats?.total_sessions || 0,
+        totalWatchTime: Math.round(contentStats?.total_watch_time || 0),
+        allTimeWatchTime: Math.round(allTimeWatch?.total || 0),
+        avgDuration: Math.round(contentStats?.avg_duration || 0),
+        completionRate: Math.round(contentStats?.completion_rate || 0),
+        completedSessions: contentStats?.completed_sessions || 0,
+        movieSessions: contentStats?.movie_sessions || 0,
+        tvSessions: contentStats?.tv_sessions || 0,
+        uniqueContentWatched: contentStats?.unique_content || 0,
+      },
+      pageViews: {
+        total: pageViewStats?.total || 0,
+        uniqueVisitors: pageViewStats?.unique_visitors || 0,
+      },
+      geographic: (geoStats.results || []).map((g: any) => ({
+        country: g.country,
+        countryName: g.country, // Could add country name lookup
+        count: g.count,
+      })),
+      devices: [], // Not tracked in current schema
+      topContent: topContent.results || [],
+      timeRanges: {
+        realtime: '5 minutes',
+        dau: '24 hours',
+        wau: '7 days',
+        mau: '30 days',
+        content: '24 hours',
+        geographic: '7 days',
+        devices: '7 days',
+        pageViews: '24 hours',
+      },
       timestamp: now,
     }, { headers: corsHeaders });
   } catch (error) {
     console.error('[GetUnifiedStats] DB error:', error);
-    return Response.json({ error: 'Database error' }, { status: 500, headers: corsHeaders });
+    return Response.json({ error: 'Database error', details: String(error) }, { status: 500, headers: corsHeaders });
   }
 }
