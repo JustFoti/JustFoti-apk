@@ -17,6 +17,146 @@ interface RecommendedItem extends MediaItem {
   matchScore?: number;
 }
 
+// WatchlistCard Component
+function WatchlistCard({ 
+  item, 
+  index, 
+  onClick, 
+  onRemove 
+}: { 
+  item: WatchlistItem; 
+  index: number; 
+  onClick: () => void; 
+  onRemove: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ delay: index * 0.03 }}
+      className="group relative cursor-pointer"
+      onClick={onClick}
+    >
+      <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-gray-800">
+        {item.posterPath ? (
+          <img
+            src={item.posterPath}
+            alt={item.title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-900/50 to-purple-900/50">
+            <span className="text-4xl">🎬</span>
+          </div>
+        )}
+        
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        
+        {/* Remove Button */}
+        <button
+          onClick={onRemove}
+          className="absolute top-2 right-2 w-8 h-8 bg-red-600/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-75 group-hover:scale-100 z-10"
+          title="Remove from watchlist"
+        >
+          <span className="text-white text-sm">✕</span>
+        </button>
+        
+        {/* Media Type Badge */}
+        <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-[10px] font-medium text-white uppercase">
+          {item.mediaType === 'tv' ? '📺 TV' : '🎬 Movie'}
+        </div>
+        
+        {/* Info on hover */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <h3 className="text-white font-semibold text-sm line-clamp-2 mb-1">{item.title}</h3>
+          {item.rating && (
+            <div className="flex items-center gap-1 text-yellow-400 text-xs">
+              <span>⭐</span>
+              <span>{item.rating.toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      {/* Title below card (mobile) */}
+      <div className="mt-2 md:hidden">
+        <h3 className="text-white text-xs font-medium line-clamp-1">{item.title}</h3>
+      </div>
+    </motion.div>
+  );
+}
+
+// RecommendationCard Component
+function RecommendationCard({ 
+  item, 
+  index, 
+  onClick 
+}: { 
+  item: RecommendedItem; 
+  index: number; 
+  onClick: () => void;
+}) {
+  const posterUrl = item.posterPath || (item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : null);
+  const title = item.title || item.name || 'Unknown';
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.05 }}
+      className="flex-shrink-0 w-[140px] sm:w-[150px] md:w-[180px] group cursor-pointer"
+      onClick={onClick}
+    >
+      <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-gray-800">
+        {posterUrl ? (
+          <img
+            src={posterUrl}
+            alt={title}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-900/50 to-purple-900/50">
+            <span className="text-4xl">🎬</span>
+          </div>
+        )}
+        
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        
+        {/* Match Score Badge */}
+        {item.matchScore && item.matchScore > 30 && (
+          <div className="absolute top-2 right-2 px-2 py-0.5 bg-violet-600/90 backdrop-blur-sm rounded text-[10px] font-bold text-white">
+            {Math.round(item.matchScore)}% Match
+          </div>
+        )}
+        
+        {/* Media Type Badge */}
+        <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-sm rounded text-[10px] font-medium text-white uppercase">
+          {item.mediaType === 'tv' ? '📺' : '🎬'}
+        </div>
+        
+        {/* Info on hover */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          <h3 className="text-white font-semibold text-xs line-clamp-2">{title}</h3>
+        </div>
+      </div>
+      
+      {/* Title and reason below */}
+      <div className="mt-2">
+        <h3 className="text-white text-xs font-medium line-clamp-1">{title}</h3>
+        {item.matchReason && (
+          <p className="text-violet-400 text-[10px] line-clamp-1 mt-0.5">{item.matchReason}</p>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function WatchlistPageClient() {
   const router = useRouter();
   const { items, removeFromWatchlist, clearWatchlist } = useWatchlist();
@@ -36,74 +176,9 @@ export default function WatchlistPageClient() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch recommendations based on watchlist
-  useEffect(() => {
-    if (items.length > 0) {
-      fetchRecommendations();
-    } else {
-      setRecommendations([]);
-      setRecProfile(null);
-    }
-  }, [items.length]); // Only re-fetch when item count changes
-
-  const fetchRecommendations = async () => {
-    if (items.length === 0) return;
-    
-    setLoadingRecs(true);
-    try {
-      // Use the intelligent recommendations API
-      const response = await fetch('/api/recommendations/watchlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: items.map(item => ({
-            id: item.id,
-            mediaType: item.mediaType,
-            title: item.title,
-          })),
-        }),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.recommendations) {
-          // Transform recommendations to match our interface
-          const recs: RecommendedItem[] = data.recommendations.map((rec: any) => ({
-            id: rec.id,
-            title: rec.title || rec.name,
-            name: rec.name,
-            posterPath: rec.poster_path ? `https://image.tmdb.org/t/p/w500${rec.poster_path}` : null,
-            poster_path: rec.poster_path,
-            backdrop_path: rec.backdrop_path,
-            overview: rec.overview,
-            vote_average: rec.vote_average,
-            rating: rec.vote_average,
-            release_date: rec.release_date,
-            first_air_date: rec.first_air_date,
-            releaseDate: rec.release_date || rec.first_air_date,
-            mediaType: rec.mediaType,
-            media_type: rec.mediaType,
-            matchReason: rec.primaryReason,
-            matchScore: rec.matchScore,
-          }));
-          setRecommendations(recs);
-          setRecProfile(data.profile || null);
-        }
-      } else {
-        // Fallback to simple recommendations if API fails
-        await fetchSimpleRecommendations();
-      }
-    } catch (err) {
-      console.error('[Watchlist] Error fetching smart recommendations:', err);
-      // Fallback to simple recommendations
-      await fetchSimpleRecommendations();
-    } finally {
-      setLoadingRecs(false);
-    }
-  };
-
-  // Fallback simple recommendations (original implementation)
-  const fetchSimpleRecommendations = async () => {
+  // Fallback simple recommendations
+  const fetchSimpleRecommendations = useCallback(async () => {
+    console.log('[Watchlist] Using fallback simple recommendations');
     try {
       const sampleItems = items.slice(0, 5);
       const allRecs: RecommendedItem[] = [];
@@ -140,7 +215,75 @@ export default function WatchlistPageClient() {
     } catch (err) {
       console.error('[Watchlist] Error in fallback recommendations:', err);
     }
-  };
+  }, [items]);
+
+  // Fetch recommendations based on watchlist
+  const fetchRecommendations = useCallback(async () => {
+    if (items.length === 0) return;
+    
+    setLoadingRecs(true);
+    console.log('[Watchlist] Fetching recommendations for', items.length, 'items');
+    
+    try {
+      const response = await fetch('/api/recommendations/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: items.map(item => ({
+            id: item.id,
+            mediaType: item.mediaType,
+            title: item.title,
+          })),
+        }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        
+        if (data.success && data.recommendations && data.recommendations.length > 0) {
+          const recs: RecommendedItem[] = data.recommendations.map((rec: any) => ({
+            id: rec.id,
+            title: rec.title || rec.name,
+            name: rec.name,
+            posterPath: rec.poster_path ? `https://image.tmdb.org/t/p/w500${rec.poster_path}` : null,
+            poster_path: rec.poster_path,
+            backdrop_path: rec.backdrop_path,
+            overview: rec.overview,
+            vote_average: rec.vote_average,
+            rating: rec.vote_average,
+            release_date: rec.release_date,
+            first_air_date: rec.first_air_date,
+            releaseDate: rec.release_date || rec.first_air_date,
+            mediaType: rec.mediaType,
+            media_type: rec.mediaType,
+            matchReason: rec.primaryReason,
+            matchScore: rec.matchScore,
+          }));
+          setRecommendations(recs);
+          setRecProfile(data.profile || null);
+        } else {
+          await fetchSimpleRecommendations();
+        }
+      } else {
+        await fetchSimpleRecommendations();
+      }
+    } catch (err) {
+      console.error('[Watchlist] Error fetching recommendations:', err);
+      await fetchSimpleRecommendations();
+    } finally {
+      setLoadingRecs(false);
+    }
+  }, [items, fetchSimpleRecommendations]);
+
+  // Fetch recommendations when items change
+  useEffect(() => {
+    if (items.length > 0) {
+      fetchRecommendations();
+    } else {
+      setRecommendations([]);
+      setRecProfile(null);
+    }
+  }, [items.length, fetchRecommendations]);
 
   const handleContentClick = useCallback((item: WatchlistItem | RecommendedItem) => {
     trackEvent('watchlist_item_clicked', { content_id: item.id });
@@ -415,177 +558,5 @@ export default function WatchlistPageClient() {
         <Footer />
       </div>
     </PageTransition>
-  );
-}
-
-
-// Watchlist Card Component
-function WatchlistCard({
-  item,
-  index,
-  onClick,
-  onRemove,
-}: {
-  item: WatchlistItem;
-  index: number;
-  onClick: () => void;
-  onRemove: (e: React.MouseEvent) => void;
-}) {
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
-      transition={{ delay: Math.min(index * 0.05, 0.3) }}
-      whileTap={{ scale: 0.95 }}
-      onClick={onClick}
-      className="cursor-pointer group relative"
-    >
-      <motion.div
-        whileHover={{ scale: 1.03, y: -4 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-        className="relative rounded-lg md:rounded-xl overflow-hidden bg-gray-900 shadow-lg"
-      >
-        <img
-          src={item.posterPath || '/placeholder-poster.jpg'}
-          alt={item.title}
-          className="w-full aspect-[2/3] object-cover"
-          loading="lazy"
-        />
-        
-        {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        
-        {/* Play Button */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-          <motion.div 
-            whileHover={{ scale: 1.1 }}
-            className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-r from-violet-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </motion.div>
-        </div>
-
-        {/* Remove Button */}
-        <button
-          onClick={onRemove}
-          className="absolute top-2 right-2 w-7 h-7 md:w-8 md:h-8 bg-black/60 hover:bg-red-600 rounded-full flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all duration-200 z-10"
-          aria-label="Remove from watchlist"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-
-        {/* Rating Badge */}
-        {item.rating && item.rating > 0 && (
-          <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] md:text-xs font-semibold text-yellow-400 flex items-center gap-0.5">
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-            </svg>
-            {item.rating.toFixed(1)}
-          </div>
-        )}
-
-        {/* Media Type Badge */}
-        <div className="absolute bottom-2 left-2 px-1.5 py-0.5 bg-violet-500/80 rounded text-[8px] md:text-[10px] font-bold text-white uppercase">
-          {item.mediaType === 'movie' ? 'Movie' : 'Series'}
-        </div>
-      </motion.div>
-
-      <div className="mt-2 px-0.5">
-        <h3 className="text-white font-medium text-xs sm:text-sm line-clamp-1 group-hover:text-violet-300 transition-colors">
-          {item.title}
-        </h3>
-        <p className="text-gray-500 text-[10px] sm:text-xs mt-0.5">
-          {item.releaseDate ? new Date(item.releaseDate).getFullYear() : ''}
-        </p>
-      </div>
-    </motion.div>
-  );
-}
-
-// Recommendation Card Component
-function RecommendationCard({
-  item,
-  index,
-  onClick,
-}: {
-  item: RecommendedItem;
-  index: number;
-  onClick: () => void;
-}) {
-  const posterUrl = item.posterPath || (item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '/placeholder-poster.jpg');
-  const title = item.title || item.name || 'Unknown';
-  const rating = item.rating || item.vote_average || 0;
-  const releaseDate = item.releaseDate || item.release_date || item.first_air_date;
-  const mediaType = item.mediaType || item.media_type || 'movie';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ delay: Math.min(index * 0.03, 0.3) }}
-      whileTap={{ scale: 0.95 }}
-      onClick={onClick}
-      className="flex-shrink-0 w-[120px] sm:w-32 md:w-36 lg:w-44 cursor-pointer group"
-    >
-      <motion.div
-        whileHover={{ scale: 1.05, y: -8 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-        className="relative rounded-lg md:rounded-xl overflow-hidden bg-gray-900 shadow-lg"
-      >
-        <img
-          src={posterUrl}
-          alt={title}
-          className="w-full aspect-[2/3] object-cover"
-          loading="lazy"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-          <motion.div 
-            whileHover={{ scale: 1.1 }}
-            className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-r from-violet-600 to-purple-600 rounded-full flex items-center justify-center shadow-lg"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" className="md:w-5 md:h-5">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </motion.div>
-        </div>
-
-        {rating > 0 && (
-          <div className="absolute top-1.5 right-1.5 md:top-2 md:right-2 px-1 md:px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] md:text-xs font-semibold text-yellow-400 flex items-center gap-0.5">
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="md:w-2.5 md:h-2.5">
-              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
-            </svg>
-            {rating.toFixed(1)}
-          </div>
-        )}
-
-        <div className="absolute bottom-1.5 left-1.5 md:bottom-2 md:left-2 px-1 md:px-1.5 py-0.5 bg-purple-500/80 rounded text-[8px] md:text-[10px] font-bold text-white uppercase">
-          {mediaType === 'movie' ? 'Movie' : 'Series'}
-        </div>
-      </motion.div>
-
-      <div className="mt-2 md:mt-2.5 px-0.5 md:px-1">
-        <h3 className="text-white font-medium text-xs sm:text-sm line-clamp-1 group-hover:text-purple-300 transition-colors">
-          {title}
-        </h3>
-        <p className="text-gray-500 text-[10px] sm:text-xs mt-0.5">
-          {releaseDate ? new Date(releaseDate).getFullYear() : ''}
-        </p>
-        {item.matchReason && (
-          <p className="text-violet-400/70 text-[9px] sm:text-[10px] mt-0.5 line-clamp-1">
-            {item.matchReason}
-          </p>
-        )}
-      </div>
-    </motion.div>
   );
 }
