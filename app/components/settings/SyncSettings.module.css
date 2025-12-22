@@ -31,6 +31,7 @@
 
 .iconWrapper svg {
   flex-shrink: 0;
+  stroke: currentColor;
 }
 
 .headerText {
@@ -155,22 +156,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.08);
   border: none;
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .visibilityToggle:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
 }
 
 .visibilityToggle svg {
   width: 16px;
   height: 16px;
+  stroke: currentColor;
 }
 
 .credentialRow {
@@ -217,19 +219,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.7);
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
 }
 
 .copyButton:hover:not(:disabled) {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.3);
-  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: #c4b5fd;
 }
 
 .copyButton:disabled {
@@ -240,6 +242,7 @@
 .copyButton svg {
   width: 16px;
   height: 16px;
+  stroke: currentColor;
 }
 
 .credentialHint {
@@ -285,6 +288,7 @@
 
 .syncButton svg {
   flex-shrink: 0;
+  stroke: currentColor;
 }
 
 .spinner {
@@ -339,6 +343,7 @@
 
 .setupIcon svg {
   flex-shrink: 0;
+  stroke: currentColor;
 }
 
 .setupIcon[data-variant="new"] {
@@ -477,7 +482,8 @@
 
 .infoItem svg {
   flex-shrink: 0;
-  color: rgba(139, 92, 246, 0.7);
+  color: rgba(139, 92, 246, 0.8);
+  stroke: currentColor;
 }
 
 .infoItem span {
