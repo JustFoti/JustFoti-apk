@@ -310,6 +310,19 @@ export function collectLocalSyncData(): SyncData {
   };
 }
 
+// Custom event name for sync data changes
+export const SYNC_DATA_CHANGED_EVENT = 'flyx_sync_data_changed';
+
+/**
+ * Dispatch event to notify components that sync data has changed
+ */
+function dispatchSyncDataChanged(): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(SYNC_DATA_CHANGED_EVENT));
+    console.log('[Sync] Dispatched sync data changed event');
+  }
+}
+
 /**
  * Apply synced data to local storage
  */
@@ -378,6 +391,9 @@ export function applyRemoteSyncData(data: SyncData): void {
   
   // Update last sync timestamp
   localStorage.setItem(LAST_SYNC_STORAGE_KEY, data.lastSyncedAt.toString());
+  
+  // Notify all components that sync data has changed
+  dispatchSyncDataChanged();
 }
 
 /**

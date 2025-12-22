@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { MediaItem } from '@/types/media';
-import { queueSync } from '@/lib/sync/auto-sync';
+import { queueSync, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
 
 export interface WatchlistItem {
   id: number | string;
@@ -46,6 +46,25 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
       console.error('[Watchlist] Error loading from localStorage:', err);
     }
     setIsLoaded(true);
+  }, []);
+
+  // Listen for sync data changes and reload watchlist
+  useEffect(() => {
+    const handleSyncDataChanged = () => {
+      console.log('[Watchlist] Sync data changed, reloading watchlist');
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setItems(Array.isArray(parsed) ? parsed : []);
+        }
+      } catch (err) {
+        console.error('[Watchlist] Error reloading from localStorage:', err);
+      }
+    };
+    
+    window.addEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
+    return () => window.removeEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
   }, []);
 
   // Save to localStorage when items change and trigger sync

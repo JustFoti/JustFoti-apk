@@ -44,6 +44,8 @@ export {
   toggleProvider,
   recordSuccessfulProvider,
   getLastSuccessfulProvider,
+  // Sync event
+  SYNC_DATA_CHANGED_EVENT,
 } from './sync-client';
 
 // Auto-sync utilities

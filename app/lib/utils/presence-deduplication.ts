@@ -22,7 +22,10 @@ const recentHeartbeats = new Map<string, {
 // Cleanup old entries every 60 minutes
 const CLEANUP_INTERVAL = 60 * 60 * 1000;
 const HEARTBEAT_EXPIRY = 60 * 60 * 1000; // 60 minutes - matches inactivity timeout
-const MIN_HEARTBEAT_GAP = 300000; // 5 minutes minimum between heartbeats
+// FIXED: Reduced from 5 minutes to 10 seconds to match PresenceProvider's MIN_HEARTBEAT_GAP
+// PresenceProvider sends heartbeats every 30s with CF, 30min without CF
+// Server-side dedup should allow these through
+const MIN_HEARTBEAT_GAP = 10000; // 10 seconds minimum between heartbeats
 
 let cleanupTimer: NodeJS.Timeout | null = null;
 

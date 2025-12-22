@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { getAnimeAudioPreference, setAnimeAudioPreference, type AnimeAudioPreference } from '@/lib/utils/player-preferences';
+import { SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
 import styles from './WatchPage.module.css';
 
 // Desktop video player
@@ -130,6 +131,17 @@ function WatchContent() {
   const [isAnimeContent, setIsAnimeContent] = useState(false);
   const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
   const isAnimeDetectedRef = useRef(false); // Track if we've ever detected anime content
+  
+  // Listen for sync data changes and refresh preferences
+  useEffect(() => {
+    const handleSyncDataChanged = () => {
+      console.log('[WatchPage] Sync data changed, refreshing audio preference');
+      setAudioPref(getAnimeAudioPreference());
+    };
+    
+    window.addEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
+    return () => window.removeEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
+  }, []);
   
   // Debug: Log anime state changes
   useEffect(() => {

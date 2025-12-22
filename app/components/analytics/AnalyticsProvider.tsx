@@ -3,6 +3,7 @@
 import { createContext, useContext, ReactNode, useEffect, useCallback } from 'react';
 import { analyticsService, type WatchEvent, type SearchEvent, type InteractionEvent, type PageViewEvent } from '@/lib/services/analytics';
 import { userTrackingService, type UserSession, type UserPreferences } from '@/lib/services/user-tracking';
+import { SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
 
 interface AnalyticsContextType {
   // Basic tracking
@@ -117,6 +118,17 @@ export default function AnalyticsProvider({ children }: AnalyticsProviderProps) 
   // Initialize analytics service on mount
   useEffect(() => {
     analyticsService.initialize();
+  }, []);
+
+  // Listen for sync data changes and reload watch progress
+  useEffect(() => {
+    const handleSyncDataChanged = () => {
+      console.log('[Analytics] Sync data changed, reloading watch progress');
+      userTrackingService.reloadWatchProgress();
+    };
+    
+    window.addEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
+    return () => window.removeEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
   }, []);
 
   // Basic event tracking

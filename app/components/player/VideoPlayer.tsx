@@ -23,7 +23,7 @@ import {
   type PlayerPreferences,
   type AnimeAudioPreference 
 } from '@/lib/utils/player-preferences';
-import { getProviderSettings, recordSuccessfulProvider, getLastSuccessfulProvider } from '@/lib/sync';
+import { getProviderSettings, recordSuccessfulProvider, getLastSuccessfulProvider, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { CastOverlay } from './CastButton';
@@ -160,6 +160,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   }, [onNextEpisode]);
   useEffect(() => { showNextEpisodeButtonRef.current = showNextEpisodeButton; }, [showNextEpisodeButton]);
   useEffect(() => { autoPlayCountdownRef.current = autoPlayCountdown; }, [autoPlayCountdown]);
+  
+  // Listen for sync data changes and refresh preferences
+  useEffect(() => {
+    const handleSyncDataChanged = () => {
+      console.log('[VideoPlayer] Sync data changed, refreshing preferences');
+      setPlayerPrefs(getPlayerPreferences());
+      setSubtitleStyleState(getSubtitleStyle());
+      setAnimeAudioPref(getAnimeAudioPreference());
+      setVolume(getSavedVolume());
+      setIsMuted(getSavedMuteState());
+    };
+    
+    window.addEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
+    return () => window.removeEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
+  }, []);
   
   const [provider, setProvider] = useState('vidsrc'); // Default to VidSrc (primary provider)
   const [menuProvider, setMenuProvider] = useState('vidsrc');

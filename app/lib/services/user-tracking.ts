@@ -95,6 +95,21 @@ class UserTrackingService {
   }
 
   /**
+   * Reload watch progress from localStorage (called after sync)
+   */
+  reloadWatchProgress(): void {
+    try {
+      const stored = localStorage.getItem(UserTrackingService.WATCH_PROGRESS_KEY);
+      if (stored && this.preferences) {
+        this.preferences.watchProgress = JSON.parse(stored);
+        console.log('[UserTracking] Reloaded watch progress from localStorage');
+      }
+    } catch (error) {
+      console.error('[UserTracking] Failed to reload watch progress:', error);
+    }
+  }
+
+  /**
    * Get or create anonymous user ID
    */
   private getOrCreateUserId(): string {
