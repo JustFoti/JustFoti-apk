@@ -8,14 +8,14 @@ import { getSyncEndpoint, isUsingCloudflareSyncWorker } from '@/lib/utils/sync-e
 
 // Debounce timer for batching rapid changes
 let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-const SYNC_DEBOUNCE_MS = 2000; // Wait 2 seconds after last change before syncing
+const SYNC_DEBOUNCE_MS = 1000; // Wait 1 second after last change before syncing (reduced from 2)
 
 // Track if a sync is in progress
 let isSyncing = false;
 
 // Track last sync time to prevent too frequent syncs
 let lastSyncTime = 0;
-const MIN_SYNC_INTERVAL_MS = 3000; // Minimum 3 seconds between syncs
+const MIN_SYNC_INTERVAL_MS = 2000; // Minimum 2 seconds between syncs (reduced from 3)
 
 /**
  * Queue a sync operation (debounced)

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { MediaItem } from '@/types/media';
-import { queueImmediateSync, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
+import { queueImmediateSync, SYNC_DATA_CHANGED_EVENT, useSyncContext } from '@/lib/sync';
 
 export interface WatchlistItem {
   id: number | string;
@@ -33,6 +33,14 @@ const STORAGE_KEY = 'flyx_watchlist';
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  
+  // Get sync context to reload when sync completes
+  let syncContext: { isInitialSyncComplete: boolean; lastSyncTime: number | null } | null = null;
+  try {
+    syncContext = useSyncContext();
+  } catch {
+    // SyncProvider might not be available in all contexts
+  }
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -47,6 +55,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
     setIsLoaded(true);
   }, []);
+
+  // Reload when initial sync completes
+  useEffect(() => {
+    if (syncContext?.isInitialSyncComplete || syncContext?.lastSyncTime) {
+      console.log('[Watchlist] Sync completed, reloading watchlist');
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setItems(Array.isArray(parsed) ? parsed : []);
+        }
+      } catch (err) {
+        console.error('[Watchlist] Error reloading from localStorage:', err);
+      }
+    }
+  }, [syncContext?.isInitialSyncComplete, syncContext?.lastSyncTime]);
 
   // Listen for sync data changes and reload watchlist
   useEffect(() => {

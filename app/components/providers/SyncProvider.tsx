@@ -7,100 +7,125 @@
  * to ensure sync happens on every page load when the user has sync enabled.
  */
 
-import { useEffect, useRef } from 'react';
-import { getSyncStatus, collectLocalSyncData, applyRemoteSyncData, mergeSyncData } from '@/lib/sync/sync-client';
+import { useEffect, useRef, createContext, useContext, useState, useCallback } from 'react';
+import { getSyncStatus, collectLocalSyncData, applyRemoteSyncData, mergeSyncData, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync/sync-client';
 import { getSyncEndpoint, isUsingCloudflareSyncWorker } from '@/lib/utils/sync-endpoints';
 
 // Minimum time between syncs (prevent spam on rapid navigation)
-const MIN_SYNC_INTERVAL_MS = 10000; // 10 seconds (reduced from 30s for faster sync)
+const MIN_SYNC_INTERVAL_MS = 3000; // 3 seconds (reduced from 5)
 
 // Periodic sync interval
-const PERIODIC_SYNC_INTERVAL_MS = 30000; // 30 seconds
+const PERIODIC_SYNC_INTERVAL_MS = 15000; // 15 seconds (reduced from 20)
+
+// Context to expose sync state and manual refresh
+interface SyncContextType {
+  isInitialSyncComplete: boolean;
+  lastSyncTime: number | null;
+  triggerSync: () => Promise<void>;
+}
+
+const SyncContext = createContext<SyncContextType>({
+  isInitialSyncComplete: false,
+  lastSyncTime: null,
+  triggerSync: async () => {},
+});
+
+export const useSyncContext = () => useContext(SyncContext);
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const lastSyncRef = useRef<number>(0);
   const isSyncingRef = useRef<boolean>(false);
+  const [isInitialSyncComplete, setIsInitialSyncComplete] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+
+  const performAutoSync = useCallback(async (forcePull = false, isInitial = false) => {
+    if (typeof window === 'undefined') return;
+    
+    const status = getSyncStatus();
+    
+    // Only sync if user has sync enabled
+    if (!status.isLinked || !status.syncCode) {
+      if (isInitial) setIsInitialSyncComplete(true);
+      return;
+    }
+
+    // Check if enough time has passed since last sync
+    const now = Date.now();
+    if (!forcePull && !isInitial && now - lastSyncRef.current < MIN_SYNC_INTERVAL_MS) {
+      console.log('[SyncProvider] Skipping sync - too soon since last sync');
+      return;
+    }
+
+    // Prevent concurrent syncs
+    if (isSyncingRef.current) {
+      return;
+    }
+
+    isSyncingRef.current = true;
+    lastSyncRef.current = now;
+
+    try {
+      const endpoint = getSyncEndpoint();
+      const headers: Record<string, string> = {
+        'X-Sync-Code': status.syncCode,
+      };
+      
+      if (status.passphrase) {
+        headers['X-Sync-Passphrase'] = status.passphrase;
+      }
+
+      console.log(`[SyncProvider] Auto-syncing via ${isUsingCloudflareSyncWorker() ? 'Cloudflare' : 'Vercel'}...`);
+
+      // Pull remote data first
+      const pullResponse = await fetch(endpoint, {
+        method: 'GET',
+        headers,
+      });
+
+      const pullResult = await pullResponse.json();
+
+      if (pullResult.success && pullResult.data) {
+        // Merge remote data with local data
+        // Use 'remote' strategy - remote wins for watchlist deletions
+        const localData = collectLocalSyncData();
+        const merged = mergeSyncData(localData, pullResult.data, 'remote');
+        applyRemoteSyncData(merged);
+        console.log('[SyncProvider] Pulled and merged remote data (remote wins)');
+      }
+
+      // Push local data to server (after merge, so we push the merged state)
+      const localData = collectLocalSyncData();
+      const pushResponse = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(localData),
+      });
+
+      const pushResult = await pushResponse.json();
+
+      if (pushResult.success) {
+        localStorage.setItem('flyx_last_sync', pushResult.lastSyncedAt.toString());
+        setLastSyncTime(Date.now());
+        console.log('[SyncProvider] Auto-sync completed successfully');
+        
+        // Dispatch event again after full sync to ensure all components update
+        window.dispatchEvent(new CustomEvent(SYNC_DATA_CHANGED_EVENT));
+      }
+
+    } catch (error) {
+      console.error('[SyncProvider] Auto-sync failed:', error);
+    } finally {
+      isSyncingRef.current = false;
+      if (isInitial) {
+        setIsInitialSyncComplete(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    const performAutoSync = async (forcePull = false) => {
-      if (typeof window === 'undefined') return;
-      
-      const status = getSyncStatus();
-      
-      // Only sync if user has sync enabled
-      if (!status.isLinked || !status.syncCode) {
-        return;
-      }
-
-      // Check if enough time has passed since last sync
-      const now = Date.now();
-      if (!forcePull && now - lastSyncRef.current < MIN_SYNC_INTERVAL_MS) {
-        console.log('[SyncProvider] Skipping sync - too soon since last sync');
-        return;
-      }
-
-      // Prevent concurrent syncs
-      if (isSyncingRef.current) {
-        return;
-      }
-
-      isSyncingRef.current = true;
-      lastSyncRef.current = now;
-
-      try {
-        const endpoint = getSyncEndpoint();
-        const headers: Record<string, string> = {
-          'X-Sync-Code': status.syncCode,
-        };
-        
-        if (status.passphrase) {
-          headers['X-Sync-Passphrase'] = status.passphrase;
-        }
-
-        console.log(`[SyncProvider] Auto-syncing via ${isUsingCloudflareSyncWorker() ? 'Cloudflare' : 'Vercel'}...`);
-
-        // Pull remote data first
-        const pullResponse = await fetch(endpoint, {
-          method: 'GET',
-          headers,
-        });
-
-        const pullResult = await pullResponse.json();
-
-        if (pullResult.success && pullResult.data) {
-          // Merge remote data with local data
-          // Use 'remote' strategy - remote wins for watchlist deletions
-          const localData = collectLocalSyncData();
-          const merged = mergeSyncData(localData, pullResult.data, 'remote');
-          applyRemoteSyncData(merged);
-          console.log('[SyncProvider] Pulled and merged remote data (remote wins)');
-        }
-
-        // Push local data to server (after merge, so we push the merged state)
-        const localData = collectLocalSyncData();
-        const pushResponse = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            ...headers,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(localData),
-        });
-
-        const pushResult = await pushResponse.json();
-
-        if (pushResult.success) {
-          localStorage.setItem('flyx_last_sync', pushResult.lastSyncedAt.toString());
-          console.log('[SyncProvider] Auto-sync completed successfully');
-        }
-
-      } catch (error) {
-        console.error('[SyncProvider] Auto-sync failed:', error);
-      } finally {
-        isSyncingRef.current = false;
-      }
-    };
-
     // Sync on page unload to save watch progress before leaving
     // Use both beforeunload and pagehide for better mobile support
     const handlePageHide = () => {
@@ -134,19 +159,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     const handleBeforeUnload = handlePageHide;
 
-    // Run sync on mount
-    performAutoSync(true);
+    // Run sync on mount (mark as initial)
+    performAutoSync(true, true);
 
     // Also sync when tab becomes visible again (force pull to get latest)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        performAutoSync(true);
+        console.log('[SyncProvider] Tab became visible, syncing...');
+        performAutoSync(true, false);
       }
     };
 
-    // Periodic sync every 30 seconds to catch changes from other devices
+    // Periodic sync to catch changes from other devices
     const periodicSyncInterval = setInterval(() => {
-      performAutoSync(false);
+      performAutoSync(false, false);
     }, PERIODIC_SYNC_INTERVAL_MS);
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -159,9 +185,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('pagehide', handlePageHide);
       clearInterval(periodicSyncInterval);
     };
-  }, []);
+  }, [performAutoSync]);
 
-  return <>{children}</>;
+  const contextValue: SyncContextType = {
+    isInitialSyncComplete,
+    lastSyncTime,
+    triggerSync: () => performAutoSync(true, false),
+  };
+
+  return (
+    <SyncContext.Provider value={contextValue}>
+      {children}
+    </SyncContext.Provider>
+  );
 }
 
 export default SyncProvider;

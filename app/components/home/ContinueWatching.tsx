@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
-import { SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
+import { SYNC_DATA_CHANGED_EVENT, useSyncContext } from '@/lib/sync';
 import type { WatchProgress } from '@/lib/services/user-tracking';
 
 interface ContentMetadata {
@@ -22,6 +22,7 @@ interface ContinueWatchingItem extends WatchProgress {
 export default function ContinueWatching() {
   const router = useRouter();
   const analytics = useAnalytics();
+  const { isInitialSyncComplete, lastSyncTime } = useSyncContext();
   const { getAllWatchProgress, removeWatchProgress, trackEvent } = analytics;
   const [items, setItems] = useState<ContinueWatchingItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,13 +92,13 @@ export default function ContinueWatching() {
     return () => window.removeEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
   }, [analytics]);
 
-  // Load continue watching items
+  // Load continue watching items - reload when sync completes or data changes
   useEffect(() => {
     const loadItems = async () => {
       setLoading(true);
       try {
         const progressItems = getAllWatchProgress();
-        console.log('[ContinueWatching] Loading items, found:', progressItems.length);
+        console.log('[ContinueWatching] Loading items, found:', progressItems.length, 'syncComplete:', isInitialSyncComplete);
         const itemsWithMetadata: ContinueWatchingItem[] = [];
         
         for (const item of progressItems.slice(0, 10)) {
@@ -117,7 +118,7 @@ export default function ContinueWatching() {
     };
 
     loadItems();
-  }, [getAllWatchProgress, fetchMetadata, reloadTrigger]);
+  }, [getAllWatchProgress, fetchMetadata, reloadTrigger, isInitialSyncComplete, lastSyncTime]);
 
   const handleItemClick = useCallback((item: ContinueWatchingItem) => {
     trackEvent('continue_watching_clicked', {

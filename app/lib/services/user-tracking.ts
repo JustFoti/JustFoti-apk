@@ -332,6 +332,11 @@ class UserTrackingService {
         JSON.stringify(this.preferences.watchProgress)
       );
       this.updatePreferences({ watchProgress: this.preferences.watchProgress });
+      
+      // Queue immediate sync to server when watch progress is removed
+      console.log('[UserTracking] Watch progress removed, triggering sync');
+      queueImmediateSync();
+      
       return true;
     } catch (error) {
       console.error('Failed to remove watch progress:', error);

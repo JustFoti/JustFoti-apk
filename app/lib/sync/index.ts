@@ -60,3 +60,6 @@ export {
 
 // React hook
 export { useSync } from './useSync';
+
+// Sync Provider context
+export { useSyncContext } from '@/components/providers/SyncProvider';
