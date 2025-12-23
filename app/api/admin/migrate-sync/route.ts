@@ -5,13 +5,13 @@
  * POST - Migrate accounts to D1
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { neon } from '@neondatabase/serverless';
-import { cookies } from 'next/headers';
-import { jwtVerify } from 'jose';
+import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'flyx-admin-jwt-secret-key-2024';
 const CF_SYNC_URL = process.env.NEXT_PUBLIC_CF_SYNC_URL || 'https://flyx-sync.vynx.workers.dev';
+const ADMIN_COOKIE = 'admin_token';
 
 interface SyncAccount {
   id: string;
@@ -24,14 +24,11 @@ interface SyncAccount {
 }
 
 // Verify admin auth
-async function verifyAdmin(): Promise<boolean> {
+function verifyAdmin(request: NextRequest): boolean {
   try {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('admin_token')?.value;
+    const token = request.cookies.get(ADMIN_COOKIE)?.value;
     if (!token) return false;
-    
-    const secret = new TextEncoder().encode(JWT_SECRET);
-    await jwtVerify(token, secret);
+    jwt.verify(token, JWT_SECRET);
     return true;
   } catch {
     return false;
@@ -39,8 +36,8 @@ async function verifyAdmin(): Promise<boolean> {
 }
 
 // GET - Preview Neon sync data
-export async function GET() {
-  if (!await verifyAdmin()) {
+export async function GET(request: NextRequest) {
+  if (!verifyAdmin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -83,8 +80,8 @@ export async function GET() {
 }
 
 // POST - Migrate to D1
-export async function POST() {
-  if (!await verifyAdmin()) {
+export async function POST(request: NextRequest) {
+  if (!verifyAdmin(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
