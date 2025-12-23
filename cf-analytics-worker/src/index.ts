@@ -302,10 +302,23 @@ export default {
     if (url.pathname === '/init') {
       try {
         await initDatabase(env.DB);
+        // Also initialize peak stats for today
+        await initPeakStats(env.DB);
         return Response.json({ success: true, message: 'Database initialized' }, { headers: corsHeaders });
       } catch (error) {
         console.error('[Init] Error:', error);
         return Response.json({ error: 'Failed to initialize database' }, { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Force update peak stats (for testing/debugging)
+    if (url.pathname === '/update-peaks') {
+      try {
+        await initPeakStats(env.DB);
+        return Response.json({ success: true, message: 'Peak stats updated' }, { headers: corsHeaders });
+      } catch (error) {
+        console.error('[UpdatePeaks] Error:', error);
+        return Response.json({ error: 'Failed to update peak stats' }, { status: 500, headers: corsHeaders });
       }
     }
 
@@ -816,6 +829,54 @@ async function updatePeakStats(db: D1Database): Promise<void> {
     }
   } catch (e) {
     console.error('[PeakStats] Error updating:', e);
+  }
+}
+
+// Initialize peak stats for today with current values
+async function initPeakStats(db: D1Database): Promise<void> {
+  const now = Date.now();
+  const fiveMinAgo = now - 5 * 60 * 1000;
+  const today = new Date().toISOString().split('T')[0];
+
+  try {
+    // Get current live counts
+    const current = await db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN activity_type = 'watching' THEN 1 ELSE 0 END) as watching,
+        SUM(CASE WHEN activity_type = 'browsing' THEN 1 ELSE 0 END) as browsing,
+        SUM(CASE WHEN activity_type = 'livetv' THEN 1 ELSE 0 END) as livetv
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ?
+    `).bind(fiveMinAgo).first() as { total: number; watching: number; browsing: number; livetv: number } | null;
+
+    const total = current?.total || 0;
+    const watching = current?.watching || 0;
+    const browsing = current?.browsing || 0;
+    const livetv = current?.livetv || 0;
+
+    // Check if row exists for today
+    const existing = await db.prepare(`SELECT * FROM peak_stats WHERE date = ?`).bind(today).first();
+
+    if (!existing) {
+      // Create new record for today with current values
+      await db.prepare(`
+        INSERT INTO peak_stats (date, peak_total, peak_total_time, peak_watching, peak_watching_time, peak_livetv, peak_livetv_time, peak_browsing, peak_browsing_time, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(today, total, now, watching, now, livetv, now, browsing, now, now, now).run();
+      console.log(`[InitPeakStats] Created peak stats for ${today}: total=${total}, watching=${watching}, livetv=${livetv}, browsing=${browsing}`);
+    } else {
+      console.log(`[InitPeakStats] Peak stats already exist for ${today}`);
+    }
+
+    // Also save an activity snapshot
+    await db.prepare(`
+      INSERT INTO activity_snapshots (id, timestamp, total_active, watching, browsing, livetv, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(`snap_init_${now}`, now, total, watching, browsing, livetv, now).run();
+    console.log(`[InitPeakStats] Saved activity snapshot`);
+  } catch (e) {
+    console.error('[InitPeakStats] Error:', e);
   }
 }
 

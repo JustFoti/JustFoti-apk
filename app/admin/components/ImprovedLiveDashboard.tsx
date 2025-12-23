@@ -10,10 +10,12 @@
  * - Users watching Live TV
  * - Users browsing (not watching anything)
  * - Persistent peak tracking (stored in DB, updated server-side)
+ * - 12-hour activity trend from server
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useStats } from '../context/StatsContext';
+import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 
 interface HistoryPoint {
   time: number;
@@ -41,33 +43,38 @@ export default function ImprovedLiveDashboard() {
   // Peak stats come from unified stats (updated server-side)
   const peakStats = unifiedStats.peakStats;
 
-  // Update history when stats change
-  useEffect(() => {
-    if (statsLoading) return;
-    
-    setLastUpdate(new Date());
-    
-    // Add to history
-    setHistory(prev => {
-      const newPoint: HistoryPoint = {
-        time: Date.now(),
-        total: currentActivity.total,
-        watching: currentActivity.watching,
-        livetv: currentActivity.livetv,
-        browsing: currentActivity.browsing,
-      };
-      
-      // Don't add duplicate points within 2 seconds
-      const lastPoint = prev[prev.length - 1];
-      if (lastPoint && (Date.now() - lastPoint.time) < 2000) {
-        return prev;
+  // Fetch 12-hour activity history from server
+  const fetchActivityHistory = useCallback(async () => {
+    try {
+      const response = await fetch(getAdminAnalyticsUrl('activity-history', { hours: 12 }));
+      const data = await response.json();
+      if (data.success && data.history) {
+        setHistory(data.history.map((h: any) => ({
+          time: h.time,
+          total: h.total,
+          watching: h.watching || 0,
+          browsing: h.browsing || 0,
+          livetv: h.livetv || 0,
+        })));
       }
-      
-      const newHistory = [...prev, newPoint];
-      // Keep last 60 data points (10 minutes at 10s intervals)
-      return newHistory.slice(-60);
-    });
-  }, [unifiedStats, statsLoading, currentActivity.total, currentActivity.watching, currentActivity.livetv, currentActivity.browsing]);
+    } catch (error) {
+      console.error('Failed to fetch activity history:', error);
+    }
+  }, []);
+
+  // Update lastUpdate when stats change
+  useEffect(() => {
+    if (!statsLoading) {
+      setLastUpdate(new Date());
+    }
+  }, [unifiedStats, statsLoading]);
+
+  // Fetch activity history on mount and every 5 minutes
+  useEffect(() => {
+    fetchActivityHistory();
+    const historyInterval = setInterval(fetchActivityHistory, 5 * 60 * 1000);
+    return () => clearInterval(historyInterval);
+  }, [fetchActivityHistory]);
 
   // Auto-refresh stats
   useEffect(() => {
@@ -284,7 +291,7 @@ export default function ImprovedLiveDashboard() {
         )}
       </div>
 
-      {/* Activity Trend Chart */}
+      {/* Activity Trend Chart - 12 Hour History */}
       <div style={{ 
         background: 'rgba(255, 255, 255, 0.03)', 
         border: '1px solid rgba(255, 255, 255, 0.1)', 
@@ -293,7 +300,7 @@ export default function ImprovedLiveDashboard() {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
           <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>
-            Activity Trend (Last {history.length > 0 ? Math.max(1, Math.round(history.length * refreshRate / 60)) : 10} min)
+            Activity Trend (Last 12 hours)
           </span>
           <div style={{ display: 'flex', gap: '12px', fontSize: '12px' }}>
             <span style={{ color: '#10b981' }}>● Total</span>
@@ -319,7 +326,7 @@ export default function ImprovedLiveDashboard() {
               color: '#64748b',
               fontSize: '13px'
             }}>
-              Collecting data...
+              Collecting data... (snapshots saved every 5 min)
             </div>
           ) : (
             /* Chart */
@@ -377,8 +384,9 @@ export default function ImprovedLiveDashboard() {
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-          <span style={{ color: '#64748b', fontSize: '11px' }}>{formatTime(history[0]?.time || Date.now())}</span>
-          <span style={{ color: '#64748b', fontSize: '11px' }}>{formatTime(history[history.length - 1]?.time || Date.now())}</span>
+          <span style={{ color: '#64748b', fontSize: '11px' }}>{history.length > 0 ? formatTime(history[0].time) : '12h ago'}</span>
+          <span style={{ color: '#64748b', fontSize: '11px' }}>{history.length > 1 ? formatTime(history[Math.floor(history.length / 2)]?.time) : ''}</span>
+          <span style={{ color: '#64748b', fontSize: '11px' }}>Now</span>
         </div>
       </div>
 
