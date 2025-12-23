@@ -128,61 +128,201 @@ const MEDIA_PLAYER_PATTERNS = [
 ];
 
 // Bot detection patterns - these are actual bots/crawlers
+// Each pattern has a confidence score (0-100) for weighted detection
 const BOT_PATTERNS = [
-  // Search engine bots
-  { pattern: /googlebot/i, name: 'Googlebot', category: 'search' },
-  { pattern: /bingbot/i, name: 'Bingbot', category: 'search' },
-  { pattern: /yandexbot/i, name: 'Yandex', category: 'search' },
-  { pattern: /duckduckbot/i, name: 'DuckDuckBot', category: 'search' },
-  { pattern: /baiduspider/i, name: 'Baidu', category: 'search' },
-  { pattern: /slurp/i, name: 'Yahoo Slurp', category: 'search' },
+  // Search engine bots (high confidence - definitely bots)
+  { pattern: /googlebot/i, name: 'Googlebot', category: 'search', confidence: 100 },
+  { pattern: /bingbot/i, name: 'Bingbot', category: 'search', confidence: 100 },
+  { pattern: /yandexbot/i, name: 'Yandex', category: 'search', confidence: 100 },
+  { pattern: /duckduckbot/i, name: 'DuckDuckBot', category: 'search', confidence: 100 },
+  { pattern: /baiduspider/i, name: 'Baidu', category: 'search', confidence: 100 },
+  { pattern: /slurp/i, name: 'Yahoo Slurp', category: 'search', confidence: 100 },
+  { pattern: /sogou/i, name: 'Sogou', category: 'search', confidence: 100 },
+  { pattern: /exabot/i, name: 'Exabot', category: 'search', confidence: 100 },
+  { pattern: /ia_archiver/i, name: 'Alexa', category: 'search', confidence: 100 },
   
   // Social media bots
-  { pattern: /facebookexternalhit/i, name: 'Facebook', category: 'social' },
-  { pattern: /twitterbot/i, name: 'Twitter', category: 'social' },
-  { pattern: /linkedinbot/i, name: 'LinkedIn', category: 'social' },
-  { pattern: /telegrambot/i, name: 'Telegram', category: 'social' },
-  { pattern: /discordbot/i, name: 'Discord', category: 'social' },
-  { pattern: /whatsapp/i, name: 'WhatsApp', category: 'social' },
-  { pattern: /slackbot/i, name: 'Slack', category: 'social' },
+  { pattern: /facebookexternalhit/i, name: 'Facebook', category: 'social', confidence: 100 },
+  { pattern: /twitterbot/i, name: 'Twitter', category: 'social', confidence: 100 },
+  { pattern: /linkedinbot/i, name: 'LinkedIn', category: 'social', confidence: 100 },
+  { pattern: /telegrambot/i, name: 'Telegram', category: 'social', confidence: 100 },
+  { pattern: /discordbot/i, name: 'Discord', category: 'social', confidence: 100 },
+  { pattern: /whatsapp/i, name: 'WhatsApp', category: 'social', confidence: 100 },
+  { pattern: /slackbot/i, name: 'Slack', category: 'social', confidence: 100 },
+  { pattern: /pinterest/i, name: 'Pinterest', category: 'social', confidence: 95 },
+  { pattern: /redditbot/i, name: 'Reddit', category: 'social', confidence: 100 },
   
   // SEO/Analytics tools
-  { pattern: /semrushbot/i, name: 'SEMrush', category: 'seo' },
-  { pattern: /ahrefsbot/i, name: 'Ahrefs', category: 'seo' },
-  { pattern: /mj12bot/i, name: 'Majestic', category: 'seo' },
-  { pattern: /dotbot/i, name: 'Moz', category: 'seo' },
-  { pattern: /rogerbot/i, name: 'Moz Roger', category: 'seo' },
-  { pattern: /screaming frog/i, name: 'Screaming Frog', category: 'seo' },
+  { pattern: /semrushbot/i, name: 'SEMrush', category: 'seo', confidence: 100 },
+  { pattern: /ahrefsbot/i, name: 'Ahrefs', category: 'seo', confidence: 100 },
+  { pattern: /mj12bot/i, name: 'Majestic', category: 'seo', confidence: 100 },
+  { pattern: /dotbot/i, name: 'Moz', category: 'seo', confidence: 100 },
+  { pattern: /rogerbot/i, name: 'Moz Roger', category: 'seo', confidence: 100 },
+  { pattern: /screaming frog/i, name: 'Screaming Frog', category: 'seo', confidence: 100 },
+  { pattern: /seokicks/i, name: 'SEOkicks', category: 'seo', confidence: 100 },
+  { pattern: /blexbot/i, name: 'BLEXBot', category: 'seo', confidence: 100 },
   
   // Monitoring/Uptime
-  { pattern: /uptimerobot/i, name: 'UptimeRobot', category: 'monitoring' },
-  { pattern: /pingdom/i, name: 'Pingdom', category: 'monitoring' },
-  { pattern: /statuscake/i, name: 'StatusCake', category: 'monitoring' },
-  { pattern: /site24x7/i, name: 'Site24x7', category: 'monitoring' },
+  { pattern: /uptimerobot/i, name: 'UptimeRobot', category: 'monitoring', confidence: 100 },
+  { pattern: /pingdom/i, name: 'Pingdom', category: 'monitoring', confidence: 100 },
+  { pattern: /statuscake/i, name: 'StatusCake', category: 'monitoring', confidence: 100 },
+  { pattern: /site24x7/i, name: 'Site24x7', category: 'monitoring', confidence: 100 },
+  { pattern: /newrelic/i, name: 'New Relic', category: 'monitoring', confidence: 100 },
+  { pattern: /datadog/i, name: 'Datadog', category: 'monitoring', confidence: 100 },
   
-  // Scrapers/Crawlers (NOT media players)
-  { pattern: /scrapy/i, name: 'Scrapy', category: 'scraper' },
-  { pattern: /python-requests/i, name: 'Python Requests', category: 'scraper' },
-  { pattern: /python-urllib/i, name: 'Python urllib', category: 'scraper' },
-  { pattern: /wget\//i, name: 'Wget', category: 'scraper' },
-  { pattern: /httpie/i, name: 'HTTPie', category: 'scraper' },
-  { pattern: /go-http-client/i, name: 'Go HTTP', category: 'scraper' },
-  { pattern: /axios/i, name: 'Axios', category: 'scraper' },
-  { pattern: /node-fetch/i, name: 'Node Fetch', category: 'scraper' },
+  // HTTP libraries / CLI tools (high confidence scrapers)
+  { pattern: /python-requests/i, name: 'Python Requests', category: 'scraper', confidence: 95 },
+  { pattern: /python-urllib/i, name: 'Python urllib', category: 'scraper', confidence: 95 },
+  { pattern: /aiohttp/i, name: 'aiohttp', category: 'scraper', confidence: 95 },
+  { pattern: /httpx/i, name: 'HTTPX', category: 'scraper', confidence: 90 },
+  { pattern: /wget\//i, name: 'Wget', category: 'scraper', confidence: 95 },
+  { pattern: /httpie/i, name: 'HTTPie', category: 'scraper', confidence: 95 },
+  { pattern: /go-http-client/i, name: 'Go HTTP', category: 'scraper', confidence: 90 },
+  { pattern: /axios/i, name: 'Axios', category: 'scraper', confidence: 85 },
+  { pattern: /node-fetch/i, name: 'Node Fetch', category: 'scraper', confidence: 85 },
+  { pattern: /got\//i, name: 'Got', category: 'scraper', confidence: 85 },
+  { pattern: /undici/i, name: 'Undici', category: 'scraper', confidence: 85 },
+  { pattern: /scrapy/i, name: 'Scrapy', category: 'scraper', confidence: 100 },
+  { pattern: /libwww-perl/i, name: 'Perl LWP', category: 'scraper', confidence: 95 },
+  { pattern: /mechanize/i, name: 'Mechanize', category: 'scraper', confidence: 95 },
+  { pattern: /okhttp/i, name: 'OkHttp', category: 'scraper', confidence: 80 },
+  { pattern: /apache-httpclient/i, name: 'Apache HttpClient', category: 'scraper', confidence: 85 },
+  { pattern: /guzzle/i, name: 'Guzzle', category: 'scraper', confidence: 85 },
+  { pattern: /restsharp/i, name: 'RestSharp', category: 'scraper', confidence: 85 },
   
   // Headless browsers
-  { pattern: /headlesschrome/i, name: 'Headless Chrome', category: 'headless' },
-  { pattern: /phantomjs/i, name: 'PhantomJS', category: 'headless' },
-  { pattern: /selenium/i, name: 'Selenium', category: 'headless' },
-  { pattern: /puppeteer/i, name: 'Puppeteer', category: 'headless' },
-  { pattern: /playwright/i, name: 'Playwright', category: 'headless' },
+  { pattern: /headlesschrome/i, name: 'Headless Chrome', category: 'headless', confidence: 100 },
+  { pattern: /phantomjs/i, name: 'PhantomJS', category: 'headless', confidence: 100 },
+  { pattern: /selenium/i, name: 'Selenium', category: 'headless', confidence: 100 },
+  { pattern: /puppeteer/i, name: 'Puppeteer', category: 'headless', confidence: 100 },
+  { pattern: /playwright/i, name: 'Playwright', category: 'headless', confidence: 100 },
+  { pattern: /webdriver/i, name: 'WebDriver', category: 'headless', confidence: 100 },
+  { pattern: /cypress/i, name: 'Cypress', category: 'headless', confidence: 95 },
+  { pattern: /nightmare/i, name: 'Nightmare', category: 'headless', confidence: 100 },
   
-  // Generic bot patterns (but NOT matching player patterns)
-  { pattern: /\bbot\b/i, name: 'Generic Bot', category: 'other' },
-  { pattern: /crawler/i, name: 'Generic Crawler', category: 'other' },
-  { pattern: /spider/i, name: 'Generic Spider', category: 'other' },
-  { pattern: /\bscraper\b/i, name: 'Generic Scraper', category: 'other' },
+  // AI crawlers
+  { pattern: /gptbot/i, name: 'GPTBot', category: 'ai', confidence: 100 },
+  { pattern: /chatgpt/i, name: 'ChatGPT', category: 'ai', confidence: 100 },
+  { pattern: /anthropic/i, name: 'Anthropic', category: 'ai', confidence: 100 },
+  { pattern: /claude-web/i, name: 'Claude', category: 'ai', confidence: 100 },
+  { pattern: /cohere-ai/i, name: 'Cohere', category: 'ai', confidence: 100 },
+  { pattern: /perplexitybot/i, name: 'Perplexity', category: 'ai', confidence: 100 },
+  { pattern: /ccbot/i, name: 'Common Crawl', category: 'ai', confidence: 100 },
+  
+  // Generic bot patterns (lower confidence - could be false positives)
+  { pattern: /\bbot\b/i, name: 'Generic Bot', category: 'other', confidence: 70 },
+  { pattern: /crawler/i, name: 'Generic Crawler', category: 'other', confidence: 75 },
+  { pattern: /spider/i, name: 'Generic Spider', category: 'other', confidence: 75 },
+  { pattern: /\bscraper\b/i, name: 'Generic Scraper', category: 'other', confidence: 80 },
+  { pattern: /fetch/i, name: 'Generic Fetch', category: 'other', confidence: 50 },
 ];
+
+// Suspicious User-Agent patterns that indicate fake/incomplete UAs
+const SUSPICIOUS_UA_PATTERNS = [
+  { pattern: /^Mozilla\/5\.0$/, reason: 'Bare Mozilla UA', confidence: 85 },
+  { pattern: /^Mozilla\/4\.0/, reason: 'Outdated Mozilla 4.0', confidence: 70 },
+  { pattern: /^Mozilla\/5\.0 \(compatible\)$/, reason: 'Generic compatible UA', confidence: 80 },
+  { pattern: /^Mozilla\/5\.0 \(Windows\)$/, reason: 'Incomplete Windows UA', confidence: 85 },
+  { pattern: /^Mozilla\/5\.0 \(Linux\)$/, reason: 'Incomplete Linux UA', confidence: 85 },
+  { pattern: /^Mozilla\/5\.0 \(Macintosh\)$/, reason: 'Incomplete Mac UA', confidence: 85 },
+  { pattern: /^$/, reason: 'Empty User-Agent', confidence: 95 },
+  { pattern: /^\s+$/, reason: 'Whitespace-only UA', confidence: 95 },
+  { pattern: /^-$/, reason: 'Dash UA', confidence: 95 },
+  { pattern: /^unknown$/i, reason: 'Unknown UA', confidence: 90 },
+  { pattern: /^null$/i, reason: 'Null UA', confidence: 95 },
+  { pattern: /^undefined$/i, reason: 'Undefined UA', confidence: 95 },
+  { pattern: /test/i, reason: 'Test UA', confidence: 60 },
+];
+
+// Request header analysis interface
+interface RequestAnalysis {
+  hasAcceptLanguage: boolean;
+  hasAccept: boolean;
+  hasSecFetchDest: boolean;
+  hasSecFetchMode: boolean;
+  hasSecFetchSite: boolean;
+  acceptLanguageValid: boolean;
+  acceptValid: boolean;
+  secFetchConsistent: boolean;
+  suspiciousHeaders: string[];
+  score: number; // 0-100, higher = more suspicious
+}
+
+// Analyze request headers for bot-like behavior
+function analyzeRequestHeaders(request: Request): RequestAnalysis {
+  const headers = request.headers;
+  const suspiciousHeaders: string[] = [];
+  let score = 0;
+  
+  // Check Accept-Language
+  const acceptLanguage = headers.get('Accept-Language');
+  const hasAcceptLanguage = !!acceptLanguage;
+  const acceptLanguageValid = hasAcceptLanguage && /^[a-z]{2}(-[A-Z]{2})?(,|;|$)/i.test(acceptLanguage);
+  if (!hasAcceptLanguage) {
+    score += 25;
+    suspiciousHeaders.push('Missing Accept-Language');
+  } else if (!acceptLanguageValid) {
+    score += 15;
+    suspiciousHeaders.push('Invalid Accept-Language format');
+  }
+  
+  // Check Accept header
+  const accept = headers.get('Accept');
+  const hasAccept = !!accept;
+  const acceptValid = hasAccept && (
+    accept.includes('text/html') || 
+    accept.includes('application/json') || 
+    accept.includes('*/*')
+  );
+  if (!hasAccept) {
+    score += 20;
+    suspiciousHeaders.push('Missing Accept');
+  }
+  
+  // Check Sec-Fetch-* headers (modern browsers send these)
+  const secFetchDest = headers.get('Sec-Fetch-Dest');
+  const secFetchMode = headers.get('Sec-Fetch-Mode');
+  const secFetchSite = headers.get('Sec-Fetch-Site');
+  const hasSecFetchDest = !!secFetchDest;
+  const hasSecFetchMode = !!secFetchMode;
+  const hasSecFetchSite = !!secFetchSite;
+  
+  // Modern browsers should have all Sec-Fetch headers or none
+  const secFetchCount = [hasSecFetchDest, hasSecFetchMode, hasSecFetchSite].filter(Boolean).length;
+  const secFetchConsistent = secFetchCount === 0 || secFetchCount === 3;
+  if (!secFetchConsistent) {
+    score += 20;
+    suspiciousHeaders.push('Inconsistent Sec-Fetch headers');
+  }
+  
+  // Check for suspicious header combinations
+  const connection = headers.get('Connection');
+  if (connection === 'close') {
+    score += 10;
+    suspiciousHeaders.push('Connection: close (unusual for browsers)');
+  }
+  
+  // Check for missing Referer on non-direct requests
+  const referer = headers.get('Referer');
+  const origin = headers.get('Origin');
+  if (!referer && !origin && secFetchSite && secFetchSite !== 'none') {
+    score += 15;
+    suspiciousHeaders.push('Missing Referer/Origin on cross-site request');
+  }
+  
+  return {
+    hasAcceptLanguage,
+    hasAccept,
+    hasSecFetchDest,
+    hasSecFetchMode,
+    hasSecFetchSite,
+    acceptLanguageValid,
+    acceptValid,
+    secFetchConsistent,
+    suspiciousHeaders,
+    score,
+  };
+}
 
 interface DetectionResult {
   isBot: boolean;
@@ -191,11 +331,115 @@ interface DetectionResult {
   category?: string;
   confidence: number;
   userAgent: string;
+  reasons?: string[];
+}
+
+// Check for browser/platform inconsistencies
+function checkBrowserConsistency(userAgent: string): { suspicious: boolean; reasons: string[]; score: number } {
+  const reasons: string[] = [];
+  let score = 0;
+  
+  const ua = userAgent.toLowerCase();
+  
+  // Safari on Windows is extremely rare (Safari for Windows was discontinued in 2012)
+  if (ua.includes('safari') && !ua.includes('chrome') && ua.includes('windows')) {
+    reasons.push('Safari on Windows (discontinued 2012)');
+    score += 40;
+  }
+  
+  // iPhone/iPad with Windows
+  if ((ua.includes('iphone') || ua.includes('ipad')) && ua.includes('windows')) {
+    reasons.push('iOS device claiming Windows');
+    score += 50;
+  }
+  
+  // Android with Mac OS
+  if (ua.includes('android') && ua.includes('macintosh')) {
+    reasons.push('Android claiming Mac OS');
+    score += 50;
+  }
+  
+  // Very old Chrome version with modern features
+  const chromeMatch = ua.match(/chrome\/(\d+)/);
+  if (chromeMatch) {
+    const chromeVersion = parseInt(chromeMatch[1]);
+    // Chrome versions below 70 are very old (2018)
+    if (chromeVersion < 70 && chromeVersion > 0) {
+      reasons.push(`Outdated Chrome version (${chromeVersion})`);
+      score += 25;
+    }
+    // Impossibly high Chrome version
+    if (chromeVersion > 200) {
+      reasons.push(`Invalid Chrome version (${chromeVersion})`);
+      score += 40;
+    }
+  }
+  
+  // Firefox version checks
+  const firefoxMatch = ua.match(/firefox\/(\d+)/);
+  if (firefoxMatch) {
+    const ffVersion = parseInt(firefoxMatch[1]);
+    if (ffVersion < 60 && ffVersion > 0) {
+      reasons.push(`Outdated Firefox version (${ffVersion})`);
+      score += 25;
+    }
+    if (ffVersion > 200) {
+      reasons.push(`Invalid Firefox version (${ffVersion})`);
+      score += 40;
+    }
+  }
+  
+  // Edge with very old version
+  const edgeMatch = ua.match(/edg\/(\d+)/);
+  if (edgeMatch) {
+    const edgeVersion = parseInt(edgeMatch[1]);
+    if (edgeVersion < 80 && edgeVersion > 0) {
+      reasons.push(`Outdated Edge version (${edgeVersion})`);
+      score += 20;
+    }
+  }
+  
+  // Multiple conflicting browsers
+  const browsers = [
+    ua.includes('chrome') && !ua.includes('chromium'),
+    ua.includes('firefox'),
+    ua.includes('safari') && !ua.includes('chrome'),
+    ua.includes('edge'),
+    ua.includes('opera'),
+  ].filter(Boolean).length;
+  
+  if (browsers > 2) {
+    reasons.push('Multiple conflicting browser identifiers');
+    score += 30;
+  }
+  
+  // User-Agent length anomalies
+  if (userAgent.length < 20) {
+    reasons.push('Unusually short User-Agent');
+    score += 35;
+  }
+  if (userAgent.length > 500) {
+    reasons.push('Unusually long User-Agent');
+    score += 25;
+  }
+  
+  // Missing expected components for claimed browser
+  if (ua.includes('chrome') && !ua.includes('applewebkit')) {
+    reasons.push('Chrome without AppleWebKit');
+    score += 30;
+  }
+  
+  if (ua.includes('firefox') && !ua.includes('gecko')) {
+    reasons.push('Firefox without Gecko');
+    score += 30;
+  }
+  
+  return { suspicious: score >= 40, reasons, score };
 }
 
 function detectUserAgent(userAgent: string | null): DetectionResult {
   if (!userAgent) {
-    return { isBot: true, isPlayer: false, name: 'No User-Agent', category: 'suspicious', confidence: 90, userAgent: '' };
+    return { isBot: true, isPlayer: false, name: 'No User-Agent', category: 'suspicious', confidence: 95, userAgent: '', reasons: ['Missing User-Agent header'] };
   }
   
   // FIRST check for media players - these are legitimate users!
@@ -219,7 +463,7 @@ function detectUserAgent(userAgent: string | null): DetectionResult {
       return { isBot: false, isPlayer: true, name: 'cURL (media)', category: 'player', confidence: 70, userAgent };
     }
     // Plain cURL = likely scraper
-    return { isBot: true, isPlayer: false, name: 'cURL', category: 'scraper', confidence: 80, userAgent };
+    return { isBot: true, isPlayer: false, name: 'cURL', category: 'scraper', confidence: 85, userAgent, reasons: ['Plain cURL without media context'] };
   }
   
   // Check for Java - could be player or bot
@@ -227,7 +471,7 @@ function detectUserAgent(userAgent: string | null): DetectionResult {
     if (/player|media|stream/i.test(userAgent)) {
       return { isBot: false, isPlayer: true, name: 'Java Player', category: 'player', confidence: 70, userAgent };
     }
-    return { isBot: true, isPlayer: false, name: 'Java HTTP', category: 'scraper', confidence: 75, userAgent };
+    return { isBot: true, isPlayer: false, name: 'Java HTTP', category: 'scraper', confidence: 80, userAgent, reasons: ['Java HTTP client'] };
   }
   
   // Check against known bot patterns
@@ -238,32 +482,80 @@ function detectUserAgent(userAgent: string | null): DetectionResult {
         isPlayer: false,
         name: bot.name,
         category: bot.category,
-        confidence: 95,
+        confidence: bot.confidence,
         userAgent,
+        reasons: [`Matched bot pattern: ${bot.name}`],
       };
     }
   }
   
-  // Suspicious indicators (lower confidence)
-  const suspiciousPatterns = [
-    { pattern: /^Mozilla\/5\.0$/, reason: 'Bare Mozilla UA' },
-    { pattern: /^Mozilla\/4\.0/, reason: 'Old Mozilla UA' },
-  ];
-  
-  for (const sus of suspiciousPatterns) {
+  // Check suspicious UA patterns
+  for (const sus of SUSPICIOUS_UA_PATTERNS) {
     if (sus.pattern.test(userAgent)) {
       return {
         isBot: true,
         isPlayer: false,
         name: sus.reason,
         category: 'suspicious',
-        confidence: 60,
+        confidence: sus.confidence,
         userAgent,
+        reasons: [sus.reason],
       };
     }
   }
   
+  // Check browser consistency
+  const consistency = checkBrowserConsistency(userAgent);
+  if (consistency.suspicious) {
+    return {
+      isBot: true,
+      isPlayer: false,
+      name: 'Inconsistent UA',
+      category: 'suspicious',
+      confidence: Math.min(consistency.score, 90),
+      userAgent,
+      reasons: consistency.reasons,
+    };
+  }
+  
   return { isBot: false, isPlayer: false, confidence: 0, userAgent };
+}
+
+// Enhanced bot detection with full request context
+function detectBotWithContext(request: Request): DetectionResult & { headerAnalysis?: RequestAnalysis } {
+  const userAgent = request.headers.get('User-Agent');
+  const uaResult = detectUserAgent(userAgent);
+  
+  // If already detected as bot or player, return early
+  if (uaResult.isBot || uaResult.isPlayer) {
+    return uaResult;
+  }
+  
+  // Analyze request headers for additional signals
+  const headerAnalysis = analyzeRequestHeaders(request);
+  
+  // Combine UA analysis with header analysis
+  const combinedScore = headerAnalysis.score;
+  
+  // If header analysis is suspicious enough, flag as bot
+  if (combinedScore >= 50) {
+    return {
+      isBot: true,
+      isPlayer: false,
+      name: 'Suspicious Headers',
+      category: 'suspicious',
+      confidence: Math.min(combinedScore, 85),
+      userAgent: userAgent || '',
+      reasons: headerAnalysis.suspiciousHeaders,
+      headerAnalysis,
+    };
+  }
+  
+  // Return with header analysis attached for logging
+  return {
+    ...uaResult,
+    headerAnalysis,
+  };
 }
 
 // Keep old function name for compatibility
@@ -597,7 +889,9 @@ async function handlePresence(
   const payload = await request.json() as PresencePayload;
   const geo = getGeoInfo(request);
   const userAgent = request.headers.get('User-Agent');
-  const uaCheck = detectUserAgent(userAgent);
+  
+  // Use enhanced detection with full request context
+  const uaCheck = detectBotWithContext(request);
   
   if (!payload.userId || !payload.sessionId) {
     return Response.json({ error: 'Missing userId or sessionId' }, { status: 400, headers: corsHeaders });
@@ -951,7 +1245,9 @@ async function handlePageView(
   const payload = await request.json() as any;
   const geo = getGeoInfo(request);
   const userAgent = request.headers.get('User-Agent');
-  const uaCheck = detectUserAgent(userAgent);
+  
+  // Use enhanced detection with full request context
+  const uaCheck = detectBotWithContext(request);
 
   if (!payload.userId || !payload.pagePath) {
     return Response.json({ error: 'Missing required fields' }, { status: 400, headers: corsHeaders });
