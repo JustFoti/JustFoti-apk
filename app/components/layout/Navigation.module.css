@@ -19,7 +19,15 @@
 
 .navigation.menuOpen {
   background: rgba(8, 8, 12, 0.98);
+  backdrop-filter: blur(20px);
   z-index: 1002;
+}
+
+/* Mobile: Always show solid background when menu is open */
+@media (max-width: 768px) {
+  .navigation.menuOpen {
+    background: #08080c;
+  }
 }
 
 .navContainer {
@@ -457,8 +465,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(8, 8, 12, 0.98);
-  backdrop-filter: blur(20px);
+  background: #08080c;
   z-index: 1000;
   padding-top: 72px;
   opacity: 0;
