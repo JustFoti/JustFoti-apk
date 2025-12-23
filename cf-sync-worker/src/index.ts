@@ -135,6 +135,11 @@ export default {
       }, { headers: corsHeaders });
     }
 
+    // Admin migration endpoint (for Neon → D1 migration)
+    if (url.pathname === '/admin/migrate' && request.method === 'POST') {
+      return await handleAdminMigrate(request, env, corsHeaders);
+    }
+
     // Sync endpoints - support both /sync and /analytics/sync paths
     const syncPath = url.pathname.replace(/^\/analytics/, '');
     if (syncPath === '/sync') {
@@ -516,4 +521,73 @@ async function ensureNeonTable(databaseUrl: string): Promise<void> {
   await neonQuery(databaseUrl, `
     CREATE INDEX IF NOT EXISTS idx_sync_accounts_hash ON sync_accounts(code_hash)
   `, []);
+}
+
+// Admin migration endpoint - insert raw account data directly
+async function handleAdminMigrate(
+  request: Request,
+  env: Env,
+  corsHeaders: HeadersInit
+): Promise<Response> {
+  if (!env.SYNC_DB) {
+    return Response.json(
+      { success: false, error: 'D1 database not configured' },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+
+  try {
+    const body = await request.json() as {
+      id: string;
+      code_hash: string;
+      sync_data: string;
+      created_at: number;
+      updated_at: number;
+      last_sync_at: number;
+      device_count: number;
+    };
+
+    // Ensure table exists
+    try {
+      await env.SYNC_DB.prepare(`
+        CREATE TABLE IF NOT EXISTS sync_accounts (
+          id TEXT PRIMARY KEY,
+          code_hash TEXT UNIQUE NOT NULL,
+          sync_data TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          last_sync_at INTEGER NOT NULL,
+          device_count INTEGER DEFAULT 1
+        )
+      `).run();
+    } catch (e) {
+      // Table exists
+    }
+
+    // Insert or replace
+    await env.SYNC_DB.prepare(`
+      INSERT OR REPLACE INTO sync_accounts (id, code_hash, sync_data, created_at, updated_at, last_sync_at, device_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      body.id,
+      body.code_hash,
+      body.sync_data,
+      body.created_at,
+      body.updated_at,
+      body.last_sync_at,
+      body.device_count || 1
+    ).run();
+
+    return Response.json({
+      success: true,
+      message: 'Account migrated',
+      id: body.id,
+    }, { headers: corsHeaders });
+  } catch (error: any) {
+    console.error('[Admin Migrate] Error:', error);
+    return Response.json(
+      { success: false, error: error.message },
+      { status: 500, headers: corsHeaders }
+    );
+  }
 }
