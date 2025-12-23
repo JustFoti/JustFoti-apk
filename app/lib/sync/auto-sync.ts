@@ -8,10 +8,14 @@ import { getSyncEndpoint, isUsingCloudflareSyncWorker } from '@/lib/utils/sync-e
 
 // Debounce timer for batching rapid changes
 let syncDebounceTimer: NodeJS.Timeout | null = null;
-const SYNC_DEBOUNCE_MS = 5000; // Wait 5 seconds after last change before syncing
+const SYNC_DEBOUNCE_MS = 3000; // Wait 3 seconds after last change before syncing (reduced from 5s)
 
 // Track if a sync is in progress
 let isSyncing = false;
+
+// Track last sync time to prevent too frequent syncs
+let lastSyncTime = 0;
+const MIN_SYNC_INTERVAL_MS = 10000; // Minimum 10 seconds between syncs
 
 /**
  * Queue a sync operation (debounced)
@@ -37,6 +41,29 @@ export function queueSync(): void {
 }
 
 /**
+ * Queue an immediate sync (shorter debounce for critical events like watch progress)
+ * Use this for watch progress updates that need faster sync
+ */
+export function queueImmediateSync(): void {
+  if (typeof window === 'undefined') return;
+  
+  const status = getSyncStatus();
+  if (!status.isLinked || !status.syncCode) {
+    return;
+  }
+  
+  // Clear existing timer
+  if (syncDebounceTimer) {
+    clearTimeout(syncDebounceTimer);
+  }
+  
+  // Shorter debounce for immediate sync (1 second)
+  syncDebounceTimer = setTimeout(() => {
+    performSync();
+  }, 1000);
+}
+
+/**
  * Perform immediate sync (no debounce)
  */
 export async function performSync(): Promise<{ success: boolean; error?: string }> {
@@ -53,7 +80,16 @@ export async function performSync(): Promise<{ success: boolean; error?: string 
     return { success: false, error: 'Sync already in progress' };
   }
   
+  // Check minimum interval
+  const now = Date.now();
+  if (now - lastSyncTime < MIN_SYNC_INTERVAL_MS) {
+    // Queue for later instead of skipping
+    queueSync();
+    return { success: false, error: 'Too soon, queued for later' };
+  }
+  
   isSyncing = true;
+  lastSyncTime = now;
   
   try {
     const localData = collectLocalSyncData();

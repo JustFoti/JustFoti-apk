@@ -97,6 +97,37 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // Sync on page unload to save watch progress before leaving
+    const handleBeforeUnload = () => {
+      const status = getSyncStatus();
+      if (!status.isLinked || !status.syncCode) return;
+
+      // Use sendBeacon for reliable sync on page close
+      const endpoint = getSyncEndpoint();
+      const localData = collectLocalSyncData();
+      
+      // sendBeacon doesn't support custom headers, so we need to use a different approach
+      // Instead, we'll do a quick sync using fetch with keepalive
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          'X-Sync-Code': status.syncCode,
+        };
+        if (status.passphrase) {
+          headers['X-Sync-Passphrase'] = status.passphrase;
+        }
+
+        fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(localData),
+          keepalive: true, // Allows request to outlive the page
+        });
+      } catch {
+        // Ignore errors on unload
+      }
+    };
+
     // Run sync on mount
     performAutoSync();
 
@@ -108,9 +139,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, []);
 

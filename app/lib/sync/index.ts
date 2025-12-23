@@ -51,6 +51,7 @@ export {
 // Auto-sync utilities
 export {
   queueSync,
+  queueImmediateSync,
   performSync,
   cancelPendingSync,
   isSyncInProgress,
