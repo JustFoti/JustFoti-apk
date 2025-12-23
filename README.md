@@ -2,9 +2,7 @@
 
 A modern streaming platform built with Next.js 15, featuring movies, TV shows, live TV, and cross-device sync.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%vynx-velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required%20for%20movie%20and%20TV%20data&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx-main)
-
-[![Deploy to Cloudflare Pages](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/vynx-velvet/flyx-main)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVynx-Velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required%20for%20movie%20and%20TV%20data&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx)
 
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square)
@@ -20,29 +18,109 @@ A modern streaming platform built with Next.js 15, featuring movies, TV shows, l
 - **Admin Dashboard** - Real-time analytics, user metrics, and live activity monitoring
 - **Privacy-First** - Anonymous tracking, no PII collected, GDPR-compliant
 
+---
+
 ## Quick Deploy
 
-### Option 1: Vercel (Recommended)
+### 1. Main App → Vercel
 
-Click the button above or:
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVynx-Velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx)
 
-1. Fork this repository
-2. Import to [Vercel](https://vercel.com/new)
-3. Add environment variables:
-   - `TMDB_API_KEY` - [Get from TMDB](https://www.themoviedb.org/settings/api) (Bearer token)
-   - `NEXT_PUBLIC_TMDB_API_KEY` - TMDB API key (v3 auth)
-4. Deploy!
+Required environment variables:
+- `TMDB_API_KEY` - [Get from TMDB](https://www.themoviedb.org/settings/api) (Bearer token)
+- `NEXT_PUBLIC_TMDB_API_KEY` - TMDB API key (v3 auth)
 
-### Option 2: Cloudflare Pages
+---
 
-> Note: Requires additional configuration for API routes. See [Cloudflare Setup](#cloudflare-workers) below.
+### 2. Cloudflare Workers + D1 (Optional but Recommended)
+
+Deploy workers for cross-device sync, analytics, and stream proxying. Each uses **Cloudflare D1** (SQLite at the edge) - no external database needed!
+
+#### Sync Worker (Cross-Device Sync)
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cf-sync-worker)
+
+<details>
+<summary>Manual deployment steps</summary>
+
+```bash
+cd cf-sync-worker
+npm install
+
+# Create D1 database
+npx wrangler d1 create flyx-sync-db
+
+# Copy the database_id from output to wrangler.toml
+
+# Initialize schema
+npx wrangler d1 execute flyx-sync-db --file=schema.sql
+
+# Deploy worker
+npx wrangler deploy
+```
+
+</details>
+
+Then add to Vercel: `NEXT_PUBLIC_CF_SYNC_URL=https://flyx-sync.YOUR-SUBDOMAIN.workers.dev`
+
+---
+
+#### Analytics Worker (Real-time Analytics)
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cf-analytics-worker)
+
+<details>
+<summary>Manual deployment steps</summary>
+
+```bash
+cd cf-analytics-worker
+npm install
+
+# Create D1 database
+npx wrangler d1 create flyx-analytics-db
+
+# Copy the database_id from output to wrangler.toml
+
+# Initialize schema
+npx wrangler d1 execute flyx-analytics-db --file=schema.sql
+
+# Deploy worker
+npx wrangler deploy
+```
+
+</details>
+
+Then add to Vercel: `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL=https://flyx-analytics.YOUR-SUBDOMAIN.workers.dev`
+
+---
+
+#### Stream Proxy (HLS/Live TV)
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cloudflare-proxy)
+
+<details>
+<summary>Manual deployment steps</summary>
+
+```bash
+cd cloudflare-proxy
+npm install
+npx wrangler deploy
+```
+
+</details>
+
+Then add to Vercel:
+- `NEXT_PUBLIC_CF_STREAM_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev/stream`
+- `NEXT_PUBLIC_CF_TV_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev`
+
+---
 
 ## Local Development
 
 ```bash
 # Clone and install
-git clone https://github.com/vynx-velvet/flyx-main.git
-cd flyx
+git clone https://github.com/Vynx-Velvet/flyx-main.git
+cd flyx-main
 npm install  # or: bun install
 
 # Configure environment
@@ -54,6 +132,8 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+---
 
 ## Environment Variables
 
@@ -68,46 +148,38 @@ Open [http://localhost:3000](http://localhost:3000)
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | Neon PostgreSQL URL (enables analytics) |
-| `NEXT_PUBLIC_CF_SYNC_URL` | Cloudflare Sync Worker URL (cross-device sync) |
-| `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL` | Cloudflare Analytics Worker URL |
+| `NEXT_PUBLIC_CF_SYNC_URL` | Sync Worker URL (cross-device sync) |
+| `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL` | Analytics Worker URL |
 | `NEXT_PUBLIC_CF_STREAM_PROXY_URL` | Stream proxy for HLS content |
 | `NEXT_PUBLIC_CF_TV_PROXY_URL` | Live TV proxy URL |
+| `DATABASE_URL` | Neon PostgreSQL (alternative to D1) |
 
 See [.env.example](.env.example) for all options.
 
-## Cloudflare Workers
+---
 
-Deploy the included workers for enhanced performance:
+## Architecture
 
-### Sync Worker (Cross-Device Sync)
-
-```bash
-cd cf-sync-worker
-npm install
-npx wrangler deploy
+```
+┌─────────────────┐     ┌──────────────────────────────────────┐
+│                 │     │         Cloudflare Edge              │
+│   Vercel        │     │  ┌─────────────┐  ┌──────────────┐  │
+│   (Next.js)     │────▶│  │ Sync Worker │  │Analytics     │  │
+│                 │     │  │ + D1 SQLite │  │Worker + D1   │  │
+└─────────────────┘     │  └─────────────┘  └──────────────┘  │
+                        │  ┌─────────────────────────────────┐ │
+                        │  │      Stream Proxy Worker        │ │
+                        │  └─────────────────────────────────┘ │
+                        └──────────────────────────────────────┘
 ```
 
-Set `NEXT_PUBLIC_CF_SYNC_URL` to your worker URL.
+**Why Cloudflare Workers + D1?**
+- **Free tier**: 100k requests/day, 5GB D1 storage
+- **Global edge**: <50ms latency worldwide
+- **No cold starts**: Always warm, instant responses
+- **SQLite at edge**: D1 is SQLite, simple and fast
 
-### Analytics Worker
-
-```bash
-cd cf-analytics-worker
-npm install
-# Add DATABASE_URL secret: npx wrangler secret put DATABASE_URL
-npx wrangler deploy
-```
-
-Set `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL` to your worker URL.
-
-### Stream Proxy
-
-```bash
-cd cloudflare-proxy
-npm install
-npx wrangler deploy
-```
+---
 
 ## Admin Panel
 
@@ -121,9 +193,11 @@ Access at `/admin` after deployment.
 # Create new admin
 npm run admin:create <username> <password>
 
-# Reset password
+# Reset password  
 npm run admin:reset-password <username> <new-password>
 ```
+
+---
 
 ## Tech Stack
 
@@ -132,34 +206,30 @@ npm run admin:reset-password <username> <new-password>
 | Framework | Next.js 15 (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
-| Database | Neon PostgreSQL / SQLite (dev) |
-| Deployment | Vercel / Cloudflare |
+| Edge Database | Cloudflare D1 (SQLite) |
+| Deployment | Vercel + Cloudflare Workers |
 | API | TMDB |
+
+---
 
 ## Project Structure
 
 ```
-flyx/
+flyx-main/
 ├── app/                    # Next.js App Router
 │   ├── (routes)/          # Page routes
 │   ├── admin/             # Admin panel
 │   ├── api/               # API routes
 │   ├── components/        # React components
 │   └── lib/               # Utilities & services
-├── cf-analytics-worker/   # Cloudflare Analytics Worker
-├── cf-sync-worker/        # Cloudflare Sync Worker
+├── cf-analytics-worker/   # Analytics Worker + D1
+├── cf-sync-worker/        # Sync Worker + D1
 ├── cloudflare-proxy/      # Stream proxy worker
 ├── server/                # Server utilities
 └── scripts/               # CLI scripts
 ```
 
-## Documentation
-
-| Guide | Description |
-|-------|-------------|
-| [QUICK_START_VERCEL.md](QUICK_START_VERCEL.md) | 5-minute Vercel deployment |
-| [NEON_SETUP.md](NEON_SETUP.md) | Database setup |
-| [ADMIN_SETUP.md](ADMIN_SETUP.md) | Admin configuration |
+---
 
 ## Scripts
 
@@ -170,6 +240,8 @@ npm run db:init      # Initialize database
 npm run db:migrate   # Run migrations
 npm run admin:create # Create admin user
 ```
+
+---
 
 ## Credits
 
