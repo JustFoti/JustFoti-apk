@@ -177,12 +177,25 @@ export default function WatchlistPageClient() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fallback simple recommendations
+  // Use a ref to track items for stable callbacks
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  
+  // Track item IDs to detect actual changes
+  const itemIdsRef = useRef<string>('');
+  const currentItemIds = items.map(i => i.id).sort().join(',');
+  const itemsChanged = itemIdsRef.current !== currentItemIds;
+  if (itemsChanged) {
+    itemIdsRef.current = currentItemIds;
+  }
+
   const fetchSimpleRecommendations = useCallback(async () => {
+    const currentItems = itemsRef.current;
     console.log('[Watchlist] Using fallback simple recommendations');
     try {
-      const sampleItems = items.slice(0, 5);
+      const sampleItems = currentItems.slice(0, 5);
       const allRecs: RecommendedItem[] = [];
-      const seenIds = new Set(items.map(i => String(i.id)));
+      const seenIds = new Set(currentItems.map(i => String(i.id)));
       
       for (const item of sampleItems) {
         try {
@@ -215,21 +228,22 @@ export default function WatchlistPageClient() {
     } catch (err) {
       console.error('[Watchlist] Error in fallback recommendations:', err);
     }
-  }, [items]);
+  }, []); // No dependencies - uses ref
 
   // Fetch recommendations based on watchlist
   const fetchRecommendations = useCallback(async () => {
-    if (items.length === 0) return;
+    const currentItems = itemsRef.current;
+    if (currentItems.length === 0) return;
     
     setLoadingRecs(true);
-    console.log('[Watchlist] Fetching recommendations for', items.length, 'items');
+    console.log('[Watchlist] Fetching recommendations for', currentItems.length, 'items');
     
     try {
       const response = await fetch('/api/recommendations/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: items.map(item => ({
+          items: currentItems.map(item => ({
             id: item.id,
             mediaType: item.mediaType,
             title: item.title,
@@ -273,17 +287,17 @@ export default function WatchlistPageClient() {
     } finally {
       setLoadingRecs(false);
     }
-  }, [items, fetchSimpleRecommendations]);
+  }, [fetchSimpleRecommendations]); // Only depends on fetchSimpleRecommendations which is stable
 
-  // Fetch recommendations when items change (only if 5+ items)
+  // Fetch recommendations only when item IDs actually change (not on every render)
   useEffect(() => {
-    if (items.length >= 5) {
+    if (items.length >= 5 && itemsChanged) {
       fetchRecommendations();
-    } else {
+    } else if (items.length < 5) {
       setRecommendations([]);
       setRecProfile(null);
     }
-  }, [items.length, fetchRecommendations]);
+  }, [currentItemIds, items.length, itemsChanged, fetchRecommendations]);
 
   const handleContentClick = useCallback((item: WatchlistItem | RecommendedItem) => {
     trackEvent('watchlist_item_clicked', { content_id: item.id });

@@ -56,40 +56,49 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     setIsLoaded(true);
   }, []);
 
-  // Reload when initial sync completes
-  useEffect(() => {
-    if (syncContext?.isInitialSyncComplete || syncContext?.lastSyncTime) {
-      console.log('[Watchlist] Sync completed, reloading watchlist');
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setItems(Array.isArray(parsed) ? parsed : []);
-        }
-      } catch (err) {
-        console.error('[Watchlist] Error reloading from localStorage:', err);
+  // Helper to check if watchlist data actually changed
+  const reloadIfChanged = useCallback(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const newItems = Array.isArray(parsed) ? parsed : [];
+        
+        // Only update if the data actually changed (compare IDs)
+        setItems(prev => {
+          const prevIds = prev.map(i => i.id).sort().join(',');
+          const newIds = newItems.map((i: WatchlistItem) => i.id).sort().join(',');
+          
+          if (prevIds !== newIds) {
+            console.log('[Watchlist] Data changed, updating items');
+            return newItems;
+          }
+          return prev; // No change, keep same reference
+        });
       }
+    } catch (err) {
+      console.error('[Watchlist] Error reloading from localStorage:', err);
     }
-  }, [syncContext?.isInitialSyncComplete, syncContext?.lastSyncTime]);
+  }, []);
 
-  // Listen for sync data changes and reload watchlist
+  // Reload when initial sync completes (only once)
+  useEffect(() => {
+    if (syncContext?.isInitialSyncComplete) {
+      console.log('[Watchlist] Initial sync completed, checking for changes');
+      reloadIfChanged();
+    }
+  }, [syncContext?.isInitialSyncComplete, reloadIfChanged]);
+
+  // Listen for sync data changes and reload watchlist only if data changed
   useEffect(() => {
     const handleSyncDataChanged = () => {
-      console.log('[Watchlist] Sync data changed, reloading watchlist');
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          setItems(Array.isArray(parsed) ? parsed : []);
-        }
-      } catch (err) {
-        console.error('[Watchlist] Error reloading from localStorage:', err);
-      }
+      console.log('[Watchlist] Sync data changed event, checking for changes');
+      reloadIfChanged();
     };
     
     window.addEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
     return () => window.removeEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
-  }, []);
+  }, [reloadIfChanged]);
 
   // Save to localStorage when items change and trigger sync
   useEffect(() => {

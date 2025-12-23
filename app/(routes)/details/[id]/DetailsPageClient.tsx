@@ -597,7 +597,7 @@ export default function DetailsPageClient({
     : 'N/A';
 
   const handleGoBack = () => {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !content) {
       router.push('/');
       return;
     }
@@ -629,9 +629,26 @@ export default function DetailsPageClient({
       }
     }
     
-    // Fallback: always go to home page instead of using router.back()
-    // This prevents going back to the video player when user navigates:
-    // home -> details -> watch -> back (to details) -> back (should go home, not watch)
+    // Route based on media type
+    // For anime: check if it's anime (Japanese animation)
+    if (isAnime) {
+      router.push('/anime');
+      return;
+    }
+    
+    // For movies
+    if (content.mediaType === 'movie') {
+      router.push('/movies');
+      return;
+    }
+    
+    // For TV shows (non-anime)
+    if (content.mediaType === 'tv') {
+      router.push('/series');
+      return;
+    }
+    
+    // Fallback to home
     router.push('/');
   };
 
