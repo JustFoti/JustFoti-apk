@@ -12,14 +12,17 @@ import { getSyncStatus, collectLocalSyncData, applyRemoteSyncData, mergeSyncData
 import { getSyncEndpoint, isUsingCloudflareSyncWorker } from '@/lib/utils/sync-endpoints';
 
 // Minimum time between syncs (prevent spam on rapid navigation)
-const MIN_SYNC_INTERVAL_MS = 30000; // 30 seconds
+const MIN_SYNC_INTERVAL_MS = 10000; // 10 seconds (reduced from 30s for faster sync)
+
+// Periodic sync interval
+const PERIODIC_SYNC_INTERVAL_MS = 30000; // 30 seconds
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
   const lastSyncRef = useRef<number>(0);
   const isSyncingRef = useRef<boolean>(false);
 
   useEffect(() => {
-    const performAutoSync = async () => {
+    const performAutoSync = async (forcePull = false) => {
       if (typeof window === 'undefined') return;
       
       const status = getSyncStatus();
@@ -31,7 +34,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
       // Check if enough time has passed since last sync
       const now = Date.now();
-      if (now - lastSyncRef.current < MIN_SYNC_INTERVAL_MS) {
+      if (!forcePull && now - lastSyncRef.current < MIN_SYNC_INTERVAL_MS) {
         console.log('[SyncProvider] Skipping sync - too soon since last sync');
         return;
       }
@@ -65,14 +68,15 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const pullResult = await pullResponse.json();
 
         if (pullResult.success && pullResult.data) {
-          // Merge remote data with local data (remote wins for conflicts)
+          // Merge remote data with local data
+          // Use 'remote' strategy - remote wins for watchlist deletions
           const localData = collectLocalSyncData();
-          const merged = mergeSyncData(localData, pullResult.data, 'newest');
+          const merged = mergeSyncData(localData, pullResult.data, 'remote');
           applyRemoteSyncData(merged);
-          console.log('[SyncProvider] Pulled and merged remote data');
+          console.log('[SyncProvider] Pulled and merged remote data (remote wins)');
         }
 
-        // Push local data to server
+        // Push local data to server (after merge, so we push the merged state)
         const localData = collectLocalSyncData();
         const pushResponse = await fetch(endpoint, {
           method: 'POST',
@@ -129,14 +133,19 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Run sync on mount
-    performAutoSync();
+    performAutoSync(true);
 
-    // Also sync when tab becomes visible again
+    // Also sync when tab becomes visible again (force pull to get latest)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        performAutoSync();
+        performAutoSync(true);
       }
     };
+
+    // Periodic sync every 30 seconds to catch changes from other devices
+    const periodicSyncInterval = setInterval(() => {
+      performAutoSync(false);
+    }, PERIODIC_SYNC_INTERVAL_MS);
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -144,6 +153,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      clearInterval(periodicSyncInterval);
     };
   }, []);
 

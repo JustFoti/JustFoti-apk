@@ -15,7 +15,7 @@ let isSyncing = false;
 
 // Track last sync time to prevent too frequent syncs
 let lastSyncTime = 0;
-const MIN_SYNC_INTERVAL_MS = 10000; // Minimum 10 seconds between syncs
+const MIN_SYNC_INTERVAL_MS = 5000; // Minimum 5 seconds between syncs (reduced from 10s)
 
 /**
  * Queue a sync operation (debounced)

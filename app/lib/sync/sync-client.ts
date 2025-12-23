@@ -397,7 +397,9 @@ export function applyRemoteSyncData(data: SyncData): void {
 }
 
 /**
- * Merge local and remote data (local wins for conflicts by default)
+ * Merge local and remote data
+ * For watchlist: remote wins (server is source of truth for deletions)
+ * For watch progress: newest timestamp wins
  */
 export function mergeSyncData(local: SyncData, remote: SyncData, strategy: 'local' | 'remote' | 'newest' = 'newest'): SyncData {
   const merged: SyncData = {
@@ -436,18 +438,53 @@ export function mergeSyncData(local: SyncData, remote: SyncData, strategy: 'loca
     }
   }
   
-  // Merge watchlist (union, dedupe by id)
-  const watchlistMap = new Map<string | number, typeof merged.watchlist[0]>();
+  // Merge watchlist - REMOTE WINS for deletions
+  // If remote has a newer lastSyncedAt, use remote as base (handles deletions)
+  // Otherwise merge with local additions
+  const remoteLastSync = remote.lastSyncedAt || 0;
+  const localLastSync = local.lastSyncedAt || 0;
   
-  for (const item of remote.watchlist || []) {
-    watchlistMap.set(item.id, item);
+  if (strategy === 'remote' || remoteLastSync > localLastSync) {
+    // Remote is newer - use remote watchlist as base
+    // Only add local items that were added AFTER the remote sync
+    const remoteIds = new Set((remote.watchlist || []).map(item => item.id));
+    const watchlistMap = new Map<string | number, typeof merged.watchlist[0]>();
+    
+    // Start with remote watchlist
+    for (const item of remote.watchlist || []) {
+      watchlistMap.set(item.id, item);
+    }
+    
+    // Add local items that are NEW (added after last sync)
+    for (const item of local.watchlist || []) {
+      if (!remoteIds.has(item.id) && item.addedAt > remoteLastSync) {
+        // This is a new local addition, keep it
+        watchlistMap.set(item.id, item);
+      }
+    }
+    
+    merged.watchlist = Array.from(watchlistMap.values())
+      .sort((a, b) => b.addedAt - a.addedAt);
+  } else {
+    // Local is newer or same - use local watchlist as base
+    const localIds = new Set((local.watchlist || []).map(item => item.id));
+    const watchlistMap = new Map<string | number, typeof merged.watchlist[0]>();
+    
+    // Start with local watchlist
+    for (const item of local.watchlist || []) {
+      watchlistMap.set(item.id, item);
+    }
+    
+    // Add remote items that are NEW (added after last local sync)
+    for (const item of remote.watchlist || []) {
+      if (!localIds.has(item.id) && item.addedAt > localLastSync) {
+        watchlistMap.set(item.id, item);
+      }
+    }
+    
+    merged.watchlist = Array.from(watchlistMap.values())
+      .sort((a, b) => b.addedAt - a.addedAt);
   }
-  for (const item of local.watchlist || []) {
-    watchlistMap.set(item.id, item);
-  }
-  
-  merged.watchlist = Array.from(watchlistMap.values())
-    .sort((a, b) => b.addedAt - a.addedAt);
   
   // Provider settings - use local (user's current device preference)
   merged.providerSettings = local.providerSettings || remote.providerSettings || DEFAULT_PROVIDER_SETTINGS;
