@@ -34,12 +34,16 @@ interface TrafficData {
     unique_visitors: number;
     bot_hits: number;
     human_hits: number;
+    player_hits?: number;
   };
   sourceTypeStats: Array<{ source_type: string; source_name: string; hit_count: number; unique_visitors: number }>;
   mediumStats: Array<{ referrer_medium: string; hit_count: number; unique_visitors: number }>;
   topReferrers: Array<{ referrer_domain: string; referrer_medium: string; hit_count: number; last_hit: number }>;
   detailedReferrers: Array<{ referrer_url: string; referrer_domain: string; referrer_medium: string; hit_count: number; unique_visitors: number; last_hit: number }>;
   botStats: Array<{ source_name: string; hit_count: number }>;
+  playerStats?: Array<{ player_name: string; player_category: string; hit_count: number; last_hit: number }>;
+  playerByCategory?: Array<{ player_category: string; hit_count: number }>;
+  playerByCountry?: Array<{ country: string; hit_count: number }>;
   hourlyPattern: Array<{ hour: number; hit_count: number; bot_hits: number }>;
   geoStats: Array<{ country: string; hit_count: number; unique_visitors: number }>;
 }
@@ -132,17 +136,12 @@ export default function TrafficV2Page() {
       <Grid cols="auto-fit" minWidth="160px" gap="16px">
         <StatCard title="Total Hits" value={trafficData?.totals?.total_hits || unifiedStats.pageViews || 0} icon="📊" color={colors.primary} />
         <StatCard title="Unique Visitors" value={trafficData?.totals?.unique_visitors || unifiedStats.uniqueVisitors || 0} icon="👥" color={colors.success} />
-        <StatCard title="Human Traffic" value={trafficData?.totals?.human_hits || unifiedStats.pageViews || 0} icon="🧑" color={colors.info} />
+        <StatCard title="Website Users" value={trafficData?.totals?.human_hits || unifiedStats.pageViews || 0} icon="🌐" color={colors.info} />
+        <StatCard title="External Players" value={trafficData?.totals?.player_hits || 0} icon="🎬" color={colors.purple} />
         <StatCard title="Bot Traffic" value={trafficData?.totals?.bot_hits || 0} icon="🤖" color={colors.warning} />
-        <StatCard 
-          title="Bot %" 
-          value={`${trafficData?.totals?.total_hits ? Math.round((trafficData.totals.bot_hits / trafficData.totals.total_hits) * 100) : 0}%`} 
-          icon="📈" 
-          color={colors.pink} 
-        />
         <StatCard title="Active Now" value={unifiedStats.liveUsers} icon="🟢" color={colors.success} pulse />
-        <StatCard title="Countries" value={unifiedStats.topCountries?.length || 0} icon="🌍" color={colors.purple} />
-        <StatCard title="Page Views (24h)" value={unifiedStats.pageViews} icon="👁️" color={colors.cyan} />
+        <StatCard title="Countries" value={unifiedStats.topCountries?.length || 0} icon="🌍" color={colors.cyan} />
+        <StatCard title="Page Views (24h)" value={unifiedStats.pageViews} icon="👁️" color={colors.pink} />
       </Grid>
 
       <div style={{ marginTop: '24px' }}>
@@ -286,15 +285,61 @@ function OverviewTab({ trafficData, presenceStats, unifiedStats }: { trafficData
 }
 
 function SourcesTab({ trafficData }: { trafficData: TrafficData | null }) {
-  const sourceIcons: Record<string, string> = { browser: '🌐', bot: '🤖', api: '⚡', social: '📱', rss: '📰', unknown: '❓' };
+  const sourceIcons: Record<string, string> = { browser: '🌐', bot: '🤖', api: '⚡', social: '📱', rss: '📰', player: '🎬', unknown: '❓' };
+  
+  // Player category icons and descriptions
+  const playerCategoryInfo: Record<string, { icon: string; label: string; description: string }> = {
+    player: { icon: '🖥️', label: 'Desktop Players', description: 'VLC, mpv, MPC-HC, PotPlayer, etc.' },
+    iptv: { icon: '📺', label: 'IPTV Apps', description: 'TiviMate, IPTV Smarters, Perfect Player, etc.' },
+  };
+  
+  // Player name icons
+  const playerNameIcons: Record<string, string> = {
+    'VLC': '🟠',
+    'mpv': '🟣',
+    'MPC-HC': '🔵',
+    'PotPlayer': '🟡',
+    'KMPlayer': '🔴',
+    'IINA': '⚪',
+    'Infuse': '🟤',
+    'Plex': '🟠',
+    'Emby': '🟢',
+    'Jellyfin': '🔵',
+    'Kodi': '🔵',
+    'XBMC/Kodi': '🔵',
+    'Fire TV': '🟠',
+    'Apple TV': '⚪',
+    'Chromecast': '🔵',
+    'Android TV': '🟢',
+    'Samsung TV': '🔵',
+    'LG TV': '🔴',
+    'PlayStation': '🔵',
+    'Xbox': '🟢',
+    'MX Player': '🔵',
+    'nPlayer': '🟠',
+    'TiviMate': '🟣',
+    'OTT Navigator': '🟢',
+    'Perfect Player': '🔵',
+    'IPTV Smarters': '🟠',
+    'GSE Smart IPTV': '🔴',
+    'Lazy IPTV': '🟡',
+    'FFmpeg': '🟢',
+    'FFmpeg/Lavf': '🟢',
+    'ExoPlayer': '🟢',
+    'AVPlayer': '⚪',
+  };
+
+  const totalPlayerHits = trafficData?.totals?.player_hits || trafficData?.playerStats?.reduce((sum, p) => sum + p.hit_count, 0) || 0;
 
   return (
     <Grid cols={2} gap="24px">
+      {/* Traffic by Source Type */}
       <Card title="Traffic by Source Type" icon="📊">
         {trafficData?.sourceTypeStats?.length ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {trafficData.sourceTypeStats.map((source) => {
               const total = trafficData.sourceTypeStats.reduce((sum, s) => sum + s.hit_count, 0);
+              const sourceColors: Record<string, string> = { browser: colors.success, player: colors.purple, bot: colors.warning };
               return (
                 <div key={`${source.source_type}-${source.source_name}`}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -303,7 +348,7 @@ function SourcesTab({ trafficData }: { trafficData: TrafficData | null }) {
                     </span>
                     <span style={{ color: colors.text.muted }}>{formatNumber(source.hit_count)} ({getPercentage(source.hit_count, total)}%)</span>
                   </div>
-                  <ProgressBar value={source.hit_count} max={total} gradient={gradients.mixed} height={8} />
+                  <ProgressBar value={source.hit_count} max={total} color={sourceColors[source.source_type] || colors.primary} height={8} />
                 </div>
               );
             })}
@@ -313,14 +358,113 @@ function SourcesTab({ trafficData }: { trafficData: TrafficData | null }) {
         )}
       </Card>
 
+      {/* Traffic Summary */}
       <Card title="Traffic Summary" icon="📈">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <SummaryRow label="Total Hits" value={trafficData?.totals?.total_hits || 0} icon="📊" />
           <SummaryRow label="Unique Visitors" value={trafficData?.totals?.unique_visitors || 0} icon="👥" />
-          <SummaryRow label="Human Traffic" value={trafficData?.totals?.human_hits || 0} icon="🧑" color={colors.success} />
-          <SummaryRow label="Bot Traffic" value={trafficData?.totals?.bot_hits || 0} icon="🤖" color={colors.warning} />
+          <SummaryRow label="Website Users" value={trafficData?.totals?.human_hits || 0} icon="🌐" color={colors.success} />
+          <SummaryRow label="External Players" value={totalPlayerHits} icon="🎬" color={colors.purple} />
+          <SummaryRow label="Bots & Crawlers" value={trafficData?.totals?.bot_hits || 0} icon="🤖" color={colors.warning} />
         </div>
       </Card>
+
+      {/* External Players Breakdown */}
+      <Card title={`External Players (${totalPlayerHits} hits)`} icon="🎬">
+        {trafficData?.playerStats?.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {trafficData.playerStats.map((player) => {
+              const icon = playerNameIcons[player.player_name] || '🎬';
+              const categoryInfo = playerCategoryInfo[player.player_category] || { icon: '🎬', label: player.player_category };
+              return (
+                <div key={player.player_name} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px', 
+                  padding: '12px', 
+                  background: 'rgba(120, 119, 198, 0.1)', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(120, 119, 198, 0.2)',
+                }}>
+                  <span style={{ fontSize: '24px' }}>{icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: colors.text.primary, fontWeight: '600', fontSize: '14px' }}>{player.player_name}</div>
+                    <div style={{ color: colors.text.muted, fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>{categoryInfo.icon}</span>
+                      <span>{categoryInfo.label}</span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ color: colors.purple, fontWeight: '700', fontSize: '18px' }}>{formatNumber(player.hit_count)}</div>
+                    <div style={{ color: colors.text.muted, fontSize: '11px' }}>
+                      {player.last_hit ? formatDate(player.last_hit) : ''}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState icon="🎬" title="No External Player Traffic" message="External player traffic (VLC, Kodi, etc.) will appear here" />
+        )}
+      </Card>
+
+      {/* Player Categories */}
+      <Card title="Player Categories" icon="📊">
+        {trafficData?.playerByCategory?.length ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {trafficData.playerByCategory.map((cat) => {
+              const info = playerCategoryInfo[cat.player_category] || { icon: '🎬', label: cat.player_category, description: 'Other players' };
+              return (
+                <div key={cat.player_category} style={{ 
+                  padding: '16px', 
+                  background: 'rgba(255,255,255,0.02)', 
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255,255,255,0.05)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '28px' }}>{info.icon}</span>
+                    <div>
+                      <div style={{ color: colors.text.primary, fontWeight: '600', fontSize: '16px' }}>{info.label}</div>
+                      <div style={{ color: colors.text.muted, fontSize: '12px' }}>{info.description}</div>
+                    </div>
+                    <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                      <div style={{ color: colors.purple, fontWeight: '700', fontSize: '24px' }}>{formatNumber(cat.hit_count)}</div>
+                      <div style={{ color: colors.text.muted, fontSize: '11px' }}>hits</div>
+                    </div>
+                  </div>
+                  <ProgressBar value={cat.hit_count} max={totalPlayerHits || 1} color={colors.purple} height={6} />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <EmptyState icon="📊" title="No Category Data" message="Player category breakdown will appear here" />
+        )}
+      </Card>
+
+      {/* Player Traffic by Country */}
+      {trafficData?.playerByCountry?.length ? (
+        <Card title="External Players by Country" icon="🌍">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {trafficData.playerByCountry.slice(0, 10).map((geo, i) => {
+              const total = trafficData.playerByCountry!.reduce((sum, g) => sum + g.hit_count, 0);
+              return (
+                <div key={geo.country}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span style={{ color: colors.text.primary, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ color: colors.text.muted, fontSize: '12px', width: '20px' }}>#{i + 1}</span>
+                      {geo.country}
+                    </span>
+                    <span style={{ color: colors.text.muted }}>{formatNumber(geo.hit_count)} ({getPercentage(geo.hit_count, total)}%)</span>
+                  </div>
+                  <ProgressBar value={geo.hit_count} max={total} color={colors.purple} height={6} />
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
     </Grid>
   );
 }
