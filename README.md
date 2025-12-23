@@ -2,8 +2,6 @@
 
 A modern streaming platform built with Next.js 15, featuring movies, TV shows, live TV, and cross-device sync.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVynx-Velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required%20for%20movie%20and%20TV%20data&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx)
-
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=flat-square)
@@ -22,9 +20,11 @@ A modern streaming platform built with Next.js 15, featuring movies, TV shows, l
 
 ## Quick Deploy
 
-### 1. Main App → Vercel
+Choose your deployment platform:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVynx-Velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx)
+### Option A: Vercel (Easiest)
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVynx-Velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required%20for%20movie%20and%20TV%20data&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx)
 
 Required environment variables:
 - `TMDB_API_KEY` - [Get from TMDB](https://www.themoviedb.org/settings/api) (Bearer token)
@@ -32,11 +32,59 @@ Required environment variables:
 
 ---
 
-### 2. Cloudflare Workers + D1 (Optional but Recommended)
+### Option B: Cloudflare Pages (100% Cloudflare Stack)
+
+Deploy the entire app to Cloudflare using `@opennextjs/cloudflare`:
+
+[![Deploy to Cloudflare Pages](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main)
+
+<details>
+<summary>Manual Cloudflare Pages deployment</summary>
+
+```bash
+# Install dependencies
+npm install
+
+# Install OpenNext Cloudflare adapter
+npm install @opennextjs/cloudflare
+
+# Build for Cloudflare
+npx opennextjs-cloudflare build
+
+# Deploy to Cloudflare Pages
+npx wrangler pages deploy .open-next/assets --project-name=flyx
+```
+
+**Or connect via Cloudflare Dashboard:**
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com) → Pages
+2. Click "Create a project" → "Connect to Git"
+3. Select the `flyx-main` repository
+4. Configure build settings:
+   - **Build command:** `npx opennextjs-cloudflare build`
+   - **Build output directory:** `.open-next/assets`
+   - **Root directory:** `/`
+5. Add environment variables:
+   - `TMDB_API_KEY` - Your TMDB Bearer token
+   - `NEXT_PUBLIC_TMDB_API_KEY` - Your TMDB API key
+6. Deploy!
+
+</details>
+
+**Cloudflare Pages Benefits:**
+- Unlimited bandwidth (free tier)
+- Global CDN with 300+ edge locations
+- Automatic SSL
+- Preview deployments for PRs
+- Native D1/KV/R2 integration
+
+---
+
+## Cloudflare Workers + D1 (Optional but Recommended)
 
 Deploy workers for cross-device sync, analytics, and stream proxying. Each uses **Cloudflare D1** (SQLite at the edge) - no external database needed!
 
-#### Sync Worker (Cross-Device Sync)
+### Sync Worker (Cross-Device Sync)
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cf-sync-worker)
 
@@ -61,11 +109,11 @@ npx wrangler deploy
 
 </details>
 
-Then add to Vercel: `NEXT_PUBLIC_CF_SYNC_URL=https://flyx-sync.YOUR-SUBDOMAIN.workers.dev`
+Then add env var: `NEXT_PUBLIC_CF_SYNC_URL=https://flyx-sync.YOUR-SUBDOMAIN.workers.dev`
 
 ---
 
-#### Analytics Worker (Real-time Analytics)
+### Analytics Worker (Real-time Analytics)
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cf-analytics-worker)
 
@@ -90,11 +138,11 @@ npx wrangler deploy
 
 </details>
 
-Then add to Vercel: `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL=https://flyx-analytics.YOUR-SUBDOMAIN.workers.dev`
+Then add env var: `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL=https://flyx-analytics.YOUR-SUBDOMAIN.workers.dev`
 
 ---
 
-#### Stream Proxy (HLS/Live TV)
+### Stream Proxy (HLS/Live TV)
 
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cloudflare-proxy)
 
@@ -109,7 +157,7 @@ npx wrangler deploy
 
 </details>
 
-Then add to Vercel:
+Then add env vars:
 - `NEXT_PUBLIC_CF_STREAM_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev/stream`
 - `NEXT_PUBLIC_CF_TV_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev`
 
@@ -160,6 +208,7 @@ See [.env.example](.env.example) for all options.
 
 ## Architecture
 
+### Vercel + Cloudflare Workers
 ```
 ┌─────────────────┐     ┌──────────────────────────────────────┐
 │                 │     │         Cloudflare Edge              │
@@ -173,8 +222,23 @@ See [.env.example](.env.example) for all options.
                         └──────────────────────────────────────┘
 ```
 
-**Why Cloudflare Workers + D1?**
-- **Free tier**: 100k requests/day, 5GB D1 storage
+### 100% Cloudflare Stack
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    Cloudflare Edge                           │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │              Cloudflare Pages (Next.js)                │ │
+│  │              via @opennextjs/cloudflare                │ │
+│  └────────────────────────────────────────────────────────┘ │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │ Sync Worker │  │Analytics     │  │  Stream Proxy     │  │
+│  │ + D1 SQLite │  │Worker + D1   │  │  Worker           │  │
+│  └─────────────┘  └──────────────┘  └───────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Why Cloudflare?**
+- **Free tier**: 100k requests/day, 5GB D1 storage, unlimited Pages bandwidth
 - **Global edge**: <50ms latency worldwide
 - **No cold starts**: Always warm, instant responses
 - **SQLite at edge**: D1 is SQLite, simple and fast
@@ -207,7 +271,7 @@ npm run admin:reset-password <username> <new-password>
 | Language | TypeScript |
 | Styling | Tailwind CSS |
 | Edge Database | Cloudflare D1 (SQLite) |
-| Deployment | Vercel + Cloudflare Workers |
+| Deployment | Vercel or Cloudflare Pages |
 | API | TMDB |
 
 ---
