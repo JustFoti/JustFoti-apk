@@ -853,48 +853,79 @@ async function extractMegaUpSourcesManually(embedUrl: string): Promise<string | 
     
     // MegaUp blocks datacenter IPs - we need to route through residential proxy
     // Use the Cloudflare Worker's /animekai route which forwards to RPI proxy
-    const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+    // Try both NEXT_PUBLIC_ (client-side) and server-side env vars
+    const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL || process.env.CF_STREAM_PROXY_URL;
+    
+    console.log(`[AnimeKai] CF Proxy URL configured: ${cfProxyUrl ? 'YES' : 'NO'}`);
     
     let mediaResponse: Response;
     
     if (cfProxyUrl) {
       // Route through Cloudflare Worker -> RPI residential proxy
       const proxyBaseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
-      const proxiedMediaUrl = `${proxyBaseUrl}/animekai?url=${encodeURIComponent(mediaUrl)}&ua=${encodeURIComponent(MEGAUP_USER_AGENT)}&referer=${encodeURIComponent(embedUrl)}`;
+      // Note: Don't pass referer for MegaUp /media/ endpoint - MegaUp blocks requests with Referer header
+      // The CF Worker and RPI proxy will handle this correctly
+      const proxiedMediaUrl = `${proxyBaseUrl}/animekai?url=${encodeURIComponent(mediaUrl)}&ua=${encodeURIComponent(MEGAUP_USER_AGENT)}`;
       
-      console.log(`[AnimeKai] Routing MegaUp /media/ through residential proxy...`);
+      console.log(`[AnimeKai] Routing MegaUp /media/ through residential proxy: ${proxiedMediaUrl.substring(0, 100)}...`);
       
-      mediaResponse = await fetch(proxiedMediaUrl, {
-        headers: {
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(15000),
-      });
+      try {
+        mediaResponse = await fetch(proxiedMediaUrl, {
+          headers: {
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(15000),
+        });
+        console.log(`[AnimeKai] Proxy response status: ${mediaResponse.status}`);
+      } catch (fetchError) {
+        console.log(`[AnimeKai] Proxy fetch error:`, fetchError);
+        return null;
+      }
     } else {
       // Fallback: Direct fetch (will likely fail due to datacenter IP blocking)
-      console.log(`[AnimeKai] WARNING: No CF proxy configured, trying direct fetch (may fail)...`);
+      console.log(`[AnimeKai] WARNING: No CF proxy configured (NEXT_PUBLIC_CF_STREAM_PROXY_URL not set), trying direct fetch (may fail)...`);
       
-      mediaResponse = await fetch(mediaUrl, {
-        headers: {
-          'User-Agent': MEGAUP_USER_AGENT,
-          'Referer': embedUrl,
-          'Accept': 'application/json',
-        },
-        signal: AbortSignal.timeout(10000),
-      });
+      try {
+        mediaResponse = await fetch(mediaUrl, {
+          headers: {
+            'User-Agent': MEGAUP_USER_AGENT,
+            'Referer': embedUrl,
+            'Accept': 'application/json',
+          },
+          signal: AbortSignal.timeout(10000),
+        });
+      } catch (fetchError) {
+        console.log(`[AnimeKai] Direct fetch error:`, fetchError);
+        return null;
+      }
     }
     
     if (!mediaResponse.ok) {
-      console.log(`[AnimeKai] MegaUp /media/ failed: HTTP ${mediaResponse.status}`);
+      const statusCode = mediaResponse.status;
+      console.log(`[AnimeKai] MegaUp /media/ failed: HTTP ${statusCode}`);
       // Log response body for debugging
       try {
         const errorText = await mediaResponse.text();
-        console.log(`[AnimeKai] MegaUp error response:`, errorText.substring(0, 200));
+        console.log(`[AnimeKai] MegaUp error response (${statusCode}):`, errorText.substring(0, 500));
+        
+        // Check for common error patterns
+        if (statusCode === 403) {
+          console.log(`[AnimeKai] 403 Forbidden - likely datacenter IP blocking or missing RPI proxy config`);
+        } else if (statusCode === 502 || statusCode === 504) {
+          console.log(`[AnimeKai] ${statusCode} - proxy chain error, check CF Worker and RPI proxy logs`);
+        }
       } catch {}
       return null;
     }
     
-    const mediaData = await mediaResponse.json();
+    // Try to parse as JSON
+    let mediaData: any;
+    try {
+      mediaData = await mediaResponse.json();
+    } catch (jsonError) {
+      console.log(`[AnimeKai] MegaUp response is not valid JSON:`, jsonError);
+      return null;
+    }
     
     if (mediaData.status !== 200 || !mediaData.result) {
       console.log(`[AnimeKai] MegaUp /media/ returned no result:`, mediaData);
@@ -1127,6 +1158,10 @@ export async function extractAnimeKaiStreams(
   if (malId) {
     console.log(`[AnimeKai] MAL override: ID=${malId}, Title="${malTitle}"`);
   }
+  
+  // Debug: Log proxy configuration
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL || process.env.CF_STREAM_PROXY_URL;
+  console.log(`[AnimeKai] Proxy config: CF_STREAM_PROXY_URL=${cfProxyUrl ? cfProxyUrl.substring(0, 50) + '...' : 'NOT SET'}`);
 
   try {
     // Step 1: Get anime IDs (MAL/AniList) from TMDB ID

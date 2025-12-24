@@ -235,7 +235,13 @@ async function fetchDirectFromCF(
     };
     
     // Add referer if provided or auto-detect
-    if (customReferer) {
+    // IMPORTANT: MegaUp CDN blocks requests with Referer header, so don't add it for megaup domains
+    const isMegaUpDomain = url.includes('megaup') || url.includes('hub26link') || url.includes('app28base');
+    
+    if (isMegaUpDomain) {
+      // MegaUp CDN - do NOT send Referer header (they block it)
+      // Only send User-Agent
+    } else if (customReferer) {
       headers['Referer'] = customReferer;
     } else if (url.includes('workers.dev')) {
       headers['Referer'] = 'https://111movies.com/';
