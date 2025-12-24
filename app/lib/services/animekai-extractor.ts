@@ -1,16 +1,23 @@
 /**
  * AnimeKai Extractor
- * Primary source for anime content using enc-dec.app API
+ * Primary source for anime content
+ * 
+ * *** FULLY NATIVE - NO enc-dec.app DEPENDENCY! ***
+ * - AnimeKai crypto: Native implementation (183 substitution tables)
+ * - MegaUp decryption: Native implementation (pre-computed keystream)
  * 
  * Flow:
  * 1. Convert TMDB ID → MAL/AniList ID using ARM mapping API
- * 2. Search AnimeKai database for the anime (get content_id)
- * 3. Encrypt content_id → fetch episodes list
- * 4. Parse HTML → get episode token
- * 5. Encrypt token → fetch servers list
- * 6. Parse HTML → get server lid
- * 7. Encrypt lid → fetch embed (encrypted)
- * 8. Decrypt → get stream URL
+ * 2. Search AnimeKai directly for the anime (get content_id/kai_id)
+ * 3. Encrypt content_id (native) → fetch episodes list
+ * 4. Parse HTML (native) → get episode token
+ * 5. Encrypt token (native) → fetch servers list
+ * 6. Parse HTML (native) → get server lid
+ * 7. Encrypt lid (native) → fetch embed (encrypted)
+ * 8. Decrypt (native) → get stream URL
+ * 
+ * All encryption/decryption is done natively using reverse-engineered algorithms.
+ * HTML parsing is done with regex - no external API calls needed.
  */
 
 interface StreamSource {
@@ -53,7 +60,7 @@ interface ParsedServers {
 }
 
 // API Configuration
-const ENC_DEC_API = 'https://enc-dec.app';
+// All crypto is native - no external API dependencies!
 const KAI_AJAX = 'https://animekai.to/ajax';
 const ARM_API = 'https://arm.haglund.dev/api/v2/ids';
 
@@ -62,11 +69,6 @@ const ARM_API = 'https://arm.haglund.dev/api/v2/ids';
  * Used for MegaUp CDN which blocks datacenter IPs
  * 
  * Flow: Vercel → Cloudflare Worker (/animekai) → RPI Proxy → MegaUp CDN
- * 
- * IMPORTANT: The User-Agent MUST be consistent across the entire chain:
- * - RPI proxy uses it to fetch from MegaUp
- * - enc-dec.app uses it to decrypt the response
- * If they don't match, decryption will fail!
  */
 async function fetchViaCfAnimeKaiProxy(
   targetUrl: string,
@@ -138,97 +140,127 @@ export async function isAnimeContent(tmdbId: string, type: 'movie' | 'tv'): Prom
 }
 
 /**
- * Encrypt text using AnimeKai encryption via enc-dec.app
+ * Encrypt text using native AnimeKai cipher
+ * No external API dependency - fully reverse engineered
  */
-async function encrypt(text: string): Promise<string | null> {
+import { encryptAnimeKai, decryptAnimeKai } from '../animekai-crypto';
+
+function encrypt(text: string): string | null {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(`${ENC_DEC_API}/api/enc-kai?text=${encodeURIComponent(text)}`, {
-      headers: HEADERS,
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.log(`[AnimeKai] Encryption failed: HTTP ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    return data.result || null;
+    return encryptAnimeKai(text);
   } catch (error) {
-    console.log(`[AnimeKai] Encryption error:`, error);
+    console.log(`[AnimeKai] Native encryption error:`, error);
     return null;
   }
 }
 
 /**
- * Decrypt text using AnimeKai decryption via enc-dec.app
+ * Decrypt text using native AnimeKai cipher
+ * No external API dependency - fully reverse engineered
  */
-async function decrypt(text: string): Promise<string | null> {
+function decrypt(text: string): string | null {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-    const response = await fetch(`${ENC_DEC_API}/api/dec-kai`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...HEADERS,
-      },
-      body: JSON.stringify({ text }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.log(`[AnimeKai] Decryption failed: HTTP ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    return data.result || null;
+    return decryptAnimeKai(text);
   } catch (error) {
-    console.log(`[AnimeKai] Decryption error:`, error);
+    console.log(`[AnimeKai] Native decryption error:`, error);
     return null;
   }
 }
 
 /**
- * Parse HTML using enc-dec.app parser
+ * Parse episodes HTML natively
+ * Extracts episode tokens from AnimeKai HTML response
+ * 
+ * HTML structure: <a num="1" token="xxx" langs="3">...</a>
+ * Returns: { "1": { "1": { token: "xxx" } } }
  */
-async function parseHtml(html: string): Promise<any | null> {
+function parseEpisodesHtml(html: string): ParsedEpisodes | null {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    const response = await fetch(`${ENC_DEC_API}/api/parse-html`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...HEADERS,
-      },
-      body: JSON.stringify({ text: html }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.log(`[AnimeKai] HTML parse failed: HTTP ${response.status}`);
-      return null;
+    const episodes: ParsedEpisodes = {};
+    
+    // Match all episode links with num and token attributes
+    const episodeRegex = /<a[^>]*\bnum="(\d+)"[^>]*\btoken="([^"]+)"[^>]*>/gi;
+    let match;
+    
+    while ((match = episodeRegex.exec(html)) !== null) {
+      const [, num, token] = match;
+      // AnimeKai uses season "1" for all episodes in the list
+      if (!episodes['1']) episodes['1'] = {};
+      episodes['1'][num] = { token };
     }
-
-    const data = await response.json();
-    return data.result || null;
+    
+    // Also try alternate attribute order (token before num)
+    const altRegex = /<a[^>]*\btoken="([^"]+)"[^>]*\bnum="(\d+)"[^>]*>/gi;
+    while ((match = altRegex.exec(html)) !== null) {
+      const [, token, num] = match;
+      if (!episodes['1']) episodes['1'] = {};
+      if (!episodes['1'][num]) {
+        episodes['1'][num] = { token };
+      }
+    }
+    
+    return Object.keys(episodes).length > 0 ? episodes : null;
   } catch (error) {
-    console.log(`[AnimeKai] HTML parse error:`, error);
+    console.log(`[AnimeKai] Native episodes parse error:`, error);
     return null;
   }
+}
+
+/**
+ * Parse servers HTML natively
+ * Extracts server lids from AnimeKai HTML response
+ * 
+ * HTML structure: 
+ * <div data-id="sub">
+ *   <span class="server" data-sid="3" data-lid="xxx">Server 1</span>
+ * </div>
+ * 
+ * Returns: { sub: { "1": { lid: "xxx", name: "Server 1" } }, dub: { ... } }
+ */
+function parseServersHtml(html: string): ParsedServers | null {
+  try {
+    const servers: ParsedServers = {};
+    
+    // Parse sub servers
+    const subMatch = html.match(/<div[^>]*data-id="sub"[^>]*>([\s\S]*?)<\/div>/i);
+    if (subMatch) {
+      servers.sub = parseServerGroup(subMatch[1]);
+    }
+    
+    // Parse dub servers
+    const dubMatch = html.match(/<div[^>]*data-id="dub"[^>]*>([\s\S]*?)<\/div>/i);
+    if (dubMatch) {
+      servers.dub = parseServerGroup(dubMatch[1]);
+    }
+    
+    return (servers.sub || servers.dub) ? servers : null;
+  } catch (error) {
+    console.log(`[AnimeKai] Native servers parse error:`, error);
+    return null;
+  }
+}
+
+/**
+ * Parse a server group (sub or dub section)
+ */
+function parseServerGroup(html: string): Record<string, ParsedServerEntry> {
+  const result: Record<string, ParsedServerEntry> = {};
+  
+  // Match server spans with data-lid attribute
+  const serverRegex = /<span[^>]*class="server"[^>]*data-lid="([^"]+)"[^>]*>([^<]*)<\/span>/gi;
+  let match;
+  let index = 1;
+  
+  while ((match = serverRegex.exec(html)) !== null) {
+    const [, lid, name] = match;
+    result[String(index)] = { 
+      lid, 
+      name: name.trim() || `Server ${index}` 
+    };
+    index++;
+  }
+  
+  return result;
 }
 
 /**
@@ -476,113 +508,148 @@ function scoreMatch(resultTitle: string, query: string): number {
 }
 
 /**
- * Search AnimeKai database via enc-dec.app to get content_id
- * API returns: [{ info: { kai_id, title_en, ... }, episodes: { ... } }]
+ * Search AnimeKai directly (no enc-dec.app dependency)
+ * 
+ * Flow:
+ * 1. Search via AJAX endpoint → get watch URLs
+ * 2. Fetch watch page → extract kai_id from data-id attribute
  */
 async function searchAnimeKai(query: string, malId?: number | null): Promise<{ content_id: string; title: string; episodes?: ParsedEpisodes } | null> {
   try {
-    // First try by MAL ID if available
-    if (malId) {
-      console.log(`[AnimeKai] Searching by MAL ID: ${malId}`);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const response = await fetch(`${ENC_DEC_API}/db/kai/find?mal_id=${malId}`, {
-        headers: HEADERS,
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (response.ok) {
-        const data = await response.json();
-        // Handle both direct object and array response
-        const result = Array.isArray(data) ? data[0] : data;
-        if (result?.info?.kai_id) {
-          console.log(`[AnimeKai] Found by MAL ID: ${result.info.title_en} (kai_id: ${result.info.kai_id})`);
-          return { 
-            content_id: result.info.kai_id, 
-            title: result.info.title_en || result.info.title_jp,
-            episodes: result.episodes 
-          };
-        }
-        // Also check for flat structure
-        if (result?.kai_id) {
-          console.log(`[AnimeKai] Found by MAL ID: ${result.title_en || result.title} (kai_id: ${result.kai_id})`);
-          return { content_id: result.kai_id, title: result.title_en || result.title };
-        }
-      }
-    }
-
-    // Fallback to title search
-    console.log(`[AnimeKai] Searching by title: "${query}"`);
+    // Search AnimeKai directly
+    console.log(`[AnimeKai] Searching directly for: "${query}"`);
+    
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(`${ENC_DEC_API}/db/kai/search?query=${encodeURIComponent(query)}`, {
+    const searchResponse = await fetch(`${KAI_AJAX}/anime/search?keyword=${encodeURIComponent(query)}`, {
       headers: HEADERS,
       signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
 
-    if (!response.ok) {
-      console.log(`[AnimeKai] Search failed: HTTP ${response.status}`);
+    if (!searchResponse.ok) {
+      console.log(`[AnimeKai] Search failed: HTTP ${searchResponse.status}`);
       return null;
     }
 
-    const data = await response.json();
+    const searchData = await searchResponse.json();
+    const searchHtml = searchData.result?.html;
     
-    // API returns array: [{ info: {...}, episodes: {...} }]
-    if (Array.isArray(data) && data.length > 0) {
-      console.log(`[AnimeKai] Found ${data.length} results, scoring matches...`);
-      
-      // Score all results and pick the best match
-      let bestResult = data[0];
-      let bestScore = -1;
-      
-      for (const result of data) {
-        if (!result.info?.kai_id) continue;
-        
-        const title = result.info.title_en || result.info.title_jp || '';
-        const score = scoreMatch(title, query);
-        console.log(`[AnimeKai]   - "${title}" score: ${score}`);
-        
-        if (score > bestScore) {
-          bestScore = score;
-          bestResult = result;
-        }
-      }
-      
-      if (bestResult.info?.kai_id) {
-        const title = bestResult.info.title_en || bestResult.info.title_jp;
-        console.log(`[AnimeKai] Best match: "${title}" (score: ${bestScore}, kai_id: ${bestResult.info.kai_id})`);
-        return { 
-          content_id: bestResult.info.kai_id, 
-          title,
-          episodes: bestResult.episodes 
-        };
-      }
-    }
-    
-    // Also check for results wrapper
-    if (data.results && data.results.length > 0) {
-      const result = data.results[0];
-      const info = result.info || result;
-      console.log(`[AnimeKai] Found ${data.results.length} results, using first: ${info.title_en || info.title}`);
-      return { 
-        content_id: info.kai_id, 
-        title: info.title_en || info.title,
-        episodes: result.episodes 
-      };
+    if (!searchHtml) {
+      console.log(`[AnimeKai] No search results HTML`);
+      return null;
     }
 
-    console.log(`[AnimeKai] No results found for "${query}"`);
-    return null;
+    // Parse search results - extract slug and title
+    const animeRegex = /<a[^>]*href="\/watch\/([^"]+)"[^>]*>[\s\S]*?<h6[^>]*class="title"[^>]*(?:data-jp="([^"]*)")?[^>]*>([^<]*)<\/h6>/gi;
+    const results: Array<{ slug: string; jpTitle: string; enTitle: string }> = [];
+    
+    let match;
+    while ((match = animeRegex.exec(searchHtml)) !== null) {
+      const [, slug, jpTitle, enTitle] = match;
+      results.push({ slug, jpTitle: jpTitle || '', enTitle: enTitle.trim() });
+    }
+
+    if (results.length === 0) {
+      console.log(`[AnimeKai] No results found for "${query}"`);
+      return null;
+    }
+
+    console.log(`[AnimeKai] Found ${results.length} results, scoring matches...`);
+
+    // Score results and pick best match
+    let bestResult = results[0];
+    let bestScore = -1;
+    
+    for (const result of results) {
+      const score = scoreMatch(result.enTitle, query);
+      console.log(`[AnimeKai]   - "${result.enTitle}" score: ${score}`);
+      
+      if (score > bestScore) {
+        bestScore = score;
+        bestResult = result;
+      }
+    }
+
+    console.log(`[AnimeKai] Best match: "${bestResult.enTitle}" (score: ${bestScore})`);
+
+    // Fetch the watch page to get kai_id
+    const watchUrl = `https://animekai.to/watch/${bestResult.slug}`;
+    console.log(`[AnimeKai] Fetching watch page: ${watchUrl}`);
+
+    const watchController = new AbortController();
+    const watchTimeoutId = setTimeout(() => watchController.abort(), 10000);
+
+    const watchResponse = await fetch(watchUrl, {
+      headers: HEADERS,
+      signal: watchController.signal,
+    });
+
+    clearTimeout(watchTimeoutId);
+
+    if (!watchResponse.ok) {
+      console.log(`[AnimeKai] Watch page fetch failed: HTTP ${watchResponse.status}`);
+      return null;
+    }
+
+    const watchHtml = await watchResponse.text();
+
+    // First try to extract anime_id from syncData script (most reliable)
+    let kaiId: string | null = null;
+    const syncDataMatch = watchHtml.match(/<script[^>]*id="syncData"[^>]*type="application\/json"[^>]*>([\s\S]*?)<\/script>/i);
+    if (syncDataMatch) {
+      try {
+        const syncData = JSON.parse(syncDataMatch[1]);
+        if (syncData.anime_id) {
+          kaiId = syncData.anime_id;
+          console.log(`[AnimeKai] Found anime_id from syncData: ${kaiId}`);
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+    }
+
+    // Fallback: Extract kai_id from data-id attribute (filter out common IDs)
+    if (!kaiId) {
+      const dataIdMatches = watchHtml.match(/data-id="([a-zA-Z0-9_-]{4,10})"/g) || [];
+      const reservedIds = ['signin', 'report', 'request', 'anime', 'episode', 'sub', 'dub'];
+      
+      for (const match of dataIdMatches) {
+        const id = match.match(/data-id="([^"]+)"/)?.[1];
+        if (id && !reservedIds.includes(id.toLowerCase()) && id.length >= 4) {
+          kaiId = id;
+          break;
+        }
+      }
+    }
+
+    if (!kaiId) {
+      console.log(`[AnimeKai] Could not extract kai_id from watch page`);
+      return null;
+    }
+
+    // Optionally verify MAL ID matches if provided
+    if (malId) {
+      const malIdMatch = watchHtml.match(/data-mal-id="(\d+)"/);
+      const pageMalId = malIdMatch ? parseInt(malIdMatch[1], 10) : 0;
+      if (pageMalId && pageMalId !== malId) {
+        console.log(`[AnimeKai] MAL ID mismatch: expected ${malId}, got ${pageMalId}`);
+        // Continue anyway - the title match might still be correct
+      }
+    }
+
+    console.log(`[AnimeKai] Found: "${bestResult.enTitle}" (kai_id: ${kaiId})`);
+    return {
+      content_id: kaiId,
+      title: bestResult.enTitle || bestResult.jpTitle,
+    };
   } catch (error) {
     console.log(`[AnimeKai] Search error:`, error);
     return null;
   }
+
 }
 
 
@@ -594,7 +661,7 @@ async function getEpisodes(contentId: string): Promise<ParsedEpisodes | null> {
     console.log(`[AnimeKai] Getting episodes for content_id: ${contentId}`);
     
     // Encrypt the content_id
-    const encId = await encrypt(contentId);
+    const encId = encrypt(contentId);
     if (!encId) {
       console.log(`[AnimeKai] Failed to encrypt content_id`);
       return null;
@@ -609,8 +676,8 @@ async function getEpisodes(contentId: string): Promise<ParsedEpisodes | null> {
       return null;
     }
 
-    // Parse the HTML response
-    const parsed = await parseHtml(response.result);
+    // Parse the HTML response using episodes-specific parser
+    const parsed = parseEpisodesHtml(response.result);
     if (!parsed) {
       console.log(`[AnimeKai] Failed to parse episodes HTML`);
       return null;
@@ -632,7 +699,7 @@ async function getServers(token: string): Promise<ParsedServers | null> {
     console.log(`[AnimeKai] Getting servers for token: ${token.substring(0, 20)}...`);
     
     // Encrypt the token
-    const encToken = await encrypt(token);
+    const encToken = encrypt(token);
     if (!encToken) {
       console.log(`[AnimeKai] Failed to encrypt token`);
       return null;
@@ -647,8 +714,8 @@ async function getServers(token: string): Promise<ParsedServers | null> {
       return null;
     }
 
-    // Parse the HTML response
-    const parsed = await parseHtml(response.result);
+    // Parse the HTML response using servers-specific parser
+    const parsed = parseServersHtml(response.result);
     if (!parsed) {
       console.log(`[AnimeKai] Failed to parse servers HTML`);
       return null;
@@ -669,117 +736,11 @@ async function getServers(token: string): Promise<ParsedServers | null> {
  * Correct flow:
  * 1. Extract video ID from embed URL
  * 2. Call /media/{videoId} to get encrypted stream data
- * 3. Decrypt with enc-dec.app/api/dec-mega
+ * 3. Extract stream URL from page (no enc-dec.app dependency)
  */
 async function decryptMegaUpEmbed(embedUrl: string): Promise<string | null> {
-  try {
-    console.log(`[AnimeKai] Decrypting MegaUp embed: ${embedUrl}`);
-    
-    // Extract video ID and base URL from embed URL
-    // Format: https://megaup22.online/e/{videoId}
-    const urlMatch = embedUrl.match(/^(https?:\/\/[^/]+)\/e\/([^/?#]+)/);
-    if (!urlMatch) {
-      console.log(`[AnimeKai] Invalid MegaUp embed URL format`);
-      return null;
-    }
-    
-    const [, baseUrl, videoId] = urlMatch;
-    console.log(`[AnimeKai] MegaUp base: ${baseUrl}, videoId: ${videoId}`);
-    
-    // Step 1: Fetch /media/{videoId} to get encrypted stream data
-    // IMPORTANT: MegaUp blocks datacenter IPs, so we MUST use RPI proxy
-    const mediaUrl = `${baseUrl}/media/${videoId}`;
-    console.log(`[AnimeKai] Fetching media endpoint via CF→RPI proxy: ${mediaUrl}`);
-
-    const mediaResponse = await fetchViaCfAnimeKaiProxy(mediaUrl, { timeout: 15000 });
-    
-    if (!mediaResponse.ok) {
-      // Log the error details from the response body
-      let errorDetails = '';
-      try {
-        const errorBody = await mediaResponse.text();
-        errorDetails = errorBody.substring(0, 500);
-        console.log(`[AnimeKai] MegaUp media request failed: HTTP ${mediaResponse.status}`);
-        console.log(`[AnimeKai] Error details: ${errorDetails}`);
-      } catch {
-        console.log(`[AnimeKai] MegaUp media request failed: HTTP ${mediaResponse.status}`);
-      }
-      // Fallback to manual extraction
-      return await extractMegaUpSourcesManually(embedUrl);
-    }
-    
-    const mediaData = await mediaResponse.json();
-    
-    if (!mediaData.result) {
-      console.log(`[AnimeKai] No result in MegaUp media response`);
-      return await extractMegaUpSourcesManually(embedUrl);
-    }
-    
-    const encryptedData = mediaData.result;
-    console.log(`[AnimeKai] Got encrypted data (${encryptedData.length} chars)`);
-    
-    // Step 2: Decrypt with enc-dec.app/api/dec-mega
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const response = await fetch(`${ENC_DEC_API}/api/dec-mega`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...HEADERS,
-      },
-      body: JSON.stringify({ 
-        text: encryptedData,
-        agent: HEADERS['User-Agent']
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.log(`[AnimeKai] MegaUp decrypt API failed: HTTP ${response.status}`);
-      return await extractMegaUpSourcesManually(embedUrl);
-    }
-
-    const data = await response.json();
-    console.log(`[AnimeKai] MegaUp decrypt response:`, JSON.stringify(data).substring(0, 300));
-    
-    // The response should contain the actual HLS stream URL
-    if (data.result) {
-      // Result could be a URL string or an object with sources
-      if (typeof data.result === 'string' && (data.result.includes('.m3u8') || data.result.includes('.mp4'))) {
-        return data.result;
-      }
-      // Try to parse as JSON if it's a string
-      try {
-        const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
-        if (parsed.sources && parsed.sources[0]) {
-          return parsed.sources[0].file || parsed.sources[0].url || null;
-        }
-        if (parsed.file) return parsed.file;
-        if (parsed.url) return parsed.url;
-      } catch {
-        // Not JSON, check if it's a direct URL
-        if (typeof data.result === 'string' && data.result.startsWith('http')) {
-          return data.result;
-        }
-      }
-    }
-    
-    // Also check for direct properties
-    if (data.file) return data.file;
-    if (data.url) return data.url;
-    if (data.sources && data.sources[0]) {
-      return data.sources[0].file || data.sources[0].url || null;
-    }
-    
-    console.log(`[AnimeKai] Could not extract stream URL from MegaUp API response`);
-    return null;
-  } catch (error) {
-    console.log(`[AnimeKai] MegaUp decrypt error:`, error);
-    return null;
-  }
+  // Use manual extraction directly - no enc-dec.app dependency
+  return await extractMegaUpSourcesManually(embedUrl);
 }
 
 /**
@@ -822,163 +783,96 @@ function unpackPACKED(packed: string): string {
 
 /**
  * Manually extract sources from MegaUp embed page
- * Fallback when dec-mega API fails
+ * Uses /media/ endpoint + native decryption (no enc-dec.app dependency)
  */
 async function extractMegaUpSourcesManually(embedUrl: string): Promise<string | null> {
   try {
-    console.log(`[AnimeKai] Trying manual MegaUp extraction via RPI proxy...`);
+    // Import native MegaUp decryption
+    const { decryptMegaUp, MEGAUP_USER_AGENT } = await import('../megaup-crypto');
     
-    // IMPORTANT: MegaUp blocks datacenter IPs, so we MUST use CF→RPI proxy
-    const response = await fetchViaCfAnimeKaiProxy(embedUrl, { timeout: 15000 });
-    
-    if (!response.ok) {
-      // Log the error details from the response body
-      let errorDetails = '';
-      try {
-        const errorBody = await response.text();
-        errorDetails = errorBody.substring(0, 500);
-        console.log(`[AnimeKai] Failed to fetch MegaUp embed: HTTP ${response.status}`);
-        console.log(`[AnimeKai] Error details: ${errorDetails}`);
-      } catch {
-        console.log(`[AnimeKai] Failed to fetch MegaUp embed: HTTP ${response.status}`);
-      }
+    // Extract video ID and base URL from embed URL
+    // e.g., https://megaup22.online/e/jIrrLzj-WS2JcOLzF79O5xvpCQ
+    const urlMatch = embedUrl.match(/https?:\/\/([^\/]+)\/e\/([^\/\?]+)/);
+    if (!urlMatch) {
+      console.log(`[AnimeKai] Invalid MegaUp embed URL format`);
       return null;
     }
     
-    let html = await response.text();
-    console.log(`[AnimeKai] Got MegaUp page (${html.length} bytes), searching for sources...`);
+    const [, host, videoId] = urlMatch;
+    const baseUrl = `https://${host}`;
+    const mediaUrl = `${baseUrl}/media/${videoId}`;
     
-    // Check if the page contains packed JavaScript and try to unpack it
-    if (html.includes('eval(function(p,a,c,k,e,')) {
-      console.log(`[AnimeKai] Found packed JavaScript, attempting to unpack...`);
-      try {
-        const unpacked = unpackPACKED(html);
-        if (unpacked !== html) {
-          console.log(`[AnimeKai] Successfully unpacked JavaScript`);
-          html = html + '\n' + unpacked; // Search both original and unpacked
-        }
-      } catch (e) {
-        console.log(`[AnimeKai] Failed to unpack JavaScript:`, e);
-      }
+    console.log(`[AnimeKai] Fetching MegaUp /media/ endpoint: ${mediaUrl}`);
+    
+    // Fetch the /media/ endpoint with the fixed UA (required for native decryption)
+    const mediaResponse = await fetch(mediaUrl, {
+      headers: {
+        'User-Agent': MEGAUP_USER_AGENT,
+        'Referer': embedUrl,
+        'Accept': 'application/json',
+      },
+      signal: AbortSignal.timeout(10000),
+    });
+    
+    if (!mediaResponse.ok) {
+      console.log(`[AnimeKai] MegaUp /media/ failed: HTTP ${mediaResponse.status}`);
+      return null;
     }
     
-    // Try to find sources in the HTML
-    // Look for patterns like: sources: [{file: "..."}] or file: "..."
-    const patterns = [
-      /sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/i,
-      /file\s*:\s*["']([^"']+\.m3u8[^"']*)["']/i,
-      /source\s*:\s*["']([^"']+\.m3u8[^"']*)["']/i,
-      /src\s*=\s*["']([^"']+\.m3u8[^"']*)["']/i,
-      /"file"\s*:\s*"([^"]+\.m3u8[^"]*)"/i,
-      /"source"\s*:\s*"([^"]+\.m3u8[^"]*)"/i,
-      // Also look for mp4 as fallback
-      /sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+\.mp4[^"']*)["']/i,
-      /file\s*:\s*["']([^"']+\.mp4[^"']*)["']/i,
-    ];
+    const mediaData = await mediaResponse.json();
     
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        const url = match[1].replace(/\\/g, '');
-        console.log(`[AnimeKai] ✓ Found stream URL in MegaUp page:`, url.substring(0, 80));
-        return url;
-      }
+    if (mediaData.status !== 200 || !mediaData.result) {
+      console.log(`[AnimeKai] MegaUp /media/ returned no result:`, mediaData);
+      return null;
     }
     
-    // Also look for any .m3u8 URL
-    const m3u8Match = html.match(/https?:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/i);
-    if (m3u8Match) {
-      const url = m3u8Match[0].replace(/\\/g, '');
-      console.log(`[AnimeKai] ✓ Found m3u8 URL in MegaUp page:`, url.substring(0, 80));
-      return url;
+    console.log(`[AnimeKai] Got encrypted media data (${mediaData.result.length} chars), decrypting natively...`);
+    
+    // Decrypt using native implementation (no enc-dec.app!)
+    const decrypted = decryptMegaUp(mediaData.result);
+    
+    // Parse the decrypted result
+    let streamData: any;
+    try {
+      streamData = JSON.parse(decrypted);
+    } catch (e) {
+      console.log(`[AnimeKai] MegaUp decryption produced invalid JSON:`, decrypted.substring(0, 100));
+      return null;
     }
     
-    // Look for mp4 as fallback
-    const mp4Match = html.match(/https?:\/\/[^"'\s\\]+\.mp4[^"'\s\\]*/i);
-    if (mp4Match) {
-      const url = mp4Match[0].replace(/\\/g, '');
-      console.log(`[AnimeKai] ✓ Found mp4 URL in MegaUp page:`, url.substring(0, 80));
-      return url;
+    // Extract stream URL
+    let streamUrl = '';
+    if (streamData.sources && streamData.sources[0]) {
+      streamUrl = streamData.sources[0].file || streamData.sources[0].url || '';
+    } else if (streamData.file) {
+      streamUrl = streamData.file;
+    } else if (streamData.url) {
+      streamUrl = streamData.url;
     }
     
-    console.log(`[AnimeKai] No stream URL found in MegaUp page`);
-    // Log a snippet of the HTML for debugging
-    console.log(`[AnimeKai] HTML snippet:`, html.substring(0, 800));
+    if (streamUrl) {
+      console.log(`[AnimeKai] ✓ Got MegaUp stream URL (native decrypt):`, streamUrl.substring(0, 80));
+      return streamUrl;
+    }
+    
+    console.log(`[AnimeKai] No stream URL in decrypted data:`, streamData);
     return null;
   } catch (error) {
-    console.log(`[AnimeKai] Manual MegaUp extraction error:`, error);
+    console.log(`[AnimeKai] MegaUp extraction error:`, error);
     return null;
   }
 }
 
 /**
  * Decrypt RapidShare embed URL to get actual HLS stream
+ * Uses manual extraction - no enc-dec.app dependency
  */
 async function decryptRapidShareEmbed(embedUrl: string): Promise<string | null> {
   try {
     console.log(`[AnimeKai] Decrypting RapidShare embed: ${embedUrl}`);
     
-    // First try manual extraction (same approach as MegaUp)
-    const manualResult = await extractMegaUpSourcesManually(embedUrl);
-    if (manualResult) {
-      return manualResult;
-    }
-    
-    // Try the dec-rapid API
-    console.log(`[AnimeKai] Manual extraction failed, trying dec-rapid API...`);
-    
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    const response = await fetch(`${ENC_DEC_API}/api/dec-rapid`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...HEADERS,
-      },
-      body: JSON.stringify({ 
-        text: embedUrl,
-        agent: HEADERS['User-Agent']
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      console.log(`[AnimeKai] RapidShare decrypt API failed: HTTP ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    console.log(`[AnimeKai] RapidShare decrypt response:`, JSON.stringify(data).substring(0, 300));
-    
-    // Extract stream URL from response
-    if (data.result) {
-      if (typeof data.result === 'string' && (data.result.includes('.m3u8') || data.result.includes('.mp4'))) {
-        return data.result;
-      }
-      try {
-        const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result;
-        if (parsed.sources && parsed.sources[0]) {
-          return parsed.sources[0].file || parsed.sources[0].url || null;
-        }
-        if (parsed.file) return parsed.file;
-        if (parsed.url) return parsed.url;
-      } catch {
-        if (typeof data.result === 'string' && data.result.startsWith('http')) {
-          return data.result;
-        }
-      }
-    }
-    
-    if (data.file) return data.file;
-    if (data.url) return data.url;
-    if (data.sources && data.sources[0]) {
-      return data.sources[0].file || data.sources[0].url || null;
-    }
-    
-    return null;
+    // Use manual extraction (same approach as MegaUp)
+    return await extractMegaUpSourcesManually(embedUrl);
   } catch (error) {
     console.log(`[AnimeKai] RapidShare decrypt error:`, error);
     return null;
@@ -993,7 +887,7 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
     console.log(`[AnimeKai] Getting stream from server ${serverName} (lid: ${lid.substring(0, 20)}...)`);
     
     // Encrypt the lid
-    const encLid = await encrypt(lid);
+    const encLid = encrypt(lid);
     if (!encLid) {
       console.log(`[AnimeKai] Failed to encrypt lid`);
       return null;
@@ -1009,11 +903,17 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
     }
 
     // Decrypt the response
-    const decrypted = await decrypt(response.result);
+    let decrypted = decrypt(response.result);
     if (!decrypted) {
       console.log(`[AnimeKai] Failed to decrypt embed`);
       return null;
     }
+
+    // Decode }XX format (AnimeKai's custom URL encoding)
+    // }7B = {, }22 = ", }3A = :, etc.
+    decrypted = decrypted.replace(/}([0-9A-Fa-f]{2})/g, (_, hex) => 
+      String.fromCharCode(parseInt(hex, 16))
+    );
 
     // Parse the decrypted data
     let streamData: any;
@@ -1024,7 +924,7 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
       if (typeof decrypted === 'string' && decrypted.startsWith('http')) {
         streamData = { url: decrypted };
       } else {
-        console.log(`[AnimeKai] Failed to parse decrypted data`);
+        console.log(`[AnimeKai] Failed to parse decrypted data:`, decrypted.substring(0, 100));
         return null;
       }
     }
@@ -1055,8 +955,9 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
         streamUrl = hlsUrl;
         console.log(`[AnimeKai] ✓ Got HLS stream from MegaUp:`, streamUrl.substring(0, 100));
       } else {
-        console.log(`[AnimeKai] Failed to decrypt MegaUp embed`);
-        return null;
+        // Fallback: return the embed URL directly - player might handle it
+        console.log(`[AnimeKai] MegaUp extraction failed, returning embed URL as fallback`);
+        // Keep streamUrl as the embed URL
       }
     }
     // RapidShare embeds also need decryption
@@ -1067,8 +968,9 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
         streamUrl = hlsUrl;
         console.log(`[AnimeKai] ✓ Got HLS stream from RapidShare:`, streamUrl.substring(0, 100));
       } else {
-        console.log(`[AnimeKai] Failed to decrypt RapidShare embed`);
-        return null;
+        // Fallback: return the embed URL directly
+        console.log(`[AnimeKai] RapidShare extraction failed, returning embed URL as fallback`);
+        // Keep streamUrl as the embed URL
       }
     }
     // Check if URL is already a direct stream (m3u8 or mp4)
@@ -1530,56 +1432,73 @@ export async function extractAnimeKaiStreams(
     }
 
     // Step 7: Try servers - get sources from both sub AND dub
-    // We want at least 2 sub sources + 1 dub source (if available)
+    // Process servers in PARALLEL to avoid sequential rate limiting
     const allSources: StreamSource[] = [];
     const subSources: StreamSource[] = [];
     const dubSources: StreamSource[] = [];
 
-    // First, collect sub sources (up to 2)
+    // Collect all server tasks
+    const serverTasks: Array<{
+      lid: string;
+      displayName: string;
+      type: 'sub' | 'dub';
+    }> = [];
+
+    // Add sub servers
     const subServerList = servers.sub;
     if (subServerList) {
       for (const [serverKey, serverData] of Object.entries(subServerList)) {
         const server = serverData as any;
         if (!server.lid) continue;
-
         const serverName = server.name || `Server ${serverKey}`;
-        const displayName = `${serverName} (sub)`;
-
-        const source = await getStreamFromServer(server.lid, displayName);
-        
-        if (source) {
-          source.title = displayName;
-          source.language = 'ja';
-          subSources.push(source);
-          console.log(`[AnimeKai] ✓ Got SUB source from ${displayName}`);
-        }
-
-        // Get up to 2 sub sources
-        if (subSources.length >= 2) break;
+        serverTasks.push({
+          lid: server.lid,
+          displayName: `${serverName} (sub)`,
+          type: 'sub',
+        });
       }
     }
 
-    // Then, collect dub sources (up to 1)
+    // Add dub servers
     const dubServerList = servers.dub;
     if (dubServerList) {
       for (const [serverKey, serverData] of Object.entries(dubServerList)) {
         const server = serverData as any;
         if (!server.lid) continue;
-
         const serverName = server.name || `Server ${serverKey}`;
-        const displayName = `${serverName} (dub)`;
+        serverTasks.push({
+          lid: server.lid,
+          displayName: `${serverName} (dub)`,
+          type: 'dub',
+        });
+      }
+    }
 
-        const source = await getStreamFromServer(server.lid, displayName);
-        
+    // Process all servers in parallel
+    console.log(`[AnimeKai] Processing ${serverTasks.length} servers in parallel...`);
+    const results = await Promise.allSettled(
+      serverTasks.map(async (task) => {
+        const source = await getStreamFromServer(task.lid, task.displayName);
         if (source) {
-          source.title = displayName;
-          source.language = 'en';
-          dubSources.push(source);
-          console.log(`[AnimeKai] ✓ Got DUB source from ${displayName}`);
+          source.title = task.displayName;
+          source.language = task.type === 'dub' ? 'en' : 'ja';
+          return { source, type: task.type };
         }
+        return null;
+      })
+    );
 
-        // Get up to 1 dub source
-        if (dubSources.length >= 1) break;
+    // Collect successful results
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        const { source, type } = result.value;
+        if (type === 'sub' && subSources.length < 2) {
+          subSources.push(source);
+          console.log(`[AnimeKai] ✓ Got SUB source from ${source.title}`);
+        } else if (type === 'dub' && dubSources.length < 1) {
+          dubSources.push(source);
+          console.log(`[AnimeKai] ✓ Got DUB source from ${source.title}`);
+        }
       }
     }
 

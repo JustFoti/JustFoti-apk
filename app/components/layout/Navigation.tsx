@@ -18,6 +18,10 @@ interface GitHubStats {
   forks: number;
 }
 
+interface DiscordStats {
+  memberCount: number;
+}
+
 export const Navigation: React.FC<NavigationProps> = ({ 
   transparent = false,
   onSearch 
@@ -32,6 +36,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const [githubStats, setGithubStats] = useState<GitHubStats | null>(null);
+  const [discordStats, setDiscordStats] = useState<DiscordStats | null>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
 
   // Fetch GitHub stats - fail silently on CORS errors
@@ -56,6 +61,28 @@ export const Navigation: React.FC<NavigationProps> = ({
     fetchGitHubStats();
     // Refresh every 5 minutes
     const interval = setInterval(fetchGitHubStats, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch Discord stats
+  useEffect(() => {
+    const fetchDiscordStats = async () => {
+      try {
+        // Discord server ID for discord.vynx.cc - using widget API
+        const response = await fetch('https://discord.com/api/guilds/1320893445923049543/widget.json');
+        if (response.ok) {
+          const data = await response.json();
+          setDiscordStats({
+            memberCount: data.presence_count || 0,
+          });
+        }
+      } catch {
+        // Silently fail
+      }
+    };
+    
+    fetchDiscordStats();
+    const interval = setInterval(fetchDiscordStats, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -315,6 +342,11 @@ export const Navigation: React.FC<NavigationProps> = ({
                 >
                   <DiscordIcon />
                   <span>Discord</span>
+                  {discordStats && discordStats.memberCount > 0 && (
+                    <span className={styles.discordCount}>
+                      {formatNumber(discordStats.memberCount)} online
+                    </span>
+                  )}
                 </a>
                 <a
                   href="https://buymeacoffee.com/vynxdev"
@@ -431,6 +463,11 @@ export const Navigation: React.FC<NavigationProps> = ({
                 >
                   <DiscordIcon />
                   <span>Join Discord</span>
+                  {discordStats && discordStats.memberCount > 0 && (
+                    <span className={styles.mobileDiscordStats}>
+                      🟢 {formatNumber(discordStats.memberCount)}
+                    </span>
+                  )}
                 </a>
                 <a
                   href="https://buymeacoffee.com/vynxdev"

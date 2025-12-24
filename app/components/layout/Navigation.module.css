@@ -273,6 +273,25 @@
   border-color: rgba(88, 101, 242, 0.5);
 }
 
+.discordCount {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  background: rgba(35, 165, 90, 0.2);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  color: #23a55a;
+  font-weight: 600;
+}
+
+.mobileDiscordStats {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #23a55a;
+  font-weight: 500;
+}
+
 .supportButton {
   display: flex;
   align-items: center;

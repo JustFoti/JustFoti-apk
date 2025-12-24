@@ -291,10 +291,10 @@ export default function ContinueWatching() {
 
                       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
 
-                      {/* Remove button */}
+                      {/* Remove button - always visible on mobile, hover on desktop */}
                       <button
                         onClick={(e) => handleRemove(e, item)}
-                        className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-red-600 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 z-10 border border-white/20 hover:border-red-500"
+                        className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-red-600 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200 z-10 border border-white/20 hover:border-red-500"
                         aria-label={`Remove ${item.metadata?.title || 'item'} from continue watching`}
                         data-tv-skip="true"
                         tabIndex={-1}

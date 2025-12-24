@@ -56,13 +56,16 @@ function WatchlistCard({
         {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         
-        {/* Remove Button */}
+        {/* Remove Button - always visible on mobile, hover on desktop */}
         <button
           onClick={onRemove}
-          className="absolute top-2 right-2 w-8 h-8 bg-red-600/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 transform scale-75 group-hover:scale-100 z-10"
+          className="absolute top-2 right-2 w-8 h-8 bg-red-600/90 hover:bg-red-500 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-300 transform scale-100 md:scale-75 md:group-hover:scale-100 z-10"
           title="Remove from watchlist"
         >
-          <span className="text-white text-sm">✕</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-white">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
         
         {/* Media Type Badge */}

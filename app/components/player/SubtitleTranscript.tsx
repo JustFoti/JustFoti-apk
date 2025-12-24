@@ -233,18 +233,21 @@ export default function SubtitleTranscript({
           </div>
         </div>
         <button className={styles.closeButton} onClick={onClose} aria-label="Close transcript">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <span style={{ color: 'white', fontSize: '18px', fontWeight: 'bold', lineHeight: 1 }}>✕</span>
         </button>
       </div>
 
       {/* Search */}
       <div className={styles.searchContainer}>
-        <svg className={styles.searchIcon} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8" />
-          <path d="M21 21l-4.35-4.35" />
-        </svg>
+        <span style={{ 
+          position: 'absolute',
+          left: '1.75rem',
+          top: '50%',
+          transform: 'translateY(-50%)',
+          color: 'white', 
+          fontSize: '14px',
+          pointerEvents: 'none'
+        }}>🔍</span>
         <input
           type="text"
           className={styles.searchInput}
@@ -259,9 +262,7 @@ export default function SubtitleTranscript({
             onClick={() => setSearchQuery('')}
             aria-label="Clear search"
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
+            <span style={{ color: 'white', fontSize: '12px', fontWeight: 'bold', lineHeight: 1 }}>✕</span>
           </button>
         )}
       </div>

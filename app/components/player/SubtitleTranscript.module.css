@@ -109,7 +109,7 @@
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
-  color: rgba(255, 255, 255, 0.35);
+  color: white !important;
   pointer-events: none;
 }
 

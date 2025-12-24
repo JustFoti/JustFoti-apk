@@ -70,6 +70,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const subtitlesFetchedRef = useRef(false);
   const subtitlesAutoLoadedRef = useRef(false);
   const hasShownResumePromptRef = useRef(false);
+  const shouldShowResumePromptRef = useRef(false); // Track if resume prompt will be shown (to prevent autoplay)
   const triedProvidersRef = useRef<Set<string>>(new Set());
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isAutoplayNavigationRef = useRef(autoplay); // Track if this is an autoplay navigation
@@ -613,12 +614,31 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
   };
 
+  // Debug: Log sub/dub toggle visibility conditions
+  useEffect(() => {
+    console.log(`[VideoPlayer] Sub/Dub toggle conditions: isAnimeContent=${isAnimeContent}, provider=${provider}, shouldShow=${isAnimeContent && provider === 'animekai'}`);
+    if (isAnimeContent && provider !== 'animekai') {
+      console.warn(`[VideoPlayer] ⚠️ Anime content detected but provider is "${provider}" not "animekai" - toggle will NOT show!`);
+    }
+  }, [isAnimeContent, provider]);
+
   // Initial fetch with automatic provider fallback
   useEffect(() => {
     // Reset subtitle auto-load flag for new video
     subtitlesAutoLoadedRef.current = false;
     hasShownResumePromptRef.current = false;
+    shouldShowResumePromptRef.current = false; // Reset resume prompt check
     triedProvidersRef.current.clear(); // Reset tried providers for new content
+    
+    // Check early if we'll need to show resume prompt (to prevent autoplay)
+    if (!isAutoplayNavigationRef.current) {
+      const savedTime = loadProgress();
+      // We'll show resume prompt if there's saved progress (will be validated against duration later)
+      if (savedTime > 30) {
+        shouldShowResumePromptRef.current = true;
+        console.log('[VideoPlayer] Will show resume prompt, skipping autoplay');
+      }
+    }
 
     // Clear cache when content changes
     setSourcesCache({});
@@ -698,16 +718,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       
       const providerOrder: string[] = [];
       
-      // If we have a last successful provider for this content, try it first
-      if (lastSuccessful && availability[lastSuccessful as keyof typeof availability] && !disabledProviders.has(lastSuccessful)) {
-        providerOrder.push(lastSuccessful);
-        console.log(`[VideoPlayer] Prioritizing last successful provider: ${lastSuccessful}`);
+      // For ANIME content: AnimeKai MUST be first (ignore last successful if it's not animekai)
+      // This ensures the sub/dub toggle works properly
+      if (isAnime && availability.animekai && !disabledProviders.has('animekai')) {
+        providerOrder.push('animekai'); // AnimeKai as PRIMARY for anime - ALWAYS FIRST
+        console.log(`[VideoPlayer] ✓ AnimeKai is PRIMARY for anime content (ignoring last successful: ${lastSuccessful})`);
       }
       
-      // For anime, always prioritize AnimeKai if available
-      if (isAnime && availability.animekai && !disabledProviders.has('animekai') && !providerOrder.includes('animekai')) {
-        providerOrder.push('animekai'); // AnimeKai as PRIMARY for anime
-        console.log(`[VideoPlayer] ✓ Adding AnimeKai as PRIMARY provider for anime content`);
+      // For non-anime content, prioritize last successful provider
+      if (!isAnime && lastSuccessful && availability[lastSuccessful as keyof typeof availability] && !disabledProviders.has(lastSuccessful)) {
+        providerOrder.push(lastSuccessful);
+        console.log(`[VideoPlayer] Prioritizing last successful provider: ${lastSuccessful}`);
       }
       
       // Add providers in user's preferred order
@@ -957,7 +978,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               }, 100);
             }
           }
-          video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+          // Only autoplay if resume prompt won't be shown
+          if (!shouldShowResumePromptRef.current) {
+            video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+          } else {
+            console.log('[VideoPlayer] Skipping autoplay - resume prompt will be shown');
+          }
         });
 
         // Track current level changes
@@ -1160,7 +1186,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           if (currentSubtitleDataRef.current) {
             setTimeout(() => loadSubtitle(currentSubtitleDataRef.current, subtitleOffset), 100);
           }
-          video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+          // Only autoplay if resume prompt won't be shown
+          if (!shouldShowResumePromptRef.current) {
+            video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+          } else {
+            console.log('[VideoPlayer] Skipping autoplay (Safari) - resume prompt will be shown');
+          }
         });
       }
     } else {
@@ -1176,7 +1207,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         if (currentSubtitleDataRef.current) {
           setTimeout(() => loadSubtitle(currentSubtitleDataRef.current, subtitleOffset), 100);
         }
-        video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+        // Only autoplay if resume prompt won't be shown
+        if (!shouldShowResumePromptRef.current) {
+          video.play().catch(e => console.log('[VideoPlayer] Autoplay prevented:', e));
+        } else {
+          console.log('[VideoPlayer] Skipping autoplay (native) - resume prompt will be shown');
+        }
       });
     }
   }, [streamUrl]);
@@ -2625,6 +2661,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       videoRef.current.play();
     }
     setShowResumePrompt(false);
+    shouldShowResumePromptRef.current = false;
   };
 
   const handleResume = () => {
@@ -2635,6 +2672,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setTimeout(resyncSubtitles, 100);
     }
     setShowResumePrompt(false);
+    shouldShowResumePromptRef.current = false;
   };
 
   // Auto-focus the Resume button and handle keyboard navigation when modal is open

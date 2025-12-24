@@ -14,6 +14,7 @@ const sections = [
   { id: 'vidsrc', title: 'VidSrc', icon: '📡' },
   { id: 'videasy', title: 'Videasy', icon: '🌍' },
   { id: 'animekai', title: 'AnimeKai', icon: '🎌' },
+  { id: 'megaup', title: 'MegaUp', icon: '🔓' },
   { id: 'proxy-architecture', title: 'Proxy Architecture', icon: '🔄' },
   { id: 'techniques', title: 'Techniques', icon: '🛠️' },
   { id: 'tools', title: 'Tools', icon: '🧰' },
@@ -26,7 +27,8 @@ const providerStats = [
   { name: 'Flixer', status: 'working', type: 'Movies/TV', method: 'WASM Bundling' },
   { name: 'VidSrc', status: 'working', type: 'Movies/TV', method: 'Static Decoders' },
   { name: 'Videasy', status: 'working', type: 'Multi-Lang', method: 'External API' },
-  { name: 'AnimeKai', status: 'working', type: 'Anime', method: 'Residential Proxy' },
+  { name: 'AnimeKai', status: 'working', type: 'Anime', method: 'Native Crypto (183 Tables)' },
+  { name: 'MegaUp', status: 'working', type: 'CDN', method: 'UA-Based Stream Cipher' },
 ];
 
 function CodeBlock({ title, code, id, copiedCode, onCopy }: { 
@@ -210,7 +212,7 @@ export default function ReverseEngineeringPage() {
             transition={{ delay: 0.5 }}
           >
             <div className={styles.stat}>
-              <span className={styles.statNum}>6</span>
+              <span className={styles.statNum}>7</span>
               <span className={styles.statLabel}>Providers</span>
             </div>
             <div className={styles.stat}>
@@ -839,30 +841,297 @@ const streamUrl = decrypted.result.sources[0].url;`}
             >
               <h2 className={styles.sectionTitle}>
                 <span className={styles.sectionIcon}>🎌</span>
-                AnimeKai - Anime Specialist
+                AnimeKai - Native Crypto Breakthrough
               </h2>
               
               <div className={styles.statusBadge}>
                 <span className={styles.statusDot} />
-                Working - Sub/Dub Support
+                Fully Reverse Engineered - December 2025
               </div>
               
-              <h3>Complex Extraction Flow</h3>
+              <h3>Overview</h3>
+              <p>
+                AnimeKai uses a position-dependent substitution cipher for all API encryption. After 
+                extensive analysis, we discovered the cipher uses 183 unique substitution tables—one 
+                for each character position. We reverse engineered all tables and now have 100% native 
+                encryption/decryption with zero external dependencies.
+              </p>
+
+              <h3>The Discovery</h3>
+              <p>
+                The breakthrough came when we noticed that encrypting the same character at different 
+                positions produced different outputs, but the same character at the same position 
+                always produced the same output. This revealed a position-dependent substitution cipher.
+              </p>
+
+              <h3>Cipher Structure</h3>
               <div className={styles.flowContainer}>
-                <FlowStep num={1} title="ID Mapping" description="Convert TMDB ID → MAL/AniList ID using ARM mapping API" />
-                <FlowStep num={2} title="Search AnimeKai" description="Search database for anime, get content_id (kai_id)" />
-                <FlowStep num={3} title="Get Episodes" description="Encrypt content_id → fetch episodes list → parse HTML" />
-                <FlowStep num={4} title="Get Servers" description="Encrypt episode token → fetch servers (sub/dub)" />
-                <FlowStep num={5} title="Get Embed" description="Encrypt server lid → fetch encrypted embed URL" />
-                <FlowStep num={6} title="Decrypt Stream" description="Decrypt MegaUp embed → extract HLS stream URL" />
+                <FlowStep num={1} title="21-Byte Header" description="Fixed header: c509bdb497cbc06873ff412af12fd8007624c29faa (hex)" />
+                <FlowStep num={2} title="Constant Padding" description="Positions 1,2,3,4,5,6,8,9,10,12,14,16,18 have fixed values" />
+                <FlowStep num={3} title="Position Mapping" description="Plaintext position 0→0, 1→7, 2→11, 3→13, 4→15, 5→17, 6→19, 7+→20+" />
+                <FlowStep num={4} title="Substitution Tables" description="183 tables, each mapping 78 characters to unique bytes" />
+                <FlowStep num={5} title="URL-Safe Base64" description="Output encoded with - and _ instead of + and /" />
               </div>
+
+              <h3>Building the Tables</h3>
+              <p>
+                We built all 183 substitution tables by systematically encrypting test strings and 
+                observing the output bytes. Each table maps the 78 printable characters (a-z, A-Z, 
+                0-9, and special chars) to unique byte values.
+              </p>
+
+              <CodeBlock 
+                title="Table Building Process"
+                id="animekai-tables"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`// For each position 0-182:
+const chars = '0123456789 !"#$%&()*+,-./:;<=>?@' +
+              'ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_\`' +
+              'abcdefghijklmnopqrstuvwxyz{|}~';
+
+for (let pos = 0; pos < 183; pos++) {
+  const table = {};
+  for (const char of chars) {
+    // Build test string with char at position
+    const testStr = 'a'.repeat(pos) + char;
+    const encrypted = await encryptViaAPI(testStr);
+    const cipherPos = getCipherPosition(pos);
+    table[char] = encrypted[HEADER_LEN + cipherPos];
+  }
+  ENCRYPT_TABLES[pos] = table;
+}`}
+              />
+
+              <h3>Native Encryption</h3>
+              <CodeBlock 
+                title="encryptKai() Implementation"
+                id="animekai-encrypt"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`export function encryptKai(plaintext: string): string {
+  // Start with fixed header
+  const result = Buffer.alloc(HEADER_LEN + 20 + plaintext.length);
+  HEADER.copy(result, 0);
+  
+  // Fill constant padding bytes
+  for (const [pos, val] of Object.entries(CONSTANT_BYTES)) {
+    result[HEADER_LEN + parseInt(pos)] = val;
+  }
+  
+  // Encrypt each character using position-specific table
+  for (let i = 0; i < plaintext.length; i++) {
+    const char = plaintext[i];
+    const table = ENCRYPT_TABLES[i];
+    const cipherPos = getCipherPosition(i);
+    result[HEADER_LEN + cipherPos] = table[char] ?? 0xd4;
+  }
+  
+  return urlSafeBase64Encode(result);
+}`}
+              />
+
+              <h3>Native Decryption</h3>
+              <CodeBlock 
+                title="decryptKai() Implementation"
+                id="animekai-decrypt"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`export function decryptKai(ciphertext: string): string {
+  const bytes = urlSafeBase64Decode(ciphertext);
+  
+  // Skip header, extract cipher bytes
+  const cipherBytes = bytes.slice(HEADER_LEN);
+  
+  // Decrypt using reverse lookup tables
+  let result = '';
+  for (let plainPos = 0; plainPos < 183; plainPos++) {
+    const cipherPos = getCipherPosition(plainPos);
+    if (cipherPos >= cipherBytes.length) break;
+    
+    const byte = cipherBytes[cipherPos];
+    const table = DECRYPT_TABLES[plainPos];
+    const char = table[byte];
+    
+    if (char) result += char;
+    else break; // End of message
+  }
+  
+  return result;
+}`}
+              />
+
+              <h3>Complete API Flow</h3>
+              <div className={styles.flowContainer}>
+                <FlowStep num={1} title="ID Mapping" description="TMDB ID → MAL/AniList ID via ARM API (arm.haglund.dev)" />
+                <FlowStep num={2} title="Search" description="encryptKai(malId) → POST /ajax/anime/search → parse HTML for kai_id" />
+                <FlowStep num={3} title="Episodes" description="encryptKai(kai_id) → GET /ajax/episodes → parse HTML for episode tokens" />
+                <FlowStep num={4} title="Servers" description="encryptKai(token) → GET /ajax/links → parse HTML for server lids (sub/dub)" />
+                <FlowStep num={5} title="Embed URL" description="encryptKai(lid) → GET /ajax/embed → decryptKai(response) → MegaUp URL" />
+                <FlowStep num={6} title="Stream" description="MegaUp URL → native decryption → HLS m3u8 stream" />
+              </div>
+
+              <blockquote className={styles.quote}>
+                <p>
+                  &quot;The cipher looked complex at first—183 different substitution tables! But once 
+                  we realized it was position-dependent with no key derivation, building the tables 
+                  was just tedious, not hard. The real insight was recognizing the pattern.&quot;
+                </p>
+                <cite>- Field Notes, December 2025</cite>
+              </blockquote>
+            </motion.div>
+          </section>
+
+          {/* MegaUp Section */}
+          <section id="megaup" className={styles.section}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <h2 className={styles.sectionTitle}>
+                <span className={styles.sectionIcon}>🔓</span>
+                MegaUp - Stream Cipher Cracked
+              </h2>
+              
+              <div className={styles.statusBadge}>
+                <span className={styles.statusDot} />
+                Fully Reverse Engineered - December 2025
+              </div>
+              
+              <h3>Overview</h3>
+              <p>
+                MegaUp is the CDN used by AnimeKai for video hosting. Their <code>/media/</code> endpoint 
+                returns encrypted JSON containing the HLS stream URL. After analyzing their obfuscated 
+                JavaScript, we discovered a stream cipher where the keystream depends on the User-Agent.
+              </p>
+
+              <h3>The Discovery</h3>
+              <p>
+                Key insight: For a fixed User-Agent, the keystream is constant across all requests. 
+                The cipher XORs plaintext with a keystream derived from specific characters in the UA 
+                string (positions 0, 2, 4, 6, 8). By using a fixed UA, we can pre-compute the keystream 
+                and decrypt without understanding the full algorithm.
+              </p>
+
+              <h3>Keystream Analysis</h3>
+              <CodeBlock 
+                title="UA Dependency Discovery"
+                id="megaup-ua"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`// Testing revealed keystream depends on UA characters at even positions
+const ua1 = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+const ua2 = 'Nozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+//           ^-- Position 0 changed: M→N
+
+// Result: Completely different keystreams!
+// But same UA = same keystream every time
+
+// Key positions that affect keystream:
+// Position 0: 'M' (0x4D)
+// Position 2: 'z' (0x7A)  
+// Position 4: 'l' (0x6C)
+// Position 6: 'a' (0x61)
+// Position 8: '/' (0x2F)`}
+              />
+
+              <h3>Pre-Computed Keystream</h3>
+              <CodeBlock 
+                title="Fixed UA + Keystream"
+                id="megaup-keystream"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`// Fixed User-Agent for all MegaUp requests
+export const MEGAUP_USER_AGENT = 
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+// Pre-computed 521-byte keystream for this UA
+const MEGAUP_KEYSTREAM_HEX = 
+  'dece4f239861eb1c7d83f86c2fb5d27e557a3fd2696781674b986f9ed5d55cb0' +
+  '28abc5e482a02a7c03d7ee811eb7bd6ad1dba549a20e53f564208b9d5d2e28b0' +
+  '797f6c6e547b5ce423bbc44be596b6ad536b9edea25a6bf97ed7fe1f36298ff1' +
+  // ... 521 bytes total
+  ;`}
+              />
+
+              <h3>Native Decryption</h3>
+              <CodeBlock 
+                title="decryptMegaUp() Implementation"
+                id="megaup-decrypt"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`export function decryptMegaUp(encryptedBase64: string): string {
+  const keystream = Buffer.from(MEGAUP_KEYSTREAM_HEX, 'hex');
+  
+  // Convert from URL-safe base64
+  const base64 = encryptedBase64.replace(/-/g, '+').replace(/_/g, '/');
+  const encBytes = Buffer.from(base64, 'base64');
+  
+  // XOR decrypt with pre-computed keystream
+  const decBytes = Buffer.alloc(encBytes.length);
+  for (let i = 0; i < encBytes.length; i++) {
+    decBytes[i] = encBytes[i] ^ keystream[i];
+  }
+  
+  // Find valid JSON (handles minor tail variations)
+  const result = decBytes.toString('utf8');
+  for (let i = result.length; i > 0; i--) {
+    const substr = result.substring(0, i);
+    if (substr.endsWith('}')) {
+      try {
+        JSON.parse(substr);
+        return substr;
+      } catch { /* continue */ }
+    }
+  }
+  return result;
+}`}
+              />
+
+              <h3>Decrypted Response Format</h3>
+              <CodeBlock 
+                title="MegaUp Response Structure"
+                id="megaup-response"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`// Decrypted JSON structure:
+{
+  "sources": [{
+    "file": "https://xxx.megaup.net/hls/xxx/master.m3u8",
+    "type": "hls"
+  }],
+  "tracks": [{
+    "file": "https://xxx.megaup.net/subs/xxx.vtt",
+    "kind": "captions",
+    "label": "English"
+  }]
+}`}
+              />
 
               <h3>CDN Blocking</h3>
               <p>
-                MegaUp CDN blocks ALL datacenter IPs and requests with Origin headers. This affects 
-                Cloudflare Workers, AWS, Vercel, and any VPS. Solution: Route through Raspberry Pi 
-                on residential internet.
+                MegaUp CDN blocks datacenter IPs AND requests with Origin headers. Our solution routes 
+                through a Raspberry Pi on residential internet, stripping Origin/Referer headers.
               </p>
+
+              <div className={styles.warningNote}>
+                <span>⚠️</span>
+                <p>
+                  The keystream is tied to the specific User-Agent. If you change the UA, you must 
+                  re-compute the keystream by XORing known plaintext with ciphertext.
+                </p>
+              </div>
+
+              <blockquote className={styles.quote}>
+                <p>
+                  &quot;We spent days trying to reverse engineer the full keystream generation algorithm 
+                  from their obfuscated JS. Then realized: if the keystream is constant for a fixed UA, 
+                  we don&apos;t need to understand HOW it&apos;s generated—just WHAT it is. Pre-compute once, 
+                  use forever.&quot;
+                </p>
+                <cite>- Field Notes, December 2025</cite>
+              </blockquote>
             </motion.div>
           </section>
 

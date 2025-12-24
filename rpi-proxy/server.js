@@ -221,9 +221,9 @@ try {
 const PORT = process.env.PORT || 3001;
 const API_KEY = process.env.API_KEY || 'change-this-secret-key';
 
-// Simple rate limiting
+// Simple rate limiting - higher limit for CF worker which handles many users
 const rateLimiter = new Map();
-const RATE_LIMIT = 500; // requests per minute
+const RATE_LIMIT = 2000; // requests per minute (increased from 500)
 const RATE_WINDOW = 60000;
 
 function checkRateLimit(ip) {
@@ -971,8 +971,9 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ error: 'Unauthorized' }));
   }
 
-  // Rate limiting
-  if (!checkRateLimit(clientIp)) {
+  // Rate limiting - skip for animekai route (already protected by API key)
+  const isAnimeKaiRoute = reqUrl.pathname === '/animekai';
+  if (!isAnimeKaiRoute && !checkRateLimit(clientIp)) {
     res.writeHead(429, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Rate limited' }));
   }
