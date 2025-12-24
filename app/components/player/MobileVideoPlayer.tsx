@@ -30,7 +30,7 @@ interface MobileVideoPlayerProps {
   onBack?: () => void;
   onError?: (error: string) => void;
   onSourceChange?: (sourceIndex: number, currentTime: number) => void;
-  availableSources?: Array<{ title: string; url: string; quality?: string; provider?: string }>;
+  availableSources?: Array<{ title: string; url: string; quality?: string; provider?: string; skipIntro?: [number, number]; skipOutro?: [number, number] }>;
   currentSourceIndex?: number;
   nextEpisode?: { season: number; episode: number; title?: string } | null;
   onNextEpisode?: () => void;
@@ -47,6 +47,9 @@ interface MobileVideoPlayerProps {
   availableProviders?: Provider[];
   onProviderChange?: (provider: Provider, currentTime: number) => void;
   loadingProvider?: boolean;
+  // Skip intro/outro data (from AnimeKai)
+  skipIntro?: [number, number] | null;
+  skipOutro?: [number, number] | null;
 }
 
 const formatTime = (seconds: number): string => {
@@ -99,6 +102,8 @@ export default function MobileVideoPlayer({
   availableProviders = [],
   onProviderChange,
   loadingProvider = false,
+  skipIntro: skipIntroProp = null,
+  skipOutro: skipOutroProp = null,
 }: MobileVideoPlayerProps) {
   const mobileInfo = useIsMobile();
   const presenceContext = usePresenceContext();
@@ -145,6 +150,16 @@ export default function MobileVideoPlayer({
   const [seekPreview, setSeekPreview] = useState<{ show: boolean; time: number; delta: number } | null>(null);
   const [doubleTapIndicator, setDoubleTapIndicator] = useState<{ show: boolean; side: 'left' | 'right'; x: number; y: number } | null>(null);
   const [brightnessLevel, setBrightnessLevel] = useState(1);
+  
+  // Skip intro/outro state
+  const [showSkipIntroButton, setShowSkipIntroButton] = useState(false);
+  const [showSkipOutroButton, setShowSkipOutroButton] = useState(false);
+  const skipIntroRef = useRef<[number, number] | null>(skipIntroProp);
+  const skipOutroRef = useRef<[number, number] | null>(skipOutroProp);
+  
+  // Keep refs in sync with props
+  useEffect(() => { skipIntroRef.current = skipIntroProp; }, [skipIntroProp]);
+  useEffect(() => { skipOutroRef.current = skipOutroProp; }, [skipOutroProp]);
   const [volumeLevel, setVolumeLevel] = useState(1);
   const [showBrightnessOverlay, setShowBrightnessOverlay] = useState(false);
   const [showVolumeOverlay, setShowVolumeOverlay] = useState(false);
@@ -309,6 +324,11 @@ export default function MobileVideoPlayer({
   useEffect(() => {
     console.log('[MobilePlayer] Anime props:', { isAnime, audioPref, hasOnAudioPrefChange: !!onAudioPrefChange });
   }, [isAnime, audioPref, onAudioPrefChange]);
+
+  // Debug: Log skip intro/outro props
+  useEffect(() => {
+    console.log('[MobilePlayer] Skip data:', { skipIntro: skipIntroProp, skipOutro: skipOutroProp });
+  }, [skipIntroProp, skipOutroProp]);
 
   // Watch progress tracking
   const {
@@ -683,6 +703,22 @@ export default function MobileVideoPlayer({
       }
       if (video.buffered.length > 0) {
         setBuffered((video.buffered.end(video.buffered.length - 1) / video.duration) * 100);
+      }
+      
+      // Show/hide skip intro button based on current time
+      const currentSkipIntro = skipIntroRef.current;
+      if (currentSkipIntro) {
+        const [introStart, introEnd] = currentSkipIntro;
+        const inIntro = video.currentTime >= introStart && video.currentTime < introEnd;
+        setShowSkipIntroButton(inIntro);
+      }
+      
+      // Show/hide skip outro button based on current time
+      const currentSkipOutro = skipOutroRef.current;
+      if (currentSkipOutro) {
+        const [outroStart, outroEnd] = currentSkipOutro;
+        const inOutro = video.currentTime >= outroStart && video.currentTime < outroEnd;
+        setShowSkipOutroButton(inOutro);
       }
     };
     const onDurationChange = () => setDuration(video.duration);
@@ -1387,6 +1423,43 @@ export default function MobileVideoPlayer({
         </div>
       </div>
 
+      {/* Skip Intro Button */}
+      {showSkipIntroButton && skipIntroProp && (
+        <button
+          className={styles.skipIntroOutroButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current && skipIntroProp) {
+              videoRef.current.currentTime = skipIntroProp[1];
+              setShowSkipIntroButton(false);
+              triggerHaptic('light');
+            }
+          }}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
+          <span>Skip Intro</span>
+          <span>⏭️</span>
+        </button>
+      )}
+
+      {/* Skip Outro Button */}
+      {showSkipOutroButton && skipOutroProp && (
+        <button
+          className={styles.skipIntroOutroButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current && skipOutroProp) {
+              videoRef.current.currentTime = skipOutroProp[1];
+              setShowSkipOutroButton(false);
+              triggerHaptic('light');
+            }
+          }}
+          onTouchEnd={(e) => e.stopPropagation()}
+        >
+          <span>Skip Outro</span>
+          <span>⏭️</span>
+        </button>
+      )}
 
       {/* Source Menu */}
       {showSourceMenu && (

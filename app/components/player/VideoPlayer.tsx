@@ -161,6 +161,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   }, [onNextEpisode]);
   useEffect(() => { showNextEpisodeButtonRef.current = showNextEpisodeButton; }, [showNextEpisodeButton]);
   useEffect(() => { autoPlayCountdownRef.current = autoPlayCountdown; }, [autoPlayCountdown]);
+  useEffect(() => { skipIntroRef.current = skipIntro; }, [skipIntro]);
+  useEffect(() => { skipOutroRef.current = skipOutro; }, [skipOutro]);
   
   // Listen for sync data changes and refresh preferences
   useEffect(() => {
@@ -237,6 +239,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const lastTimeUpdateRef = useRef<number>(0);
   const lastWatchTimeUpdateRef = useRef<number>(0);
   const sourceConfirmedWorkingRef = useRef<boolean>(false);
+  
+  // Skip intro/outro refs (to avoid stale closures in event handlers)
+  const skipIntroRef = useRef<[number, number] | null>(null);
+  const skipOutroRef = useRef<[number, number] | null>(null);
 
   // Pinch-to-zoom for mobile
   const [showZoomIndicator, setShowZoomIndicator] = useState(false);
@@ -547,9 +553,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           [providerName]: sources
         }));
 
-        // If this is the active provider, update available sources
+        // If this is the active provider, update available sources and skip data
         if (providerName === provider) {
           setAvailableSources(sources);
+          
+          // Extract skip intro/outro data
+          const firstSource = sources[0];
+          if (firstSource?.skipIntro) {
+            console.log('[VideoPlayer] Skip intro available from fetchSources:', firstSource.skipIntro);
+            setSkipIntro(firstSource.skipIntro);
+          }
+          if (firstSource?.skipOutro) {
+            console.log('[VideoPlayer] Skip outro available from fetchSources:', firstSource.skipOutro);
+            setSkipOutro(firstSource.skipOutro);
+          }
         }
 
         return sources;
@@ -1348,16 +1365,18 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
         setBuffered((video.buffered.end(video.buffered.length - 1) / video.duration) * 100);
       }
       
-      // Show/hide skip intro button based on current time
-      if (skipIntro) {
-        const [introStart, introEnd] = skipIntro;
+      // Show/hide skip intro button based on current time (use refs to avoid stale closures)
+      const currentSkipIntro = skipIntroRef.current;
+      if (currentSkipIntro) {
+        const [introStart, introEnd] = currentSkipIntro;
         const inIntro = video.currentTime >= introStart && video.currentTime < introEnd;
         setShowSkipIntroButton(inIntro);
       }
       
-      // Show/hide skip outro button based on current time
-      if (skipOutro) {
-        const [outroStart, outroEnd] = skipOutro;
+      // Show/hide skip outro button based on current time (use refs to avoid stale closures)
+      const currentSkipOutro = skipOutroRef.current;
+      if (currentSkipOutro) {
+        const [outroStart, outroEnd] = currentSkipOutro;
         const inOutro = video.currentTime >= outroStart && video.currentTime < outroEnd;
         setShowSkipOutroButton(inOutro);
       }

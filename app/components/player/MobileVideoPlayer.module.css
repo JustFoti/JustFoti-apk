@@ -1137,6 +1137,36 @@
   font-size: 1rem;
 }
 
+/* Skip Intro/Outro Button */
+.skipIntroOutroButton {
+  position: absolute;
+  bottom: 100px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.skipIntroOutroButton:active {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(0.95);
+}
+
 /* ============================================
    Cast / AirPlay Styles
    ============================================ */

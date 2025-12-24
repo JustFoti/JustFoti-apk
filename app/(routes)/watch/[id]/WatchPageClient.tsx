@@ -116,7 +116,7 @@ function WatchContent() {
   
   // Mobile player state
   const [mobileStreamUrl, setMobileStreamUrl] = useState<string | null>(null);
-  const [mobileSources, setMobileSources] = useState<Array<{ title: string; url: string; quality?: string; provider?: string }>>([]);
+  const [mobileSources, setMobileSources] = useState<Array<{ title: string; url: string; quality?: string; provider?: string; skipIntro?: [number, number]; skipOutro?: [number, number] }>>([]);
   const [mobileSourceIndex, setMobileSourceIndex] = useState(0);
   const [mobileLoading, setMobileLoading] = useState(true);
   const [mobileError, setMobileError] = useState<string | null>(null);
@@ -452,6 +452,8 @@ function WatchContent() {
                 url: s.url,
                 quality: s.quality,
                 provider: provider,
+                skipIntro: s.skipIntro,
+                skipOutro: s.skipOutro,
               }));
               
               setMobileSources(sources);
@@ -479,6 +481,13 @@ function WatchContent() {
               console.log(`[WatchPage] ✓ Mobile stream loaded from ${provider}:`, 
                 sources[selectedIndex].url?.substring(0, 50), 
                 provider === 'animekai' ? `(${currentAudioPref})` : '');
+              // Log skip data if available
+              if (sources[selectedIndex].skipIntro || sources[selectedIndex].skipOutro) {
+                console.log('[WatchPage] Skip data available:', {
+                  skipIntro: sources[selectedIndex].skipIntro,
+                  skipOutro: sources[selectedIndex].skipOutro,
+                });
+              }
               return;
             }
           }
@@ -547,6 +556,8 @@ function WatchContent() {
             url: s.url,
             quality: s.quality,
             provider: provider,
+            skipIntro: s.skipIntro,
+            skipOutro: s.skipOutro,
           }));
           
           setMobileSources(sources);
@@ -786,6 +797,8 @@ function WatchContent() {
             availableProviders={availableProviders}
             onProviderChange={handleProviderChange}
             loadingProvider={loadingProvider}
+            skipIntro={mobileSources[mobileSourceIndex]?.skipIntro}
+            skipOutro={mobileSources[mobileSourceIndex]?.skipOutro}
           />
         </div>
       </div>
