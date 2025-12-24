@@ -1087,7 +1087,7 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
  * Local extraction fallback (when RPI is not available)
  * This may fail due to datacenter IP blocking
  */
-async function getStreamFromServerLocal(lid: string, serverName: string, encryptedEmbed: string): Promise<StreamSource | null> {
+async function getStreamFromServerLocal(_lid: string, serverName: string, encryptedEmbed: string): Promise<StreamSource | null> {
   try {
     console.log(`[AnimeKai] Falling back to local extraction...`);
     
