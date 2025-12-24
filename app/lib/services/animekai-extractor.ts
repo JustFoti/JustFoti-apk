@@ -423,6 +423,48 @@ async function getTmdbSeasonName(tmdbId: string, seasonNumber: number): Promise<
 }
 
 /**
+ * Get episode counts for all seasons from TMDB
+ * Used to calculate absolute episode numbers for anime with multiple TMDB seasons
+ * but single AnimeKai entry (e.g., Dragon Ball Z has 9 TMDB seasons but 1 AnimeKai entry)
+ */
+async function getTmdbSeasonEpisodeCounts(tmdbId: string): Promise<Record<number, number> | null> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
+    if (!apiKey) return null;
+
+    const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${apiKey}`;
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await fetch(url, {
+      signal: controller.signal,
+      next: { revalidate: 86400 },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    
+    if (!data.seasons || !Array.isArray(data.seasons)) return null;
+    
+    const counts: Record<number, number> = {};
+    for (const season of data.seasons) {
+      if (season.season_number > 0) { // Skip specials (season 0)
+        counts[season.season_number] = season.episode_count || 0;
+      }
+    }
+    
+    console.log(`[AnimeKai] TMDB season episode counts:`, counts);
+    return counts;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Helper to normalize title for comparison
  */
 function normalizeTitle(title: string): string {
@@ -1275,6 +1317,10 @@ export async function extractAnimeKaiStreams(
     console.log(`[AnimeKai] Looking for S${seasonNumber}E${episodeNumber}...`);
     console.log(`[AnimeKai] Available seasons:`, Object.keys(episodes));
     
+    // Log episode count in season 1 (for absolute numbering detection)
+    const season1EpCount = episodes["1"] ? Object.keys(episodes["1"]).length : 0;
+    console.log(`[AnimeKai] Season 1 has ${season1EpCount} episodes in AnimeKai`);
+    
     // Strategy 1: Try the exact season/episode combination
     const targetSeason = episodes[seasonKey];
     if (targetSeason && targetSeason[episodeKey]) {
@@ -1286,32 +1332,43 @@ export async function extractAnimeKaiStreams(
     }
     
     // Strategy 2: If season > 1 and not found, try absolute episode number
-    // Calculate absolute episode by summing previous seasons' episodes
+    // Calculate absolute episode by summing previous seasons' episodes from TMDB
     if (!episodeToken && seasonNumber > 1) {
       console.log(`[AnimeKai] Episode not found in season ${seasonNumber}, trying absolute numbering...`);
       
       // Check if all episodes are in season "1" (absolute numbering)
       const season1 = episodes["1"];
       if (season1) {
-        // Count episodes in previous seasons to calculate absolute number
+        // Get TMDB season episode counts to calculate absolute number
+        const tmdbSeasonCounts = await getTmdbSeasonEpisodeCounts(tmdbId);
+        
         let absoluteEpisode = episodeNumber;
         
-        // Try to calculate based on available seasons
-        for (let s = 1; s < seasonNumber; s++) {
-          const prevSeason = episodes[String(s)];
-          if (prevSeason) {
-            absoluteEpisode += Object.keys(prevSeason).length;
+        if (tmdbSeasonCounts) {
+          // Use TMDB episode counts for accurate calculation
+          for (let s = 1; s < seasonNumber; s++) {
+            const seasonEpCount = tmdbSeasonCounts[s] || 0;
+            absoluteEpisode += seasonEpCount;
+            console.log(`[AnimeKai] Season ${s} has ${seasonEpCount} episodes (TMDB)`);
+          }
+        } else {
+          // Fallback: Try to calculate based on available seasons in episodes object
+          for (let s = 1; s < seasonNumber; s++) {
+            const prevSeason = episodes[String(s)];
+            if (prevSeason) {
+              absoluteEpisode += Object.keys(prevSeason).length;
+            }
           }
         }
         
         const absoluteKey = String(absoluteEpisode);
-        console.log(`[AnimeKai] Trying absolute episode ${absoluteEpisode}...`);
+        console.log(`[AnimeKai] Trying absolute episode ${absoluteEpisode} (S${seasonNumber}E${episodeNumber})...`);
         
         if (season1[absoluteKey]) {
           const epData = season1[absoluteKey];
           if (epData && typeof epData === 'object' && 'token' in epData) {
             episodeToken = epData.token;
-            console.log(`[AnimeKai] Found episode using absolute numbering: ${absoluteEpisode}`);
+            console.log(`[AnimeKai] ✓ Found episode using absolute numbering: ${absoluteEpisode}`);
           }
         }
       }
