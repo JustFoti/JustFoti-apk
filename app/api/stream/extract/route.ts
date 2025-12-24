@@ -685,6 +685,9 @@ export async function GET(request: NextRequest) {
         requiresSegmentProxy: source.requiresSegmentProxy,
         status: source.status || 'working',
         language: source.language || 'en',
+        // Pass through skip intro/outro data for anime
+        skipIntro: source.skipIntro,
+        skipOutro: source.skipOutro,
       }));
 
       return NextResponse.json({

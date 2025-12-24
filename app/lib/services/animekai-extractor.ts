@@ -30,6 +30,9 @@ interface StreamSource {
   skipOrigin?: boolean; // For MegaUp CDN - proxy should NOT send Origin/Referer headers
   status?: 'working' | 'down' | 'unknown';
   language?: string;
+  // Skip intro/outro timestamps (from AnimeKai)
+  skipIntro?: [number, number]; // [startSeconds, endSeconds]
+  skipOutro?: [number, number]; // [startSeconds, endSeconds]
 }
 
 interface ExtractionResult {
@@ -1047,6 +1050,17 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
       const streamUrl = extractData.streamUrl;
       console.log(`[AnimeKai] ✓ Got stream URL from RPI:`, streamUrl.substring(0, 80));
       
+      // Extract skip intro/outro data if available
+      const skipIntro = extractData.skip?.intro as [number, number] | undefined;
+      const skipOutro = extractData.skip?.outro as [number, number] | undefined;
+      
+      if (skipIntro) {
+        console.log(`[AnimeKai] Skip intro: ${skipIntro[0]}s - ${skipIntro[1]}s`);
+      }
+      if (skipOutro) {
+        console.log(`[AnimeKai] Skip outro: ${skipOutro[0]}s - ${skipOutro[1]}s`);
+      }
+      
       // Extract the proper referer from the stream URL's origin
       let referer = 'https://animekai.to/';
       try {
@@ -1069,6 +1083,8 @@ async function getStreamFromServer(lid: string, serverName: string): Promise<Str
         skipOrigin: isMegaUpCdn,
         status: 'working',
         language: 'ja',
+        skipIntro,
+        skipOutro,
       };
       
     } catch (fetchError) {

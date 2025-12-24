@@ -198,6 +198,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   
   // Anime-specific preferences
   const [animeAudioPref, setAnimeAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
+  
+  // Skip intro/outro state (from AnimeKai)
+  const [skipIntro, setSkipIntro] = useState<[number, number] | null>(null);
+  const [skipOutro, setSkipOutro] = useState<[number, number] | null>(null);
+  const [showSkipIntroButton, setShowSkipIntroButton] = useState(false);
+  const [showSkipOutroButton, setShowSkipOutroButton] = useState(false);
 
   // Videasy language filter for dub selection
   const [videasyLanguageFilter, setVideasyLanguageFilter] = useState<string>('all');
@@ -652,6 +658,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     setStreamUrl(null);
     setIsAnimeContent(false); // Reset anime detection for new content
     
+    // Reset skip intro/outro state when content changes
+    setSkipIntro(null);
+    setSkipOutro(null);
+    setShowSkipIntroButton(false);
+    setShowSkipOutroButton(false);
+    
     // Reset next episode state when content changes (prevents auto-skip bug)
     setShowNextEpisodeButton(false);
     setAutoPlayCountdownState(null);
@@ -780,6 +792,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setMenuProvider(successfulProvider);
       setSourcesCache(prev => ({ ...prev, [successfulProvider]: sources }));
       setAvailableSources(sources);
+      
+      // Extract skip intro/outro data from the first source (all sources from same anime have same skip times)
+      const firstSource = sources[0];
+      if (firstSource?.skipIntro) {
+        console.log('[VideoPlayer] Skip intro available:', firstSource.skipIntro);
+        setSkipIntro(firstSource.skipIntro);
+      } else {
+        setSkipIntro(null);
+      }
+      if (firstSource?.skipOutro) {
+        console.log('[VideoPlayer] Skip outro available:', firstSource.skipOutro);
+        setSkipOutro(firstSource.skipOutro);
+      } else {
+        setSkipOutro(null);
+      }
       
       // For AnimeKai, try to find preferred server and match dub/sub preference
       let selectedSourceIndex = 0;
@@ -1319,6 +1346,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       setCurrentTime(video.currentTime);
       if (video.buffered.length > 0) {
         setBuffered((video.buffered.end(video.buffered.length - 1) / video.duration) * 100);
+      }
+      
+      // Show/hide skip intro button based on current time
+      if (skipIntro) {
+        const [introStart, introEnd] = skipIntro;
+        const inIntro = video.currentTime >= introStart && video.currentTime < introEnd;
+        setShowSkipIntroButton(inIntro);
+      }
+      
+      // Show/hide skip outro button based on current time
+      if (skipOutro) {
+        const [outroStart, outroEnd] = skipOutro;
+        const inOutro = video.currentTime >= outroStart && video.currentTime < outroEnd;
+        setShowSkipOutroButton(inOutro);
       }
 
       // Show next episode button based on user preference (use refs for current values)
@@ -3178,6 +3219,44 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             <path d="M7 9h5v1H7z"/>
           </svg>
           <span>1x</span>
+        </button>
+      )}
+
+      {/* Skip Intro Button */}
+      {showSkipIntroButton && skipIntro && (
+        <button
+          className={styles.skipButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current && skipIntro) {
+              videoRef.current.currentTime = skipIntro[1];
+              setShowSkipIntroButton(false);
+            }
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+          </svg>
+          <span>Skip Intro</span>
+        </button>
+      )}
+
+      {/* Skip Outro Button */}
+      {showSkipOutroButton && skipOutro && (
+        <button
+          className={styles.skipButton}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current && skipOutro) {
+              videoRef.current.currentTime = skipOutro[1];
+              setShowSkipOutroButton(false);
+            }
+          }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>
+          </svg>
+          <span>Skip Outro</span>
         </button>
       )}
 
