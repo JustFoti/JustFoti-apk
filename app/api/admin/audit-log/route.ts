@@ -5,8 +5,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { AdminAuthService, AuditLogService } from '@/app/admin/middleware/auth';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { AdminAuthService, AuditLogService } from '@/app/admin/middleware/auth-server';
+import { initializeDB, getDB } from '@/lib/db/server-connection';
 
 export async function POST(request: NextRequest) {
   try {

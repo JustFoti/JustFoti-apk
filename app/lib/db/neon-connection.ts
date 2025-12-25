@@ -204,8 +204,23 @@ class DatabaseConnection {
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'viewer',
+        permissions TEXT DEFAULT '["read"]',
+        specific_permissions TEXT DEFAULT '[]',
         created_at BIGINT,
         last_login BIGINT
+      )`,
+
+      // Audit logs table
+      `CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        timestamp BIGINT NOT NULL,
+        created_at BIGINT,
+        FOREIGN KEY (user_id) REFERENCES admin_users(id)
       )`,
 
       // Daily metrics table
@@ -604,8 +619,23 @@ class DatabaseConnection {
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
+        role TEXT DEFAULT 'viewer',
+        permissions TEXT DEFAULT '["read"]',
+        specific_permissions TEXT DEFAULT '[]',
         created_at INTEGER DEFAULT(strftime('%s', 'now')),
         last_login INTEGER
+      )`,
+
+      // Audit logs table
+      `CREATE TABLE IF NOT EXISTS audit_logs(
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT,
+        ip_address TEXT,
+        timestamp INTEGER NOT NULL,
+        created_at INTEGER DEFAULT(strftime('%s', 'now')),
+        FOREIGN KEY (user_id) REFERENCES admin_users(id)
       )`,
 
       // Daily metrics table

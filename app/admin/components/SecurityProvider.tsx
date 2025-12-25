@@ -6,7 +6,7 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { AdminUser, AdminAuthService, FunctionalityCategory, PermissionLevel } from '../middleware/auth';
+import { AdminUser, ClientAuthUtils, FunctionalityCategory, PermissionLevel, PermissionCheck } from '../types/auth';
 
 interface SecurityContextType {
   user: AdminUser | null;
@@ -75,14 +75,14 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
 
   const hasPermission = (category: FunctionalityCategory, level: PermissionLevel = 'read'): boolean => {
     if (!user) return false;
-    return AdminAuthService.checkPermissions(user, category, level).allowed;
+    return ClientAuthUtils.checkPermissions(user, category, level).allowed;
   };
 
   const checkAccess = (category: FunctionalityCategory, level: PermissionLevel = 'read') => {
     if (!user) {
       return { allowed: false, reason: 'Not authenticated' };
     }
-    return AdminAuthService.checkPermissions(user, category, level);
+    return ClientAuthUtils.checkPermissions(user, category, level);
   };
 
   const contextValue: SecurityContextType = {

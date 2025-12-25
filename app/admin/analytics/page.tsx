@@ -703,8 +703,8 @@ function SessionsTab({
   getCompletionColor
 }: any) {
   // Get unique values for filter options
-  const deviceOptions = [...new Set(sessions.map((s: WatchSession) => s.device_type).filter(Boolean))];
-  const qualityOptions = [...new Set(sessions.map((s: WatchSession) => s.quality).filter(Boolean))];
+  const deviceOptions = [...new Set(sessions.map((s: WatchSession) => s.device_type).filter(Boolean))] as string[];
+  const qualityOptions = [...new Set(sessions.map((s: WatchSession) => s.quality).filter(Boolean))] as string[];
 
   return (
     <div>
@@ -750,7 +750,7 @@ function SessionsTab({
           }}
         >
           <option value="all">All Devices</option>
-          {deviceOptions.map((device: string) => (
+          {deviceOptions.map((device) => (
             <option key={device} value={device}>{device}</option>
           ))}
         </select>
@@ -767,7 +767,7 @@ function SessionsTab({
           }}
         >
           <option value="all">All Quality</option>
-          {qualityOptions.map((quality: string) => (
+          {qualityOptions.map((quality) => (
             <option key={quality} value={quality}>{quality}</option>
           ))}
         </select>
@@ -1036,7 +1036,7 @@ function EngagementTab({ engagementMetrics }: any) {
           <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>Completion Distribution</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {Object.entries(engagementMetrics.completionDistribution).map(([range, count]: [string, any]) => {
-              const total = Object.values(engagementMetrics.completionDistribution).reduce((a: number, b: number) => a + b, 0);
+              const total = Object.values(engagementMetrics.completionDistribution).reduce((a: number, b: unknown) => a + (b as number), 0);
               const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
               const colors: Record<string, string> = {
                 '0-25%': '#ef4444',

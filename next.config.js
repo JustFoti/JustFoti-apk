@@ -28,7 +28,7 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
 
   // Reduce bundle size
-  swcMinify: true,
+  // swcMinify is deprecated in Next.js 13+ (SWC is enabled by default)
 
   // Experimental optimizations
   experimental: {
