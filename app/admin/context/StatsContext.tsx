@@ -22,6 +22,29 @@ interface PeakStats {
   peakBrowsingTime: number;
 }
 
+// Bot detection metrics interface
+interface BotDetectionMetrics {
+  totalDetections: number;
+  suspectedBots: number;
+  confirmedBots: number;
+  pendingReview: number;
+  avgConfidenceScore: number;
+  recentDetections: Array<{
+    userId: string;
+    ipAddress: string;
+    confidenceScore: number;
+    status: string;
+    timestamp: number;
+  }>;
+}
+
+// Bot filtering options interface
+interface BotFilterOptions {
+  includeBots: boolean;
+  confidenceThreshold: number; // 0-100, bots above this threshold are filtered
+  showBotMetrics: boolean;
+}
+
 // Unified stats interface - SINGLE SOURCE OF TRUTH
 // All counts use DISTINCT user_id to avoid duplicates
 interface UnifiedStats {
@@ -70,6 +93,9 @@ interface UnifiedStats {
   // Devices - unique users per device (last 7 days)
   deviceBreakdown: Array<{ device: string; count: number }>;
   
+  // Bot detection metrics
+  botDetection: BotDetectionMetrics;
+  
   // Time ranges for transparency
   timeRanges: {
     realtime: string;
@@ -80,6 +106,7 @@ interface UnifiedStats {
     geographic: string;
     devices: string;
     pageViews: string;
+    botDetection: string;
   };
   
   // Timestamps
@@ -93,6 +120,9 @@ interface StatsContextType {
   error: string | null;
   refresh: () => Promise<void>;
   lastRefresh: Date | null;
+  // Bot filtering options
+  botFilterOptions: BotFilterOptions;
+  setBotFilterOptions: (options: BotFilterOptions) => void;
 }
 
 const defaultStats: UnifiedStats = {
@@ -124,6 +154,14 @@ const defaultStats: UnifiedStats = {
   uniqueVisitors: 0,
   topCountries: [],
   deviceBreakdown: [],
+  botDetection: {
+    totalDetections: 0,
+    suspectedBots: 0,
+    confirmedBots: 0,
+    pendingReview: 0,
+    avgConfidenceScore: 0,
+    recentDetections: [],
+  },
   timeRanges: {
     realtime: '5 minutes',
     dau: '24 hours',
@@ -133,9 +171,16 @@ const defaultStats: UnifiedStats = {
     geographic: '7 days',
     devices: '7 days',
     pageViews: '24 hours',
+    botDetection: '7 days',
   },
   lastUpdated: 0,
   dataSource: 'none',
+};
+
+const defaultBotFilterOptions: BotFilterOptions = {
+  includeBots: false, // Exclude bots by default
+  confidenceThreshold: 70, // Only filter bots with >70% confidence
+  showBotMetrics: true, // Show bot detection metrics by default
 };
 
 const StatsContext = createContext<StatsContextType>({
@@ -144,6 +189,8 @@ const StatsContext = createContext<StatsContextType>({
   error: null,
   refresh: async () => {},
   lastRefresh: null,
+  botFilterOptions: defaultBotFilterOptions,
+  setBotFilterOptions: () => {},
 });
 
 export function useStats() {
@@ -155,6 +202,7 @@ export function StatsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [botFilterOptions, setBotFilterOptions] = useState<BotFilterOptions>(defaultBotFilterOptions);
 
   const fetchAllStats = useCallback(async (isInitial = false) => {
     // Only show loading on initial fetch, not on refreshes
@@ -164,8 +212,16 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
+      // Build query parameters for bot filtering
+      const params = new URLSearchParams();
+      if (!botFilterOptions.includeBots) {
+        params.set('excludeBots', 'true');
+        params.set('botThreshold', botFilterOptions.confidenceThreshold.toString());
+      }
+      
       // Fetch all data in parallel from a single unified endpoint
-      const response = await fetch(getAdminAnalyticsUrl('unified-stats'));
+      const url = `${getAdminAnalyticsUrl('unified-stats')}${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
       
       if (!response.ok) {
         throw new Error('Failed to fetch stats');
@@ -220,8 +276,21 @@ export function StatsProvider({ children }: { children: ReactNode }) {
           // Devices (unique users per device, last 7 days)
           deviceBreakdown: data.devices || [],
           
+          // Bot detection metrics
+          botDetection: {
+            totalDetections: data.botDetection?.totalDetections || 0,
+            suspectedBots: data.botDetection?.suspectedBots || 0,
+            confirmedBots: data.botDetection?.confirmedBots || 0,
+            pendingReview: data.botDetection?.pendingReview || 0,
+            avgConfidenceScore: data.botDetection?.avgConfidenceScore || 0,
+            recentDetections: data.botDetection?.recentDetections || [],
+          },
+          
           // Time ranges for transparency
-          timeRanges: data.timeRanges || defaultStats.timeRanges,
+          timeRanges: data.timeRanges || {
+            ...defaultStats.timeRanges,
+            botDetection: '7 days',
+          },
           
           // Meta
           lastUpdated: Date.now(),
@@ -238,7 +307,7 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [botFilterOptions]);
 
   // Initial fetch
   useEffect(() => {
@@ -247,12 +316,29 @@ export function StatsProvider({ children }: { children: ReactNode }) {
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
-    const interval = setInterval(fetchAllStats, 30000);
+    const interval = setInterval(() => {
+      fetchAllStats(false);
+    }, 30000);
     return () => clearInterval(interval);
   }, [fetchAllStats]);
 
+  // Refetch when bot filter options change
+  useEffect(() => {
+    if (lastRefresh) { // Only refetch if we've already loaded data initially
+      fetchAllStats(false);
+    }
+  }, [botFilterOptions, fetchAllStats, lastRefresh]);
+
   return (
-    <StatsContext.Provider value={{ stats, loading, error, refresh: fetchAllStats, lastRefresh }}>
+    <StatsContext.Provider value={{ 
+      stats, 
+      loading, 
+      error, 
+      refresh: fetchAllStats, 
+      lastRefresh,
+      botFilterOptions,
+      setBotFilterOptions,
+    }}>
       {children}
     </StatsContext.Provider>
   );

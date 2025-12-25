@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import AdminLayout from './components/AdminLayout';
 import AdminLogin from './components/AdminLogin';
+import { SecurityProvider } from './components/SecurityProvider';
+import LoadingSpinner from './components/LoadingSpinner';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<any>(null);
@@ -28,16 +30,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     if (loading) {
         return (
-            <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                minHeight: '100vh',
-                background: 'linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%)',
-                color: '#e2e8f0'
-            }}>
-                Loading...
-            </div>
+            <LoadingSpinner 
+                fullScreen 
+                message="Loading admin panel..." 
+                size="lg"
+            />
         );
     }
 
@@ -45,5 +42,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         return <AdminLogin onLoginSuccess={setUser} />;
     }
 
-    return <AdminLayout>{children}</AdminLayout>;
+    return (
+        <SecurityProvider>
+            <AdminLayout>{children}</AdminLayout>
+        </SecurityProvider>
+    );
 }

@@ -6,35 +6,30 @@ import { StatsProvider } from '../context/StatsContext';
 import AdminSidebar from './AdminSidebar';
 import AdminHeader from './AdminHeader';
 import UnifiedStatsBar from './UnifiedStatsBar';
+import ResponsiveLayout from './ResponsiveLayout';
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
     return (
         <AdminProvider>
             <StatsProvider>
-                <div style={{
-                    display: 'flex',
-                    minHeight: '100vh',
-                    background: '#0f172a',
-                    color: '#f8fafc'
-                }}>
-                    <AdminSidebar />
-                    <div style={{
-                        flex: 1,
-                        marginLeft: '260px',
-                        display: 'flex',
-                        flexDirection: 'column'
-                    }}>
-                        <AdminHeader />
-                        <UnifiedStatsBar />
-                        <main style={{
+                <ResponsiveLayout
+                    sidebar={<AdminSidebar />}
+                >
+                    <AdminHeader />
+                    <UnifiedStatsBar />
+                    <main 
+                        style={{
                             flex: 1,
                             padding: '32px',
-                            overflowY: 'auto'
-                        }}>
-                            {children}
-                        </main>
-                    </div>
-                </div>
+                            overflowY: 'auto',
+                            minWidth: 0, // Prevent overflow
+                        }}
+                        role="main"
+                        aria-label="Admin panel main content"
+                    >
+                        {children}
+                    </main>
+                </ResponsiveLayout>
             </StatsProvider>
         </AdminProvider>
     );

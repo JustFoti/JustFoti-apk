@@ -31,7 +31,7 @@ interface CachedStats {
 }
 
 let statsCache: CachedStats | null = null;
-const CACHE_TTL = 10000; // 10 seconds cache TTL - balances freshness with performance
+const CACHE_TTL = 30000; // 30 seconds cache TTL - balances freshness with performance
 
 export async function GET(request: NextRequest) {
   try {
@@ -391,7 +391,77 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // 7. UPDATE PEAK STATS (server-side tracking)
+    // 8. BOT DETECTION METRICS
+    // Get bot detection statistics from bot_detections table
+    // ============================================
+    let botDetection = {
+      totalDetections: 0,
+      suspectedBots: 0,
+      confirmedBots: 0,
+      pendingReview: 0,
+      avgConfidenceScore: 0,
+      recentDetections: [] as any[],
+    };
+    
+    try {
+      // Check if bot_detections table exists and get metrics
+      const botMetricsQuery = isNeon
+        ? `SELECT 
+             COUNT(*) as total_detections,
+             COUNT(CASE WHEN status = 'suspected' THEN 1 END) as suspected_bots,
+             COUNT(CASE WHEN status = 'confirmed_bot' THEN 1 END) as confirmed_bots,
+             COUNT(CASE WHEN status = 'pending_review' THEN 1 END) as pending_review,
+             AVG(confidence_score) as avg_confidence_score
+           FROM bot_detections 
+           WHERE created_at >= $1`
+        : `SELECT 
+             COUNT(*) as total_detections,
+             COUNT(CASE WHEN status = 'suspected' THEN 1 END) as suspected_bots,
+             COUNT(CASE WHEN status = 'confirmed_bot' THEN 1 END) as confirmed_bots,
+             COUNT(CASE WHEN status = 'pending_review' THEN 1 END) as pending_review,
+             AVG(confidence_score) as avg_confidence_score
+           FROM bot_detections 
+           WHERE created_at >= ?`;
+
+      const botMetricsResult = await adapter.query(botMetricsQuery, [oneWeekAgo]);
+      
+      if (botMetricsResult[0]) {
+        botDetection.totalDetections = parseInt(botMetricsResult[0].total_detections) || 0;
+        botDetection.suspectedBots = parseInt(botMetricsResult[0].suspected_bots) || 0;
+        botDetection.confirmedBots = parseInt(botMetricsResult[0].confirmed_bots) || 0;
+        botDetection.pendingReview = parseInt(botMetricsResult[0].pending_review) || 0;
+        botDetection.avgConfidenceScore = Math.round(parseFloat(botMetricsResult[0].avg_confidence_score) || 0);
+      }
+
+      // Get recent high-confidence detections
+      const recentBotsQuery = isNeon
+        ? `SELECT user_id, ip_address, confidence_score, status, created_at
+           FROM bot_detections 
+           WHERE created_at >= $1 AND confidence_score >= 70
+           ORDER BY confidence_score DESC, created_at DESC 
+           LIMIT 10`
+        : `SELECT user_id, ip_address, confidence_score, status, created_at
+           FROM bot_detections 
+           WHERE created_at >= ? AND confidence_score >= 70
+           ORDER BY confidence_score DESC, created_at DESC 
+           LIMIT 10`;
+
+      const recentBotsResult = await adapter.query(recentBotsQuery, [oneDayAgo]);
+      
+      botDetection.recentDetections = recentBotsResult.map((row: any) => ({
+        userId: row.user_id,
+        ipAddress: row.ip_address,
+        confidenceScore: parseInt(row.confidence_score) || 0,
+        status: row.status,
+        timestamp: parseInt(row.created_at) || 0,
+      }));
+    } catch (e) {
+      // Bot detection table might not exist yet
+      console.log('Bot detection table not available:', e);
+    }
+
+    // ============================================
+    // 9. UPDATE PEAK STATS (server-side tracking)
     // This ensures peaks are tracked even when admin isn't watching
     // ============================================
     let peakStats = null;
@@ -420,6 +490,7 @@ export async function GET(request: NextRequest) {
       geographic,
       devices,
       pageViews,
+      botDetection,
       peakStats,
       // Include time ranges for transparency
       timeRanges: {
@@ -431,6 +502,7 @@ export async function GET(request: NextRequest) {
         geographic: '7 days',
         devices: '7 days',
         pageViews: '24 hours',
+        botDetection: '7 days (recent detections: 24 hours)',
       },
       timestamp: now,
       timestampISO: new Date(now).toISOString(),

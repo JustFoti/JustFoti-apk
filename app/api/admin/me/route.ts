@@ -1,11 +1,12 @@
 /**
  * Admin User Info API
- * GET /api/admin/me - Get current admin user info
+ * GET /api/admin/me - Get current admin user info with roles and permissions
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import jwt from 'jsonwebtoken';
 import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { AdminAuthService } from '@/app/admin/middleware/auth';
 
 const ADMIN_COOKIE = 'admin_token';
 
@@ -15,93 +16,58 @@ export async function GET(request: NextRequest) {
   console.log(`[${requestId}] Admin me endpoint called`);
   
   try {
-    // Get token from cookie
-    const token = request.cookies.get(ADMIN_COOKIE)?.value;
+    // Use the enhanced authentication service
+    const authResult = await AdminAuthService.authenticateRequest(request);
     
-    if (!token) {
-      console.log(`[${requestId}] No admin token cookie found`);
+    if (!authResult.success || !authResult.user) {
+      console.log(`[${requestId}] Authentication failed:`, authResult.error);
       return NextResponse.json(
-        { error: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-    
-    // Verify JWT token
-    const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
-    let decoded;
-    
-    try {
-      decoded = jwt.verify(token, JWT_SECRET) as { id: string; username: string };
-      console.log(`[${requestId}] Token verified for user:`, decoded.username);
-    } catch (jwtError) {
-      console.error(`[${requestId}] JWT verification failed:`, jwtError);
-      return NextResponse.json(
-        { error: 'Invalid or expired token' },
+        { error: authResult.error || 'Authentication required' },
         { status: 401 }
       );
     }
 
-    // Initialize database and get user info
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    
-    let user;
-    
-    if (db.isUsingNeon()) {
-      // PostgreSQL syntax for Neon
-      const result = await adapter.query(
-        'SELECT id, username, created_at, last_login FROM admin_users WHERE id = $1',
-        [decoded.id]
-      );
-      user = result[0];
-    } else {
-      // SQLite syntax
-      const result = await adapter.query(
-        'SELECT id, username, created_at, last_login FROM admin_users WHERE id = ?',
-        [decoded.id]
-      );
-      user = result[0];
-    }
-    
-    if (!user) {
-      console.log(`[${requestId}] User not found in database:`, decoded.id);
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
+    const user = authResult.user;
+    console.log(`[${requestId}] Successfully authenticated user:`, user.username);
 
     // Update last login timestamp
     const now = Date.now();
     
     try {
+      await initializeDB();
+      const db = getDB();
+      const adapter = db.getAdapter();
+      
       if (db.isUsingNeon()) {
         await adapter.execute(
           'UPDATE admin_users SET last_login = $1 WHERE id = $2',
-          [now, decoded.id]
+          [now, user.id]
         );
       } else {
         await adapter.execute(
           'UPDATE admin_users SET last_login = ? WHERE id = ?',
-          [now, decoded.id]
+          [now, user.id]
         );
       }
-      console.log(`[${requestId}] Updated last login for user:`, decoded.username);
+      console.log(`[${requestId}] Updated last login for user:`, user.username);
     } catch (updateError) {
       console.error(`[${requestId}] Failed to update last login:`, updateError);
       // Don't fail the request for this
     }
 
-    // Return user info (without sensitive data)
+    // Return enhanced user info with permissions
     const userInfo = {
       id: user.id,
       username: user.username,
-      createdAt: user.created_at,
-      lastLogin: now, // Use the current timestamp
+      role: user.role,
+      permissions: user.permissions,
+      specificPermissions: user.specificPermissions,
+      createdAt: user.createdAt,
+      lastLogin: now,
+      permissionScope: AdminAuthService.getUserPermissionScope(user)
     };
 
-    console.log(`[${requestId}] Successfully retrieved user info for:`, decoded.username);
+    console.log(`[${requestId}] Successfully retrieved enhanced user info for:`, user.username);
     
     return NextResponse.json({
       success: true,
