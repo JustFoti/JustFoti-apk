@@ -13,9 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   successResponse,
   unauthorizedResponse,
-  badRequestResponse,
   internalErrorResponse,
-  ErrorCodes,
 } from '@/app/lib/utils/api-response';
 
 // Initialize channel mappings table if it doesn't exist
