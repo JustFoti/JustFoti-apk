@@ -211,7 +211,10 @@ export default function IPTVDebugPage() {
       setCdnStreamDebug(data);
       
       if (data.success && data.streamUrl) {
-        setCdnStreamUrl(data.streamUrl);
+        // Proxy the stream through our API to add proper headers
+        // The raw URL from edge.cdn-live-tv.ru requires Referer header
+        const proxiedUrl = `/api/livetv/cdn-live-proxy?url=${encodeURIComponent(data.streamUrl)}`;
+        setCdnStreamUrl(proxiedUrl);
       }
     } catch (error) {
       console.error('Failed to get CDN-Live stream:', error);
