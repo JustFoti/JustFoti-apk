@@ -23,7 +23,7 @@ interface AuditLogEntry {
 }
 
 export default function AdminSecurityPage() {
-  const { user, isAuthenticated, hasPermission } = useSecurity();
+  const { user, isAuthenticated } = useSecurity();
   const { logPageView, logSystemAction } = useAuditLogger();
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
