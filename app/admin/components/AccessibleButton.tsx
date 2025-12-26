@@ -65,22 +65,6 @@ const AccessibleButton = forwardRef<HTMLButtonElement, AccessibleButtonProps>(
       },
     };
 
-    const focusStyles = {
-      ':focus-visible': {
-        outline: '2px solid #7877c6',
-        outlineOffset: '2px',
-      },
-    };
-
-    const hoverStyles = !disabled && !loading ? {
-      ':hover': {
-        transform: 'translateY(-1px)',
-        boxShadow: variant === 'primary' ? '0 4px 8px rgba(120, 119, 198, 0.3)' :
-                   variant === 'danger' ? '0 4px 8px rgba(239, 68, 68, 0.3)' :
-                   '0 2px 4px rgba(255, 255, 255, 0.1)',
-      },
-    } : {};
-
     return (
       <button
         ref={ref}
