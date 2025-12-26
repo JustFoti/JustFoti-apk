@@ -1,4 +1,3 @@
-import React from 'react';
 import DataExportPanel from '../components/DataExportPanel';
 
 export default function ExportPage() {
