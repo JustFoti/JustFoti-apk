@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { initializeDB, getDB } from '@/lib/db/server-connection';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const ADMIN_COOKIE = 'admin_token';
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Create JWT token
     const token = jwt.sign(
-      { id: admin.id, username: admin.username },
+      { userId: admin.id, username: admin.username },
       JWT_SECRET,
       { expiresIn: '24h' }
     );

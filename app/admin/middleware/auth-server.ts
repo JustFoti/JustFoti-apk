@@ -18,7 +18,7 @@ import {
 } from '../types/auth';
 
 // Constants
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 /**
  * Server-side Authentication Service
@@ -67,10 +67,14 @@ export class AdminAuthService {
       const adapter = db.getAdapter();
 
       // Get user from database
-      const users = await adapter.query(
-        'SELECT * FROM admin_users WHERE id = ?',
-        [decoded.userId]
-      );
+      let userQuery;
+      if (db.isUsingNeon()) {
+        userQuery = 'SELECT * FROM admin_users WHERE id = $1';
+      } else {
+        userQuery = 'SELECT * FROM admin_users WHERE id = ?';
+      }
+      
+      const users = await adapter.query(userQuery, [decoded.userId]);
 
       if (users.length === 0) {
         return {
@@ -146,10 +150,14 @@ export class AdminAuthService {
       const db = getDB();
       const adapter = db.getAdapter();
       
-      await adapter.execute(
-        'UPDATE admin_users SET last_login = ? WHERE id = ?',
-        [Date.now(), userId]
-      );
+      let updateQuery;
+      if (db.isUsingNeon()) {
+        updateQuery = 'UPDATE admin_users SET last_login = $1 WHERE id = $2';
+      } else {
+        updateQuery = 'UPDATE admin_users SET last_login = ? WHERE id = ?';
+      }
+      
+      await adapter.execute(updateQuery, [Date.now(), userId]);
     } catch (error) {
       console.error('Failed to update last login:', error);
     }
@@ -184,9 +192,16 @@ export class AuditLogService {
         created_at: Date.now()
       };
 
-      await adapter.execute(
-        `INSERT INTO audit_logs (id, user_id, action, details, ip_address, timestamp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      let insertQuery;
+      if (db.isUsingNeon()) {
+        insertQuery = `INSERT INTO audit_logs (id, user_id, action, details, ip_address, timestamp, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`;
+      } else {
+        insertQuery = `INSERT INTO audit_logs (id, user_id, action, details, ip_address, timestamp, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`;
+      }
+
+      await adapter.execute(insertQuery,
         [
           logEntry.id,
           logEntry.user_id,
@@ -226,24 +241,41 @@ export class AuditLogService {
 
       let whereClause = 'WHERE 1=1';
       const params: any[] = [];
+      let paramIndex = 1;
 
       if (userId) {
-        whereClause += ' AND user_id = ?';
+        if (db.isUsingNeon()) {
+          whereClause += ` AND user_id = $${paramIndex++}`;
+        } else {
+          whereClause += ' AND user_id = ?';
+        }
         params.push(userId);
       }
 
       if (action) {
-        whereClause += ' AND action LIKE ?';
+        if (db.isUsingNeon()) {
+          whereClause += ` AND action LIKE $${paramIndex++}`;
+        } else {
+          whereClause += ' AND action LIKE ?';
+        }
         params.push(`%${action}%`);
       }
 
       if (startDate) {
-        whereClause += ' AND timestamp >= ?';
+        if (db.isUsingNeon()) {
+          whereClause += ` AND timestamp >= $${paramIndex++}`;
+        } else {
+          whereClause += ' AND timestamp >= ?';
+        }
         params.push(startDate);
       }
 
       if (endDate) {
-        whereClause += ' AND timestamp <= ?';
+        if (db.isUsingNeon()) {
+          whereClause += ` AND timestamp <= $${paramIndex++}`;
+        } else {
+          whereClause += ' AND timestamp <= ?';
+        }
         params.push(endDate);
       }
 
@@ -256,13 +288,24 @@ export class AuditLogService {
 
       // Get paginated logs
       const offset = (page - 1) * limit;
-      const logs = await adapter.query(
-        `SELECT al.*, au.username 
+      let logsQuery;
+      if (db.isUsingNeon()) {
+        logsQuery = `SELECT al.*, au.username 
          FROM audit_logs al 
          LEFT JOIN admin_users au ON al.user_id = au.id 
          ${whereClause} 
          ORDER BY al.timestamp DESC 
-         LIMIT ? OFFSET ?`,
+         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      } else {
+        logsQuery = `SELECT al.*, au.username 
+         FROM audit_logs al 
+         LEFT JOIN admin_users au ON al.user_id = au.id 
+         ${whereClause} 
+         ORDER BY al.timestamp DESC 
+         LIMIT ? OFFSET ?`;
+      }
+      
+      const logs = await adapter.query(logsQuery,
         [...params, limit, offset]
       );
 
