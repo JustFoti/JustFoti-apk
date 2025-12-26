@@ -19,7 +19,10 @@ interface Channel {
   isHD?: boolean;
   categoryInfo: { name: string; icon: string };
   countryInfo: { name: string; flag: string };
-  source?: 'xfinity' | 'dlhd';
+  source?: 'xfinity' | 'dlhd' | 'ppv';
+  // PPV-specific fields
+  ppvUriName?: string;
+  ppvPoster?: string;
 }
 
 interface DLHDChannel {
@@ -118,6 +121,68 @@ const DLHDChannelCard = memo(function DLHDChannelCard({
   );
 });
 
+// Memoized PPV stream card
+const PPVStreamCard = memo(function PPVStreamCard({
+  stream,
+  categoryName,
+  categoryIcon,
+  onSelect,
+}: {
+  stream: PPVStream;
+  categoryName: string;
+  categoryIcon: string;
+  onSelect: (stream: PPVStream, categoryName: string) => void;
+}) {
+  const startTime = new Date(stream.startsAt * 1000);
+  const formattedTime = startTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  const formattedDate = startTime.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return (
+    <div 
+      className={`${styles.eventCard} ${stream.isLive ? styles.live : ''}`}
+      onClick={() => onSelect(stream, categoryName)}
+      style={{ cursor: 'pointer' }}
+    >
+      <div className={styles.eventHeader}>
+        <span className={styles.eventTime}>
+          {stream.isAlwaysLive ? '24/7' : `${formattedDate} ${formattedTime}`}
+        </span>
+        <span className={styles.eventSport}>{categoryIcon}</span>
+        {stream.isLive && (
+          <span className={styles.liveTag}>
+            <span className={styles.liveDot} /> LIVE
+          </span>
+        )}
+      </div>
+      <div className={styles.eventBody}>
+        <span className={styles.eventTitle}>{stream.name}</span>
+        {stream.tag && <span className={styles.league}>{stream.tag}</span>}
+      </div>
+      <div className={styles.eventChannels}>
+        <button
+          className={styles.channelBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect(stream, categoryName);
+          }}
+        >
+          ▶ Watch Now
+        </button>
+        {stream.viewers && parseInt(stream.viewers) > 0 && (
+          <span className={styles.moreChannels}>👁 {stream.viewers} viewers</span>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // Memoized event card for Live Events
 const EventCard = memo(function EventCard({
   event,
@@ -189,7 +254,34 @@ function getIcon(sport: string): string {
   return '📺';
 }
 
-type ViewMode = 'events' | 'channels';
+// PPV.to Types
+interface PPVStream {
+  id: number;
+  name: string;
+  tag: string;
+  poster: string;
+  blurhash?: string;
+  colors?: string[];
+  uriName: string;
+  startsAt: number;
+  endsAt: number;
+  isLive: boolean;
+  isAlwaysLive: boolean;
+  viewers: string;
+  hasSubstreams: boolean;
+  substreamCount: number;
+}
+
+interface PPVCategory {
+  id: number;
+  name: string;
+  icon: string;
+  isAlwaysLive: boolean;
+  streams: PPVStream[];
+  streamCount: number;
+}
+
+type ViewMode = 'events' | 'channels' | 'ppv';
 
 export default function LiveTVClient() {
   const { 
@@ -227,6 +319,16 @@ export default function LiveTVClient() {
   const [liveEventsCount, setLiveEventsCount] = useState(0);
   const [totalEventsCount, setTotalEventsCount] = useState(0); // Total unfiltered events
 
+  // PPV.to state
+  const [ppvCategories, setPpvCategories] = useState<PPVCategory[]>([]);
+  const [allPpvCategories, setAllPpvCategories] = useState<PPVCategory[]>([]); // Unfiltered for sidebar
+  const [selectedPpvCategory, setSelectedPpvCategory] = useState('all');
+  const [ppvLiveOnly, setPpvLiveOnly] = useState(false);
+  const [ppvSearchQuery, setPpvSearchQuery] = useState('');
+  const [ppvLoading, setPpvLoading] = useState(true);
+  const [ppvError, setPpvError] = useState<string | null>(null);
+  const [ppvStats, setPpvStats] = useState({ totalStreams: 0, liveStreams: 0 });
+
   useEffect(() => { trackPageView('/livetv'); }, [trackPageView]);
 
   // Fetch Live Events (DLHD schedule) - only on initial load or view mode change
@@ -236,6 +338,59 @@ export default function LiveTVClient() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewMode]);
+
+  // Fetch PPV streams when PPV tab is selected
+  useEffect(() => {
+    if (viewMode === 'ppv') {
+      fetchPpvStreams();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode]);
+
+  // Apply PPV filters client-side
+  useEffect(() => {
+    if (allPpvCategories.length === 0) return;
+    
+    let filtered = [...allPpvCategories];
+    
+    // Filter by category
+    if (selectedPpvCategory !== 'all') {
+      filtered = filtered.filter(
+        cat => cat.name.toLowerCase() === selectedPpvCategory.toLowerCase()
+      );
+    }
+    
+    // Filter by live only
+    if (ppvLiveOnly) {
+      filtered = filtered
+        .map(cat => ({
+          ...cat,
+          streams: cat.streams.filter(s => s.isLive),
+          streamCount: cat.streams.filter(s => s.isLive).length,
+        }))
+        .filter(cat => cat.streamCount > 0);
+    }
+    
+    // Filter by search
+    if (ppvSearchQuery) {
+      const searchLower = ppvSearchQuery.toLowerCase();
+      filtered = filtered
+        .map(cat => ({
+          ...cat,
+          streams: cat.streams.filter(s => 
+            s.name.toLowerCase().includes(searchLower) ||
+            s.tag.toLowerCase().includes(searchLower)
+          ),
+          streamCount: cat.streams.filter(s => 
+            s.name.toLowerCase().includes(searchLower) ||
+            s.tag.toLowerCase().includes(searchLower)
+          ).length,
+        }))
+        .filter(cat => cat.streamCount > 0);
+    }
+    
+    setPpvCategories(filtered);
+  }, [selectedPpvCategory, ppvLiveOnly, ppvSearchQuery, allPpvCategories]);
   
   // Apply filters client-side when sport or liveOnly changes
   useEffect(() => {
@@ -349,6 +504,65 @@ export default function LiveTVClient() {
     }
   };
 
+  // Fetch PPV.to streams
+  const fetchPpvStreams = async () => {
+    try {
+      setPpvLoading(true);
+      setPpvError(null);
+      
+      const response = await fetch('/api/livetv/ppv-streams');
+      const data = await response.json();
+      
+      if (data.success) {
+        setAllPpvCategories(data.categories);
+        setPpvCategories(data.categories);
+        setPpvStats({
+          totalStreams: data.stats.totalStreams,
+          liveStreams: data.stats.liveStreams,
+        });
+      } else {
+        setPpvError('Failed to load PPV streams');
+      }
+    } catch {
+      setPpvError('Failed to load PPV streams');
+    } finally {
+      setPpvLoading(false);
+    }
+  };
+
+  // Handle PPV stream selection
+  const handlePpvStreamSelect = useCallback((stream: PPVStream, categoryName: string) => {
+    const channel: Channel = {
+      id: `ppv-${stream.id}`,
+      name: stream.name,
+      category: categoryName,
+      country: 'international',
+      streamId: String(stream.id),
+      firstLetter: stream.name.charAt(0),
+      isHD: true,
+      categoryInfo: { name: stream.tag || categoryName, icon: '🎬' },
+      countryInfo: { name: 'PPV.to', flag: '🌐' },
+      source: 'ppv',
+      ppvUriName: stream.uriName,
+      ppvPoster: stream.poster,
+    };
+    
+    setSelectedChannel(channel);
+    trackLiveTVEvent({
+      action: 'channel_select',
+      channelId: String(stream.id),
+      channelName: stream.name,
+      category: categoryName,
+    });
+    trackEvent('livetv_ppv_stream_selected', { 
+      streamId: stream.id, 
+      streamName: stream.name,
+      category: categoryName,
+      isLive: stream.isLive,
+      source: 'ppv',
+    });
+  }, [trackLiveTVEvent, trackEvent]);
+
   // Handle DLHD event channel selection - routes through RPI proxy
   const handleEventChannelSelect = useCallback((channelId: string, channelName: string, eventTitle: string) => {
     if (!channelId) return;
@@ -454,7 +668,11 @@ export default function LiveTVClient() {
         <aside className={styles.sidebar}>
           <div className={styles.sidebarHeader}>
             <h2>Live TV</h2>
-            {viewMode === 'events' ? (
+            {viewMode === 'ppv' ? (
+              <span className={styles.liveCount}>
+                <span className={styles.liveDot} /> {ppvStats.liveStreams} Live
+              </span>
+            ) : viewMode === 'events' ? (
               <span className={styles.liveCount}>
                 <span className={styles.liveDot} /> {liveEventsCount} Live
               </span>
@@ -472,6 +690,12 @@ export default function LiveTVClient() {
               🔴 Live Events
             </button>
             <button
+              className={`${styles.modeBtn} ${viewMode === 'ppv' ? styles.active : ''}`}
+              onClick={() => setViewMode('ppv')}
+            >
+              🎬 PPV Sports
+            </button>
+            <button
               className={`${styles.modeBtn} ${viewMode === 'channels' ? styles.active : ''}`}
               onClick={() => setViewMode('channels')}
             >
@@ -479,7 +703,50 @@ export default function LiveTVClient() {
             </button>
           </div>
 
-          {viewMode === 'events' ? (
+          {viewMode === 'ppv' ? (
+            /* PPV.to Filters */
+            <div className={styles.filterList}>
+              <div className={styles.sidebarSearch}>
+                <input
+                  type="text"
+                  placeholder="Search PPV streams..."
+                  value={ppvSearchQuery}
+                  onChange={(e) => setPpvSearchQuery(e.target.value)}
+                  className={styles.searchInput}
+                />
+              </div>
+              <div className={styles.filterSection}>
+                <h3>Filter</h3>
+                <button
+                  className={`${styles.filterItem} ${styles.liveFilter} ${ppvLiveOnly ? styles.active : ''}`}
+                  onClick={() => setPpvLiveOnly(!ppvLiveOnly)}
+                >
+                  <span>🔴 Live Now Only</span>
+                  <span className={styles.filterCount}>{ppvStats.liveStreams}</span>
+                </button>
+              </div>
+              <div className={styles.filterSection}>
+                <h3>Categories</h3>
+                <button
+                  className={`${styles.filterItem} ${selectedPpvCategory === 'all' ? styles.active : ''}`}
+                  onClick={() => setSelectedPpvCategory('all')}
+                >
+                  <span>📺 All Categories</span>
+                  <span className={styles.filterCount}>{ppvStats.totalStreams}</span>
+                </button>
+                {allPpvCategories.map((cat) => (
+                  <button
+                    key={cat.name}
+                    className={`${styles.filterItem} ${selectedPpvCategory === cat.name.toLowerCase() ? styles.active : ''}`}
+                    onClick={() => setSelectedPpvCategory(cat.name.toLowerCase())}
+                  >
+                    <span>{cat.icon} {cat.name}</span>
+                    <span className={styles.filterCount}>{cat.streamCount}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : viewMode === 'events' ? (
             /* Live Events Filters */
             <div className={styles.filterList}>
               <div className={styles.filterSection}>
@@ -573,7 +840,40 @@ export default function LiveTVClient() {
 
         {/* Main Content */}
         <main className={styles.main}>
-          {viewMode === 'events' ? (
+          {viewMode === 'ppv' ? (
+            /* PPV.to Streams Grid */
+            ppvLoading ? (
+              <div className={styles.loading}>
+                <div className={styles.spinner} />
+                <p>Loading PPV streams...</p>
+              </div>
+            ) : ppvError ? (
+              <div className={styles.error}>
+                <p>{ppvError}</p>
+                <button onClick={fetchPpvStreams} className={styles.retryBtn}>
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <div className={styles.eventsGrid}>
+                {ppvCategories.length === 0 ? (
+                  <div className={styles.noResults}>
+                    <p>No PPV streams found</p>
+                  </div>
+                ) : ppvCategories.flatMap((cat) =>
+                  cat.streams.map((stream) => (
+                    <PPVStreamCard
+                      key={stream.id}
+                      stream={stream}
+                      categoryName={cat.name}
+                      categoryIcon={cat.icon}
+                      onSelect={handlePpvStreamSelect}
+                    />
+                  ))
+                )}
+              </div>
+            )
+          ) : viewMode === 'events' ? (
             /* Live Events Grid */
             eventsLoading ? (
               <div className={styles.loading}>
@@ -719,7 +1019,10 @@ function LiveTVPlayer({
     // Different stream URL based on source
     let streamUrl: string;
     
-    if (channel.source === 'dlhd') {
+    if (channel.source === 'ppv') {
+      // PPV streams need to go through our API to extract the m3u8
+      streamUrl = `${window.location.origin}/api/livetv/ppv-stream?uri=${encodeURIComponent(channel.ppvUriName || '')}`;
+    } else if (channel.source === 'dlhd') {
       // Use CF Worker directly for DLHD streams
       const cfProxyUrl = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL;
       if (cfProxyUrl) {
@@ -848,7 +1151,9 @@ function LiveTVPlayer({
 
     try {
       // Route based on source type
-      if (channel.source === 'dlhd') {
+      if (channel.source === 'ppv') {
+        await loadPPVStream();
+      } else if (channel.source === 'dlhd') {
         await loadDLHDStream();
       } else {
         await loadXfinityStream(isRetry);
@@ -856,6 +1161,147 @@ function LiveTVPlayer({
     } catch (err: any) {
       console.error('[LiveTV] Stream load error:', err);
       setError(err.message || 'Failed to load stream');
+      setIsLoading(false);
+    }
+  };
+
+  // Load PPV.to stream using HLS.js
+  const loadPPVStream = async () => {
+    if (!videoRef.current || !channel.ppvUriName) {
+      setError('Missing PPV stream information');
+      setIsLoading(false);
+      return;
+    }
+    
+    console.log('[LiveTV] Loading PPV stream:', channel.ppvUriName);
+    
+    try {
+      // First, get the m3u8 URL from our API
+      const response = await fetch(`/api/livetv/ppv-stream?uri=${encodeURIComponent(channel.ppvUriName)}&id=${channel.streamId}&name=${encodeURIComponent(channel.name)}`);
+      const data = await response.json();
+      
+      if (!data.success || !data.streamUrl) {
+        setError(data.error || 'Failed to get PPV stream URL');
+        setIsLoading(false);
+        return;
+      }
+      
+      const m3u8Url = data.streamUrl;
+      console.log('[LiveTV] PPV m3u8 URL:', m3u8Url);
+      
+      const Hls = (await import('hls.js')).default;
+      
+      if (!Hls.isSupported()) {
+        // Fallback for Safari
+        if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
+          videoRef.current.src = m3u8Url;
+          videoRef.current.addEventListener('loadedmetadata', async () => {
+            setIsLoading(false);
+            if (videoRef.current) {
+              try {
+                await videoRef.current.play();
+              } catch (e) {
+                console.log('[LiveTV] Safari autoplay blocked, trying muted...');
+                try {
+                  videoRef.current.muted = true;
+                  setIsMuted(true);
+                  await videoRef.current.play();
+                } catch (e2) {
+                  console.log('[LiveTV] Safari muted autoplay also blocked');
+                }
+              }
+            }
+          });
+          return;
+        }
+        setError('HLS playback not supported in this browser');
+        setIsLoading(false);
+        return;
+      }
+
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        liveDurationInfinity: true,
+        fragLoadingTimeOut: 15000,
+        fragLoadingMaxRetry: 2,
+        levelLoadingTimeOut: 10000,
+        levelLoadingMaxRetry: 3,
+        manifestLoadingTimeOut: 10000,
+        manifestLoadingMaxRetry: 2,
+        startFragPrefetch: true,
+        xhrSetup: (xhr: XMLHttpRequest) => {
+          xhr.withCredentials = false;
+        },
+      });
+
+      hls.loadSource(m3u8Url);
+      hls.attachMedia(videoRef.current);
+      
+      hls.on(Hls.Events.MANIFEST_PARSED, async () => {
+        console.log('[LiveTV] PPV manifest parsed');
+        setIsLoading(false);
+        setError(null);
+        
+        if (videoRef.current) {
+          try {
+            await videoRef.current.play();
+            console.log('[LiveTV] PPV autoplay succeeded');
+          } catch (e) {
+            console.log('[LiveTV] PPV autoplay blocked, trying muted...');
+            try {
+              videoRef.current.muted = true;
+              setIsMuted(true);
+              await videoRef.current.play();
+              console.log('[LiveTV] PPV muted autoplay succeeded');
+            } catch (e2) {
+              console.log('[LiveTV] PPV muted autoplay also blocked');
+            }
+          }
+        }
+      });
+      
+      hls.on(Hls.Events.FRAG_LOADED, () => {
+        setError(null);
+        setBufferingStatus(null);
+      });
+      
+      hls.on(Hls.Events.ERROR, (_event: any, data: any) => {
+        console.log('[LiveTV] PPV HLS error:', data.details, data.fatal ? '(fatal)' : '');
+        
+        if (!data.fatal) {
+          return;
+        }
+        
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          console.log('[LiveTV] PPV media error, recovering...');
+          hls.recoverMediaError();
+          return;
+        }
+        
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          console.log('[LiveTV] PPV network error, restarting...');
+          hls.startLoad();
+          return;
+        }
+        
+        console.log('[LiveTV] PPV fatal error, reloading stream...');
+        setBufferingStatus('Reconnecting...');
+        setTimeout(() => {
+          hls.destroy();
+          loadPPVStream();
+        }, 2000);
+      });
+
+      hlsRef.current = hls;
+    } catch (err: any) {
+      console.error('[LiveTV] PPV stream error:', err);
+      setError(err.message || 'Failed to load PPV stream');
       setIsLoading(false);
     }
   };
