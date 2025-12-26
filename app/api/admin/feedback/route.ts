@@ -28,13 +28,12 @@ export async function GET(request: NextRequest) {
       return unauthorizedResponse(authResult.error || 'Authentication required');
     }
 
-  const { searchParams } = new URL(request.url);
-  const status = searchParams.get('status') || 'all';
-  const type = searchParams.get('type') || 'all';
-  const limit = parseInt(searchParams.get('limit') || '50');
-  const offset = parseInt(searchParams.get('offset') || '0');
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status') || 'all';
+    const type = searchParams.get('type') || 'all';
+    const limit = parseInt(searchParams.get('limit') || '50');
+    const offset = parseInt(searchParams.get('offset') || '0');
 
-  try {
     // Build query conditions
     let conditions = [];
     if (status !== 'all') {
