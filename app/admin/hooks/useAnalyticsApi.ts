@@ -17,7 +17,8 @@ type AdminEndpoint =
   | 'unified-stats'
   | 'admin-analytics'
   | 'activity-history'
-  | 'stats';
+  | 'stats'
+  | 'system-health';
 
 /**
  * Get the URL for an admin analytics endpoint

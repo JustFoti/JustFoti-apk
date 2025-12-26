@@ -5,8 +5,8 @@
  * Provides security context and authentication state management
  */
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { AdminUser, ClientAuthUtils, FunctionalityCategory, PermissionLevel, PermissionCheck } from '../types/auth';
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { AdminUser, ClientAuthUtils, FunctionalityCategory, PermissionLevel } from '../types/auth';
 
 interface SecurityContextType {
   user: AdminUser | null;

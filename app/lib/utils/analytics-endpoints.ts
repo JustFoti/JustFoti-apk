@@ -39,7 +39,7 @@ function getCfAnalyticsUrl(): string | null {
  * @param endpoint - The endpoint name (presence, pageview, event, watch-session, live-activity, page-view, stats)
  * @returns The full URL to use for the analytics request
  */
-export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-view' | 'event' | 'watch-session' | 'live-activity' | 'livetv-session' | 'stats' | 'traffic-sources' | 'presence-stats' | 'users' | 'user-engagement' | 'unified-stats' | 'admin-analytics' | 'activity-history'): string {
+export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-view' | 'event' | 'watch-session' | 'live-activity' | 'livetv-session' | 'stats' | 'traffic-sources' | 'presence-stats' | 'users' | 'user-engagement' | 'unified-stats' | 'admin-analytics' | 'activity-history' | 'system-health'): string {
   const dedicatedWorkerUrl = getCfAnalyticsDedicatedWorkerUrl();
   const cfUrl = getCfAnalyticsUrl();
   
@@ -62,6 +62,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'unified-stats': '/unified-stats',
       'admin-analytics': '/stats',
       'activity-history': '/activity-history',
+      'system-health': '/system-health',
     };
     return `${dedicatedWorkerUrl}${workerEndpoints[endpoint] || `/${endpoint}`}`;
   }
@@ -86,6 +87,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
       'unified-stats': '/unified-stats',
       'admin-analytics': '/stats',
       'activity-history': '/activity-history',
+      'system-health': '/system-health',
     };
     return `${cfUrl}${cfEndpoints[endpoint] || `/${endpoint}`}`;
   }
@@ -107,6 +109,7 @@ export function getAnalyticsEndpoint(endpoint: 'presence' | 'pageview' | 'page-v
     'unified-stats': '/api/admin/unified-stats',
     'admin-analytics': '/api/admin/analytics',
     'activity-history': '/api/admin/analytics/activity-history',
+    'system-health': '/api/admin/system-health',
   };
   return vercelEndpoints[endpoint] || `/api/analytics/${endpoint}`;
 }
