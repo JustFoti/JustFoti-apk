@@ -29,7 +29,6 @@ import type mpegts from 'mpegts.js';
 // Proxy URLs for IPTV streams
 const RPI_PROXY_URL = process.env.NEXT_PUBLIC_RPI_PROXY_URL;
 const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
-const _RPI_PROXY_KEY = process.env.NEXT_PUBLIC_RPI_PROXY_KEY;
 
 // Tab types
 type DebugTab = 'cdn-live' | 'ppv' | 'stalker';
@@ -666,44 +665,6 @@ export default function IPTVDebugPage() {
       setLoading(false);
     }
   }, [portalUrl, macAddress, loadAllChannels, selectedCategory]);
-
-  const getStream = useCallback(async (channel: Channel) => {
-    if (!testResult?.token) return;
-    
-    setLoadingStream(true);
-    setSelectedChannel(channel);
-    setStreamUrl(null);
-    setRawStreamUrl(null);
-    setStreamDebug(null);
-    
-    try {
-      const response = await fetch('/api/admin/iptv-debug', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'stream', 
-          portalUrl, 
-          macAddress, 
-          token: testResult.token,
-          cmd: channel.cmd
-        })
-      });
-      
-      const data = await response.json();
-      setStreamDebug({ ...data, channelCmd: channel.cmd, channelName: channel.name });
-      
-      if (data.success && data.streamUrl) {
-        const url = data.streamUrl;
-        setRawStreamUrl(url);
-        const proxiedUrl = `/api/admin/iptv-debug/stream?url=${encodeURIComponent(url)}&mac=${encodeURIComponent(macAddress)}&token=${encodeURIComponent(testResult.token)}`;
-        setStreamUrl(proxiedUrl);
-      }
-    } catch (error) {
-      setStreamDebug({ error: String(error) });
-    } finally {
-      setLoadingStream(false);
-    }
-  }, [testResult?.token, portalUrl, macAddress]);
 
   const getStreamViaCF = useCallback(async (channel: Channel) => {
     if (!portalUrl || !macAddress) return;
