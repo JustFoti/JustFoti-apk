@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSecurity } from './SecurityProvider';
 import {
     LayoutDashboard,
     Users,
@@ -25,6 +26,19 @@ import {
 
 export default function AdminSidebar() {
     const pathname = usePathname();
+    const { logout } = useSecurity();
+
+    const handleSignOut = async () => {
+        try {
+            await logout();
+            // Redirect to login page
+            window.location.href = '/admin';
+        } catch (error) {
+            console.error('Sign out error:', error);
+            // Force redirect even if logout fails
+            window.location.href = '/admin';
+        }
+    };
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard' },
@@ -139,6 +153,7 @@ export default function AdminSidebar() {
             </nav>
 
             <button 
+                onClick={handleSignOut}
                 style={{
                     display: 'flex',
                     alignItems: 'center',

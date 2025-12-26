@@ -19,6 +19,7 @@ interface SecurityContextType {
     reason?: string;
   };
   refreshAuth: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const SecurityContext = createContext<SecurityContextType | undefined>(undefined);
@@ -85,6 +86,17 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
     return ClientAuthUtils.checkPermissions(user, category, level);
   };
 
+  const logout = async () => {
+    try {
+      await fetch('/api/admin/auth', { method: 'DELETE' });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      setUser(null);
+      setError(null);
+    }
+  };
+
   const contextValue: SecurityContextType = {
     user,
     loading,
@@ -92,7 +104,8 @@ export function SecurityProvider({ children }: SecurityProviderProps) {
     isAuthenticated: !!user,
     hasPermission,
     checkAccess,
-    refreshAuth: checkAuth
+    refreshAuth: checkAuth,
+    logout
   };
 
   return (
