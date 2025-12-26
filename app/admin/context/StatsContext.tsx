@@ -56,6 +56,9 @@ interface UnifiedStats {
   liveBrowsing: number;       // Users browsing (not watching)
   liveTVViewers: number;      // Users watching Live TV
   
+  // Real-time geographic distribution (current active users by location)
+  realtimeGeographic: Array<{ country: string; countryName: string; count: number }>;
+  
   // Peak stats (persisted in DB, updated server-side)
   peakStats: PeakStats | null;
   
@@ -90,6 +93,9 @@ interface UnifiedStats {
   // Geographic - unique users per country (last 7 days)
   topCountries: Array<{ country: string; countryName: string; count: number }>;
   
+  // Cities - unique users per city (last 7 days)
+  topCities: Array<{ city: string; country: string; countryName: string; count: number }>;
+  
   // Devices - unique users per device (last 7 days)
   deviceBreakdown: Array<{ device: string; count: number }>;
   
@@ -123,6 +129,9 @@ interface StatsContextType {
   // Bot filtering options
   botFilterOptions: BotFilterOptions;
   setBotFilterOptions: (options: BotFilterOptions) => void;
+  // Time range selection
+  timeRange: string;
+  setTimeRange: (range: string) => void;
 }
 
 const defaultStats: UnifiedStats = {
@@ -131,6 +140,7 @@ const defaultStats: UnifiedStats = {
   liveWatching: 0,
   liveBrowsing: 0,
   liveTVViewers: 0,
+  realtimeGeographic: [],
   peakStats: null,
   totalUsers: 0,
   activeToday: 0,
@@ -153,6 +163,7 @@ const defaultStats: UnifiedStats = {
   pageViews: 0,
   uniqueVisitors: 0,
   topCountries: [],
+  topCities: [],
   deviceBreakdown: [],
   botDetection: {
     totalDetections: 0,
@@ -191,18 +202,64 @@ const StatsContext = createContext<StatsContextType>({
   lastRefresh: null,
   botFilterOptions: defaultBotFilterOptions,
   setBotFilterOptions: () => {},
+  timeRange: '24h',
+  setTimeRange: () => {},
 });
 
 export function useStats() {
   return useContext(StatsContext);
 }
 
+// Helper to load bot filter options from localStorage
+const loadBotFilterOptions = (): BotFilterOptions => {
+  if (typeof window === 'undefined') return defaultBotFilterOptions;
+  try {
+    const stored = localStorage.getItem('admin_bot_filter_options');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return {
+        includeBots: typeof parsed.includeBots === 'boolean' ? parsed.includeBots : defaultBotFilterOptions.includeBots,
+        confidenceThreshold: typeof parsed.confidenceThreshold === 'number' ? parsed.confidenceThreshold : defaultBotFilterOptions.confidenceThreshold,
+        showBotMetrics: typeof parsed.showBotMetrics === 'boolean' ? parsed.showBotMetrics : defaultBotFilterOptions.showBotMetrics,
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load bot filter options from localStorage:', e);
+  }
+  return defaultBotFilterOptions;
+};
+
+// Helper to save bot filter options to localStorage
+const saveBotFilterOptions = (options: BotFilterOptions) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('admin_bot_filter_options', JSON.stringify(options));
+  } catch (e) {
+    console.error('Failed to save bot filter options to localStorage:', e);
+  }
+};
+
 export function StatsProvider({ children }: { children: ReactNode }) {
   const [stats, setStats] = useState<UnifiedStats>(defaultStats);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [botFilterOptions, setBotFilterOptions] = useState<BotFilterOptions>(defaultBotFilterOptions);
+  const [botFilterOptions, setBotFilterOptionsState] = useState<BotFilterOptions>(defaultBotFilterOptions);
+  const [timeRange, setTimeRange] = useState<string>('24h');
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Load bot filter options from localStorage on mount
+  useEffect(() => {
+    const savedOptions = loadBotFilterOptions();
+    setBotFilterOptionsState(savedOptions);
+    setIsInitialized(true);
+  }, []);
+
+  // Wrapper to persist bot filter options when they change
+  const setBotFilterOptions = useCallback((options: BotFilterOptions) => {
+    setBotFilterOptionsState(options);
+    saveBotFilterOptions(options);
+  }, []);
 
   const fetchAllStats = useCallback(async (isInitial = false) => {
     // Only show loading on initial fetch, not on refreshes
@@ -212,12 +269,14 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     setError(null);
     
     try {
-      // Build query parameters for bot filtering
+      // Build query parameters for bot filtering and time range
       const params = new URLSearchParams();
       if (!botFilterOptions.includeBots) {
         params.set('excludeBots', 'true');
         params.set('botThreshold', botFilterOptions.confidenceThreshold.toString());
       }
+      // Add time range parameter
+      params.set('timeRange', timeRange);
       
       // Fetch all data in parallel from a single unified endpoint
       const url = `${getAdminAnalyticsUrl('unified-stats')}${params.toString() ? '?' + params.toString() : ''}`;
@@ -238,6 +297,9 @@ export function StatsProvider({ children }: { children: ReactNode }) {
           liveWatching: data.realtime?.watching || 0,
           liveBrowsing: data.realtime?.browsing || 0,
           liveTVViewers: data.realtime?.livetv || 0,
+          
+          // Real-time geographic distribution
+          realtimeGeographic: data.realtimeGeographic || [],
           
           // Peak stats (from DB, updated server-side)
           peakStats: data.peakStats || null,
@@ -273,6 +335,9 @@ export function StatsProvider({ children }: { children: ReactNode }) {
           // Geographic (unique users per country, last 7 days)
           topCountries: data.geographic || [],
           
+          // Cities (unique users per city, last 7 days)
+          topCities: data.cities || [],
+          
           // Devices (unique users per device, last 7 days)
           deviceBreakdown: data.devices || [],
           
@@ -307,7 +372,7 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [botFilterOptions]);
+  }, [botFilterOptions, timeRange]);
 
   // Initial fetch
   useEffect(() => {
@@ -322,12 +387,12 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(interval);
   }, [fetchAllStats]);
 
-  // Refetch when bot filter options change
+  // Refetch when bot filter options change (only after initialization)
   useEffect(() => {
-    if (lastRefresh) { // Only refetch if we've already loaded data initially
+    if (isInitialized && lastRefresh) { // Only refetch if we've already loaded data initially
       fetchAllStats(false);
     }
-  }, [botFilterOptions, fetchAllStats, lastRefresh]);
+  }, [botFilterOptions, timeRange, fetchAllStats, lastRefresh, isInitialized]);
 
   return (
     <StatsContext.Provider value={{ 
@@ -338,6 +403,8 @@ export function StatsProvider({ children }: { children: ReactNode }) {
       lastRefresh,
       botFilterOptions,
       setBotFilterOptions,
+      timeRange,
+      setTimeRange,
     }}>
       {children}
     </StatsContext.Provider>

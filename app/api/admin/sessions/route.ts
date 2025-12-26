@@ -1,8 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server';
+/**
+ * Admin Sessions API
+ * GET /api/admin/sessions - Get watch sessions with pagination
+ * 
+ * Implements standardized response format per Requirements 16.2, 16.3, 16.4, 16.5
+ */
+
+import { NextRequest } from 'next/server';
 import { initializeDB } from '@/app/lib/db/neon-connection';
+import { verifyAdminAuth } from '@/lib/utils/admin-auth';
+import {
+  successResponse,
+  unauthorizedResponse,
+  internalErrorResponse,
+} from '@/app/lib/utils/api-response';
 
 export async function GET(req: NextRequest) {
     try {
+        // Verify admin authentication - Requirements 16.3
+        const authResult = await verifyAdminAuth(req);
+        if (!authResult.success) {
+            return unauthorizedResponse(authResult.error || 'Authentication required');
+        }
+
         const searchParams = req.nextUrl.searchParams;
         const page = parseInt(searchParams.get('page') || '1');
         const limit = parseInt(searchParams.get('limit') || '20');
@@ -46,21 +65,20 @@ export async function GET(req: NextRequest) {
             total = parseInt((countResult as any).rows[0].total || (countResult as any).rows[0].count || '0');
         }
 
-        return NextResponse.json({
-            data: sessions,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages: Math.ceil(total / limit)
+        return successResponse(
+            { sessions },
+            {
+                pagination: {
+                    page,
+                    pageSize: limit,
+                    total,
+                    hasMore: page * limit < total,
+                }
             }
-        });
+        );
 
     } catch (error) {
         console.error('Failed to fetch sessions:', error);
-        return NextResponse.json(
-            { error: 'Failed to fetch sessions' },
-            { status: 500 }
-        );
+        return internalErrorResponse('Failed to fetch sessions', error instanceof Error ? error : undefined);
     }
 }

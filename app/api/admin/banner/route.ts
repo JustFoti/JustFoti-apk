@@ -1,5 +1,20 @@
-import { NextRequest, NextResponse } from 'next/server';
+/**
+ * Admin Banner API
+ * GET /api/admin/banner - Fetch current banner (public for display, admin for editing)
+ * POST /api/admin/banner - Update banner (admin only)
+ * DELETE /api/admin/banner - Disable banner (admin only)
+ * 
+ * Implements standardized response format per Requirements 16.2, 16.3, 16.4, 16.5
+ */
+
+import { NextRequest } from 'next/server';
 import { neon } from '@neondatabase/serverless';
+import { verifyAdminAuth } from '@/lib/utils/admin-auth';
+import {
+  successResponse,
+  unauthorizedResponse,
+  internalErrorResponse,
+} from '@/app/lib/utils/api-response';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -16,9 +31,13 @@ export interface BannerConfig {
   updatedAt: string;
 }
 
-// GET - Fetch current banner
-export async function GET() {
+// GET - Fetch current banner (public endpoint for display)
+export async function GET(request: NextRequest) {
   try {
+    // Check if this is an admin request (should return banner even if disabled)
+    const url = new URL(request.url);
+    const isAdminRequest = url.searchParams.get('admin') === 'true';
+    
     // Try to get banner from database
     const result = await sql`
       SELECT * FROM site_settings WHERE key = 'banner' LIMIT 1
@@ -27,24 +46,29 @@ export async function GET() {
     if (result.length > 0 && result[0].value) {
       const banner = JSON.parse(result[0].value) as BannerConfig;
       
+      // For admin requests, always return the banner for editing
+      if (isAdminRequest) {
+        return successResponse({ banner });
+      }
+      
       // Check if banner has expired
       if (banner.expiresAt && new Date(banner.expiresAt) < new Date()) {
-        return NextResponse.json({ banner: null });
+        return successResponse({ banner: null });
       }
       
       // Only return if enabled
       if (!banner.enabled) {
-        return NextResponse.json({ banner: null });
+        return successResponse({ banner: null });
       }
       
-      return NextResponse.json({ banner });
+      return successResponse({ banner });
     }
     
-    return NextResponse.json({ banner: null });
+    return successResponse({ banner: null });
   } catch (error) {
     console.error('[Banner API] Error fetching banner:', error);
     // Return null banner on error (don't break the site)
-    return NextResponse.json({ banner: null });
+    return successResponse({ banner: null });
   }
 }
 
@@ -58,18 +82,10 @@ function generateBannerId(): string {
 // POST - Update banner (admin only)
 export async function POST(request: NextRequest) {
   try {
-    // Check admin auth
-    const authHeader = request.headers.get('authorization');
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    
-    if (!adminPassword || authHeader !== `Bearer ${adminPassword}`) {
-      // Also check cookie-based auth
-      const cookies = request.cookies;
-      const adminAuth = cookies.get('admin_auth')?.value;
-      
-      if (adminAuth !== adminPassword) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
     }
     
     const body = await request.json();
@@ -108,30 +124,20 @@ export async function POST(request: NextRequest) {
         updated_at = NOW()
     `;
     
-    return NextResponse.json({ success: true, banner });
+    return successResponse({ banner }, { message: 'Banner updated successfully' });
   } catch (error) {
     console.error('[Banner API] Error updating banner:', error);
-    return NextResponse.json(
-      { error: 'Failed to update banner' },
-      { status: 500 }
-    );
+    return internalErrorResponse('Failed to update banner', error instanceof Error ? error : undefined);
   }
 }
 
 // DELETE - Disable/remove banner (admin only)
 export async function DELETE(request: NextRequest) {
   try {
-    // Check admin auth
-    const authHeader = request.headers.get('authorization');
-    const adminPassword = process.env.ADMIN_PASSWORD;
-    
-    if (!adminPassword || authHeader !== `Bearer ${adminPassword}`) {
-      const cookies = request.cookies;
-      const adminAuth = cookies.get('admin_auth')?.value;
-      
-      if (adminAuth !== adminPassword) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
     }
     
     // Set banner to disabled
@@ -142,12 +148,9 @@ export async function DELETE(request: NextRequest) {
       WHERE key = 'banner'
     `;
     
-    return NextResponse.json({ success: true });
+    return successResponse(null, { message: 'Banner disabled successfully' });
   } catch (error) {
     console.error('[Banner API] Error deleting banner:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete banner' },
-      { status: 500 }
-    );
+    return internalErrorResponse('Failed to delete banner', error instanceof Error ? error : undefined);
   }
 }

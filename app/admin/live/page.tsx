@@ -1,10 +1,52 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import LiveActivityTracker from '../components/LiveActivityTracker';
 import ImprovedLiveDashboard from '../components/ImprovedLiveDashboard';
 import { useStats } from '../context/StatsContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
+
+// Hook for animated number transitions
+function useAnimatedNumber(value: number, duration: number = 500): number {
+  const [displayValue, setDisplayValue] = useState(value);
+  const previousValue = useRef(value);
+  const animationRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (previousValue.current === value) return;
+    
+    const startValue = previousValue.current;
+    const endValue = value;
+    const startTime = performance.now();
+    
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out cubic for smooth deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const currentValue = Math.round(startValue + (endValue - startValue) * easeOut);
+      
+      setDisplayValue(currentValue);
+      
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        previousValue.current = value;
+      }
+    };
+    
+    animationRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [value, duration]);
+
+  return displayValue;
+}
 
 // Helper function to get country name from ISO code
 function getCountryNameFromCode(code: string): string {
@@ -158,6 +200,27 @@ export default function AdminLivePage() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', position: 'relative', zIndex: 20 }}>
+            <button
+              onClick={() => {
+                fetchStats();
+                fetchActivityHistory();
+              }}
+              style={{
+                padding: '8px 12px',
+                background: 'rgba(120, 119, 198, 0.2)',
+                border: '1px solid rgba(120, 119, 198, 0.3)',
+                borderRadius: '8px',
+                color: '#7877c6',
+                fontSize: '14px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+              title="Refresh data now"
+            >
+              🔄 Refresh
+            </button>
             <select value={refreshRate} onChange={(e) => setRefreshRate(parseInt(e.target.value))} style={{ padding: '8px 12px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#f8fafc', fontSize: '14px' }}>
               <option value={5}>5s refresh</option>
               <option value={10}>10s refresh</option>
@@ -362,13 +425,43 @@ export default function AdminLivePage() {
 }
 
 function StatCard({ title, value, icon, color, pulse = false }: { title: string; value: string | number; icon: string; color: string; pulse?: boolean }) {
+  const numericValue = typeof value === 'number' ? value : parseInt(value) || 0;
+  const animatedValue = useAnimatedNumber(numericValue);
+  const [flash, setFlash] = useState(false);
+  const prevValue = useRef(numericValue);
+
+  // Flash effect when value changes
+  useEffect(() => {
+    if (prevValue.current !== numericValue) {
+      setFlash(true);
+      const timer = setTimeout(() => setFlash(false), 300);
+      prevValue.current = numericValue;
+      return () => clearTimeout(timer);
+    }
+  }, [numericValue]);
+
   return (
-    <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '16px', borderTop: `3px solid ${color}` }}>
+    <div style={{ 
+      background: flash ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255, 255, 255, 0.03)', 
+      border: '1px solid rgba(255, 255, 255, 0.1)', 
+      borderRadius: '12px', 
+      padding: '16px', 
+      borderTop: `3px solid ${color}`,
+      transition: 'background 0.3s ease',
+    }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
         <span style={{ fontSize: '20px', position: 'relative' }}>{icon}{pulse && <span style={{ position: 'absolute', top: '-2px', right: '-2px', width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', animation: 'pulse 2s infinite' }} />}</span>
         <span style={{ color: '#94a3b8', fontSize: '13px' }}>{title}</span>
       </div>
-      <div style={{ fontSize: '24px', fontWeight: '700', color: '#f8fafc' }}>{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      <div style={{ 
+        fontSize: '24px', 
+        fontWeight: '700', 
+        color: '#f8fafc',
+        transition: 'transform 0.2s ease',
+        transform: flash ? 'scale(1.05)' : 'scale(1)',
+      }}>
+        {typeof value === 'number' ? animatedValue.toLocaleString() : value}
+      </div>
     </div>
   );
 }

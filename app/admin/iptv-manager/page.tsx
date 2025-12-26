@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { 
   Database, 
   Plus, 
@@ -12,8 +12,23 @@ import {
   Loader2,
   Zap,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  RefreshCw,
+  Activity,
+  Tv,
+  Radio,
+  Signal,
+  SignalHigh,
+  SignalLow,
+  SignalZero,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+
+// ============ INTERFACES ============
 
 interface IPTVAccount {
   id: string;
@@ -49,15 +64,53 @@ interface OurChannel {
   id: string;
   name: string;
   category: string;
+  country: string;
+  streamId: string;
+  firstLetter: string;
+  isHD: boolean;
+  categoryInfo: { name: string; icon: string };
+  countryInfo: { name: string; flag: string };
 }
 
+interface ChannelWithStatus extends OurChannel {
+  status: 'online' | 'offline' | 'unknown';
+  isEnabled: boolean;
+  mappingCount: number;
+  successRate: number;
+  lastChecked?: number;
+  healthScore: number;
+}
+
+interface ChannelFilters {
+  categories: { id: string; name: string; icon: string; count: number }[];
+  countries: { id: string; name: string; flag: string; count: number }[];
+  letters: string[];
+}
+
+// ============ MAIN COMPONENT ============
 
 export default function IPTVManagerPage() {
-  const [activeTab, setActiveTab] = useState<'accounts' | 'mappings'>('accounts');
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'channels' | 'accounts' | 'mappings'>('channels');
+  
+  // Channel state
+  const [channels, setChannels] = useState<ChannelWithStatus[]>([]);
+  const [channelFilters, setChannelFilters] = useState<ChannelFilters>({ categories: [], countries: [], letters: [] });
+  const [channelSearch, setChannelSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedCountry, setSelectedCountry] = useState<string>('all');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false);
+  const [channelStatusFilter, setChannelStatusFilter] = useState<'all' | 'online' | 'offline' | 'enabled' | 'disabled'>('all');
+  
+  // Account state
   const [accounts, setAccounts] = useState<IPTVAccount[]>([]);
   const [mappings, setMappings] = useState<ChannelMapping[]>([]);
-  const [ourChannels, setOurChannels] = useState<OurChannel[]>([]);
+  
+  // Loading states
   const [loading, setLoading] = useState(true);
+  const [refreshingChannels, setRefreshingChannels] = useState(false);
+  const [checkingHealth, setCheckingHealth] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Account form state
@@ -69,7 +122,7 @@ export default function IPTVManagerPage() {
   const [selectedAccount, setSelectedAccount] = useState<IPTVAccount | null>(null);
   const [stalkerChannels, setStalkerChannels] = useState<any[]>([]);
   const [loadingStalkerChannels, _setLoadingStalkerChannels] = useState(false);
-  const [channelSearch, setChannelSearch] = useState('');
+  const [stalkerChannelSearch, setStalkerChannelSearch] = useState('');
   const [ourChannelSearch, setOurChannelSearch] = useState('');
   const [selectedOurChannel, setSelectedOurChannel] = useState<OurChannel | null>(null);
   const [selectedStalkerChannel, setSelectedStalkerChannel] = useState<any | null>(null);
@@ -92,7 +145,318 @@ export default function IPTVManagerPage() {
     channelsTested?: number;
   }[]>([]);
 
-  // Auto-map ALL channels for ALL accounts - one account at a time with DB updates
+  // Channel health check state
+  const [healthCheckProgress, setHealthCheckProgress] = useState<string | null>(null);
+
+  // ============ DATA FETCHING ============
+
+  // Fetch channels with status
+  const fetchChannels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/livetv/channels?limit=1000');
+      const data = await res.json();
+      
+      if (data.success) {
+        // Get mappings to determine channel status
+        const mappingsRes = await fetch('/api/admin/channel-mappings');
+        const mappingsData = await mappingsRes.json();
+        const channelMappings = mappingsData.success ? mappingsData.mappings : [];
+        
+        // Create a map of channel ID to mapping info
+        const mappingsByChannel = new Map<string, ChannelMapping[]>();
+        channelMappings.forEach((m: ChannelMapping) => {
+          const existing = mappingsByChannel.get(m.our_channel_id) || [];
+          existing.push(m);
+          mappingsByChannel.set(m.our_channel_id, existing);
+        });
+        
+        // Enhance channels with status info
+        const enhancedChannels: ChannelWithStatus[] = data.channels.map((ch: OurChannel) => {
+          const chMappings = mappingsByChannel.get(ch.streamId) || [];
+          const totalSuccess = chMappings.reduce((sum, m) => sum + (m.success_count || 0), 0);
+          const totalFailure = chMappings.reduce((sum, m) => sum + (m.failure_count || 0), 0);
+          const totalAttempts = totalSuccess + totalFailure;
+          const successRate = totalAttempts > 0 ? (totalSuccess / totalAttempts) * 100 : 0;
+          const hasActiveMappings = chMappings.some(m => m.is_active);
+          
+          // Determine status based on mappings and success rate
+          let status: 'online' | 'offline' | 'unknown' = 'unknown';
+          if (chMappings.length > 0) {
+            if (successRate >= 50) {
+              status = 'online';
+            } else if (totalAttempts > 0) {
+              status = 'offline';
+            }
+          }
+          
+          // Calculate health score (0-100)
+          let healthScore = 0;
+          if (chMappings.length > 0) {
+            healthScore = Math.min(100, Math.round(
+              (successRate * 0.6) + 
+              (Math.min(chMappings.length, 5) * 8) // More mappings = better redundancy
+            ));
+          }
+          
+          return {
+            ...ch,
+            status,
+            isEnabled: hasActiveMappings,
+            mappingCount: chMappings.length,
+            successRate,
+            healthScore,
+            lastChecked: chMappings.length > 0 ? Date.now() : undefined
+          };
+        });
+        
+        setChannels(enhancedChannels);
+        setChannelFilters(data.filters);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, []);
+
+  // Fetch accounts
+  const fetchAccounts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/iptv-accounts');
+      const data = await res.json();
+      if (data.success) {
+        setAccounts(data.accounts);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, []);
+
+  // Fetch mappings
+  const fetchMappings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/channel-mappings');
+      const data = await res.json();
+      if (data.success) {
+        setMappings(data.mappings);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, []);
+
+  // Initial data load
+  useEffect(() => {
+    Promise.all([fetchChannels(), fetchAccounts(), fetchMappings()])
+      .finally(() => setLoading(false));
+  }, [fetchChannels, fetchAccounts, fetchMappings]);
+
+  // ============ CHANNEL ACTIONS ============
+
+  // Toggle channel enabled/disabled
+  const handleToggleChannel = async (channel: ChannelWithStatus) => {
+    try {
+      // Get all mappings for this channel
+      const channelMappings = mappings.filter(m => m.our_channel_id === channel.streamId);
+      
+      if (channelMappings.length === 0) {
+        alert('No mappings found for this channel. Add mappings first.');
+        return;
+      }
+      
+      const newStatus = !channel.isEnabled;
+      
+      // Update all mappings for this channel
+      for (const mapping of channelMappings) {
+        await fetch('/api/admin/channel-mappings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update',
+            id: mapping.id,
+            is_active: newStatus
+          })
+        });
+      }
+      
+      // Refresh data
+      await fetchChannels();
+      await fetchMappings();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // Refresh single channel status
+  const handleRefreshChannel = async (channel: ChannelWithStatus) => {
+    try {
+      setRefreshingChannels(true);
+      
+      // Get mappings for this channel
+      const channelMappings = mappings.filter(m => m.our_channel_id === channel.streamId);
+      
+      if (channelMappings.length === 0) {
+        alert('No mappings found for this channel.');
+        setRefreshingChannels(false);
+        return;
+      }
+      
+      // Test the first active mapping
+      const activeMapping = channelMappings.find(m => m.is_active) || channelMappings[0];
+      const account = accounts.find(a => a.id === activeMapping.stalker_account_id);
+      
+      if (!account) {
+        alert('Account not found for this mapping.');
+        setRefreshingChannels(false);
+        return;
+      }
+      
+      // Test the stream
+      const res = await fetch('/api/admin/iptv-debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'test-channel',
+          portalUrl: account.portal_url,
+          macAddress: account.mac_address,
+          channelCmd: activeMapping.stalker_channel_cmd
+        })
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        alert(`Channel "${channel.name}" is working!`);
+      } else {
+        alert(`Channel "${channel.name}" test failed: ${data.error || 'Unknown error'}`);
+      }
+      
+      await fetchChannels();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setRefreshingChannels(false);
+    }
+  };
+
+  // Bulk health check
+  const handleBulkHealthCheck = async () => {
+    setCheckingHealth(true);
+    setHealthCheckProgress('Starting health check...');
+    
+    try {
+      const channelsWithMappings = channels.filter(ch => ch.mappingCount > 0);
+      let checked = 0;
+      let online = 0;
+      let offline = 0;
+      
+      for (const channel of channelsWithMappings.slice(0, 20)) { // Limit to 20 for performance
+        setHealthCheckProgress(`Checking ${checked + 1}/${Math.min(channelsWithMappings.length, 20)}: ${channel.name}`);
+        
+        const channelMappings = mappings.filter(m => m.our_channel_id === channel.streamId);
+        const activeMapping = channelMappings.find(m => m.is_active) || channelMappings[0];
+        const account = accounts.find(a => a.id === activeMapping?.stalker_account_id);
+        
+        if (account && activeMapping) {
+          try {
+            const res = await fetch('/api/admin/iptv-debug', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'test-channel',
+                portalUrl: account.portal_url,
+                macAddress: account.mac_address,
+                channelCmd: activeMapping.stalker_channel_cmd
+              })
+            });
+            
+            const data = await res.json();
+            if (data.success) {
+              online++;
+            } else {
+              offline++;
+            }
+          } catch {
+            offline++;
+          }
+        }
+        
+        checked++;
+      }
+      
+      setHealthCheckProgress(null);
+      alert(`Health check complete!\n\n✓ Online: ${online}\n✗ Offline: ${offline}\n\nChecked ${checked} channels.`);
+      await fetchChannels();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCheckingHealth(false);
+      setHealthCheckProgress(null);
+    }
+  };
+
+  // ============ FILTERED CHANNELS ============
+
+  const filteredChannels = useMemo(() => {
+    let result = channels;
+    
+    // Filter by search
+    if (channelSearch) {
+      const searchLower = channelSearch.toLowerCase();
+      result = result.filter(ch => 
+        ch.name.toLowerCase().includes(searchLower) ||
+        ch.streamId.toLowerCase().includes(searchLower)
+      );
+    }
+    
+    // Filter by category
+    if (selectedCategory !== 'all') {
+      result = result.filter(ch => ch.category === selectedCategory);
+    }
+    
+    // Filter by country
+    if (selectedCountry !== 'all') {
+      result = result.filter(ch => ch.country === selectedCountry);
+    }
+    
+    // Filter by status
+    if (channelStatusFilter !== 'all') {
+      switch (channelStatusFilter) {
+        case 'online':
+          result = result.filter(ch => ch.status === 'online');
+          break;
+        case 'offline':
+          result = result.filter(ch => ch.status === 'offline');
+          break;
+        case 'enabled':
+          result = result.filter(ch => ch.isEnabled);
+          break;
+        case 'disabled':
+          result = result.filter(ch => !ch.isEnabled);
+          break;
+      }
+    }
+    
+    return result;
+  }, [channels, channelSearch, selectedCategory, selectedCountry, channelStatusFilter]);
+
+  // ============ CHANNEL STATS ============
+
+  const channelStats = useMemo(() => {
+    const total = channels.length;
+    const online = channels.filter(ch => ch.status === 'online').length;
+    const offline = channels.filter(ch => ch.status === 'offline').length;
+    const enabled = channels.filter(ch => ch.isEnabled).length;
+    const mapped = channels.filter(ch => ch.mappingCount > 0).length;
+    const avgHealth = channels.length > 0 
+      ? Math.round(channels.reduce((sum, ch) => sum + ch.healthScore, 0) / channels.length)
+      : 0;
+    
+    return { total, online, offline, enabled, mapped, avgHealth };
+  }, [channels]);
+
+
+  // ============ ACCOUNT FUNCTIONS ============
+
+  // Auto-map ALL channels for ALL accounts
   const handleAutoMapAllAccountsChannels = async () => {
     if (accounts.length === 0) {
       alert('No accounts to map. Import accounts first.');
@@ -131,7 +495,6 @@ export default function IPTVManagerPage() {
           totalSkipped += result.skipped;
           accountsProcessed++;
           
-          // Refresh mappings after each account to update the database view
           await fetchMappings();
         }
         
@@ -140,6 +503,7 @@ export default function IPTVManagerPage() {
       
       setMappingProgress(null);
       alert(`✓ Auto-mapping complete!\n\nAccounts processed: ${accountsProcessed}/${accounts.length}\nTotal mappings created: ${totalMapped}\nSkipped: ${totalSkipped}`);
+      await fetchChannels();
     } catch (err: any) {
       setMappingProgress(null);
       alert(`Error: ${err.message}`);
@@ -167,12 +531,11 @@ export default function IPTVManagerPage() {
     }
   };
 
-  // Verify a single account - just check if we can get a token (fast verification)
+  // Verify a single account
   const verifyAccount = async (account: IPTVAccount): Promise<typeof verifyResults[0]> => {
     const maskedMac = account.mac_address.substring(0, 11) + '**:**:**';
     
     try {
-      // Only test handshake/token - that's all we need to verify the account works
       const testRes = await fetchWithTimeout('/api/admin/iptv-debug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,7 +551,6 @@ export default function IPTVManagerPage() {
         return { accountId: account.id, mac: maskedMac, status: 'invalid', error: testData.error || 'Handshake failed' };
       }
       
-      // Token obtained = account is valid for streaming
       return { 
         accountId: account.id, 
         mac: maskedMac, 
@@ -201,7 +563,7 @@ export default function IPTVManagerPage() {
     }
   };
 
-  // Verify all accounts - 3 at a time, delete invalid immediately
+  // Verify all accounts
   const handleVerifyAllAccounts = async () => {
     if (accounts.length === 0) {
       alert('No accounts to verify.');
@@ -225,11 +587,9 @@ export default function IPTVManagerPage() {
     let errors = 0;
     let completed = 0;
     
-    // Process 10 at a time (fast token-only verification)
     const CONCURRENCY = 10;
     
     const processAccount = async (account: IPTVAccount, index: number) => {
-      // Verify this account
       const result = await verifyAccount(account);
       results[index] = result;
       setVerifyResults([...results]);
@@ -237,12 +597,10 @@ export default function IPTVManagerPage() {
       completed++;
       setVerifyProgress(`Verified ${completed}/${accounts.length} (${valid} valid, ${invalid} invalid)`);
       
-      // Update counters and delete immediately if invalid
       if (result.status === 'valid') {
         valid++;
       } else if (result.status === 'invalid') {
         invalid++;
-        // Delete immediately
         try {
           const deleteRes = await fetch('/api/admin/iptv-accounts', {
             method: 'POST',
@@ -263,7 +621,6 @@ export default function IPTVManagerPage() {
       }
     };
     
-    // Process in batches of 3
     for (let i = 0; i < accounts.length; i += CONCURRENCY) {
       const batch = accounts.slice(i, i + CONCURRENCY);
       const batchPromises = batch.map((account, batchIndex) => 
@@ -272,64 +629,15 @@ export default function IPTVManagerPage() {
       await Promise.all(batchPromises);
     }
     
-    // Refresh accounts list at the end
     await fetchAccounts();
     await fetchMappings();
+    await fetchChannels();
     
     setVerifyProgress(null);
     setVerifying(false);
     
     alert(`Verification complete!\n\n✓ Valid: ${valid}\n✗ Invalid: ${invalid} (${deleted} removed)\n⚠ Errors: ${errors}`);
   };
-
-  // Fetch accounts
-  const fetchAccounts = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/iptv-accounts');
-      const data = await res.json();
-      if (data.success) {
-        setAccounts(data.accounts);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }, []);
-
-  // Fetch mappings
-  const fetchMappings = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/channel-mappings');
-      const data = await res.json();
-      if (data.success) {
-        setMappings(data.mappings);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    }
-  }, []);
-
-  // Fetch our channels (from DLHD data)
-  const fetchOurChannels = useCallback(async () => {
-    try {
-      const res = await fetch('/api/livetv/channels?limit=1000');
-      const data = await res.json();
-      if (data.success) {
-        setOurChannels(data.channels.map((ch: any) => ({
-          id: ch.streamId,
-          name: ch.name,
-          category: ch.category
-        })));
-      }
-    } catch (err: any) {
-      console.error('Failed to fetch our channels:', err);
-    }
-  }, []);
-
-  useEffect(() => {
-    Promise.all([fetchAccounts(), fetchMappings(), fetchOurChannels()])
-      .finally(() => setLoading(false));
-  }, [fetchAccounts, fetchMappings, fetchOurChannels]);
-
 
   // Add account
   const handleAddAccount = async () => {
@@ -366,6 +674,7 @@ export default function IPTVManagerPage() {
       });
       fetchAccounts();
       fetchMappings();
+      fetchChannels();
     } catch (err: any) {
       setError(err.message);
     }
@@ -384,6 +693,7 @@ export default function IPTVManagerPage() {
       });
       fetchAccounts();
       fetchMappings();
+      fetchChannels();
       alert('All accounts deleted');
     } catch (err: any) {
       setError(err.message);
@@ -401,6 +711,7 @@ export default function IPTVManagerPage() {
         body: JSON.stringify({ action: 'deleteAll' })
       });
       fetchMappings();
+      fetchChannels();
       alert('All mappings deleted');
     } catch (err: any) {
       setError(err.message);
@@ -433,8 +744,6 @@ export default function IPTVManagerPage() {
   };
 
   // Import accounts from JSON
-  // Scanner output format: [{ portal, mac, success, profile: { playback_limit, name }, content: { itv } }]
-  // Accepts all portal domains
   const handleImportAccounts = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -450,11 +759,8 @@ export default function IPTVManagerPage() {
           return;
         }
 
-        // Normalize and filter accounts - match scanner output format
-        // Accept all portal domains
         const accountsToImport = rawAccounts
           .filter((acc: any) => {
-            // Must be successful scan with portal and mac
             if (!acc.portal || !acc.mac) return false;
             if (acc.success === false) return false;
             return true;
@@ -498,7 +804,6 @@ export default function IPTVManagerPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-
   // Create mapping
   const createMapping = async (ourChannel: OurChannel, stalkerChannel: any, silent = false) => {
     if (!selectedAccount) return false;
@@ -509,7 +814,7 @@ export default function IPTVManagerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'add',
-          our_channel_id: ourChannel.id,
+          our_channel_id: ourChannel.streamId,
           our_channel_name: ourChannel.name,
           stalker_account_id: selectedAccount.id,
           stalker_channel_id: stalkerChannel.id,
@@ -521,6 +826,7 @@ export default function IPTVManagerPage() {
       const data = await res.json();
       if (data.success) {
         fetchMappings();
+        fetchChannels();
         if (!silent) {
           setSelectedOurChannel(null);
           setSelectedStalkerChannel(null);
@@ -536,7 +842,7 @@ export default function IPTVManagerPage() {
     }
   };
 
-  // Fuzzy match score - higher is better
+  // Fuzzy match score
   const fuzzyMatchScore = (str1: string, str2: string): number => {
     const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
     const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -544,7 +850,6 @@ export default function IPTVManagerPage() {
     if (s1 === s2) return 100;
     if (s1.includes(s2) || s2.includes(s1)) return 80;
     
-    // Check word overlap
     const words1 = str1.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     const words2 = str2.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     const commonWords = words1.filter(w => words2.some(w2 => w2.includes(w) || w.includes(w2)));
@@ -576,8 +881,8 @@ export default function IPTVManagerPage() {
     
     setAutoMatching(true);
     let matched = 0;
-    const unmappedChannels = ourChannels.filter(ch => 
-      !mappings.some(m => m.our_channel_id === ch.id)
+    const unmappedChannels = channels.filter(ch => 
+      !mappings.some(m => m.our_channel_id === ch.streamId)
     );
     
     for (const ourCh of unmappedChannels) {
@@ -585,7 +890,6 @@ export default function IPTVManagerPage() {
       if (match) {
         const success = await createMapping(ourCh, match, true);
         if (success) matched++;
-        // Small delay to avoid overwhelming the API
         await new Promise(r => setTimeout(r, 100));
       }
     }
@@ -593,6 +897,7 @@ export default function IPTVManagerPage() {
     setAutoMatching(false);
     alert(`Auto-matched ${matched} channels`);
     fetchMappings();
+    fetchChannels();
   };
 
   // Get suggested matches for selected channel
@@ -606,19 +911,21 @@ export default function IPTVManagerPage() {
       .slice(0, 10);
   };
 
-  // Filter channels
+  // Filter channels for mapping modal
   const filteredStalkerChannels = stalkerChannels.filter(ch => 
-    ch.name?.toLowerCase().includes(channelSearch.toLowerCase())
+    ch.name?.toLowerCase().includes(stalkerChannelSearch.toLowerCase())
   );
   
-  const filteredOurChannels = ourChannels.filter(ch =>
+  const filteredOurChannelsForMapping = channels.filter(ch =>
     ch.name?.toLowerCase().includes(ourChannelSearch.toLowerCase())
   );
 
 
+  // ============ STYLES ============
+
   const styles = {
-    container: { padding: '24px', maxWidth: '1400px', margin: '0 auto' },
-    header: { marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    container: { padding: '24px', maxWidth: '1600px', margin: '0 auto' },
+    header: { marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '16px' },
     title: { color: '#f8fafc', fontSize: '24px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '12px', margin: 0 },
     tabs: { display: 'flex', gap: '8px', marginBottom: '24px' },
     tab: (active: boolean) => ({
@@ -629,7 +936,10 @@ export default function IPTVManagerPage() {
       color: '#fff',
       cursor: 'pointer',
       fontSize: '14px',
-      fontWeight: active ? '600' : '400'
+      fontWeight: active ? '600' : '400',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
     }),
     card: {
       background: 'rgba(30, 41, 59, 0.5)',
@@ -638,14 +948,17 @@ export default function IPTVManagerPage() {
       marginBottom: '16px',
       border: '1px solid rgba(255, 255, 255, 0.1)'
     },
-    btn: (variant: 'primary' | 'secondary' | 'danger' = 'secondary') => ({
+    btn: (variant: 'primary' | 'secondary' | 'danger' | 'success' = 'secondary') => ({
       padding: '8px 16px',
       background: variant === 'primary' ? 'linear-gradient(135deg, #7877c6 0%, #9333ea 100%)' 
         : variant === 'danger' ? 'rgba(239, 68, 68, 0.2)' 
+        : variant === 'success' ? 'rgba(34, 197, 94, 0.2)'
         : 'rgba(255, 255, 255, 0.1)',
-      border: variant === 'danger' ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)',
+      border: variant === 'danger' ? '1px solid rgba(239, 68, 68, 0.3)' 
+        : variant === 'success' ? '1px solid rgba(34, 197, 94, 0.3)'
+        : '1px solid rgba(255, 255, 255, 0.1)',
       borderRadius: '8px',
-      color: variant === 'danger' ? '#ef4444' : '#fff',
+      color: variant === 'danger' ? '#ef4444' : variant === 'success' ? '#22c55e' : '#fff',
       cursor: 'pointer',
       fontSize: '13px',
       display: 'flex',
@@ -677,8 +990,12 @@ export default function IPTVManagerPage() {
       padding: '4px 8px',
       borderRadius: '4px',
       fontSize: '12px',
-      background: status === 'active' ? 'rgba(34, 197, 94, 0.2)' : status === 'error' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(156, 163, 175, 0.2)',
-      color: status === 'active' ? '#22c55e' : status === 'error' ? '#ef4444' : '#9ca3af'
+      background: status === 'active' || status === 'online' ? 'rgba(34, 197, 94, 0.2)' 
+        : status === 'error' || status === 'offline' ? 'rgba(239, 68, 68, 0.2)' 
+        : 'rgba(156, 163, 175, 0.2)',
+      color: status === 'active' || status === 'online' ? '#22c55e' 
+        : status === 'error' || status === 'offline' ? '#ef4444' 
+        : '#9ca3af'
     }),
     mappingRow: {
       display: 'flex',
@@ -700,9 +1017,52 @@ export default function IPTVManagerPage() {
       cursor: 'pointer',
       border: '1px solid rgba(255, 255, 255, 0.05)',
       transition: 'all 0.2s'
-    }
+    },
+    statsCard: {
+      background: 'rgba(15, 23, 42, 0.4)',
+      borderRadius: '12px',
+      padding: '16px',
+      textAlign: 'center' as const,
+      border: '1px solid rgba(255, 255, 255, 0.05)'
+    },
+    dropdown: {
+      position: 'absolute' as const,
+      top: '100%',
+      left: 0,
+      right: 0,
+      background: 'rgba(15, 23, 42, 0.95)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: '8px',
+      maxHeight: '300px',
+      overflowY: 'auto' as const,
+      zIndex: 100,
+      marginTop: '4px'
+    },
+    dropdownItem: {
+      padding: '10px 14px',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderBottom: '1px solid rgba(255, 255, 255, 0.05)'
+    },
+    healthBar: (_score: number) => ({
+      width: '100%',
+      height: '4px',
+      background: 'rgba(255, 255, 255, 0.1)',
+      borderRadius: '2px',
+      overflow: 'hidden' as const,
+      position: 'relative' as const
+    }),
+    healthFill: (score: number) => ({
+      width: `${score}%`,
+      height: '100%',
+      background: score >= 70 ? '#22c55e' : score >= 40 ? '#fbbf24' : '#ef4444',
+      borderRadius: '2px'
+    })
   };
 
+  // ============ RENDER ============
 
   if (loading) {
     return (
@@ -714,52 +1074,32 @@ export default function IPTVManagerPage() {
 
   return (
     <div style={styles.container}>
+      {/* Header */}
       <div style={styles.header}>
         <h1 style={styles.title}>
-          <Database size={28} />
-          IPTV Account Manager
+          <Tv size={28} />
+          IPTV Manager
         </h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <input ref={fileInputRef} type="file" accept=".json" onChange={handleImportAccounts} style={{ display: 'none' }} />
           <button style={styles.btn('secondary')} onClick={() => fileInputRef.current?.click()}>
-            <Upload size={16} /> Import JSON
+            <Upload size={16} /> Import Accounts
           </button>
           <button style={styles.btn('primary')} onClick={() => setShowAddAccount(true)}>
             <Plus size={16} /> Add Account
           </button>
-          {accounts.length > 0 && (
-            <>
-              <button 
-                style={styles.btn('secondary')} 
-                onClick={handleVerifyAllAccounts}
-                disabled={verifying || autoMappingAll}
-              >
-                {verifying ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <ShieldCheck size={16} />}
-                {verifying ? 'Verifying...' : 'Verify All'}
-              </button>
-              <button 
-                style={styles.btn('primary')} 
-                onClick={handleAutoMapAllAccountsChannels}
-                disabled={autoMappingAll || verifying}
-              >
-                {autoMappingAll ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Link2 size={16} />}
-                {autoMappingAll ? 'Mapping...' : 'Map All'}
-              </button>
-              <button style={styles.btn('danger')} onClick={handleDeleteAllAccounts} disabled={verifying || autoMappingAll}>
-                <Trash2 size={16} /> Remove All
-              </button>
-            </>
-          )}
         </div>
       </div>
 
+      {/* Error Display */}
       {error && (
         <div style={{ ...styles.card, background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
           <p style={{ color: '#ef4444', margin: 0 }}>{error}</p>
+          <button style={{ ...styles.btn('secondary'), marginTop: '8px' }} onClick={() => setError(null)}>Dismiss</button>
         </div>
       )}
 
-      {/* Mapping Progress */}
+      {/* Progress Indicators */}
       {mappingProgress && (
         <div style={{ ...styles.card, background: 'rgba(120, 119, 198, 0.1)', borderColor: 'rgba(120, 119, 198, 0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -769,7 +1109,6 @@ export default function IPTVManagerPage() {
         </div>
       )}
 
-      {/* Verification Progress */}
       {verifyProgress && (
         <div style={{ ...styles.card, background: 'rgba(34, 197, 94, 0.1)', borderColor: 'rgba(34, 197, 94, 0.3)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -779,88 +1118,525 @@ export default function IPTVManagerPage() {
         </div>
       )}
 
-      {/* Verification Results */}
-      {verifyResults.length > 0 && (
-        <div style={{ ...styles.card, marginBottom: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px' }}>
-              <ShieldCheck size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-              Verification Results
-            </h3>
-            <button 
-              style={{ ...styles.btn('secondary'), padding: '4px 10px', fontSize: '12px' }} 
-              onClick={() => setVerifyResults([])}
-            >
-              Clear
-            </button>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
-            {verifyResults.map((result, idx) => (
-              <div 
-                key={idx} 
-                style={{ 
-                  padding: '10px 14px', 
-                  background: result.status === 'valid' ? 'rgba(34, 197, 94, 0.1)' 
-                    : result.status === 'invalid' ? 'rgba(239, 68, 68, 0.1)'
-                    : result.status === 'error' ? 'rgba(245, 158, 11, 0.1)'
-                    : 'rgba(156, 163, 175, 0.1)',
-                  borderRadius: '8px',
-                  border: `1px solid ${
-                    result.status === 'valid' ? 'rgba(34, 197, 94, 0.3)' 
-                    : result.status === 'invalid' ? 'rgba(239, 68, 68, 0.3)'
-                    : result.status === 'error' ? 'rgba(245, 158, 11, 0.3)'
-                    : 'rgba(156, 163, 175, 0.3)'
-                  }`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}
-              >
-                {result.status === 'checking' && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} color="#9ca3af" />}
-                {result.status === 'valid' && <CheckCircle size={16} color="#22c55e" />}
-                {result.status === 'invalid' && <XCircle size={16} color="#ef4444" />}
-                {result.status === 'error' && <AlertTriangle size={16} color="#f59e0b" />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ 
-                    color: result.status === 'valid' ? '#22c55e' 
-                      : result.status === 'invalid' ? '#ef4444'
-                      : result.status === 'error' ? '#f59e0b'
-                      : '#9ca3af',
-                    fontSize: '13px',
-                    fontFamily: 'monospace'
-                  }}>
-                    {result.mac}
-                  </div>
-                  {result.error && (
-                    <div style={{ color: '#9ca3af', fontSize: '11px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {result.error}
-                    </div>
-                  )}
-                  {result.status === 'valid' && result.channelsTested && (
-                    <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px' }}>
-                      {result.channelsTested} channels available
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+      {healthCheckProgress && (
+        <div style={{ ...styles.card, background: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.3)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} color="#3b82f6" />
+            <p style={{ color: '#3b82f6', margin: 0, fontWeight: '500' }}>{healthCheckProgress}</p>
           </div>
         </div>
       )}
 
       {/* Tabs */}
       <div style={styles.tabs}>
+        <button style={styles.tab(activeTab === 'channels')} onClick={() => setActiveTab('channels')}>
+          <Tv size={16} />
+          Channels ({channels.length})
+        </button>
         <button style={styles.tab(activeTab === 'accounts')} onClick={() => setActiveTab('accounts')}>
-          <Database size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+          <Database size={16} />
           Accounts ({accounts.length})
         </button>
         <button style={styles.tab(activeTab === 'mappings')} onClick={() => setActiveTab('mappings')}>
-          <Link2 size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
-          Channel Mappings ({mappings.length})
+          <Link2 size={16} />
+          Mappings ({mappings.length})
         </button>
       </div>
 
-      {/* Add Account Modal */}
+      {/* ============ CHANNELS TAB ============ */}
+      {activeTab === 'channels' && (
+        <div>
+          {/* Channel Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div style={styles.statsCard}>
+              <Tv size={24} color="#7877c6" style={{ marginBottom: '8px' }} />
+              <p style={{ color: '#f8fafc', fontSize: '24px', fontWeight: '600', margin: 0 }}>{channelStats.total}</p>
+              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Total Channels</p>
+            </div>
+            <div style={styles.statsCard}>
+              <Signal size={24} color="#22c55e" style={{ marginBottom: '8px' }} />
+              <p style={{ color: '#22c55e', fontSize: '24px', fontWeight: '600', margin: 0 }}>{channelStats.online}</p>
+              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Online</p>
+            </div>
+            <div style={styles.statsCard}>
+              <SignalZero size={24} color="#ef4444" style={{ marginBottom: '8px' }} />
+              <p style={{ color: '#ef4444', fontSize: '24px', fontWeight: '600', margin: 0 }}>{channelStats.offline}</p>
+              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Offline</p>
+            </div>
+            <div style={styles.statsCard}>
+              <Link2 size={24} color="#a78bfa" style={{ marginBottom: '8px' }} />
+              <p style={{ color: '#a78bfa', fontSize: '24px', fontWeight: '600', margin: 0 }}>{channelStats.mapped}</p>
+              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Mapped</p>
+            </div>
+            <div style={styles.statsCard}>
+              <Activity size={24} color="#fbbf24" style={{ marginBottom: '8px' }} />
+              <p style={{ color: '#fbbf24', fontSize: '24px', fontWeight: '600', margin: 0 }}>{channelStats.avgHealth}%</p>
+              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Avg Health</p>
+            </div>
+          </div>
+
+          {/* Channel Filters */}
+          <div style={{ ...styles.card, marginBottom: '16px' }}>
+            <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              {/* Search */}
+              <div style={{ flex: '1', minWidth: '200px' }}>
+                <label style={styles.label}>Search Channels</label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <input
+                    style={{ ...styles.input, paddingLeft: '36px' }}
+                    placeholder="Search by name or ID..."
+                    value={channelSearch}
+                    onChange={e => setChannelSearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Category Filter */}
+              <div style={{ minWidth: '180px', position: 'relative' }}>
+                <label style={styles.label}>Category</label>
+                <button
+                  style={{ ...styles.input, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                  onClick={() => { setShowCategoryDropdown(!showCategoryDropdown); setShowCountryDropdown(false); }}
+                >
+                  <span>{selectedCategory === 'all' ? 'All Categories' : channelFilters.categories.find(c => c.id === selectedCategory)?.name || selectedCategory}</span>
+                  {showCategoryDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {showCategoryDropdown && (
+                  <div style={styles.dropdown}>
+                    <div
+                      style={{ ...styles.dropdownItem, background: selectedCategory === 'all' ? 'rgba(120, 119, 198, 0.2)' : 'transparent' }}
+                      onClick={() => { setSelectedCategory('all'); setShowCategoryDropdown(false); }}
+                    >
+                      <span style={{ color: '#f8fafc' }}>All Categories</span>
+                      <span style={{ color: '#64748b', fontSize: '12px' }}>{channels.length}</span>
+                    </div>
+                    {channelFilters.categories.map(cat => (
+                      <div
+                        key={cat.id}
+                        style={{ ...styles.dropdownItem, background: selectedCategory === cat.id ? 'rgba(120, 119, 198, 0.2)' : 'transparent' }}
+                        onClick={() => { setSelectedCategory(cat.id); setShowCategoryDropdown(false); }}
+                      >
+                        <span style={{ color: '#f8fafc' }}>{cat.icon} {cat.name}</span>
+                        <span style={{ color: '#64748b', fontSize: '12px' }}>{cat.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Country Filter */}
+              <div style={{ minWidth: '180px', position: 'relative' }}>
+                <label style={styles.label}>Country</label>
+                <button
+                  style={{ ...styles.input, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                  onClick={() => { setShowCountryDropdown(!showCountryDropdown); setShowCategoryDropdown(false); }}
+                >
+                  <span>{selectedCountry === 'all' ? 'All Countries' : channelFilters.countries.find(c => c.id === selectedCountry)?.name || selectedCountry}</span>
+                  {showCountryDropdown ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {showCountryDropdown && (
+                  <div style={styles.dropdown}>
+                    <div
+                      style={{ ...styles.dropdownItem, background: selectedCountry === 'all' ? 'rgba(120, 119, 198, 0.2)' : 'transparent' }}
+                      onClick={() => { setSelectedCountry('all'); setShowCountryDropdown(false); }}
+                    >
+                      <span style={{ color: '#f8fafc' }}>All Countries</span>
+                      <span style={{ color: '#64748b', fontSize: '12px' }}>{channels.length}</span>
+                    </div>
+                    {channelFilters.countries.map(country => (
+                      <div
+                        key={country.id}
+                        style={{ ...styles.dropdownItem, background: selectedCountry === country.id ? 'rgba(120, 119, 198, 0.2)' : 'transparent' }}
+                        onClick={() => { setSelectedCountry(country.id); setShowCountryDropdown(false); }}
+                      >
+                        <span style={{ color: '#f8fafc' }}>{country.flag} {country.name}</span>
+                        <span style={{ color: '#64748b', fontSize: '12px' }}>{country.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Filter */}
+              <div style={{ minWidth: '150px' }}>
+                <label style={styles.label}>Status</label>
+                <select
+                  style={styles.input}
+                  value={channelStatusFilter}
+                  onChange={e => setChannelStatusFilter(e.target.value as any)}
+                >
+                  <option value="all">All Status</option>
+                  <option value="online">Online</option>
+                  <option value="offline">Offline</option>
+                  <option value="enabled">Enabled</option>
+                  <option value="disabled">Disabled</option>
+                </select>
+              </div>
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  style={styles.btn('secondary')}
+                  onClick={() => fetchChannels()}
+                  disabled={refreshingChannels}
+                >
+                  <RefreshCw size={16} className={refreshingChannels ? 'animate-spin' : ''} />
+                  Refresh
+                </button>
+                <button
+                  style={styles.btn('primary')}
+                  onClick={handleBulkHealthCheck}
+                  disabled={checkingHealth}
+                >
+                  <Activity size={16} />
+                  Health Check
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Channel List */}
+          <div style={{ ...styles.card }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px' }}>
+                Showing {filteredChannels.length} of {channels.length} channels
+              </h3>
+            </div>
+
+            <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)' }}>
+                    <th style={{ padding: '12px', textAlign: 'left', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Channel</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Category</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Country</th>
+                    <th style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Status</th>
+                    <th style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Health</th>
+                    <th style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Mappings</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#94a3b8', fontSize: '12px', fontWeight: '500' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredChannels.slice(0, 100).map(channel => (
+                    <tr key={channel.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                      <td style={{ padding: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '8px',
+                            background: 'rgba(120, 119, 198, 0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Radio size={20} color="#7877c6" />
+                          </div>
+                          <div>
+                            <p style={{ color: '#f8fafc', margin: 0, fontWeight: '500', fontSize: '14px' }}>{channel.name}</p>
+                            <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>ID: {channel.streamId}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                          {channel.categoryInfo?.icon} {channel.categoryInfo?.name || channel.category}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <span style={{ color: '#94a3b8', fontSize: '13px' }}>
+                          {channel.countryInfo?.flag} {channel.countryInfo?.name || channel.country}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <span style={styles.status(channel.status)}>
+                          {channel.status === 'online' ? <SignalHigh size={12} /> : channel.status === 'offline' ? <SignalZero size={12} /> : <SignalLow size={12} />}
+                          {channel.status}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ 
+                            color: channel.healthScore >= 70 ? '#22c55e' : channel.healthScore >= 40 ? '#fbbf24' : '#ef4444',
+                            fontSize: '12px',
+                            fontWeight: '600'
+                          }}>
+                            {channel.healthScore}%
+                          </span>
+                          <div style={{ ...styles.healthBar(channel.healthScore), width: '60px' }}>
+                            <div style={styles.healthFill(channel.healthScore)} />
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'center' }}>
+                        <span style={{
+                          background: channel.mappingCount > 0 ? 'rgba(120, 119, 198, 0.2)' : 'rgba(156, 163, 175, 0.2)',
+                          color: channel.mappingCount > 0 ? '#a78bfa' : '#9ca3af',
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}>
+                          {channel.mappingCount}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                          <button
+                            style={styles.btn(channel.isEnabled ? 'success' : 'secondary')}
+                            onClick={() => handleToggleChannel(channel)}
+                            title={channel.isEnabled ? 'Disable channel' : 'Enable channel'}
+                          >
+                            {channel.isEnabled ? <Eye size={14} /> : <EyeOff size={14} />}
+                          </button>
+                          <button
+                            style={styles.btn('secondary')}
+                            onClick={() => handleRefreshChannel(channel)}
+                            disabled={refreshingChannels}
+                            title="Test channel"
+                          >
+                            <RefreshCw size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredChannels.length > 100 && (
+                <p style={{ color: '#64748b', textAlign: 'center', padding: '16px', margin: 0 }}>
+                  Showing first 100 channels. Use filters to narrow down results.
+                </p>
+              )}
+              {filteredChannels.length === 0 && (
+                <p style={{ color: '#64748b', textAlign: 'center', padding: '32px', margin: 0 }}>
+                  No channels found matching your filters.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ============ ACCOUNTS TAB ============ */}
+      {activeTab === 'accounts' && (
+        <div>
+          {/* Account Actions */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+            {accounts.length > 0 && (
+              <>
+                <button 
+                  style={styles.btn('secondary')} 
+                  onClick={handleVerifyAllAccounts}
+                  disabled={verifying || autoMappingAll}
+                >
+                  {verifying ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <ShieldCheck size={16} />}
+                  {verifying ? 'Verifying...' : 'Verify All'}
+                </button>
+                <button 
+                  style={styles.btn('primary')} 
+                  onClick={handleAutoMapAllAccountsChannels}
+                  disabled={autoMappingAll || verifying}
+                >
+                  {autoMappingAll ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Link2 size={16} />}
+                  {autoMappingAll ? 'Mapping...' : 'Map All Channels'}
+                </button>
+                <button style={styles.btn('danger')} onClick={handleDeleteAllAccounts} disabled={verifying || autoMappingAll}>
+                  <Trash2 size={16} /> Remove All
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Verification Results */}
+          {verifyResults.length > 0 && (
+            <div style={{ ...styles.card, marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px' }}>
+                  <ShieldCheck size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                  Verification Results
+                </h3>
+                <button 
+                  style={{ ...styles.btn('secondary'), padding: '4px 10px', fontSize: '12px' }} 
+                  onClick={() => setVerifyResults([])}
+                >
+                  Clear
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '8px' }}>
+                {verifyResults.map((result, idx) => (
+                  <div 
+                    key={idx} 
+                    style={{ 
+                      padding: '10px 14px', 
+                      background: result.status === 'valid' ? 'rgba(34, 197, 94, 0.1)' 
+                        : result.status === 'invalid' ? 'rgba(239, 68, 68, 0.1)'
+                        : result.status === 'error' ? 'rgba(245, 158, 11, 0.1)'
+                        : 'rgba(156, 163, 175, 0.1)',
+                      borderRadius: '8px',
+                      border: `1px solid ${
+                        result.status === 'valid' ? 'rgba(34, 197, 94, 0.3)' 
+                        : result.status === 'invalid' ? 'rgba(239, 68, 68, 0.3)'
+                        : result.status === 'error' ? 'rgba(245, 158, 11, 0.3)'
+                        : 'rgba(156, 163, 175, 0.3)'
+                      }`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px'
+                    }}
+                  >
+                    {result.status === 'checking' && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} color="#9ca3af" />}
+                    {result.status === 'valid' && <CheckCircle size={16} color="#22c55e" />}
+                    {result.status === 'invalid' && <XCircle size={16} color="#ef4444" />}
+                    {result.status === 'error' && <AlertTriangle size={16} color="#f59e0b" />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ 
+                        color: result.status === 'valid' ? '#22c55e' 
+                          : result.status === 'invalid' ? '#ef4444'
+                          : '#9ca3af',
+                        fontSize: '13px',
+                        fontFamily: 'monospace'
+                      }}>
+                        {result.mac}
+                      </div>
+                      {result.error && (
+                        <div style={{ color: '#9ca3af', fontSize: '11px', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {result.error}
+                        </div>
+                      )}
+                      {result.status === 'valid' && result.channelsTested && (
+                        <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px' }}>
+                          {result.channelsTested} channels available
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Account Grid */}
+          <div style={styles.grid}>
+            {accounts.map(account => (
+              <div key={account.id} style={styles.accountCard}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <div>
+                    <h4 style={{ color: '#f8fafc', margin: '0 0 4px 0', fontSize: '14px' }}>
+                      {account.name || (() => { try { return new URL(account.portal_url).hostname; } catch { return 'Unknown Portal'; } })()}
+                    </h4>
+                    <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>{account.mac_address}</p>
+                  </div>
+                  <span style={styles.status(account.status)}>
+                    {account.status === 'active' ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                    {account.status}
+                  </span>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                  <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
+                    <p style={{ color: '#64748b', margin: 0, fontSize: '11px' }}>Channels</p>
+                    <p style={{ color: '#f8fafc', margin: 0, fontSize: '16px', fontWeight: '600' }}>{account.channels_count}</p>
+                  </div>
+                  <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
+                    <p style={{ color: '#64748b', margin: 0, fontSize: '11px' }}>Stream Limit</p>
+                    <p style={{ color: '#f8fafc', margin: 0, fontSize: '16px', fontWeight: '600' }}>{account.stream_limit}</p>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                  <button style={styles.btn('secondary')} onClick={() => handleTestAccount(account)}>
+                    <Zap size={14} /> Test
+                  </button>
+                  <button style={styles.btn('danger')} onClick={() => handleDeleteAccount(account.id)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            
+            {accounts.length === 0 && (
+              <div style={{ ...styles.card, textAlign: 'center', gridColumn: '1 / -1' }}>
+                <p style={{ color: '#64748b', margin: 0 }}>No accounts yet. Add one or import from JSON.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+
+      {/* ============ MAPPINGS TAB ============ */}
+      {activeTab === 'mappings' && (
+        <div>
+          {mappings.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ color: '#94a3b8', fontSize: '14px' }}>
+                {(() => {
+                  const uniqueChannels = new Set(mappings.map(m => m.our_channel_id)).size;
+                  return `${uniqueChannels} channels mapped (${mappings.length} total account-channel pairs)`;
+                })()}
+              </div>
+              <button style={styles.btn('danger')} onClick={handleDeleteAllMappings}>
+                <Trash2 size={16} /> Delete All Mappings
+              </button>
+            </div>
+          )}
+          {mappings.length === 0 ? (
+            <div style={{ ...styles.card, textAlign: 'center' }}>
+              <p style={{ color: '#64748b', margin: 0 }}>No channel mappings yet. Use "Map All Channels" in the Accounts tab to auto-map all accounts to all channels.</p>
+            </div>
+          ) : (
+            (() => {
+              const grouped = mappings.reduce((acc, m) => {
+                if (!acc[m.our_channel_id]) {
+                  acc[m.our_channel_id] = {
+                    channelId: m.our_channel_id,
+                    channelName: m.our_channel_name,
+                    stalkerChannelName: m.stalker_channel_name,
+                    accounts: [],
+                    totalSuccess: 0,
+                    totalFailure: 0,
+                  };
+                }
+                acc[m.our_channel_id].accounts.push(m);
+                acc[m.our_channel_id].totalSuccess += m.success_count;
+                acc[m.our_channel_id].totalFailure += m.failure_count;
+                return acc;
+              }, {} as Record<string, { channelId: string; channelName: string; stalkerChannelName: string; accounts: ChannelMapping[]; totalSuccess: number; totalFailure: number }>);
+              
+              const sortedChannels = Object.values(grouped).sort((a, b) => a.channelName.localeCompare(b.channelName));
+              
+              return sortedChannels.map(channel => (
+                <div key={channel.channelId} style={styles.mappingRow}>
+                  <div style={{ flex: 1 }}>
+                    <span style={{ color: '#f8fafc', fontWeight: '500' }}>{channel.channelName}</span>
+                    <span style={{ color: '#64748b', margin: '0 8px' }}>→</span>
+                    <span style={{ color: '#7877c6' }}>{channel.stalkerChannelName}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ 
+                      background: 'rgba(120, 119, 198, 0.2)', 
+                      color: '#a78bfa', 
+                      padding: '4px 10px', 
+                      borderRadius: '12px', 
+                      fontSize: '12px',
+                      fontWeight: '600'
+                    }}>
+                      {channel.accounts.length} account{channel.accounts.length !== 1 ? 's' : ''}
+                    </span>
+                    <span style={{ color: '#22c55e', fontSize: '12px' }}>✓ {channel.totalSuccess}</span>
+                    <span style={{ color: '#ef4444', fontSize: '12px' }}>✗ {channel.totalFailure}</span>
+                  </div>
+                </div>
+              ));
+            })()
+          )}
+        </div>
+      )}
+
+      {/* ============ ADD ACCOUNT MODAL ============ */}
       {showAddAccount && (
         <div style={styles.card}>
           <h3 style={{ color: '#f8fafc', margin: '0 0 16px 0' }}>Add New Account</h3>
@@ -910,127 +1686,7 @@ export default function IPTVManagerPage() {
         </div>
       )}
 
-
-      {/* Accounts Tab */}
-      {activeTab === 'accounts' && (
-        <div style={styles.grid}>
-          {accounts.map(account => (
-            <div key={account.id} style={styles.accountCard}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                <div>
-                  <h4 style={{ color: '#f8fafc', margin: '0 0 4px 0', fontSize: '14px' }}>
-                    {account.name || new URL(account.portal_url).hostname}
-                  </h4>
-                  <p style={{ color: '#64748b', margin: 0, fontSize: '12px' }}>{account.mac_address}</p>
-                </div>
-                <span style={styles.status(account.status)}>
-                  {account.status === 'active' ? <CheckCircle size={12} /> : <XCircle size={12} />}
-                  {account.status}
-                </span>
-              </div>
-              
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
-                  <p style={{ color: '#64748b', margin: 0, fontSize: '11px' }}>Channels</p>
-                  <p style={{ color: '#f8fafc', margin: 0, fontSize: '16px', fontWeight: '600' }}>{account.channels_count}</p>
-                </div>
-                <div style={{ background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
-                  <p style={{ color: '#64748b', margin: 0, fontSize: '11px' }}>Stream Limit</p>
-                  <p style={{ color: '#f8fafc', margin: 0, fontSize: '16px', fontWeight: '600' }}>{account.stream_limit}</p>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                <button style={styles.btn('secondary')} onClick={() => handleTestAccount(account)}>
-                  <Zap size={14} /> Test
-                </button>
-                <button style={styles.btn('danger')} onClick={() => handleDeleteAccount(account.id)}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-          
-          {accounts.length === 0 && (
-            <div style={{ ...styles.card, textAlign: 'center', gridColumn: '1 / -1' }}>
-              <p style={{ color: '#64748b', margin: 0 }}>No accounts yet. Add one or import from JSON.</p>
-            </div>
-          )}
-        </div>
-      )}
-
-
-      {/* Mappings Tab - Grouped by Channel */}
-      {activeTab === 'mappings' && (
-        <div>
-          {mappings.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ color: '#94a3b8', fontSize: '14px' }}>
-                {(() => {
-                  const uniqueChannels = new Set(mappings.map(m => m.our_channel_id)).size;
-                  return `${uniqueChannels} channels mapped (${mappings.length} total account-channel pairs)`;
-                })()}
-              </div>
-              <button style={styles.btn('danger')} onClick={handleDeleteAllMappings}>
-                <Trash2 size={16} /> Delete All Mappings
-              </button>
-            </div>
-          )}
-          {mappings.length === 0 ? (
-            <div style={{ ...styles.card, textAlign: 'center' }}>
-              <p style={{ color: '#64748b', margin: 0 }}>No channel mappings yet. Use "Map All" to auto-map all accounts to all channels.</p>
-            </div>
-          ) : (
-            (() => {
-              // Group mappings by our_channel_id
-              const grouped = mappings.reduce((acc, m) => {
-                if (!acc[m.our_channel_id]) {
-                  acc[m.our_channel_id] = {
-                    channelId: m.our_channel_id,
-                    channelName: m.our_channel_name,
-                    stalkerChannelName: m.stalker_channel_name,
-                    accounts: [],
-                    totalSuccess: 0,
-                    totalFailure: 0,
-                  };
-                }
-                acc[m.our_channel_id].accounts.push(m);
-                acc[m.our_channel_id].totalSuccess += m.success_count;
-                acc[m.our_channel_id].totalFailure += m.failure_count;
-                return acc;
-              }, {} as Record<string, { channelId: string; channelName: string; stalkerChannelName: string; accounts: ChannelMapping[]; totalSuccess: number; totalFailure: number }>);
-              
-              const sortedChannels = Object.values(grouped).sort((a, b) => a.channelName.localeCompare(b.channelName));
-              
-              return sortedChannels.map(channel => (
-                <div key={channel.channelId} style={styles.mappingRow}>
-                  <div style={{ flex: 1 }}>
-                    <span style={{ color: '#f8fafc', fontWeight: '500' }}>{channel.channelName}</span>
-                    <span style={{ color: '#64748b', margin: '0 8px' }}>→</span>
-                    <span style={{ color: '#7877c6' }}>{channel.stalkerChannelName}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ 
-                      background: 'rgba(120, 119, 198, 0.2)', 
-                      color: '#a78bfa', 
-                      padding: '4px 10px', 
-                      borderRadius: '12px', 
-                      fontSize: '12px',
-                      fontWeight: '600'
-                    }}>
-                      {channel.accounts.length} account{channel.accounts.length !== 1 ? 's' : ''}
-                    </span>
-                    <span style={{ color: '#22c55e', fontSize: '12px' }}>✓ {channel.totalSuccess}</span>
-                    <span style={{ color: '#ef4444', fontSize: '12px' }}>✗ {channel.totalFailure}</span>
-                  </div>
-                </div>
-              ));
-            })()
-          )}
-        </div>
-      )}
-
-      {/* Channel Mapping Modal */}
+      {/* ============ CHANNEL MAPPING MODAL ============ */}
       {showAddMapping && selectedAccount && (
         <div style={{
           position: 'fixed',
@@ -1048,7 +1704,7 @@ export default function IPTVManagerPage() {
           <div style={{ ...styles.card, width: '100%', maxWidth: '1400px', maxHeight: '90vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <h3 style={{ color: '#f8fafc', margin: 0 }}>
-                Map Channels - {selectedAccount.name || new URL(selectedAccount.portal_url).hostname}
+                Map Channels - {selectedAccount.name || (() => { try { return new URL(selectedAccount.portal_url).hostname; } catch { return 'Unknown Portal'; } })()}
               </h3>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
@@ -1071,7 +1727,6 @@ export default function IPTVManagerPage() {
               </div>
             </div>
 
-            {/* Selected channels bar */}
             {(selectedOurChannel || selectedStalkerChannel) && (
               <div style={{ 
                 background: 'rgba(120, 119, 198, 0.1)', 
@@ -1119,9 +1774,8 @@ export default function IPTVManagerPage() {
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
-                {/* Our Channels */}
                 <div>
-                  <h4 style={{ color: '#f8fafc', margin: '0 0 12px 0' }}>Our Channels ({filteredOurChannels.length})</h4>
+                  <h4 style={{ color: '#f8fafc', margin: '0 0 12px 0' }}>Our Channels ({filteredOurChannelsForMapping.length})</h4>
                   <div style={{ marginBottom: '12px' }}>
                     <input 
                       style={styles.input}
@@ -1131,9 +1785,9 @@ export default function IPTVManagerPage() {
                     />
                   </div>
                   <div style={styles.channelList}>
-                    {filteredOurChannels.slice(0, 100).map(ch => {
-                      const isMapped = mappings.some(m => m.our_channel_id === ch.id);
-                      const isSelected = selectedOurChannel?.id === ch.id;
+                    {filteredOurChannelsForMapping.slice(0, 100).map(ch => {
+                      const isMapped = mappings.some(m => m.our_channel_id === ch.streamId);
+                      const isSelected = selectedOurChannel?.streamId === ch.streamId;
                       return (
                         <div 
                           key={ch.id} 
@@ -1157,7 +1811,6 @@ export default function IPTVManagerPage() {
                   </div>
                 </div>
 
-                {/* Suggested Matches */}
                 <div>
                   <h4 style={{ color: '#f8fafc', margin: '0 0 12px 0' }}>
                     {selectedOurChannel ? `Suggestions for "${selectedOurChannel.name}"` : 'Suggestions'}
@@ -1196,15 +1849,14 @@ export default function IPTVManagerPage() {
                   </div>
                 </div>
                 
-                {/* Stalker Channels */}
                 <div>
                   <h4 style={{ color: '#f8fafc', margin: '0 0 12px 0' }}>All Stalker Channels ({filteredStalkerChannels.length})</h4>
                   <div style={{ marginBottom: '12px' }}>
                     <input 
                       style={styles.input}
                       placeholder="Search stalker channels..."
-                      value={channelSearch}
-                      onChange={e => setChannelSearch(e.target.value)}
+                      value={stalkerChannelSearch}
+                      onChange={e => setStalkerChannelSearch(e.target.value)}
                     />
                   </div>
                   <div style={styles.channelList}>

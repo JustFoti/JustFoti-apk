@@ -1,8 +1,16 @@
 'use client';
 
+/**
+ * Traffic Page - Production Ready
+ * Complete traffic analysis with Overview, Sources, Referrers, Bots, and Presence tabs.
+ * Integrates with StatsContext for bot detection metrics and unified data.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../context/AdminContext';
+import { useStats } from '../context/StatsContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
+import BotFilterControls from '../components/BotFilterControls';
 
 interface SourceStats {
   source_type: string;
@@ -75,24 +83,41 @@ interface PresenceStats {
   activeContent: Array<{ content_title: string; content_type: string; activity_type: string; viewer_count: number }>;
 }
 
-
 export default function TrafficSourcesPage() {
   useAdmin();
+  const { stats, botFilterOptions, timeRange: globalTimeRange, setTimeRange: setGlobalTimeRange } = useStats();
   
   const [trafficData, setTrafficData] = useState<TrafficData | null>(null);
   const [presenceStats, setPresenceStats] = useState<PresenceStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'sources' | 'referrers' | 'bots' | 'presence'>('sources');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'referrers' | 'bots' | 'presence'>('overview');
   const [timeRange, setTimeRange] = useState('7d');
-  const [referrerLimit, setReferrerLimit] = useState(100); // Default limit for referrers
+  const [referrerLimit, setReferrerLimit] = useState(100);
+
+  // Sync local time range with global time range
+  useEffect(() => {
+    if (globalTimeRange) {
+      setTimeRange(globalTimeRange);
+    }
+  }, [globalTimeRange]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
       
+      // Build query parameters for bot filtering
+      const params = new URLSearchParams();
+      params.set('days', days.toString());
+      params.set('limit', referrerLimit.toString());
+      
+      if (!botFilterOptions.includeBots) {
+        params.set('excludeBots', 'true');
+        params.set('botThreshold', botFilterOptions.confidenceThreshold.toString());
+      }
+      
       const [trafficRes, presenceRes] = await Promise.all([
-        fetch(getAdminAnalyticsUrl('traffic-sources', { days, limit: referrerLimit })),
+        fetch(`${getAdminAnalyticsUrl('traffic-sources')}?${params.toString()}`),
         fetch(getAdminAnalyticsUrl('presence-stats', { minutes: 30 })),
       ]);
       
@@ -110,7 +135,7 @@ export default function TrafficSourcesPage() {
     } finally {
       setLoading(false);
     }
-  }, [timeRange, referrerLimit]);
+  }, [timeRange, referrerLimit, botFilterOptions]);
 
   useEffect(() => {
     fetchData();
@@ -118,6 +143,11 @@ export default function TrafficSourcesPage() {
     return () => clearInterval(interval);
   }, [fetchData]);
 
+  // Handle time range change - update both local and global
+  const handleTimeRangeChange = (range: string) => {
+    setTimeRange(range);
+    setGlobalTimeRange(range);
+  };
 
   const formatNumber = (num: number) => num?.toLocaleString() || '0';
   
@@ -145,6 +175,10 @@ export default function TrafficSourcesPage() {
     );
   }
 
+  // Calculate bot percentage and trends from StatsContext
+  const botPercentage = trafficData?.totals?.total_hits 
+    ? Math.round((trafficData.totals.bot_hits / trafficData.totals.total_hits) * 100) 
+    : 0;
 
   return (
     <div>
@@ -162,7 +196,20 @@ export default function TrafficSourcesPage() {
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {['24h', '7d', '30d'].map((range) => (
-              <button key={range} onClick={() => setTimeRange(range)} style={{ padding: '8px 16px', background: timeRange === range ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid', borderColor: timeRange === range ? '#7877c6' : 'rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: timeRange === range ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '13px' }}>
+              <button 
+                key={range} 
+                onClick={() => handleTimeRangeChange(range)} 
+                style={{ 
+                  padding: '8px 16px', 
+                  background: timeRange === range ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', 
+                  border: '1px solid', 
+                  borderColor: timeRange === range ? '#7877c6' : 'rgba(255, 255, 255, 0.1)', 
+                  borderRadius: '8px', 
+                  color: timeRange === range ? 'white' : '#94a3b8', 
+                  cursor: 'pointer', 
+                  fontSize: '13px' 
+                }}
+              >
                 {range === '24h' ? '24 Hours' : range === '7d' ? '7 Days' : '30 Days'}
               </button>
             ))}
@@ -170,37 +217,149 @@ export default function TrafficSourcesPage() {
         </div>
       </div>
 
-
-      {/* Overview Stats */}
-      {trafficData?.totals && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-          <StatCard title="Total Hits" value={formatNumber(trafficData.totals.total_hits)} icon="📊" color="#7877c6" />
-          <StatCard title="Unique Visitors" value={formatNumber(trafficData.totals.unique_visitors)} icon="👥" color="#10b981" />
-          <StatCard title="Human Traffic" value={formatNumber(trafficData.totals.human_hits)} icon="🧑" color="#3b82f6" />
-          <StatCard title="Bot Traffic" value={formatNumber(trafficData.totals.bot_hits)} icon="🤖" color="#f59e0b" />
-          <StatCard title="Bot Percentage" value={`${trafficData.totals.total_hits > 0 ? Math.round((trafficData.totals.bot_hits / trafficData.totals.total_hits) * 100) : 0}%`} icon="📈" color="#ec4899" />
-          {presenceStats?.totals && (
-            <StatCard title="Active Now" value={formatNumber(presenceStats.totals.total_active)} icon="🟢" color="#22c55e" pulse />
-          )}
-        </div>
-      )}
-
+      {/* Bot Filter Controls */}
+      <div style={{ marginBottom: '24px' }}>
+        <BotFilterControls />
+      </div>
 
       {/* Tab Selector */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {[
-          { id: 'sources', label: '📊 Traffic Sources', count: trafficData?.sourceTypeStats?.length || 0 },
+          { id: 'overview', label: '📊 Overview', count: null },
+          { id: 'sources', label: '🌐 Traffic Sources', count: trafficData?.sourceTypeStats?.length || 0 },
           { id: 'referrers', label: '🔗 Top Referrers', count: trafficData?.topReferrers?.length || 0 },
           { id: 'bots', label: '🤖 Bot Analysis', count: trafficData?.botStats?.length || 0 },
-          { id: 'presence', label: '🟢 Live Presence', count: presenceStats?.totals?.total_active || 0 },
+          { id: 'presence', label: '🟢 Live Presence', count: presenceStats?.totals?.total_active || stats.liveUsers || 0 },
         ].map((tab) => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} style={{ padding: '10px 20px', background: activeTab === tab.id ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', border: '1px solid', borderColor: activeTab === tab.id ? '#7877c6' : 'rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: activeTab === tab.id ? 'white' : '#94a3b8', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button 
+            key={tab.id} 
+            onClick={() => setActiveTab(tab.id as typeof activeTab)} 
+            style={{ 
+              padding: '10px 20px', 
+              background: activeTab === tab.id ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', 
+              border: '1px solid', 
+              borderColor: activeTab === tab.id ? '#7877c6' : 'rgba(255, 255, 255, 0.1)', 
+              borderRadius: '8px', 
+              color: activeTab === tab.id ? 'white' : '#94a3b8', 
+              cursor: 'pointer', 
+              fontWeight: '500', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px' 
+            }}
+          >
             {tab.label}
-            {tab.count > 0 && <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>{tab.count}</span>}
+            {tab.count !== null && tab.count > 0 && (
+              <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '10px', fontSize: '12px' }}>
+                {tab.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
+      {/* Overview Tab - NEW */}
+      {activeTab === 'overview' && (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          {/* Real-time Stats from Unified Context */}
+          <div style={{
+            background: 'rgba(15, 15, 35, 0.8)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '1px solid rgba(255, 255, 255, 0.1)'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#f8fafc' }}>
+              🔴 Real-Time Activity
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+              <StatCard title="Live Users" value={formatNumber(stats.liveUsers)} icon="👥" color="#22c55e" pulse />
+              <StatCard title="Truly Active" value={formatNumber(stats.trulyActiveUsers)} icon="⚡" color="#10b981" pulse />
+              <StatCard title="Watching Content" value={formatNumber(stats.liveWatching)} icon="▶️" color="#7877c6" />
+              <StatCard title="Browsing" value={formatNumber(stats.liveBrowsing)} icon="🔍" color="#3b82f6" />
+              <StatCard title="Live TV" value={formatNumber(stats.liveTVViewers)} icon="📺" color="#f59e0b" />
+            </div>
+          </div>
+
+          {/* Traffic Overview Stats */}
+          {trafficData?.totals && (
+            <div style={{
+              background: 'rgba(15, 15, 35, 0.8)',
+              borderRadius: '16px',
+              padding: '24px',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#f8fafc' }}>
+                📊 Traffic Overview ({timeRange})
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                <StatCard title="Total Hits" value={formatNumber(trafficData.totals.total_hits)} icon="📊" color="#7877c6" />
+                <StatCard title="Unique Visitors" value={formatNumber(trafficData.totals.unique_visitors)} icon="👥" color="#10b981" />
+                <StatCard title="Human Traffic" value={formatNumber(trafficData.totals.human_hits)} icon="🧑" color="#3b82f6" />
+                <StatCard title="Bot Traffic" value={formatNumber(trafficData.totals.bot_hits)} icon="🤖" color="#f59e0b" />
+                <StatCard title="Bot Percentage" value={`${botPercentage}%`} icon="📈" color="#ec4899" />
+              </div>
+            </div>
+          )}
+
+          {/* Bot Detection Metrics from StatsContext */}
+          {stats.botDetection && (
+            <div style={{
+              background: 'rgba(15, 15, 35, 0.8)',
+              borderRadius: '16px',
+              padding: '24px',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#f8fafc' }}>
+                🤖 Bot Detection Metrics
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+                <StatCard title="Total Detections" value={formatNumber(stats.botDetection.totalDetections)} icon="🔍" color="#f59e0b" />
+                <StatCard title="Suspected Bots" value={formatNumber(stats.botDetection.suspectedBots)} icon="⚠️" color="#ef4444" />
+                <StatCard title="Confirmed Bots" value={formatNumber(stats.botDetection.confirmedBots)} icon="🚨" color="#dc2626" />
+                <StatCard title="Pending Review" value={formatNumber(stats.botDetection.pendingReview)} icon="⏳" color="#8b5cf6" />
+                <StatCard title="Avg Confidence" value={`${Math.round(stats.botDetection.avgConfidenceScore)}%`} icon="📊" color="#06b6d4" />
+              </div>
+            </div>
+          )}
+
+          {/* Geographic Distribution from Unified Context */}
+          {stats.topCountries && stats.topCountries.length > 0 && (
+            <div style={{
+              background: 'rgba(15, 15, 35, 0.8)',
+              borderRadius: '16px',
+              padding: '24px',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '20px', color: '#f8fafc' }}>
+                🌍 Geographic Distribution
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                {stats.topCountries.slice(0, 8).map((country) => {
+                  const total = stats.topCountries.reduce((sum, c) => sum + c.count, 0);
+                  const pct = total > 0 ? Math.round((country.count / total) * 100) : 0;
+                  return (
+                    <div key={country.country} style={{
+                      padding: '12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontWeight: '500', color: '#f8fafc' }}>{country.countryName}</span>
+                        <span style={{ color: '#94a3b8', fontSize: '13px' }}>{pct}%</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: '#94a3b8', fontSize: '12px' }}>{country.country}</span>
+                        <span style={{ fontWeight: '600', color: '#7877c6' }}>{formatNumber(country.count)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Sources Tab */}
       {activeTab === 'sources' && trafficData && (
@@ -232,7 +391,6 @@ export default function TrafficSourcesPage() {
             ) : <div style={{ color: '#64748b', textAlign: 'center', padding: '40px' }}>No source data yet</div>}
           </div>
 
-
           {/* By Medium */}
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
             <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>Traffic by Medium</h3>
@@ -263,14 +421,13 @@ export default function TrafficSourcesPage() {
         </div>
       )}
 
-
       {/* Referrers Tab */}
       {activeTab === 'referrers' && trafficData && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           {/* Limit Controls */}
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ color: '#94a3b8', fontSize: '14px' }}>Show:</span>
-            {[50, 100, 250, 500, 1000].map((limit) => (
+            {[10, 25, 50, 100].map((limit) => (
               <button 
                 key={limit} 
                 onClick={() => setReferrerLimit(limit)} 
@@ -380,10 +537,36 @@ export default function TrafficSourcesPage() {
         </div>
       )}
 
-
       {/* Bots Tab */}
       {activeTab === 'bots' && trafficData && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          {/* Bot Detection Summary from StatsContext */}
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
+            <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>🛡️ Bot Detection Summary</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ color: '#94a3b8' }}>Total Detections</span>
+                <span style={{ fontSize: '20px', fontWeight: '700', color: '#f59e0b' }}>{formatNumber(stats.botDetection.totalDetections)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ color: '#94a3b8' }}>Suspected Bots</span>
+                <span style={{ fontSize: '20px', fontWeight: '700', color: '#ef4444' }}>{formatNumber(stats.botDetection.suspectedBots)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ color: '#94a3b8' }}>Confirmed Bots</span>
+                <span style={{ fontSize: '20px', fontWeight: '700', color: '#dc2626' }}>{formatNumber(stats.botDetection.confirmedBots)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ color: '#94a3b8' }}>Avg Confidence Score</span>
+                <span style={{ fontSize: '20px', fontWeight: '700', color: '#06b6d4' }}>{Math.round(stats.botDetection.avgConfidenceScore)}%</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ color: '#94a3b8' }}>Bot Traffic %</span>
+                <span style={{ fontSize: '20px', fontWeight: '700', color: '#ec4899' }}>{botPercentage}%</span>
+              </div>
+            </div>
+          </div>
+
           {/* Bot Breakdown */}
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
             <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>🤖 Bot Breakdown</h3>
@@ -411,9 +594,8 @@ export default function TrafficSourcesPage() {
             ) : <div style={{ color: '#64748b', textAlign: 'center', padding: '40px' }}>No bot traffic detected</div>}
           </div>
 
-
           {/* Hourly Pattern */}
-          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px', gridColumn: 'span 2' }}>
             <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>📊 Hourly Traffic Pattern</h3>
             {trafficData.hourlyPattern?.length > 0 ? (
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '150px' }}>
@@ -437,7 +619,6 @@ export default function TrafficSourcesPage() {
           </div>
         </div>
       )}
-
 
       {/* Presence Tab */}
       {activeTab === 'presence' && presenceStats && (
@@ -469,7 +650,6 @@ export default function TrafficSourcesPage() {
             ) : <div style={{ color: '#64748b', textAlign: 'center', padding: '40px' }}>No active users</div>}
           </div>
 
-
           {/* Trust Levels */}
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
             <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>🛡️ User Trust Levels</h3>
@@ -493,7 +673,6 @@ export default function TrafficSourcesPage() {
             ) : <div style={{ color: '#64748b', textAlign: 'center', padding: '40px' }}>No trust data yet</div>}
           </div>
 
-
           {/* Active Content */}
           {presenceStats.activeContent?.length > 0 && (
             <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px', gridColumn: 'span 2' }}>
@@ -507,6 +686,25 @@ export default function TrafficSourcesPage() {
                       <div style={{ color: '#64748b', fontSize: '12px' }}>{content.activity_type === 'livetv' ? '📺 Live TV' : `🎬 ${content.content_type}`}</div>
                     </div>
                     <span style={{ fontSize: '16px', fontWeight: '700', color: '#10b981' }}>{content.viewer_count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Geographic Distribution */}
+          {presenceStats.geoDistribution?.length > 0 && (
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px', gridColumn: 'span 2' }}>
+              <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>🌍 Active Users by Location</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                {presenceStats.geoDistribution.slice(0, 12).map((geo, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                    <span style={{ fontSize: '20px' }}>📍</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#f8fafc', fontSize: '14px' }}>{geo.city || 'Unknown'}</div>
+                      <div style={{ color: '#64748b', fontSize: '12px' }}>{geo.country}</div>
+                    </div>
+                    <span style={{ fontSize: '16px', fontWeight: '700', color: '#7877c6' }}>{geo.user_count}</span>
                   </div>
                 ))}
               </div>

@@ -15,6 +15,23 @@ import { useStats } from '../context/StatsContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import BotFilterControls from '../components/BotFilterControls';
 
+// Custom hook for debounced value
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 // Data interfaces
 interface WatchSession {
   id: string;
@@ -117,6 +134,9 @@ export default function UnifiedAnalyticsPage() {
   const [filterContentType, setFilterContentType] = useState<string>('all');
   const [sortField, setSortField] = useState<'started_at' | 'total_watch_time' | 'completion_percentage'>('started_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Debounce search query for better performance (300ms delay)
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   useEffect(() => {
     fetchAnalytics();
@@ -225,9 +245,9 @@ export default function UnifiedAnalyticsPage() {
   const filteredSessions = useMemo(() => {
     let result = [...sessions];
     
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Apply search filter with debounced query
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
       result = result.filter(s => 
         s.content_title?.toLowerCase().includes(query) ||
         s.content_id?.toLowerCase().includes(query) ||
@@ -258,7 +278,7 @@ export default function UnifiedAnalyticsPage() {
     });
     
     return result;
-  }, [sessions, searchQuery, filterDevice, filterQuality, filterContentType, sortField, sortOrder]);
+  }, [sessions, debouncedSearchQuery, filterDevice, filterQuality, filterContentType, sortField, sortOrder]);
 
   // Calculate trends using real previous period data
   const trends = useMemo((): TrendData[] => {

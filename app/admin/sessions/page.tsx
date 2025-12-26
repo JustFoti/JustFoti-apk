@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
+import { useDebounce } from '@/app/hooks/useDebounce';
 
 interface WatchSession {
   id: string;
@@ -38,24 +39,45 @@ interface SessionMetrics {
   mostWatchedType: string;
 }
 
+interface PaginationState {
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+}
+
 export default function AdminSessionsPage() {
   const { dateRange, setIsLoading } = useAdmin();
-  // Use unified stats for key metrics - SINGLE SOURCE OF TRUTH
   const { stats: unifiedStats } = useStats();
   
   const [sessions, setSessions] = useState<WatchSession[]>([]);
   const [localMetrics, setLocalMetrics] = useState<SessionMetrics | null>(null);
   const [trafficSources, setTrafficSources] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  
+  // Filter states
   const [filter, setFilter] = useState<'all' | 'completed' | 'abandoned'>('all');
   const [contentTypeFilter, setContentTypeFilter] = useState<'all' | 'movie' | 'tv'>('all');
+  const [deviceFilter, setDeviceFilter] = useState<'all' | 'desktop' | 'mobile' | 'tablet'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'recent' | 'duration' | 'completion'>('recent');
+  
+  // Pagination state
+  const [pagination, setPagination] = useState<PaginationState>({
+    page: 1,
+    pageSize: 50,
+    total: 0,
+    hasMore: false
+  });
+  
   const [selectedSession, setSelectedSession] = useState<WatchSession | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'timeline' | 'traffic'>('table');
-  const limit = 100;
+  
+  // Debounce search query
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   
   // Key metrics from unified stats - SINGLE SOURCE OF TRUTH
-  // Session metrics are for the last 24 hours
   const metrics: SessionMetrics = {
     totalSessions: unifiedStats.totalSessions || localMetrics?.totalSessions || 0,
     avgDuration: unifiedStats.avgSessionDuration || localMetrics?.avgDuration || 0,
@@ -68,9 +90,9 @@ export default function AdminSessionsPage() {
   };
 
   useEffect(() => {
-    fetchSessions();
+    fetchSessions(1, false);
     fetchTrafficSources();
-  }, [dateRange, filter, contentTypeFilter, sortBy]);
+  }, [dateRange]);
 
   const fetchTrafficSources = async () => {
     try {
@@ -86,12 +108,19 @@ export default function AdminSessionsPage() {
     }
   };
 
-  const fetchSessions = async () => {
+  const fetchSessions = async (page: number = 1, append: boolean = false) => {
     try {
-      setLoading(true);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setIsLoading(true);
       
-      const params = new URLSearchParams({ limit: limit.toString() });
+      const params = new URLSearchParams({ 
+        limit: pagination.pageSize.toString(),
+        page: page.toString()
+      });
       
       if (dateRange.startDate && dateRange.endDate) {
         params.append('startDate', dateRange.startDate.getTime().toString());
@@ -103,27 +132,22 @@ export default function AdminSessionsPage() {
         const data = await response.json();
         let sessionData = data.sessions || [];
         
-        // Apply filters
-        if (filter === 'completed') {
-          sessionData = sessionData.filter((s: WatchSession) => s.is_completed || s.completion_percentage >= 90);
-        } else if (filter === 'abandoned') {
-          sessionData = sessionData.filter((s: WatchSession) => !s.is_completed && s.completion_percentage < 50);
+        if (append) {
+          setSessions(prev => [...prev, ...sessionData]);
+        } else {
+          setSessions(sessionData);
         }
         
-        if (contentTypeFilter !== 'all') {
-          sessionData = sessionData.filter((s: WatchSession) => s.content_type === contentTypeFilter);
-        }
+        // Update pagination
+        const total = data.pagination?.total || data.analytics?.totalSessions || sessionData.length;
+        setPagination(prev => ({
+          ...prev,
+          page,
+          total,
+          hasMore: sessionData.length === prev.pageSize
+        }));
         
-        // Apply sorting
-        if (sortBy === 'duration') {
-          sessionData.sort((a: WatchSession, b: WatchSession) => b.total_watch_time - a.total_watch_time);
-        } else if (sortBy === 'completion') {
-          sessionData.sort((a: WatchSession, b: WatchSession) => b.completion_percentage - a.completion_percentage);
-        }
-        
-        setSessions(sessionData);
-        
-        // Calculate local metrics (for details not in unified stats)
+        // Calculate local metrics
         if (data.analytics) {
           const analytics = data.analytics;
           setLocalMetrics({
@@ -133,7 +157,7 @@ export default function AdminSessionsPage() {
             completedCount: analytics.completedSessions || 0,
             avgPauses: Math.round((analytics.totalPauses || 0) / Math.max(analytics.totalSessions, 1)),
             avgSeeks: Math.round((analytics.totalSeeks || 0) / Math.max(analytics.totalSessions, 1)),
-            peakHour: 20, // Would need additional data
+            peakHour: 20,
             mostWatchedType: sessionData.filter((s: WatchSession) => s.content_type === 'movie').length > 
                            sessionData.filter((s: WatchSession) => s.content_type === 'tv').length ? 'Movies' : 'TV Shows',
           });
@@ -143,9 +167,60 @@ export default function AdminSessionsPage() {
       console.error('Failed to fetch sessions:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setIsLoading(false);
     }
   };
+
+  const loadMoreSessions = () => {
+    if (!loadingMore && pagination.hasMore) {
+      fetchSessions(pagination.page + 1, true);
+    }
+  };
+
+  // Filter and sort sessions
+  const filteredSessions = useMemo(() => {
+    let result = [...sessions];
+    
+    // Apply completion filter
+    if (filter === 'completed') {
+      result = result.filter((s) => s.is_completed || s.completion_percentage >= 90);
+    } else if (filter === 'abandoned') {
+      result = result.filter((s) => !s.is_completed && s.completion_percentage < 50);
+    }
+    
+    // Apply content type filter
+    if (contentTypeFilter !== 'all') {
+      result = result.filter((s) => s.content_type === contentTypeFilter);
+    }
+    
+    // Apply device filter
+    if (deviceFilter !== 'all') {
+      result = result.filter((s) => s.device_type?.toLowerCase() === deviceFilter);
+    }
+    
+    // Apply search filter
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
+      result = result.filter((s) => 
+        s.content_title?.toLowerCase().includes(query) ||
+        s.content_id?.toLowerCase().includes(query) ||
+        s.user_id?.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply sorting
+    if (sortBy === 'duration') {
+      result.sort((a, b) => b.total_watch_time - a.total_watch_time);
+    } else if (sortBy === 'completion') {
+      result.sort((a, b) => b.completion_percentage - a.completion_percentage);
+    } else {
+      // Default: recent
+      result.sort((a, b) => (b.started_at || 0) - (a.started_at || 0));
+    }
+    
+    return result;
+  }, [sessions, filter, contentTypeFilter, deviceFilter, debouncedSearchQuery, sortBy]);
 
   const formatDuration = (seconds: number) => {
     if (!seconds) return '0m';
@@ -155,7 +230,6 @@ export default function AdminSessionsPage() {
     return `${minutes}m`;
   };
 
-  // Validate timestamp is reasonable (must be after Jan 1, 2020 and not in the future)
   const isValidTimestamp = (ts: number): boolean => {
     if (!ts || ts <= 0 || isNaN(ts)) return false;
     const now = Date.now();
@@ -165,25 +239,15 @@ export default function AdminSessionsPage() {
 
   const normalizeTimestamp = (timestamp: number | string | undefined | null): number | null => {
     if (!timestamp) return null;
-    
-    // Handle string timestamps
     const ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : Number(timestamp);
-    
-    // Check if it's a valid number
     if (isNaN(ts) || ts <= 0) return null;
-    
-    // Check if timestamp is in seconds (Unix) vs milliseconds
-    // If timestamp looks like seconds (before year 2001 in ms), convert to ms
     const normalized = ts < 1000000000000 ? ts * 1000 : ts;
-    
-    // Validate the normalized timestamp
     return isValidTimestamp(normalized) ? normalized : null;
   };
 
   const formatDate = (timestamp: number | string | undefined | null) => {
     const normalizedTs = normalizeTimestamp(timestamp);
     if (!normalizedTs) return 'N/A';
-    
     try {
       return new Date(normalizedTs).toLocaleString();
     } catch {
@@ -194,7 +258,6 @@ export default function AdminSessionsPage() {
   const formatTime = (timestamp: number | string | undefined | null) => {
     const normalizedTs = normalizeTimestamp(timestamp);
     if (!normalizedTs) return '--:--';
-    
     try {
       return new Date(normalizedTs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch {
@@ -211,7 +274,7 @@ export default function AdminSessionsPage() {
   const exportSessions = () => {
     const csvContent = [
       ['Content', 'Type', 'Started', 'Duration', 'Watch Time', 'Completion', 'Device', 'Pauses', 'Seeks'].join(','),
-      ...sessions.map(s => [
+      ...filteredSessions.map(s => [
         `"${s.content_title || s.content_id}"`,
         s.content_type,
         new Date(s.started_at).toISOString(),
@@ -245,6 +308,51 @@ export default function AdminSessionsPage() {
     return hours;
   };
 
+  // Generate session timeline events
+  const getSessionEvents = (session: WatchSession) => {
+    const events = [];
+    
+    // Start event
+    events.push({
+      type: 'start',
+      time: session.started_at,
+      label: 'Session Started',
+      icon: '▶️'
+    });
+    
+    // Pause events (simulated based on pause_count)
+    if (session.pause_count > 0) {
+      events.push({
+        type: 'pause',
+        time: session.started_at + (session.total_watch_time * 1000 * 0.3),
+        label: `${session.pause_count} Pause${session.pause_count > 1 ? 's' : ''}`,
+        icon: '⏸️'
+      });
+    }
+    
+    // Seek events (simulated based on seek_count)
+    if (session.seek_count > 0) {
+      events.push({
+        type: 'seek',
+        time: session.started_at + (session.total_watch_time * 1000 * 0.5),
+        label: `${session.seek_count} Seek${session.seek_count > 1 ? 's' : ''}`,
+        icon: '⏩'
+      });
+    }
+    
+    // End event
+    if (session.ended_at) {
+      events.push({
+        type: 'end',
+        time: session.ended_at,
+        label: session.is_completed ? 'Completed' : 'Session Ended',
+        icon: session.is_completed ? '✅' : '⏹️'
+      });
+    }
+    
+    return events.sort((a, b) => a.time - b.time);
+  };
+
   return (
     <div>
       <div style={{
@@ -270,7 +378,7 @@ export default function AdminSessionsPage() {
         </p>
       </div>
 
-      {/* Metrics Cards - Using unified stats for key metrics */}
+      {/* Metrics Cards */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
@@ -294,23 +402,54 @@ export default function AdminSessionsPage() {
         marginBottom: '20px',
         flexWrap: 'wrap'
       }}>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Search Input */}
+          <input
+            type="text"
+            placeholder="Search by title, ID, user..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              color: '#f8fafc',
+              fontSize: '14px',
+              width: '200px'
+            }}
+          />
+          
+          {/* Status Filter */}
           <select value={filter} onChange={(e) => setFilter(e.target.value as any)} style={selectStyle}>
             <option value="all">All Sessions</option>
             <option value="completed">Completed (90%+)</option>
             <option value="abandoned">Abandoned (&lt;50%)</option>
           </select>
+          
+          {/* Content Type Filter */}
           <select value={contentTypeFilter} onChange={(e) => setContentTypeFilter(e.target.value as any)} style={selectStyle}>
             <option value="all">All Content</option>
             <option value="movie">Movies Only</option>
             <option value="tv">TV Shows Only</option>
           </select>
+          
+          {/* Device Filter */}
+          <select value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value as any)} style={selectStyle}>
+            <option value="all">All Devices</option>
+            <option value="desktop">Desktop</option>
+            <option value="mobile">Mobile</option>
+            <option value="tablet">Tablet</option>
+          </select>
+          
+          {/* Sort By */}
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} style={selectStyle}>
             <option value="recent">Most Recent</option>
             <option value="duration">Longest Duration</option>
             <option value="completion">Highest Completion</option>
           </select>
         </div>
+        
         <div style={{ display: 'flex', gap: '8px' }}>
           <button onClick={() => setViewMode('table')} style={{ ...viewButtonStyle, background: viewMode === 'table' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', color: viewMode === 'table' ? 'white' : '#94a3b8' }}>📋 Table</button>
           <button onClick={() => setViewMode('timeline')} style={{ ...viewButtonStyle, background: viewMode === 'timeline' ? '#7877c6' : 'rgba(255, 255, 255, 0.05)', color: viewMode === 'timeline' ? 'white' : '#94a3b8' }}>📈 Timeline</button>
@@ -322,6 +461,16 @@ export default function AdminSessionsPage() {
       {/* Sessions Table View */}
       {viewMode === 'table' && (
         <div style={{ background: 'rgba(255, 255, 255, 0.05)', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.1)', overflow: 'hidden' }}>
+          {/* Table Header with count */}
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '16px' }}>
+              Sessions ({filteredSessions.length}{pagination.total > sessions.length ? ` of ${pagination.total}` : ''})
+            </h3>
+            <span style={{ color: '#64748b', fontSize: '13px' }}>
+              Showing {sessions.length} loaded • Page {pagination.page}
+            </span>
+          </div>
+          
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '900px' }}>
               <thead>
@@ -340,10 +489,10 @@ export default function AdminSessionsPage() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading sessions...</td></tr>
-                ) : sessions.length === 0 ? (
+                ) : filteredSessions.length === 0 ? (
                   <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No sessions found</td></tr>
                 ) : (
-                  sessions.map((session) => (
+                  filteredSessions.map((session) => (
                     <tr key={session.id} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)', cursor: 'pointer' }} onClick={() => setSelectedSession(session)}>
                       <td style={tdStyle}>
                         <div>
@@ -375,6 +524,41 @@ export default function AdminSessionsPage() {
               </tbody>
             </table>
           </div>
+          
+          {/* Pagination Controls */}
+          {pagination.hasMore && (
+            <div style={{ padding: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.1)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+              <button
+                onClick={loadMoreSessions}
+                disabled={loadingMore}
+                style={{
+                  padding: '12px 32px',
+                  background: loadingMore ? 'rgba(120, 119, 198, 0.1)' : 'rgba(120, 119, 198, 0.2)',
+                  border: '1px solid rgba(120, 119, 198, 0.3)',
+                  borderRadius: '8px',
+                  color: '#a5b4fc',
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                {loadingMore ? (
+                  <>
+                    <span style={{ display: 'inline-block', width: '14px', height: '14px', border: '2px solid rgba(165, 180, 252, 0.3)', borderTopColor: '#a5b4fc', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    Loading...
+                  </>
+                ) : (
+                  <>Load More Sessions</>
+                )}
+              </button>
+              <span style={{ color: '#64748b', fontSize: '13px' }}>
+                Page {pagination.page} • {sessions.length} loaded
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -404,7 +588,7 @@ export default function AdminSessionsPage() {
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px' }}>
             <h3 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '16px' }}>🕐 Recent Sessions Timeline</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {sessions.slice(0, 20).map((session) => (
+              {filteredSessions.slice(0, 20).map((session) => (
                 <div key={session.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', cursor: 'pointer' }} onClick={() => setSelectedSession(session)}>
                   <div style={{ width: '60px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>{formatTime(session.started_at)}</div>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: getCompletionColor(session.completion_percentage), boxShadow: `0 0 8px ${getCompletionColor(session.completion_percentage)}40` }} />
@@ -523,7 +707,7 @@ export default function AdminSessionsPage() {
       {/* Session Detail Modal */}
       {selectedSession && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => setSelectedSession(null)}>
-          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '24px', maxWidth: '500px', width: '100%', maxHeight: '80vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: '#1e293b', borderRadius: '16px', padding: '24px', maxWidth: '600px', width: '100%', maxHeight: '85vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
               <div>
                 <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '18px' }}>{selectedSession.content_title || selectedSession.content_id}</h3>
@@ -535,6 +719,7 @@ export default function AdminSessionsPage() {
               <button onClick={() => setSelectedSession(null)} style={{ background: 'none', border: 'none', color: '#94a3b8', fontSize: '24px', cursor: 'pointer', padding: '0' }}>×</button>
             </div>
             
+            {/* Session Details Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
               <DetailItem label="Started" value={formatDate(selectedSession.started_at)} />
               <DetailItem label="Device" value={selectedSession.device_type || 'Unknown'} />
@@ -542,8 +727,11 @@ export default function AdminSessionsPage() {
               <DetailItem label="Watch Time" value={formatDuration(selectedSession.total_watch_time)} />
               <DetailItem label="Quality" value={selectedSession.quality || 'Auto'} />
               <DetailItem label="Last Position" value={formatDuration(selectedSession.last_position)} />
+              <DetailItem label="User ID" value={selectedSession.user_id?.substring(0, 16) + '...' || 'N/A'} />
+              <DetailItem label="Session ID" value={selectedSession.session_id?.substring(0, 16) + '...' || 'N/A'} />
             </div>
 
+            {/* Completion Progress */}
             <div style={{ marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: '#94a3b8', fontSize: '14px' }}>Completion</span>
@@ -554,7 +742,8 @@ export default function AdminSessionsPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '24px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px' }}>
+            {/* Session Stats */}
+            <div style={{ display: 'flex', gap: '24px', padding: '16px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', marginBottom: '20px' }}>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: '24px', fontWeight: '700', color: '#f8fafc' }}>{selectedSession.pause_count}</div>
                 <div style={{ color: '#64748b', fontSize: '12px' }}>Pauses</div>
@@ -568,6 +757,24 @@ export default function AdminSessionsPage() {
                 <div style={{ color: '#64748b', fontSize: '12px' }}>{selectedSession.is_completed ? 'Completed' : 'In Progress'}</div>
               </div>
             </div>
+
+            {/* Session Timeline Events */}
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', borderRadius: '8px', padding: '16px' }}>
+              <h4 style={{ margin: '0 0 16px 0', color: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>📊 Session Timeline</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {getSessionEvents(selectedSession).map((event, idx) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(120, 119, 198, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
+                      {event.icon}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#f8fafc', fontSize: '13px', fontWeight: '500' }}>{event.label}</div>
+                      <div style={{ color: '#64748b', fontSize: '11px' }}>{formatDate(event.time)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -575,6 +782,7 @@ export default function AdminSessionsPage() {
   );
 }
 
+// Styles
 const selectStyle: React.CSSProperties = {
   padding: '8px 12px',
   background: 'rgba(255, 255, 255, 0.05)',
@@ -613,6 +821,7 @@ const tdStyle: React.CSSProperties = {
   fontSize: '14px'
 };
 
+// Components
 function MetricCard({ title, value, icon }: { title: string; value: string | number; icon: string }) {
   return (
     <div style={{

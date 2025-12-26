@@ -402,7 +402,7 @@ describe('Cross-Component Data Flow Integration', () => {
         content: fc.record({
           totalSessions: fc.integer({ min: 0, max: 100000 }),
           totalWatchTime: fc.integer({ min: 0, max: 1000000 }),
-          avgDuration: fc.float({ min: 0, max: 180 })
+          avgDuration: fc.float({ min: 0, max: 180, noNaN: true })
         })
       }),
       (apiResponse) => {

@@ -1,7 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server';
+/**
+ * Admin Channel Mappings API
+ * GET /api/admin/channel-mappings - Get channel mappings
+ * POST /api/admin/channel-mappings - Create/update/delete channel mappings
+ * 
+ * Implements standardized response format per Requirements 16.2, 16.3, 16.4, 16.5
+ */
+
+import { NextRequest } from 'next/server';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 import { getDB, initializeDB } from '@/app/lib/db/neon-connection';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  successResponse,
+  unauthorizedResponse,
+  badRequestResponse,
+  internalErrorResponse,
+  ErrorCodes,
+} from '@/app/lib/utils/api-response';
 
 // Initialize channel mappings table if it doesn't exist
 async function ensureMappingsTables() {
@@ -55,12 +70,13 @@ async function ensureMappingsTables() {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdminAuth(request);
-  if (!authResult.success) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
+
     await ensureMappingsTables();
     const db = getDB().getAdapter();
     
@@ -98,27 +114,21 @@ export async function GET(request: NextRequest) {
     
     const mappings = await db.query(query, params);
     
-    return NextResponse.json({ 
-      success: true, 
-      mappings,
-      total: mappings.length 
-    });
+    return successResponse({ mappings, total: mappings.length });
   } catch (error: any) {
     console.error('Failed to fetch channel mappings:', error);
-    return NextResponse.json({ 
-      success: false, 
-      error: error.message 
-    }, { status: 500 });
+    return internalErrorResponse('Failed to fetch channel mappings', error);
   }
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdminAuth(request);
-  if (!authResult.success) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
+
     await ensureMappingsTables();
     const db = getDB().getAdapter();
     const body = await request.json();

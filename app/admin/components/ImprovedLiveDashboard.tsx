@@ -13,9 +13,51 @@
  * - 12-hour activity trend from server
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStats } from '../context/StatsContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
+
+// Hook for animated number transitions
+function useAnimatedNumber(value: number, duration: number = 500): number {
+  const [displayValue, setDisplayValue] = useState(value);
+  const previousValue = useRef(value);
+  const animationRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (previousValue.current === value) return;
+    
+    const startValue = previousValue.current;
+    const endValue = value;
+    const startTime = performance.now();
+    
+    const animate = (currentTime: number) => {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      
+      // Ease out cubic for smooth deceleration
+      const easeOut = 1 - Math.pow(1 - progress, 3);
+      const currentValue = Math.round(startValue + (endValue - startValue) * easeOut);
+      
+      setDisplayValue(currentValue);
+      
+      if (progress < 1) {
+        animationRef.current = requestAnimationFrame(animate);
+      } else {
+        previousValue.current = value;
+      }
+    };
+    
+    animationRef.current = requestAnimationFrame(animate);
+    
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [value, duration]);
+
+  return displayValue;
+}
 
 interface HistoryPoint {
   time: number;
@@ -390,6 +432,87 @@ export default function ImprovedLiveDashboard() {
         </div>
       </div>
 
+      {/* Currently Active Content */}
+      <div style={{ 
+        background: 'rgba(255, 255, 255, 0.03)', 
+        border: '1px solid rgba(255, 255, 255, 0.1)', 
+        borderRadius: '12px', 
+        padding: '16px' 
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <span style={{ color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>🔥 Currently Active Content</span>
+          <span style={{ color: '#64748b', fontSize: '12px' }}>Sorted by viewers</span>
+        </div>
+        
+        {unifiedStats.topContent && unifiedStats.topContent.length > 0 ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px' }}>
+            {unifiedStats.topContent.slice(0, 6).map((content, i) => (
+              <div 
+                key={content.contentId} 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  padding: '12px',
+                  background: i === 0 ? 'rgba(255, 215, 0, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '8px',
+                  border: i === 0 ? '1px solid rgba(255, 215, 0, 0.2)' : '1px solid transparent',
+                }}
+              >
+                <span style={{ 
+                  width: '28px', 
+                  height: '28px', 
+                  borderRadius: '50%', 
+                  background: i < 3 ? ['#ffd700', '#c0c0c0', '#cd7f32'][i] : 'rgba(255,255,255,0.1)', 
+                  color: i < 3 ? '#000' : '#94a3b8', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center', 
+                  fontWeight: '700', 
+                  fontSize: '12px',
+                  flexShrink: 0,
+                }}>
+                  {i + 1}
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ 
+                    color: '#f8fafc', 
+                    fontSize: '13px', 
+                    fontWeight: '500',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}>
+                    {content.contentTitle || content.contentId}
+                  </div>
+                  <div style={{ color: '#64748b', fontSize: '11px', textTransform: 'capitalize' }}>
+                    {content.contentType}
+                  </div>
+                </div>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '4px',
+                  padding: '4px 8px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  borderRadius: '12px',
+                  flexShrink: 0,
+                }}>
+                  <span style={{ color: '#10b981', fontWeight: '600', fontSize: '13px' }}>
+                    {content.watchCount}
+                  </span>
+                  <span style={{ color: '#10b981', fontSize: '11px' }}>👁</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '24px', color: '#64748b' }}>
+            No active content right now
+          </div>
+        )}
+      </div>
+
       <style jsx>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; }
@@ -419,6 +542,21 @@ function ActivityCard({
   color: string;
   isMain?: boolean;
 }) {
+  const animatedValue = useAnimatedNumber(value);
+  const animatedPeak = useAnimatedNumber(peak);
+  const [flash, setFlash] = useState(false);
+  const prevValue = useRef(value);
+
+  // Flash effect when value changes
+  useEffect(() => {
+    if (prevValue.current !== value) {
+      setFlash(true);
+      const timer = setTimeout(() => setFlash(false), 300);
+      prevValue.current = value;
+      return () => clearTimeout(timer);
+    }
+  }, [value]);
+
   const formatPeakTime = (ts: number) => {
     if (!ts) return '';
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -426,11 +564,16 @@ function ActivityCard({
 
   return (
     <div style={{ 
-      background: isMain ? `linear-gradient(135deg, ${color}15, ${color}05)` : 'rgba(255, 255, 255, 0.03)', 
+      background: flash 
+        ? `linear-gradient(135deg, ${color}25, ${color}10)` 
+        : isMain 
+          ? `linear-gradient(135deg, ${color}15, ${color}05)` 
+          : 'rgba(255, 255, 255, 0.03)', 
       border: `1px solid ${isMain ? color + '30' : 'rgba(255, 255, 255, 0.1)'}`, 
       borderRadius: '12px', 
       padding: '16px',
       borderTop: `3px solid ${color}`,
+      transition: 'background 0.3s ease',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
         <span style={{ fontSize: '20px' }}>{icon}</span>
@@ -445,9 +588,11 @@ function ActivityCard({
         fontWeight: '700', 
         color: color,
         lineHeight: '1',
-        marginBottom: '8px'
+        marginBottom: '8px',
+        transition: 'transform 0.2s ease',
+        transform: flash ? 'scale(1.05)' : 'scale(1)',
       }}>
-        {value.toLocaleString()}
+        {animatedValue.toLocaleString()}
       </div>
       
       <div style={{ 
@@ -461,7 +606,7 @@ function ActivityCard({
       }}>
         <span style={{ color: '#ec4899' }}>📈</span>
         <span style={{ color: '#94a3b8' }}>Peak today:</span>
-        <span style={{ color: '#f8fafc', fontWeight: '600' }}>{peak}</span>
+        <span style={{ color: '#f8fafc', fontWeight: '600' }}>{animatedPeak}</span>
         {peakTime > 0 && (
           <span style={{ color: '#64748b' }}>at {formatPeakTime(peakTime)}</span>
         )}

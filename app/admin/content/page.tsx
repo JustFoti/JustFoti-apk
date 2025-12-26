@@ -5,6 +5,23 @@ import { useAdmin } from '../context/AdminContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
 import { contentTitleCache } from '../../lib/utils/content-title-cache';
 
+// Custom hook for debounced value
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
 interface ContentStat {
   contentId: string;
   contentTitle: string;
@@ -23,6 +40,7 @@ interface ContentMetrics {
   avgCompletion: number;
   movieCount: number;
   tvCount: number;
+  liveCount: number;
   topPerformer: string;
   mostCompleted: string;
 }
@@ -46,6 +64,7 @@ export default function AdminContentPage() {
   const [sortBy, setSortBy] = useState<'views' | 'watchTime' | 'completion' | 'viewers'>('views');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300); // 300ms debounce
   const [viewMode, setViewMode] = useState<'table' | 'cards' | 'chart'>('table');
   const fetchInProgress = useRef(false);
 
@@ -138,6 +157,7 @@ export default function AdminContentPage() {
     const avgCompletion = stats.reduce((sum, s) => sum + s.avgCompletion, 0) / stats.length;
     const movieCount = stats.filter(s => s.contentType === 'movie').length;
     const tvCount = stats.filter(s => s.contentType === 'tv').length;
+    const liveCount = stats.filter(s => s.contentType === 'live').length;
     const topByViews = [...stats].sort((a, b) => b.views - a.views)[0];
     const topByCompletion = [...stats].sort((a, b) => b.avgCompletion - a.avgCompletion)[0];
     return {
@@ -147,6 +167,7 @@ export default function AdminContentPage() {
       avgCompletion: Math.round(avgCompletion),
       movieCount,
       tvCount,
+      liveCount,
       topPerformer: topByViews?.displayTitle || topByViews?.contentTitle || 'N/A',
       mostCompleted: topByCompletion?.displayTitle || topByCompletion?.contentTitle || 'N/A',
     };
@@ -154,8 +175,8 @@ export default function AdminContentPage() {
 
   const filteredStats = useMemo(() => {
     let result = [...stats];
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
       result = result.filter(s => 
         s.displayTitle?.toLowerCase().includes(query) ||
         s.contentTitle?.toLowerCase().includes(query) ||
@@ -174,7 +195,7 @@ export default function AdminContentPage() {
       return sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
     });
     return result;
-  }, [stats, searchQuery, sortBy, sortOrder]);
+  }, [stats, debouncedSearchQuery, sortBy, sortOrder]);
 
   const chartData = useMemo(() => {
     const top10 = filteredStats.slice(0, 10);
@@ -193,6 +214,28 @@ export default function AdminContentPage() {
     if (percentage >= 50) return '#f59e0b';
     if (percentage >= 25) return '#3b82f6';
     return '#ef4444';
+  };
+
+  const getContentTypeStyle = (type: string) => {
+    switch (type) {
+      case 'movie':
+        return { background: 'rgba(16, 185, 129, 0.2)', color: '#10b981' };
+      case 'tv':
+        return { background: 'rgba(245, 158, 11, 0.2)', color: '#f59e0b' };
+      case 'live':
+        return { background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' };
+      default:
+        return { background: 'rgba(148, 163, 184, 0.2)', color: '#94a3b8' };
+    }
+  };
+
+  const getContentTypeLabel = (type: string) => {
+    switch (type) {
+      case 'movie': return 'Movie';
+      case 'tv': return 'TV Show';
+      case 'live': return 'Live TV';
+      default: return type;
+    }
   };
 
   if (loading) {
@@ -218,6 +261,9 @@ export default function AdminContentPage() {
           <MetricCard title="Avg Completion" value={`${metrics.avgCompletion}%`} icon="✅" color="#ec4899" />
           <MetricCard title="Movies" value={metrics.movieCount} icon="🎬" color="#3b82f6" />
           <MetricCard title="TV Shows" value={metrics.tvCount} icon="📺" color="#8b5cf6" />
+          {metrics.liveCount > 0 && (
+            <MetricCard title="Live TV" value={metrics.liveCount} icon="📡" color="#ef4444" />
+          )}
         </div>
       )}
 
@@ -236,23 +282,108 @@ export default function AdminContentPage() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-          <input type="text" placeholder="Search content..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} style={{ padding: '10px 16px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px', color: '#f8fafc', fontSize: '14px', minWidth: '200px', outline: 'none' }} />
-          <select value={contentType} onChange={(e) => setContentType(e.target.value)} style={selectStyle}>
+          <div style={{ position: 'relative' }}>
+            <input 
+              type="text" 
+              placeholder="Search by title or ID..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              style={{ 
+                padding: '10px 36px 10px 16px', 
+                background: 'rgba(255, 255, 255, 0.05)', 
+                border: '1px solid rgba(255, 255, 255, 0.1)', 
+                borderRadius: '8px', 
+                color: '#f8fafc', 
+                fontSize: '14px', 
+                minWidth: '220px', 
+                outline: 'none' 
+              }} 
+              aria-label="Search content by title or ID"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  fontSize: '14px',
+                  lineHeight: 1
+                }}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
+            {searchQuery !== debouncedSearchQuery && (
+              <span style={{ 
+                position: 'absolute', 
+                right: searchQuery ? '32px' : '10px', 
+                top: '50%', 
+                transform: 'translateY(-50%)', 
+                color: '#64748b', 
+                fontSize: '12px' 
+              }}>
+                ...
+              </span>
+            )}
+          </div>
+          <select 
+            value={contentType} 
+            onChange={(e) => setContentType(e.target.value)} 
+            style={selectStyle}
+            aria-label="Filter by content type"
+          >
             <option value="all">All Content</option>
             <option value="movie">Movies</option>
             <option value="tv">TV Shows</option>
+            <option value="live">Live TV</option>
           </select>
-          <select value={`${sortBy}-${sortOrder}`} onChange={(e) => { const [field, order] = e.target.value.split('-'); setSortBy(field as typeof sortBy); setSortOrder(order as typeof sortOrder); }} style={selectStyle}>
+          <select 
+            value={`${sortBy}-${sortOrder}`} 
+            onChange={(e) => { 
+              const [field, order] = e.target.value.split('-'); 
+              setSortBy(field as typeof sortBy); 
+              setSortOrder(order as typeof sortOrder); 
+            }} 
+            style={selectStyle}
+            aria-label="Sort content"
+          >
             <option value="views-desc">Most Views</option>
             <option value="views-asc">Least Views</option>
             <option value="watchTime-desc">Most Watch Time</option>
+            <option value="watchTime-asc">Least Watch Time</option>
             <option value="completion-desc">Highest Completion</option>
+            <option value="completion-asc">Lowest Completion</option>
             <option value="viewers-desc">Most Unique Viewers</option>
+            <option value="viewers-asc">Least Unique Viewers</option>
           </select>
         </div>
         <div style={{ display: 'flex', gap: '4px', background: 'rgba(255, 255, 255, 0.05)', padding: '4px', borderRadius: '8px' }}>
-          {[{ id: 'table', icon: '📋' }, { id: 'cards', icon: '🃏' }, { id: 'chart', icon: '📊' }].map((mode) => (
-            <button key={mode.id} onClick={() => setViewMode(mode.id as typeof viewMode)} style={{ padding: '8px 12px', background: viewMode === mode.id ? '#7877c6' : 'transparent', border: 'none', borderRadius: '6px', color: viewMode === mode.id ? 'white' : '#94a3b8', cursor: 'pointer', fontSize: '16px' }}>{mode.icon}</button>
+          {[{ id: 'table', icon: '📋', label: 'Table view' }, { id: 'cards', icon: '🃏', label: 'Cards view' }, { id: 'chart', icon: '📊', label: 'Chart view' }].map((mode) => (
+            <button 
+              key={mode.id} 
+              onClick={() => setViewMode(mode.id as typeof viewMode)} 
+              style={{ 
+                padding: '8px 12px', 
+                background: viewMode === mode.id ? '#7877c6' : 'transparent', 
+                border: 'none', 
+                borderRadius: '6px', 
+                color: viewMode === mode.id ? 'white' : '#94a3b8', 
+                cursor: 'pointer', 
+                fontSize: '16px' 
+              }}
+              aria-label={mode.label}
+              aria-pressed={viewMode === mode.id}
+            >
+              {mode.icon}
+            </button>
           ))}
         </div>
       </div>
@@ -282,7 +413,7 @@ export default function AdminContentPage() {
                     <tr key={stat.contentId} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}>
                       <td style={tdStyle}><span style={{ width: '28px', height: '28px', borderRadius: '50%', background: index < 3 ? ['#ffd700', '#c0c0c0', '#cd7f32'][index] : 'rgba(255,255,255,0.1)', color: index < 3 ? '#000' : '#94a3b8', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', fontSize: '12px' }}>{index + 1}</span></td>
                       <td style={tdStyle}><div style={{ color: '#f8fafc', fontWeight: '500' }}>{stat.displayTitle || stat.contentTitle || stat.contentId}</div><div style={{ color: '#64748b', fontSize: '12px', marginTop: '2px' }}>ID: {stat.contentId}</div></td>
-                      <td style={tdStyle}><span style={{ padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', background: stat.contentType === 'movie' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: stat.contentType === 'movie' ? '#10b981' : '#f59e0b' }}>{stat.contentType}</span></td>
+                      <td style={tdStyle}><span style={{ padding: '4px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: '600', textTransform: 'uppercase', ...getContentTypeStyle(stat.contentType) }}>{getContentTypeLabel(stat.contentType)}</span></td>
                       <td style={tdStyle}><span style={{ fontWeight: '600', color: '#f8fafc' }}>{stat.views.toLocaleString()}</span></td>
                       <td style={tdStyle}><span style={{ color: '#94a3b8' }}>{stat.uniqueViewers?.toLocaleString() || 0}</span></td>
                       <td style={tdStyle}><span style={{ color: '#f8fafc' }}>{formatDuration(stat.totalWatchTime)}</span></td>
@@ -301,7 +432,7 @@ export default function AdminContentPage() {
           {filteredStats.map((stat, index) => (
             <div key={stat.contentId} style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px', padding: '20px', position: 'relative' }}>
               {index < 3 && <div style={{ position: 'absolute', top: '12px', right: '12px', width: '28px', height: '28px', borderRadius: '50%', background: ['#ffd700', '#c0c0c0', '#cd7f32'][index], color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '12px' }}>{index + 1}</div>}
-              <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', background: stat.contentType === 'movie' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: stat.contentType === 'movie' ? '#10b981' : '#f59e0b' }}>{stat.contentType}</span>
+              <span style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', textTransform: 'uppercase', ...getContentTypeStyle(stat.contentType) }}>{getContentTypeLabel(stat.contentType)}</span>
               <h3 style={{ margin: '12px 0 16px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600', lineHeight: '1.3', paddingRight: index < 3 ? '36px' : 0 }}>{stat.displayTitle || stat.contentTitle || stat.contentId}</h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div><div style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase' }}>Views</div><div style={{ color: '#f8fafc', fontSize: '18px', fontWeight: '700' }}>{stat.views.toLocaleString()}</div></div>

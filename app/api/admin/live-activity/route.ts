@@ -1,10 +1,19 @@
 /**
  * Live Activity API - Real-time monitoring of user activity
- * GET /api/admin/live-activity
+ * GET /api/admin/live-activity - Get live activity data (requires auth)
+ * POST /api/admin/live-activity - Record new activity (public endpoint for tracking)
+ * 
+ * Implements standardized response format per Requirements 16.2, 16.3, 16.4, 16.5
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { verifyAdminAuth } from '@/lib/utils/admin-auth';
+import {
+  successResponse,
+  unauthorizedResponse,
+  internalErrorResponse,
+} from '@/app/lib/utils/api-response';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +90,12 @@ function parseUserAgent(userAgent: string) {
 
 export async function GET(request: NextRequest) {
   try {
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const type = searchParams.get('type') || 'all'; // 'all', 'active', 'recent'
@@ -213,26 +228,19 @@ export async function GET(request: NextRequest) {
       }, {})
     };
     
-    return NextResponse.json({
-      success: true,
-      data: {
-        activities: filteredActivities,
-        stats,
-        timestamp: new Date().toISOString(),
-        totalCount: filteredActivities.length
-      }
+    return successResponse({
+      activities: filteredActivities,
+      stats,
+      totalCount: filteredActivities.length
     });
     
   } catch (error) {
     console.error('Live activity API error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to fetch live activity data'
-    }, { status: 500 });
+    return internalErrorResponse('Failed to fetch live activity data', error instanceof Error ? error : undefined);
   }
 }
 
-// POST endpoint to add new activity (called by analytics tracking)
+// POST endpoint to add new activity (called by analytics tracking - public endpoint)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -276,16 +284,10 @@ export async function POST(request: NextRequest) {
       recentActivities.splice(MAX_ACTIVITIES);
     }
     
-    return NextResponse.json({
-      success: true,
-      activityId: activity.id
-    });
+    return successResponse({ activityId: activity.id }, { message: 'Activity recorded' });
     
   } catch (error) {
     console.error('Live activity POST error:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Failed to record activity'
-    }, { status: 500 });
+    return internalErrorResponse('Failed to record activity', error instanceof Error ? error : undefined);
   }
 }

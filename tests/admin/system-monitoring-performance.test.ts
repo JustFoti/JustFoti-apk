@@ -160,8 +160,8 @@ describe('System Health Monitoring Performance', () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
-          cpuLoad: fc.float({ min: 0, max: 100 }),
-          memoryLoad: fc.float({ min: 0, max: 100 }),
+          cpuLoad: fc.float({ min: 0, max: 100, noNaN: true }),
+          memoryLoad: fc.float({ min: 0, max: 100, noNaN: true }),
           dbConnections: fc.integer({ min: 1, max: 200 }),
         }),
         async (systemLoad) => {

@@ -409,23 +409,24 @@ describe('Bot Filtering Consistency', () => {
 
           // Property: No data should be lost or corrupted during filtering
           const totalOriginalUsers = new Set(userRecords.map(r => r.userId)).size;
-          const includedUsers = new Set(result.includedRecords.map(r => r.userId)).size;
-          const excludedUsers = new Set(result.excludedBotRecords.map(r => r.userId)).size;
-
-          // All original users should be accounted for (either included or excluded)
-          // Note: Some users might appear in multiple records, so we check that no users are lost
-          expect(includedUsers + excludedUsers).toBeLessThanOrEqual(totalOriginalUsers);
-
-          // No user should appear in both included and excluded lists
           const includedUserIds = new Set(result.includedRecords.map(r => r.userId));
           const excludedUserIds = new Set(result.excludedBotRecords.map(r => r.userId));
           
-          for (const userId of includedUserIds) {
-            expect(excludedUserIds.has(userId)).toBe(false);
+          // All original users should be accounted for in at least one of the sets
+          // Note: A user can appear in BOTH sets if they have multiple records with different bot scores
+          const allAccountedUserIds = new Set([...includedUserIds, ...excludedUserIds]);
+          const originalUserIds = new Set(userRecords.map(r => r.userId));
+          
+          // Every original user should appear in at least one result set
+          for (const userId of originalUserIds) {
+            expect(allAccountedUserIds.has(userId)).toBe(true);
           }
+          
+          // The union of included and excluded users should equal original users
+          expect(allAccountedUserIds.size).toBe(totalOriginalUsers)
 
           // Property: Metric value should match the count of included unique users
-          expect(result.value).toBe(includedUsers);
+          expect(result.value).toBe(includedUserIds.size);
 
           // Property: Total records processed should equal original records
           expect(result.includedRecords.length + result.excludedBotRecords.length).toBe(userRecords.length);

@@ -6,8 +6,9 @@
  * detection criteria transparency, and filtering options throughout analytics displays
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import BotFilterControls from '../components/BotFilterControls';
+import { useStats } from '../context/StatsContext';
 
 interface BotDetection {
   id: string;
@@ -54,21 +55,55 @@ interface BotDetectionMetrics {
   maxConfidenceScore: number;
 }
 
+interface ReviewHistoryItem {
+  detectionId: string;
+  reviewerId: string;
+  decision: string;
+  confidence: number;
+  notes: string | null;
+  accuracyImprovement: number;
+  reviewedAt: number;
+  detection: {
+    userId: string;
+    ipAddress: string;
+    originalConfidence: number;
+    currentStatus: string;
+  };
+}
+
+interface ReviewStatistics {
+  totalReviews: number;
+  confirmedBots: number;
+  confirmedHumans: number;
+  needsMoreData: number;
+  avgReviewerConfidence: number;
+  avgAccuracyImprovement: number;
+}
+
 export default function BotDetectionPage() {
   const [detections, setDetections] = useState<BotDetection[]>([]);
   const [metrics, setMetrics] = useState<BotDetectionMetrics | null>(null);
   const [criteria, setCriteria] = useState<DetectionCriteria | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDetection, setSelectedDetection] = useState<BotDetection | null>(null);
+  const [detailViewDetection, setDetailViewDetection] = useState<BotDetection | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewDecision, setReviewDecision] = useState<'confirm_bot' | 'confirm_human' | 'needs_more_data'>('confirm_bot');
   const [activeTab, setActiveTab] = useState<'overview' | 'detections' | 'criteria' | 'review'>('overview');
+  const [reviewHistory, setReviewHistory] = useState<ReviewHistoryItem[]>([]);
+  const [reviewStats, setReviewStats] = useState<ReviewStatistics | null>(null);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  
+  // Use StatsContext for global bot filter settings
+  const { refresh: refreshStats } = useStats();
 
   useEffect(() => {
     fetchBotDetectionData();
   }, []);
 
-  const fetchBotDetectionData = async () => {
+  const fetchBotDetectionData = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch('/api/admin/bot-detection');
@@ -84,10 +119,35 @@ export default function BotDetectionPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const fetchReviewHistory = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/bot-detection/review');
+      const data = await response.json();
+      
+      if (data.success) {
+        setReviewHistory(data.reviewHistory || []);
+        setReviewStats(data.statistics || null);
+      }
+    } catch (error) {
+      console.error('Failed to fetch review history:', error);
+    }
+  }, []);
+
+  // Fetch review history when switching to review tab
+  useEffect(() => {
+    if (activeTab === 'review') {
+      fetchReviewHistory();
+    }
+  }, [activeTab, fetchReviewHistory]);
 
   const submitManualReview = async (detection: BotDetection) => {
     try {
+      setSubmittingReview(true);
+      setReviewError(null);
+      setReviewSuccess(null);
+      
       const reviewData = {
         detectionId: detection.id,
         decision: reviewDecision,
@@ -103,14 +163,29 @@ export default function BotDetectionPage() {
         body: JSON.stringify(reviewData),
       });
 
-      if (response.ok) {
+      const data = await response.json();
+
+      if (response.ok && data.success) {
         // Refresh data after successful review
         await fetchBotDetectionData();
+        await fetchReviewHistory();
+        // Also refresh global stats
+        await refreshStats();
+        
         setSelectedDetection(null);
         setReviewNotes('');
+        setReviewSuccess(`Review submitted successfully. Status changed to: ${data.feedback?.newStatus || reviewDecision}`);
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => setReviewSuccess(null), 3000);
+      } else {
+        setReviewError(data.error || 'Failed to submit review');
       }
     } catch (error) {
       console.error('Failed to submit review:', error);
+      setReviewError('Network error. Please try again.');
+    } finally {
+      setSubmittingReview(false);
     }
   };
 
@@ -212,72 +287,240 @@ export default function BotDetectionPage() {
 
       {/* Overview Tab */}
       {activeTab === 'overview' && metrics && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-          gap: '16px',
-          marginBottom: '24px',
-        }}>
+        <div>
+          {/* Main Metrics Grid */}
           <div style={{
-            background: 'rgba(15, 23, 42, 0.6)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '20px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: '16px',
+            marginBottom: '24px',
           }}>
-            <h3 style={{
-              color: '#f1f5f9',
-              fontSize: '16px',
-              fontWeight: '600',
-              margin: '0 0 12px 0',
-            }}>
-              Total Detections
-            </h3>
             <div style={{
-              color: '#60a5fa',
-              fontSize: '32px',
-              fontWeight: '700',
-              marginBottom: '8px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '20px',
             }}>
-              {metrics.totalDetections.toLocaleString()}
+              <h3 style={{
+                color: '#f1f5f9',
+                fontSize: '16px',
+                fontWeight: '600',
+                margin: '0 0 12px 0',
+              }}>
+                Total Detections
+              </h3>
+              <div style={{
+                color: '#60a5fa',
+                fontSize: '32px',
+                fontWeight: '700',
+                marginBottom: '8px',
+              }}>
+                {metrics.totalDetections.toLocaleString()}
+              </div>
+              <div style={{
+                color: '#94a3b8',
+                fontSize: '14px',
+              }}>
+                Last 7 days
+              </div>
             </div>
+
             <div style={{
-              color: '#94a3b8',
-              fontSize: '14px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '20px',
             }}>
-              Last 7 days
+              <h3 style={{
+                color: '#f1f5f9',
+                fontSize: '16px',
+                fontWeight: '600',
+                margin: '0 0 12px 0',
+              }}>
+                Suspected Bots
+              </h3>
+              <div style={{
+                color: '#f59e0b',
+                fontSize: '32px',
+                fontWeight: '700',
+                marginBottom: '8px',
+              }}>
+                {metrics.suspectedBots.toLocaleString()}
+              </div>
+              <div style={{
+                color: '#94a3b8',
+                fontSize: '14px',
+              }}>
+                Confidence ≥ 50%
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '20px',
+            }}>
+              <h3 style={{
+                color: '#f1f5f9',
+                fontSize: '16px',
+                fontWeight: '600',
+                margin: '0 0 12px 0',
+              }}>
+                Confirmed Bots
+              </h3>
+              <div style={{
+                color: '#ef4444',
+                fontSize: '32px',
+                fontWeight: '700',
+                marginBottom: '8px',
+              }}>
+                {metrics.confirmedBots.toLocaleString()}
+              </div>
+              <div style={{
+                color: '#94a3b8',
+                fontSize: '14px',
+              }}>
+                Confidence ≥ 80%
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '20px',
+            }}>
+              <h3 style={{
+                color: '#f1f5f9',
+                fontSize: '16px',
+                fontWeight: '600',
+                margin: '0 0 12px 0',
+              }}>
+                Pending Review
+              </h3>
+              <div style={{
+                color: '#3b82f6',
+                fontSize: '32px',
+                fontWeight: '700',
+                marginBottom: '8px',
+              }}>
+                {metrics.pendingReview.toLocaleString()}
+              </div>
+              <div style={{
+                color: '#94a3b8',
+                fontSize: '14px',
+              }}>
+                Awaiting manual review
+              </div>
             </div>
           </div>
 
+          {/* Additional Metrics Row */}
           <div style={{
-            background: 'rgba(15, 23, 42, 0.6)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '20px',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: '16px',
+            marginBottom: '24px',
           }}>
-            <h3 style={{
-              color: '#f1f5f9',
-              fontSize: '16px',
-              fontWeight: '600',
-              margin: '0 0 12px 0',
-            }}>
-              Suspected Bots
-            </h3>
             <div style={{
-              color: '#f59e0b',
-              fontSize: '32px',
-              fontWeight: '700',
-              marginBottom: '8px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '16px',
             }}>
-              {metrics.suspectedBots.toLocaleString()}
+              <h4 style={{
+                color: '#94a3b8',
+                fontSize: '13px',
+                fontWeight: '500',
+                margin: '0 0 8px 0',
+              }}>
+                Average Confidence Score
+              </h4>
+              <div style={{
+                color: getConfidenceColor(metrics.avgConfidenceScore),
+                fontSize: '24px',
+                fontWeight: '700',
+              }}>
+                {metrics.avgConfidenceScore}%
+              </div>
             </div>
+
             <div style={{
-              color: '#94a3b8',
-              fontSize: '14px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '16px',
             }}>
-              Confidence ≥ 50%
+              <h4 style={{
+                color: '#94a3b8',
+                fontSize: '13px',
+                fontWeight: '500',
+                margin: '0 0 8px 0',
+              }}>
+                Max Confidence Score
+              </h4>
+              <div style={{
+                color: getConfidenceColor(metrics.maxConfidenceScore),
+                fontSize: '24px',
+                fontWeight: '700',
+              }}>
+                {metrics.maxConfidenceScore}%
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '16px',
+            }}>
+              <h4 style={{
+                color: '#94a3b8',
+                fontSize: '13px',
+                fontWeight: '500',
+                margin: '0 0 8px 0',
+              }}>
+                Bot Detection Rate
+              </h4>
+              <div style={{
+                color: '#f1f5f9',
+                fontSize: '24px',
+                fontWeight: '700',
+              }}>
+                {metrics.totalDetections > 0 
+                  ? Math.round(((metrics.confirmedBots + metrics.suspectedBots) / metrics.totalDetections) * 100)
+                  : 0}%
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              padding: '16px',
+            }}>
+              <h4 style={{
+                color: '#94a3b8',
+                fontSize: '13px',
+                fontWeight: '500',
+                margin: '0 0 8px 0',
+              }}>
+                Review Completion
+              </h4>
+              <div style={{
+                color: '#22c55e',
+                fontSize: '24px',
+                fontWeight: '700',
+              }}>
+                {metrics.totalDetections > 0 
+                  ? Math.round(((metrics.totalDetections - metrics.pendingReview) / metrics.totalDetections) * 100)
+                  : 100}%
+              </div>
             </div>
           </div>
 
+          {/* Quick Actions */}
           <div style={{
             background: 'rgba(15, 23, 42, 0.6)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -288,53 +531,79 @@ export default function BotDetectionPage() {
               color: '#f1f5f9',
               fontSize: '16px',
               fontWeight: '600',
-              margin: '0 0 12px 0',
+              margin: '0 0 16px 0',
             }}>
-              Confirmed Bots
+              Quick Actions
             </h3>
             <div style={{
-              color: '#ef4444',
-              fontSize: '32px',
-              fontWeight: '700',
-              marginBottom: '8px',
+              display: 'flex',
+              gap: '12px',
+              flexWrap: 'wrap',
             }}>
-              {metrics.confirmedBots.toLocaleString()}
-            </div>
-            <div style={{
-              color: '#94a3b8',
-              fontSize: '14px',
-            }}>
-              Confidence ≥ 80%
-            </div>
-          </div>
-
-          <div style={{
-            background: 'rgba(15, 23, 42, 0.6)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            padding: '20px',
-          }}>
-            <h3 style={{
-              color: '#f1f5f9',
-              fontSize: '16px',
-              fontWeight: '600',
-              margin: '0 0 12px 0',
-            }}>
-              Pending Review
-            </h3>
-            <div style={{
-              color: '#3b82f6',
-              fontSize: '32px',
-              fontWeight: '700',
-              marginBottom: '8px',
-            }}>
-              {metrics.pendingReview.toLocaleString()}
-            </div>
-            <div style={{
-              color: '#94a3b8',
-              fontSize: '14px',
-            }}>
-              Awaiting manual review
+              <button
+                onClick={() => setActiveTab('review')}
+                style={{
+                  padding: '10px 20px',
+                  background: metrics.pendingReview > 0 ? '#3b82f6' : 'rgba(59, 130, 246, 0.3)',
+                  border: 'none',
+                  borderRadius: '6px',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: metrics.pendingReview > 0 ? 'pointer' : 'default',
+                  transition: 'background-color 0.2s ease',
+                }}
+              >
+                Review Pending ({metrics.pendingReview})
+              </button>
+              <button
+                onClick={() => setActiveTab('detections')}
+                style={{
+                  padding: '10px 20px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f1f5f9',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                View All Detections
+              </button>
+              <button
+                onClick={() => setActiveTab('criteria')}
+                style={{
+                  padding: '10px 20px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f1f5f9',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                View Detection Criteria
+              </button>
+              <button
+                onClick={fetchBotDetectionData}
+                style={{
+                  padding: '10px 20px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f1f5f9',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                🔄 Refresh Data
+              </button>
             </div>
           </div>
         </div>
@@ -351,6 +620,9 @@ export default function BotDetectionPage() {
           <div style={{
             padding: '16px',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
           }}>
             <h3 style={{
               color: '#f1f5f9',
@@ -360,6 +632,12 @@ export default function BotDetectionPage() {
             }}>
               Recent Bot Detections
             </h3>
+            <span style={{
+              color: '#94a3b8',
+              fontSize: '13px',
+            }}>
+              Click on a detection to view details
+            </span>
           </div>
           
           <div style={{
@@ -384,7 +662,7 @@ export default function BotDetectionPage() {
                     cursor: 'pointer',
                     transition: 'background-color 0.2s ease',
                   }}
-                  onClick={() => setSelectedDetection(detection)}
+                  onClick={() => setDetailViewDetection(detection)}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)';
                   }}
@@ -468,6 +746,301 @@ export default function BotDetectionPage() {
                 </div>
               ))
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Detection Detail Modal */}
+      {detailViewDetection && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setDetailViewDetection(null)}
+        >
+          <div
+            style={{
+              background: '#1e293b',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '12px',
+              padding: '24px',
+              maxWidth: '600px',
+              width: '90%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
+            }}>
+              <h2 style={{
+                color: '#f1f5f9',
+                fontSize: '20px',
+                fontWeight: '700',
+                margin: 0,
+              }}>
+                Detection Details
+              </h2>
+              <button
+                onClick={() => setDetailViewDetection(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Status and Confidence */}
+            <div style={{
+              display: 'flex',
+              gap: '16px',
+              marginBottom: '20px',
+            }}>
+              <div style={{
+                flex: 1,
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '8px',
+                padding: '16px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Status</div>
+                <div style={{
+                  background: getStatusColor(detailViewDetection.status),
+                  color: 'white',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  textTransform: 'uppercase',
+                  display: 'inline-block',
+                }}>
+                  {detailViewDetection.status.replace(/_/g, ' ')}
+                </div>
+              </div>
+              <div style={{
+                flex: 1,
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '8px',
+                padding: '16px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Confidence Score</div>
+                <div style={{
+                  color: getConfidenceColor(detailViewDetection.confidenceScore),
+                  fontSize: '28px',
+                  fontWeight: '700',
+                }}>
+                  {detailViewDetection.confidenceScore}%
+                </div>
+              </div>
+            </div>
+
+            {/* Basic Info */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '16px',
+            }}>
+              <h4 style={{
+                color: '#f1f5f9',
+                fontSize: '14px',
+                fontWeight: '600',
+                margin: '0 0 12px 0',
+              }}>
+                Basic Information
+              </h4>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                color: '#94a3b8',
+                fontSize: '13px',
+              }}>
+                <div>
+                  <strong style={{ color: '#f1f5f9' }}>Detection ID:</strong>
+                  <div style={{ fontFamily: 'monospace', marginTop: '2px' }}>{detailViewDetection.id}</div>
+                </div>
+                <div>
+                  <strong style={{ color: '#f1f5f9' }}>User ID:</strong>
+                  <div style={{ fontFamily: 'monospace', marginTop: '2px' }}>{detailViewDetection.userId}</div>
+                </div>
+                <div>
+                  <strong style={{ color: '#f1f5f9' }}>IP Address:</strong>
+                  <div style={{ fontFamily: 'monospace', marginTop: '2px' }}>{detailViewDetection.ipAddress}</div>
+                </div>
+                <div>
+                  <strong style={{ color: '#f1f5f9' }}>Created:</strong>
+                  <div style={{ marginTop: '2px' }}>{new Date(detailViewDetection.createdAt).toLocaleString()}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* User Agent */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '16px',
+            }}>
+              <h4 style={{
+                color: '#f1f5f9',
+                fontSize: '14px',
+                fontWeight: '600',
+                margin: '0 0 8px 0',
+              }}>
+                User Agent
+              </h4>
+              <div style={{
+                color: '#94a3b8',
+                fontSize: '12px',
+                fontFamily: 'monospace',
+                wordBreak: 'break-all',
+                lineHeight: '1.5',
+              }}>
+                {detailViewDetection.userAgent}
+              </div>
+            </div>
+
+            {/* Detection Reasons */}
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.02)',
+              border: '1px solid rgba(255, 255, 255, 0.05)',
+              borderRadius: '8px',
+              padding: '16px',
+              marginBottom: '16px',
+            }}>
+              <h4 style={{
+                color: '#f1f5f9',
+                fontSize: '14px',
+                fontWeight: '600',
+                margin: '0 0 12px 0',
+              }}>
+                Detection Reasons ({detailViewDetection.detectionReasons.length})
+              </h4>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+              }}>
+                {detailViewDetection.detectionReasons.map((reason, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.1)',
+                      border: '1px solid rgba(59, 130, 246, 0.2)',
+                      color: '#60a5fa',
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                    }}
+                  >
+                    {reason}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Review Info (if reviewed) */}
+            {detailViewDetection.reviewedBy && (
+              <div style={{
+                background: 'rgba(34, 197, 94, 0.1)',
+                border: '1px solid rgba(34, 197, 94, 0.2)',
+                borderRadius: '8px',
+                padding: '16px',
+                marginBottom: '16px',
+              }}>
+                <h4 style={{
+                  color: '#22c55e',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  margin: '0 0 8px 0',
+                }}>
+                  ✓ Reviewed
+                </h4>
+                <div style={{
+                  color: '#94a3b8',
+                  fontSize: '13px',
+                }}>
+                  <div>Reviewed by: {detailViewDetection.reviewedBy}</div>
+                  {detailViewDetection.reviewedAt && (
+                    <div>Reviewed at: {new Date(detailViewDetection.reviewedAt).toLocaleString()}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              marginTop: '20px',
+            }}>
+              {detailViewDetection.status === 'pending_review' && (
+                <button
+                  onClick={() => {
+                    setSelectedDetection(detailViewDetection);
+                    setDetailViewDetection(null);
+                    setActiveTab('review');
+                  }}
+                  style={{
+                    flex: 1,
+                    padding: '12px 20px',
+                    background: '#3b82f6',
+                    border: 'none',
+                    borderRadius: '6px',
+                    color: 'white',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s ease',
+                  }}
+                >
+                  Review This Detection
+                </button>
+              )}
+              <button
+                onClick={() => setDetailViewDetection(null)}
+                style={{
+                  flex: detailViewDetection.status === 'pending_review' ? 'none' : 1,
+                  padding: '12px 20px',
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  borderRadius: '6px',
+                  color: '#f1f5f9',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -709,310 +1282,480 @@ export default function BotDetectionPage() {
 
       {/* Manual Review Tab */}
       {activeTab === 'review' && (
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: selectedDetection ? '1fr 400px' : '1fr',
-          gap: '24px',
-        }}>
-          {/* Pending Reviews List */}
-          <div style={{
-            background: 'rgba(15, 23, 42, 0.6)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            overflow: 'hidden',
-          }}>
+        <div>
+          {/* Success/Error Messages */}
+          {reviewSuccess && (
             <div style={{
-              padding: '16px',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              padding: '12px 16px',
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              borderRadius: '6px',
+              color: '#22c55e',
+              fontSize: '14px',
+              marginBottom: '16px',
             }}>
-              <h3 style={{
-                color: '#f1f5f9',
-                fontSize: '18px',
-                fontWeight: '600',
-                margin: 0,
-              }}>
-                Pending Manual Reviews
-              </h3>
+              ✓ {reviewSuccess}
             </div>
-            
+          )}
+          {reviewError && (
             <div style={{
-              maxHeight: '600px',
-              overflowY: 'auto',
+              padding: '12px 16px',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '6px',
+              color: '#ef4444',
+              fontSize: '14px',
+              marginBottom: '16px',
             }}>
-              {detections.filter(d => d.status === 'pending_review').length === 0 ? (
-                <div style={{
-                  padding: '40px',
-                  textAlign: 'center',
-                  color: '#94a3b8',
-                }}>
-                  No detections pending review
-                </div>
-              ) : (
-                detections
-                  .filter(d => d.status === 'pending_review')
-                  .map((detection) => (
-                    <div
-                      key={detection.id}
-                      style={{
-                        padding: '16px',
-                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
-                        cursor: 'pointer',
-                        background: selectedDetection?.id === detection.id 
-                          ? 'rgba(59, 130, 246, 0.1)' 
-                          : 'transparent',
-                        transition: 'background-color 0.2s ease',
-                      }}
-                      onClick={() => setSelectedDetection(detection)}
-                    >
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '8px',
-                      }}>
-                        <div style={{
-                          color: '#f1f5f9',
-                          fontSize: '14px',
-                          fontWeight: '500',
-                        }}>
-                          {detection.userId}
-                        </div>
-                        <div style={{
-                          color: getConfidenceColor(detection.confidenceScore),
-                          fontSize: '16px',
-                          fontWeight: '700',
-                        }}>
-                          {detection.confidenceScore}%
-                        </div>
-                      </div>
-                      
-                      <div style={{
-                        color: '#94a3b8',
-                        fontSize: '12px',
-                        marginBottom: '8px',
-                      }}>
-                        {detection.ipAddress} • {new Date(detection.createdAt).toLocaleDateString()}
-                      </div>
-                      
-                      <div style={{
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        gap: '4px',
-                      }}>
-                        {detection.detectionReasons.slice(0, 2).map((reason, index) => (
-                          <span
-                            key={index}
-                            style={{
-                              background: 'rgba(59, 130, 246, 0.1)',
-                              color: '#60a5fa',
-                              padding: '2px 6px',
-                              borderRadius: '3px',
-                              fontSize: '10px',
-                            }}
-                          >
-                            {reason.length > 30 ? reason.substring(0, 30) + '...' : reason}
-                          </span>
-                        ))}
-                        {detection.detectionReasons.length > 2 && (
-                          <span style={{
-                            color: '#94a3b8',
-                            fontSize: '10px',
-                            padding: '2px 6px',
-                          }}>
-                            +{detection.detectionReasons.length - 2} more
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-              )}
+              ✗ {reviewError}
             </div>
-          </div>
+          )}
 
-          {/* Review Panel */}
-          {selectedDetection && (
+          {/* Review Statistics */}
+          {reviewStats && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '12px',
+              marginBottom: '20px',
+            }}>
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Total Reviews</div>
+                <div style={{ color: '#f1f5f9', fontSize: '20px', fontWeight: '700' }}>{reviewStats.totalReviews}</div>
+              </div>
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Confirmed Bots</div>
+                <div style={{ color: '#ef4444', fontSize: '20px', fontWeight: '700' }}>{reviewStats.confirmedBots}</div>
+              </div>
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Confirmed Humans</div>
+                <div style={{ color: '#22c55e', fontSize: '20px', fontWeight: '700' }}>{reviewStats.confirmedHumans}</div>
+              </div>
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center',
+              }}>
+                <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '4px' }}>Avg Confidence</div>
+                <div style={{ color: '#60a5fa', fontSize: '20px', fontWeight: '700' }}>{reviewStats.avgReviewerConfidence}%</div>
+              </div>
+            </div>
+          )}
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: selectedDetection ? '1fr 400px' : '1fr',
+            gap: '24px',
+          }}>
+            {/* Pending Reviews List */}
             <div style={{
               background: 'rgba(15, 23, 42, 0.6)',
               border: '1px solid rgba(255, 255, 255, 0.1)',
               borderRadius: '8px',
-              padding: '20px',
-              height: 'fit-content',
+              overflow: 'hidden',
             }}>
-              <h3 style={{
-                color: '#f1f5f9',
-                fontSize: '18px',
-                fontWeight: '600',
-                marginBottom: '16px',
+              <div style={{
+                padding: '16px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               }}>
-                Manual Review
-              </h3>
+                <h3 style={{
+                  color: '#f1f5f9',
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  margin: 0,
+                }}>
+                  Pending Manual Reviews
+                </h3>
+              </div>
               
               <div style={{
-                marginBottom: '20px',
-                padding: '16px',
-                background: 'rgba(255, 255, 255, 0.02)',
-                borderRadius: '6px',
+                maxHeight: '400px',
+                overflowY: 'auto',
               }}>
-                <div style={{
+                {detections.filter(d => d.status === 'pending_review').length === 0 ? (
+                  <div style={{
+                    padding: '40px',
+                    textAlign: 'center',
+                    color: '#94a3b8',
+                  }}>
+                    No detections pending review
+                  </div>
+                ) : (
+                  detections
+                    .filter(d => d.status === 'pending_review')
+                    .map((detection) => (
+                      <div
+                        key={detection.id}
+                        style={{
+                          padding: '16px',
+                          borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                          cursor: 'pointer',
+                          background: selectedDetection?.id === detection.id 
+                            ? 'rgba(59, 130, 246, 0.1)' 
+                            : 'transparent',
+                          transition: 'background-color 0.2s ease',
+                        }}
+                        onClick={() => setSelectedDetection(detection)}
+                      >
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px',
+                        }}>
+                          <div style={{
+                            color: '#f1f5f9',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                          }}>
+                            {detection.userId}
+                          </div>
+                          <div style={{
+                            color: getConfidenceColor(detection.confidenceScore),
+                            fontSize: '16px',
+                            fontWeight: '700',
+                          }}>
+                            {detection.confidenceScore}%
+                          </div>
+                        </div>
+                        
+                        <div style={{
+                          color: '#94a3b8',
+                          fontSize: '12px',
+                          marginBottom: '8px',
+                        }}>
+                          {detection.ipAddress} • {new Date(detection.createdAt).toLocaleDateString()}
+                        </div>
+                        
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '4px',
+                        }}>
+                          {detection.detectionReasons.slice(0, 2).map((reason, index) => (
+                            <span
+                              key={index}
+                              style={{
+                                background: 'rgba(59, 130, 246, 0.1)',
+                                color: '#60a5fa',
+                                padding: '2px 6px',
+                                borderRadius: '3px',
+                                fontSize: '10px',
+                              }}
+                            >
+                              {reason.length > 30 ? reason.substring(0, 30) + '...' : reason}
+                            </span>
+                          ))}
+                          {detection.detectionReasons.length > 2 && (
+                            <span style={{
+                              color: '#94a3b8',
+                              fontSize: '10px',
+                              padding: '2px 6px',
+                            }}>
+                              +{detection.detectionReasons.length - 2} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+
+            {/* Review Panel */}
+            {selectedDetection && (
+              <div style={{
+                background: 'rgba(15, 23, 42, 0.6)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '8px',
+                padding: '20px',
+                height: 'fit-content',
+              }}>
+                <h3 style={{
                   color: '#f1f5f9',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  marginBottom: '8px',
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  marginBottom: '16px',
                 }}>
-                  Detection Details
-                </div>
-                <div style={{
-                  color: '#94a3b8',
-                  fontSize: '12px',
-                  lineHeight: '1.5',
-                }}>
-                  <div><strong>User ID:</strong> {selectedDetection.userId}</div>
-                  <div><strong>IP Address:</strong> {selectedDetection.ipAddress}</div>
-                  <div><strong>Confidence:</strong> {selectedDetection.confidenceScore}%</div>
-                  <div><strong>Created:</strong> {new Date(selectedDetection.createdAt).toLocaleString()}</div>
-                </div>
+                  Manual Review
+                </h3>
                 
                 <div style={{
-                  marginTop: '12px',
+                  marginBottom: '20px',
+                  padding: '16px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderRadius: '6px',
                 }}>
                   <div style={{
                     color: '#f1f5f9',
-                    fontSize: '13px',
+                    fontSize: '14px',
                     fontWeight: '500',
-                    marginBottom: '6px',
+                    marginBottom: '8px',
                   }}>
-                    Detection Reasons:
+                    Detection Details
                   </div>
-                  {selectedDetection.detectionReasons.map((reason, index) => (
-                    <div
-                      key={index}
-                      style={{
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        color: '#60a5fa',
-                        padding: '4px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        marginBottom: '4px',
-                      }}
-                    >
-                      {reason}
+                  <div style={{
+                    color: '#94a3b8',
+                    fontSize: '12px',
+                    lineHeight: '1.5',
+                  }}>
+                    <div><strong>User ID:</strong> {selectedDetection.userId}</div>
+                    <div><strong>IP Address:</strong> {selectedDetection.ipAddress}</div>
+                    <div><strong>Confidence:</strong> {selectedDetection.confidenceScore}%</div>
+                    <div><strong>Created:</strong> {new Date(selectedDetection.createdAt).toLocaleString()}</div>
+                  </div>
+                  
+                  <div style={{
+                    marginTop: '12px',
+                  }}>
+                    <div style={{
+                      color: '#f1f5f9',
+                      fontSize: '13px',
+                      fontWeight: '500',
+                      marginBottom: '6px',
+                    }}>
+                      Detection Reasons:
                     </div>
-                  ))}
+                    {selectedDetection.detectionReasons.map((reason, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          background: 'rgba(59, 130, 246, 0.1)',
+                          color: '#60a5fa',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        {reason}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{
+                  marginBottom: '16px',
+                }}>
+                  <label style={{
+                    color: '#f1f5f9',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    display: 'block',
+                    marginBottom: '8px',
+                  }}>
+                    Review Decision:
+                  </label>
+                  <select
+                    value={reviewDecision}
+                    onChange={(e) => setReviewDecision(e.target.value as 'confirm_bot' | 'confirm_human' | 'needs_more_data')}
+                    disabled={submittingReview}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '4px',
+                      color: '#f1f5f9',
+                      fontSize: '14px',
+                      opacity: submittingReview ? 0.6 : 1,
+                    }}
+                  >
+                    <option value="confirm_bot">Confirm as Bot</option>
+                    <option value="confirm_human">Confirm as Human</option>
+                    <option value="needs_more_data">Needs More Data</option>
+                  </select>
+                </div>
+
+                <div style={{
+                  marginBottom: '20px',
+                }}>
+                  <label style={{
+                    color: '#f1f5f9',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    display: 'block',
+                    marginBottom: '8px',
+                  }}>
+                    Review Notes (Optional):
+                  </label>
+                  <textarea
+                    value={reviewNotes}
+                    onChange={(e) => setReviewNotes(e.target.value)}
+                    placeholder="Add any additional context or reasoning for this review..."
+                    disabled={submittingReview}
+                    style={{
+                      width: '100%',
+                      height: '80px',
+                      padding: '8px 12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '4px',
+                      color: '#f1f5f9',
+                      fontSize: '14px',
+                      resize: 'vertical',
+                      opacity: submittingReview ? 0.6 : 1,
+                    }}
+                  />
+                </div>
+
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                }}>
+                  <button
+                    onClick={() => submitManualReview(selectedDetection)}
+                    disabled={submittingReview}
+                    style={{
+                      flex: 1,
+                      padding: '10px 16px',
+                      background: submittingReview ? '#1e40af' : '#3b82f6',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: submittingReview ? 'not-allowed' : 'pointer',
+                      transition: 'background-color 0.2s ease',
+                      opacity: submittingReview ? 0.7 : 1,
+                    }}
+                  >
+                    {submittingReview ? 'Submitting...' : 'Submit Review'}
+                  </button>
+                  <button
+                    onClick={() => setSelectedDetection(null)}
+                    disabled={submittingReview}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'transparent',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '6px',
+                      color: '#94a3b8',
+                      fontSize: '14px',
+                      fontWeight: '500',
+                      cursor: submittingReview ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s ease',
+                      opacity: submittingReview ? 0.7 : 1,
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
+            )}
+          </div>
 
+          {/* Review History */}
+          {reviewHistory.length > 0 && (
+            <div style={{
+              marginTop: '24px',
+              background: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              overflow: 'hidden',
+            }}>
               <div style={{
-                marginBottom: '16px',
+                padding: '16px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               }}>
-                <label style={{
+                <h3 style={{
                   color: '#f1f5f9',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  display: 'block',
-                  marginBottom: '8px',
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  margin: 0,
                 }}>
-                  Review Decision:
-                </label>
-                <select
-                  value={reviewDecision}
-                  onChange={(e) => setReviewDecision(e.target.value as any)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '4px',
-                    color: '#f1f5f9',
-                    fontSize: '14px',
-                  }}
-                >
-                  <option value="confirm_bot">Confirm as Bot</option>
-                  <option value="confirm_human">Confirm as Human</option>
-                  <option value="needs_more_data">Needs More Data</option>
-                </select>
+                  Recent Review History
+                </h3>
               </div>
-
+              
               <div style={{
-                marginBottom: '20px',
+                maxHeight: '300px',
+                overflowY: 'auto',
               }}>
-                <label style={{
-                  color: '#f1f5f9',
-                  fontSize: '14px',
-                  fontWeight: '500',
-                  display: 'block',
-                  marginBottom: '8px',
-                }}>
-                  Review Notes (Optional):
-                </label>
-                <textarea
-                  value={reviewNotes}
-                  onChange={(e) => setReviewNotes(e.target.value)}
-                  placeholder="Add any additional context or reasoning for this review..."
-                  style={{
-                    width: '100%',
-                    height: '80px',
-                    padding: '8px 12px',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '4px',
-                    color: '#f1f5f9',
-                    fontSize: '14px',
-                    resize: 'vertical',
-                  }}
-                />
-              </div>
-
-              <div style={{
-                display: 'flex',
-                gap: '12px',
-              }}>
-                <button
-                  onClick={() => submitManualReview(selectedDetection)}
-                  style={{
-                    flex: 1,
-                    padding: '10px 16px',
-                    background: '#3b82f6',
-                    border: 'none',
-                    borderRadius: '6px',
-                    color: 'white',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'background-color 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = '#2563eb';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '#3b82f6';
-                  }}
-                >
-                  Submit Review
-                </button>
-                <button
-                  onClick={() => setSelectedDetection(null)}
-                  style={{
-                    padding: '10px 16px',
-                    background: 'transparent',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    borderRadius: '6px',
-                    color: '#94a3b8',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
-                    e.currentTarget.style.color = '#f1f5f9';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent';
-                    e.currentTarget.style.color = '#94a3b8';
-                  }}
-                >
-                  Cancel
-                </button>
+                {reviewHistory.map((review, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      padding: '12px 16px',
+                      borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <div style={{
+                        color: '#f1f5f9',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        marginBottom: '4px',
+                      }}>
+                        {review.detection.userId} • {review.detection.ipAddress}
+                      </div>
+                      <div style={{
+                        color: '#94a3b8',
+                        fontSize: '11px',
+                      }}>
+                        Reviewed by {review.reviewerId} • {new Date(review.reviewedAt).toLocaleString()}
+                      </div>
+                      {review.notes && (
+                        <div style={{
+                          color: '#64748b',
+                          fontSize: '11px',
+                          fontStyle: 'italic',
+                          marginTop: '4px',
+                        }}>
+                          "{review.notes}"
+                        </div>
+                      )}
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                    }}>
+                      <div style={{
+                        color: '#94a3b8',
+                        fontSize: '12px',
+                      }}>
+                        {review.detection.originalConfidence}% → {review.confidence}%
+                      </div>
+                      <div style={{
+                        background: review.decision === 'confirm_bot' ? '#ef4444' 
+                          : review.decision === 'confirm_human' ? '#22c55e' 
+                          : '#3b82f6',
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '10px',
+                        fontWeight: '500',
+                        textTransform: 'uppercase',
+                      }}>
+                        {review.decision.replace(/_/g, ' ')}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

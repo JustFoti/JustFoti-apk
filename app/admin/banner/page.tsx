@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface BannerConfig {
   id: string;
@@ -15,40 +15,63 @@ interface BannerConfig {
   updatedAt?: string;
 }
 
+const DEFAULT_BANNER: BannerConfig = {
+  id: 'main-banner',
+  message: '',
+  type: 'info',
+  enabled: false,
+  dismissible: true,
+  linkText: '',
+  linkUrl: '',
+  expiresAt: '',
+};
+
 export default function BannerManagementPage() {
-  const [banner, setBanner] = useState<BannerConfig>({
-    id: 'main-banner',
-    message: '',
-    type: 'info',
-    enabled: false,
-    dismissible: true,
-    linkText: '',
-    linkUrl: '',
-    expiresAt: '',
-  });
+  const [banner, setBanner] = useState<BannerConfig>(DEFAULT_BANNER);
+  const [originalBanner, setOriginalBanner] = useState<BannerConfig>(DEFAULT_BANNER);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [hasChanges, setHasChanges] = useState(false);
 
+  // Track changes
   useEffect(() => {
-    fetchBanner();
-  }, []);
+    const changed = JSON.stringify(banner) !== JSON.stringify(originalBanner);
+    setHasChanges(changed);
+  }, [banner, originalBanner]);
 
-  const fetchBanner = async () => {
+  const fetchBanner = useCallback(async () => {
     try {
-      const response = await fetch('/api/admin/banner');
+      // Use admin=true to get banner even if disabled (for editing)
+      const response = await fetch('/api/admin/banner?admin=true');
       const data = await response.json();
       if (data.banner) {
         setBanner(data.banner);
+        setOriginalBanner(data.banner);
       }
     } catch (error) {
       console.error('Failed to fetch banner:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchBanner();
+  }, [fetchBanner]);
+
+  // Update banner field helper
+  const updateBanner = useCallback((field: keyof BannerConfig, value: any) => {
+    setBanner(prev => ({ ...prev, [field]: value }));
+    setMessage(null); // Clear any previous messages when editing
+  }, []);
 
   const saveBanner = async () => {
+    if (!banner.message.trim()) {
+      setMessage({ type: 'error', text: 'Banner message is required' });
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
     
@@ -60,8 +83,12 @@ export default function BannerManagementPage() {
       });
       
       if (response.ok) {
+        const data = await response.json();
         setMessage({ type: 'success', text: 'Banner saved successfully!' });
-        fetchBanner();
+        if (data.banner) {
+          setBanner(data.banner);
+          setOriginalBanner(data.banner);
+        }
       } else {
         const data = await response.json();
         setMessage({ type: 'error', text: data.error || 'Failed to save banner' });
@@ -83,7 +110,9 @@ export default function BannerManagementPage() {
       });
       
       if (response.ok) {
-        setBanner(prev => ({ ...prev, enabled: false }));
+        const updatedBanner = { ...banner, enabled: false };
+        setBanner(updatedBanner);
+        setOriginalBanner(updatedBanner);
         setMessage({ type: 'success', text: 'Banner disabled!' });
       } else {
         setMessage({ type: 'error', text: 'Failed to disable banner' });
@@ -93,6 +122,11 @@ export default function BannerManagementPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const resetChanges = () => {
+    setBanner(originalBanner);
+    setMessage(null);
   };
 
   if (loading) {
@@ -115,9 +149,12 @@ export default function BannerManagementPage() {
       </div>
 
       {/* Preview */}
-      {banner.message && (
-        <div style={{ marginBottom: '24px' }}>
-          <h3 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '16px' }}>Preview</h3>
+      <div style={{ marginBottom: '24px' }}>
+        <h3 style={{ margin: '0 0 12px 0', color: '#f8fafc', fontSize: '16px' }}>
+          Live Preview
+          {hasChanges && <span style={{ marginLeft: '8px', color: '#f59e0b', fontSize: '12px' }}>(unsaved changes)</span>}
+        </h3>
+        {banner.message ? (
           <div style={{
             padding: '12px 20px',
             borderRadius: '8px',
@@ -150,8 +187,20 @@ export default function BannerManagementPage() {
               <span style={{ marginLeft: '10px', opacity: 0.7 }}>(Disabled)</span>
             )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div style={{
+            padding: '20px',
+            borderRadius: '8px',
+            background: 'rgba(255, 255, 255, 0.03)',
+            border: '1px dashed rgba(255, 255, 255, 0.2)',
+            textAlign: 'center',
+            color: '#64748b',
+            fontSize: '14px',
+          }}>
+            Enter a message below to see the preview
+          </div>
+        )}
+      </div>
 
       {/* Form */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '600px' }}>
@@ -174,7 +223,7 @@ export default function BannerManagementPage() {
             </span>
           </div>
           <button
-            onClick={() => setBanner({ ...banner, enabled: !banner.enabled })}
+            onClick={() => updateBanner('enabled', !banner.enabled)}
             style={{
               padding: '8px 20px',
               background: banner.enabled ? '#10b981' : 'rgba(255, 255, 255, 0.1)',
@@ -183,7 +232,9 @@ export default function BannerManagementPage() {
               color: 'white',
               fontWeight: '600',
               cursor: 'pointer',
+              transition: 'all 0.2s ease',
             }}
+            aria-label={banner.enabled ? 'Disable banner' : 'Enable banner'}
           >
             {banner.enabled ? 'Enabled' : 'Disabled'}
           </button>
@@ -196,7 +247,7 @@ export default function BannerManagementPage() {
           </label>
           <textarea
             value={banner.message}
-            onChange={(e) => setBanner({ ...banner, message: e.target.value })}
+            onChange={(e) => updateBanner('message', e.target.value)}
             placeholder="Enter your announcement message..."
             rows={3}
             style={{
@@ -209,19 +260,23 @@ export default function BannerManagementPage() {
               fontSize: '14px',
               resize: 'vertical',
             }}
+            aria-label="Banner message"
           />
+          <div style={{ marginTop: '6px', color: '#64748b', fontSize: '12px' }}>
+            {banner.message.length} characters
+          </div>
         </div>
 
         {/* Type */}
         <div style={{ padding: '16px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '12px' }}>
           <label style={{ display: 'block', color: '#f8fafc', fontWeight: '500', marginBottom: '8px' }}>
-            Banner Type
+            Banner Style
           </label>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {(['info', 'warning', 'success', 'error'] as const).map((type) => (
               <button
                 key={type}
-                onClick={() => setBanner({ ...banner, type })}
+                onClick={() => updateBanner('type', type)}
                 style={{
                   padding: '8px 16px',
                   background: banner.type === type ? 
@@ -240,7 +295,10 @@ export default function BannerManagementPage() {
                   color: '#f8fafc',
                   cursor: 'pointer',
                   fontSize: '13px',
+                  transition: 'all 0.2s ease',
                 }}
+                aria-pressed={banner.type === type}
+                aria-label={`Select ${type} style`}
               >
                 {type === 'info' && 'ℹ️ Info'}
                 {type === 'warning' && '⚠️ Warning'}
@@ -260,7 +318,7 @@ export default function BannerManagementPage() {
             <input
               type="text"
               value={banner.linkText || ''}
-              onChange={(e) => setBanner({ ...banner, linkText: e.target.value })}
+              onChange={(e) => updateBanner('linkText', e.target.value)}
               placeholder="Link text (e.g., Learn more)"
               style={{
                 flex: 1,
@@ -271,11 +329,12 @@ export default function BannerManagementPage() {
                 color: '#f8fafc',
                 fontSize: '14px',
               }}
+              aria-label="Link text"
             />
             <input
               type="text"
               value={banner.linkUrl || ''}
-              onChange={(e) => setBanner({ ...banner, linkUrl: e.target.value })}
+              onChange={(e) => updateBanner('linkUrl', e.target.value)}
               placeholder="URL (e.g., /about)"
               style={{
                 flex: 2,
@@ -286,6 +345,7 @@ export default function BannerManagementPage() {
                 color: '#f8fafc',
                 fontSize: '14px',
               }}
+              aria-label="Link URL"
             />
           </div>
         </div>
@@ -300,8 +360,9 @@ export default function BannerManagementPage() {
               <input
                 type="checkbox"
                 checked={banner.dismissible}
-                onChange={(e) => setBanner({ ...banner, dismissible: e.target.checked })}
+                onChange={(e) => updateBanner('dismissible', e.target.checked)}
                 style={{ width: '18px', height: '18px', accentColor: '#7877c6' }}
+                aria-label="Allow users to dismiss the banner"
               />
               <span style={{ color: '#94a3b8', fontSize: '14px' }}>
                 Allow users to dismiss the banner
@@ -312,7 +373,7 @@ export default function BannerManagementPage() {
               <input
                 type="datetime-local"
                 value={banner.expiresAt ? banner.expiresAt.slice(0, 16) : ''}
-                onChange={(e) => setBanner({ ...banner, expiresAt: e.target.value ? new Date(e.target.value).toISOString() : '' })}
+                onChange={(e) => updateBanner('expiresAt', e.target.value ? new Date(e.target.value).toISOString() : '')}
                 style={{
                   padding: '8px 12px',
                   background: 'rgba(0, 0, 0, 0.3)',
@@ -321,7 +382,25 @@ export default function BannerManagementPage() {
                   color: '#f8fafc',
                   fontSize: '14px',
                 }}
+                aria-label="Banner expiration date and time"
               />
+              {banner.expiresAt && (
+                <button
+                  onClick={() => updateBanner('expiresAt', '')}
+                  style={{
+                    padding: '6px 10px',
+                    background: 'rgba(239, 68, 68, 0.2)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    borderRadius: '6px',
+                    color: '#ef4444',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                  }}
+                  aria-label="Clear expiration date"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -341,10 +420,10 @@ export default function BannerManagementPage() {
         )}
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
           <button
             onClick={saveBanner}
-            disabled={saving || !banner.message}
+            disabled={saving || !banner.message.trim()}
             style={{
               padding: '12px 24px',
               background: '#7877c6',
@@ -353,12 +432,35 @@ export default function BannerManagementPage() {
               color: 'white',
               fontSize: '14px',
               fontWeight: '600',
-              cursor: saving || !banner.message ? 'not-allowed' : 'pointer',
-              opacity: saving || !banner.message ? 0.6 : 1,
+              cursor: saving || !banner.message.trim() ? 'not-allowed' : 'pointer',
+              opacity: saving || !banner.message.trim() ? 0.6 : 1,
+              transition: 'all 0.2s ease',
             }}
+            aria-label="Save banner"
           >
             {saving ? 'Saving...' : 'Save Banner'}
           </button>
+          {hasChanges && (
+            <button
+              onClick={resetChanges}
+              disabled={saving}
+              style={{
+                padding: '12px 24px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                borderRadius: '8px',
+                color: '#94a3b8',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: saving ? 'not-allowed' : 'pointer',
+                opacity: saving ? 0.6 : 1,
+                transition: 'all 0.2s ease',
+              }}
+              aria-label="Reset changes"
+            >
+              Reset Changes
+            </button>
+          )}
           {banner.enabled && (
             <button
               onClick={disableBanner}
@@ -373,7 +475,9 @@ export default function BannerManagementPage() {
                 fontWeight: '600',
                 cursor: saving ? 'not-allowed' : 'pointer',
                 opacity: saving ? 0.6 : 1,
+                transition: 'all 0.2s ease',
               }}
+              aria-label="Disable banner"
             >
               Disable Banner
             </button>

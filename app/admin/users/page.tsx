@@ -8,6 +8,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
+import { useDebounce } from '@/app/hooks/useDebounce';
 
 // Helper functions
 function getCountryFlag(countryCode: string): string {
@@ -116,7 +117,11 @@ export default function AdminUsersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingAll, setLoadingAll] = useState(false);
   const pageSize = 50;
+
+  // Debounce search query for better performance (300ms delay)
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
 
   // Key metrics from unified stats - SINGLE SOURCE OF TRUTH
@@ -211,9 +216,9 @@ export default function AdminUsersPage() {
   const filteredUsers = useMemo(() => {
     let result = [...users];
     
-    // Apply search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    // Apply search filter with debounced query
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
       result = result.filter(u => 
         u.userId?.toLowerCase().includes(query) || 
         u.country?.toLowerCase().includes(query) || 
@@ -240,7 +245,7 @@ export default function AdminUsersPage() {
     });
     
     return result;
-  }, [users, searchQuery, filterStatus, sortBy, sortOrder, prioritizeOnline]);
+  }, [users, debouncedSearchQuery, filterStatus, sortBy, sortOrder, prioritizeOnline]);
 
   // Validate timestamp is reasonable (not in the future, not too old)
   const isValidTimestamp = (ts: number): boolean => {
@@ -582,31 +587,32 @@ export default function AdminUsersPage() {
               <div style={{ padding: '0 20px 20px', display: 'flex', justifyContent: 'center' }}>
                 <button
                   onClick={async () => {
-                    setLoadingMore(true);
+                    setLoadingAll(true);
                     try {
                       const response = await fetch(`/api/admin/users?limit=${totalUsers}&offset=0`);
                       if (response.ok) {
                         const data = await response.json();
                         setUsers(data.users || []);
+                        setCurrentPage(1);
                       }
                     } catch (err) {
                       console.error('Failed to load all users:', err);
                     } finally {
-                      setLoadingMore(false);
+                      setLoadingAll(false);
                     }
                   }}
-                  disabled={loadingMore}
+                  disabled={loadingMore || loadingAll}
                   style={{
                     padding: '8px 20px',
-                    background: 'transparent',
+                    background: loadingAll ? 'rgba(120, 119, 198, 0.1)' : 'transparent',
                     border: '1px solid rgba(255, 255, 255, 0.1)',
                     borderRadius: '6px',
                     color: '#64748b',
-                    cursor: loadingMore ? 'not-allowed' : 'pointer',
+                    cursor: (loadingMore || loadingAll) ? 'not-allowed' : 'pointer',
                     fontSize: '12px',
                   }}
                 >
-                  Load All {totalUsers} Users
+                  {loadingAll ? 'Loading All Users...' : `Load All ${totalUsers} Users`}
                 </button>
               </div>
             )}

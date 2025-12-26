@@ -42,8 +42,30 @@ export async function GET(request: NextRequest) {
 
     const now = Date.now();
     
-    // Check cache first - return cached data if still valid
-    if (statsCache && (now - statsCache.timestamp) < CACHE_TTL) {
+    // Get time range from query params (default: 24h)
+    const { searchParams } = new URL(request.url);
+    const timeRange = searchParams.get('timeRange') || '24h';
+    
+    // Calculate time boundaries based on selected range
+    const getTimeRangeMs = (range: string): number => {
+      switch (range) {
+        case '1h': return 60 * 60 * 1000;
+        case '6h': return 6 * 60 * 60 * 1000;
+        case '12h': return 12 * 60 * 60 * 1000;
+        case '24h': return 24 * 60 * 60 * 1000;
+        case '7d': return 7 * 24 * 60 * 60 * 1000;
+        case '30d': return 30 * 24 * 60 * 60 * 1000;
+        case 'all': return now - MIN_VALID_TIMESTAMP;
+        default: return 24 * 60 * 60 * 1000;
+      }
+    };
+    
+    const selectedRangeMs = getTimeRangeMs(timeRange);
+    const selectedRangeStart = now - selectedRangeMs;
+    
+    // Check cache first - include timeRange in cache key
+    const cacheKey = `${timeRange}-${searchParams.get('excludeBots') || 'false'}`;
+    if (statsCache && statsCache.data?.cacheKey === cacheKey && (now - statsCache.timestamp) < CACHE_TTL) {
       return NextResponse.json({
         ...statsCache.data,
         cached: true,
@@ -121,6 +143,39 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
+    // 1b. REAL-TIME GEOGRAPHIC DATA (from live_activity table)
+    // Shows current active users by location
+    // ============================================
+    let realtimeGeographic: Array<{ country: string; countryName: string; count: number }> = [];
+    try {
+      const realtimeGeoQuery = isNeon
+        ? `SELECT UPPER(country) as country, COUNT(DISTINCT user_id) as count 
+           FROM live_activity 
+           WHERE is_active = TRUE AND last_heartbeat >= $1
+             AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
+           GROUP BY UPPER(country) 
+           ORDER BY count DESC 
+           LIMIT 20`
+        : `SELECT UPPER(country) as country, COUNT(DISTINCT user_id) as count 
+           FROM live_activity 
+           WHERE is_active = 1 AND last_heartbeat >= ?
+             AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
+           GROUP BY UPPER(country) 
+           ORDER BY count DESC 
+           LIMIT 20`;
+      
+      const realtimeGeoResult = await adapter.query(realtimeGeoQuery, [fiveMinutesAgo]);
+      
+      realtimeGeographic = realtimeGeoResult.map((row: any) => ({
+        country: row.country,
+        countryName: getCountryName(row.country) || row.country,
+        count: parseInt(row.count) || 0,
+      }));
+    } catch (e) {
+      console.error('Error fetching realtime geographic stats:', e);
+    }
+
+    // ============================================
     // 2. USER METRICS (from user_activity ONLY)
     // ALWAYS use COUNT(DISTINCT user_id) for accurate unique user counts
     // ============================================
@@ -189,6 +244,7 @@ export async function GET(request: NextRequest) {
     // ============================================
     // 3. CONTENT METRICS (from watch_sessions)
     // Use validated timestamps and reasonable bounds
+    // Uses selected time range for filtering
     // ============================================
     let content = { 
       totalSessions: 0, 
@@ -204,7 +260,7 @@ export async function GET(request: NextRequest) {
       uniqueContentWatched: 0
     };
     try {
-      // Count sessions from last 24h with valid data
+      // Count sessions from selected time range with valid data
       const contentQuery = isNeon
         ? `SELECT 
              COUNT(*) as total_sessions,
@@ -233,7 +289,7 @@ export async function GET(request: NextRequest) {
            FROM watch_sessions 
            WHERE started_at >= ? AND started_at <= ?`;
       
-      const contentResult = await adapter.query(contentQuery, [oneDayAgo, now]);
+      const contentResult = await adapter.query(contentQuery, [selectedRangeStart, now]);
       
       if (contentResult[0]) {
         content.totalSessions = parseInt(contentResult[0].total_sessions) || 0;
@@ -302,6 +358,7 @@ export async function GET(request: NextRequest) {
     // ============================================
     // 4. GEOGRAPHIC DATA (from user_activity)
     // Count UNIQUE users per country
+    // Uses selected time range for filtering
     // ============================================
     let geographic: Array<{ country: string; countryName: string; count: number }> = [];
     try {
@@ -321,7 +378,7 @@ export async function GET(request: NextRequest) {
            ORDER BY count DESC 
            LIMIT 20`;
       
-      const geoResult = await adapter.query(geoQuery, [oneWeekAgo, now]);
+      const geoResult = await adapter.query(geoQuery, [selectedRangeStart, now]);
       
       geographic = geoResult.map((row: any) => ({
         country: row.country,
@@ -330,6 +387,43 @@ export async function GET(request: NextRequest) {
       }));
     } catch (e) {
       console.error('Error fetching geographic stats:', e);
+    }
+
+    // ============================================
+    // 4b. CITY-LEVEL DATA (from user_activity)
+    // Count UNIQUE users per city with country
+    // Uses selected time range for filtering
+    // ============================================
+    let cities: Array<{ city: string; country: string; countryName: string; count: number }> = [];
+    try {
+      const cityQuery = isNeon
+        ? `SELECT city, UPPER(country) as country, COUNT(DISTINCT user_id) as count 
+           FROM user_activity 
+           WHERE last_seen >= $1 AND last_seen <= $2
+             AND city IS NOT NULL AND city != '' 
+             AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
+           GROUP BY city, UPPER(country) 
+           ORDER BY count DESC 
+           LIMIT 30`
+        : `SELECT city, UPPER(country) as country, COUNT(DISTINCT user_id) as count 
+           FROM user_activity 
+           WHERE last_seen >= ? AND last_seen <= ?
+             AND city IS NOT NULL AND city != '' 
+             AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
+           GROUP BY city, UPPER(country) 
+           ORDER BY count DESC 
+           LIMIT 30`;
+      
+      const cityResult = await adapter.query(cityQuery, [selectedRangeStart, now]);
+      
+      cities = cityResult.map((row: any) => ({
+        city: row.city,
+        country: row.country,
+        countryName: getCountryName(row.country) || row.country,
+        count: parseInt(row.count) || 0,
+      }));
+    } catch (e) {
+      console.error('Error fetching city stats:', e);
     }
 
     // ============================================
@@ -363,6 +457,7 @@ export async function GET(request: NextRequest) {
     // ============================================
     // 6. PAGE VIEWS (from analytics_events)
     // Note: user_id is stored in metadata JSON, not as a direct column
+    // Uses selected time range for filtering
     // ============================================
     let pageViews = { total: 0, uniqueVisitors: 0 };
     try {
@@ -380,7 +475,7 @@ export async function GET(request: NextRequest) {
            WHERE event_type = 'page_view' 
              AND timestamp >= ? AND timestamp <= ?`;
       
-      const pageViewResult = await adapter.query(pageViewQuery, [oneDayAgo, now]);
+      const pageViewResult = await adapter.query(pageViewQuery, [selectedRangeStart, now]);
       
       if (pageViewResult[0]) {
         pageViews.total = parseInt(pageViewResult[0].total) || 0;
@@ -484,10 +579,12 @@ export async function GET(request: NextRequest) {
     const responseData = {
       success: true,
       realtime,
+      realtimeGeographic,
       users,
       content,
       topContent,
       geographic,
+      cities,
       devices,
       pageViews,
       botDetection,
@@ -495,15 +592,19 @@ export async function GET(request: NextRequest) {
       // Include time ranges for transparency
       timeRanges: {
         realtime: '5 minutes (from live_activity heartbeat, 2 min for truly active)',
+        realtimeGeographic: '5 minutes (current active users)',
         dau: '24 hours',
         wau: '7 days',
         mau: '30 days',
-        content: '24 hours',
-        geographic: '7 days',
+        content: timeRange,
+        geographic: timeRange,
+        cities: timeRange,
         devices: '7 days',
-        pageViews: '24 hours',
+        pageViews: timeRange,
         botDetection: '7 days (recent detections: 24 hours)',
       },
+      selectedTimeRange: timeRange,
+      cacheKey,
       timestamp: now,
       timestampISO: new Date(now).toISOString(),
     };

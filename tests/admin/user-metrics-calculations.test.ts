@@ -104,7 +104,10 @@ describe('User Metrics Calculations', () => {
         fc.integer({ min: Date.now() - MONTH_MS, max: Date.now() }),
         fc.array(fc.string({ minLength: 5, maxLength: 20 }), { minLength: 1, maxLength: 100 }),
         fc.integer({ min: 1, max: 10 }),
-        async (referenceTime, uniqueUserIds, activitiesPerUser) => {
+        async (referenceTime, userIdList, activitiesPerUser) => {
+          // Get truly unique user IDs (the input array may contain duplicates)
+          const uniqueUserIds = [...new Set(userIdList)];
+          
           // Generate activities where each user has multiple activities within the day
           const activities: UserActivity[] = [];
           

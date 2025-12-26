@@ -5,7 +5,8 @@
  * Efficient, detailed, and uses unified components
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useStats } from '../context/StatsContext';
 import {
   StatCard,
@@ -29,10 +30,67 @@ import {
 
 type DashboardTab = 'overview' | 'realtime' | 'content' | 'users';
 
+// Auto-refresh interval in milliseconds (30 seconds)
+export const AUTO_REFRESH_INTERVAL = 30000;
+
+// Drill-down navigation targets for metric cards
+const METRIC_DRILL_DOWN_ROUTES: Record<string, string> = {
+  'Live Users': '/admin/live',
+  'DAU': '/admin/users',
+  'WAU': '/admin/users',
+  'MAU': '/admin/users',
+  'Sessions (24h)': '/admin/sessions',
+  'Watch Time': '/admin/analytics',
+  'Completion': '/admin/analytics',
+  'Page Views': '/admin/traffic',
+  'Total Active': '/admin/live',
+  'Truly Active': '/admin/live',
+  'Watching VOD': '/admin/sessions',
+  'Live TV': '/admin/live',
+  'Browsing': '/admin/traffic',
+  'Total Users': '/admin/users',
+  'New Today': '/admin/users',
+  'Returning': '/admin/users',
+};
+
 export default function DashboardPage() {
-  const { stats, loading, lastRefresh } = useStats();
+  const router = useRouter();
+  const { stats, loading, lastRefresh, refresh, timeRange, setTimeRange } = useStats();
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-  const [timeRange, setTimeRange] = useState('24h');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [nextRefreshIn, setNextRefreshIn] = useState(AUTO_REFRESH_INTERVAL / 1000);
+
+  // Manual refresh handler
+  const handleManualRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refresh();
+      setNextRefreshIn(AUTO_REFRESH_INTERVAL / 1000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refresh]);
+
+  // Countdown timer for next auto-refresh
+  useEffect(() => {
+    const countdownInterval = setInterval(() => {
+      setNextRefreshIn((prev) => {
+        if (prev <= 1) {
+          return AUTO_REFRESH_INTERVAL / 1000;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(countdownInterval);
+  }, []);
+
+  // Reset countdown when lastRefresh changes (data was refreshed)
+  useEffect(() => {
+    if (lastRefresh) {
+      setNextRefreshIn(AUTO_REFRESH_INTERVAL / 1000);
+    }
+  }, [lastRefresh]);
 
   if (loading && !stats.lastUpdated) {
     return <LoadingState message="Loading dashboard..." />;
@@ -59,6 +117,58 @@ export default function DashboardPage() {
               { value: '30d', label: '30d' },
             ]} />
             <LiveIndicator active={stats.liveUsers > 0} />
+            {/* Refresh indicator and button */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '6px 12px',
+                  background: isRefreshing ? 'rgba(120, 119, 198, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${isRefreshing ? colors.primary : colors.border.default}`,
+                  borderRadius: '8px',
+                  color: isRefreshing ? colors.primary : colors.text.secondary,
+                  fontSize: '12px',
+                  cursor: isRefreshing ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease',
+                }}
+                title="Refresh data"
+              >
+                {isRefreshing ? (
+                  <>
+                    <span style={{ 
+                      display: 'inline-block', 
+                      animation: 'spin 1s linear infinite',
+                      fontSize: '14px'
+                    }}>🔄</span>
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: '14px' }}>🔄</span>
+                    Refresh
+                  </>
+                )}
+              </button>
+              {/* Auto-refresh countdown */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 8px',
+                background: 'rgba(255, 255, 255, 0.03)',
+                borderRadius: '6px',
+                fontSize: '11px',
+                color: colors.text.muted,
+              }}>
+                <span>⏱️</span>
+                <span>{nextRefreshIn}s</span>
+              </div>
+            </div>
+            {/* Last updated timestamp */}
             <span style={{ color: colors.text.muted, fontSize: '12px' }}>
               {lastRefresh ? `Updated ${formatTimeAgo(lastRefresh.getTime())}` : ''}
             </span>
@@ -72,27 +182,39 @@ export default function DashboardPage() {
         onChange={(id) => setActiveTab(id as DashboardTab)}
       />
 
-      {activeTab === 'overview' && <OverviewTab stats={stats} />}
-      {activeTab === 'realtime' && <RealtimeTab stats={stats} />}
-      {activeTab === 'content' && <ContentTab stats={stats} />}
-      {activeTab === 'users' && <UsersTab stats={stats} />}
+      {activeTab === 'overview' && <OverviewTab stats={stats} onNavigate={(route) => router.push(route)} />}
+      {activeTab === 'realtime' && <RealtimeTab stats={stats} onNavigate={(route) => router.push(route)} />}
+      {activeTab === 'content' && <ContentTab stats={stats} onNavigate={(route) => router.push(route)} />}
+      {activeTab === 'users' && <UsersTab stats={stats} onNavigate={(route) => router.push(route)} />}
     </div>
   );
 }
 
-function OverviewTab({ stats }: { stats: any }) {
+interface TabProps {
+  stats: any;
+  onNavigate: (route: string) => void;
+}
+
+function OverviewTab({ stats, onNavigate }: TabProps) {
+  const handleMetricClick = (title: string) => {
+    const route = METRIC_DRILL_DOWN_ROUTES[title];
+    if (route) {
+      onNavigate(route);
+    }
+  };
+
   return (
     <>
       {/* Key Metrics */}
       <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Live Users" value={stats.liveUsers} icon="🟢" color={colors.success} pulse={stats.liveUsers > 0} />
-        <StatCard title="DAU" value={stats.activeToday} icon="📊" color={colors.primary} subtitle="Active today" />
-        <StatCard title="WAU" value={stats.activeThisWeek} icon="📈" color={colors.warning} subtitle="This week" />
-        <StatCard title="MAU" value={stats.activeThisMonth} icon="📅" color={colors.info} subtitle="This month" />
-        <StatCard title="Sessions (24h)" value={stats.totalSessions} icon="▶️" color={colors.pink} />
-        <StatCard title="Watch Time" value={formatDurationMinutes(stats.totalWatchTime)} icon="⏱️" color={colors.purple} subtitle={`All time: ${formatDurationMinutes(stats.allTimeWatchTime)}`} />
-        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.success} />
-        <StatCard title="Page Views" value={stats.pageViews} icon="👁️" color={colors.cyan} />
+        <StatCard title="Live Users" value={stats.liveUsers} icon="🟢" color={colors.success} pulse={stats.liveUsers > 0} onClick={() => handleMetricClick('Live Users')} />
+        <StatCard title="DAU" value={stats.activeToday} icon="📊" color={colors.primary} subtitle="Active today" onClick={() => handleMetricClick('DAU')} />
+        <StatCard title="WAU" value={stats.activeThisWeek} icon="📈" color={colors.warning} subtitle="This week" onClick={() => handleMetricClick('WAU')} />
+        <StatCard title="MAU" value={stats.activeThisMonth} icon="📅" color={colors.info} subtitle="This month" onClick={() => handleMetricClick('MAU')} />
+        <StatCard title="Sessions (24h)" value={stats.totalSessions} icon="▶️" color={colors.pink} onClick={() => handleMetricClick('Sessions (24h)')} />
+        <StatCard title="Watch Time" value={formatDurationMinutes(stats.totalWatchTime)} icon="⏱️" color={colors.purple} subtitle={`All time: ${formatDurationMinutes(stats.allTimeWatchTime)}`} onClick={() => handleMetricClick('Watch Time')} />
+        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.success} onClick={() => handleMetricClick('Completion')} />
+        <StatCard title="Page Views" value={stats.pageViews} icon="👁️" color={colors.cyan} onClick={() => handleMetricClick('Page Views')} />
       </Grid>
 
       {/* Secondary Metrics */}
@@ -183,15 +305,22 @@ function OverviewTab({ stats }: { stats: any }) {
   );
 }
 
-function RealtimeTab({ stats }: { stats: any }) {
+function RealtimeTab({ stats, onNavigate }: TabProps) {
+  const handleMetricClick = (title: string) => {
+    const route = METRIC_DRILL_DOWN_ROUTES[title];
+    if (route) {
+      onNavigate(route);
+    }
+  };
+
   return (
     <>
       <Grid cols="auto-fit" minWidth="200px" gap="16px">
-        <StatCard title="Total Active" value={stats.liveUsers} icon="👥" color={colors.success} pulse size="lg" />
-        <StatCard title="Truly Active" value={stats.trulyActiveUsers} icon="🎯" color={colors.primary} subtitle="Last 60 seconds" />
-        <StatCard title="Watching VOD" value={stats.liveWatching} icon="▶️" color={colors.purple} />
-        <StatCard title="Live TV" value={stats.liveTVViewers} icon="📺" color={colors.warning} />
-        <StatCard title="Browsing" value={stats.liveBrowsing} icon="🔍" color={colors.info} />
+        <StatCard title="Total Active" value={stats.liveUsers} icon="👥" color={colors.success} pulse size="lg" onClick={() => handleMetricClick('Total Active')} />
+        <StatCard title="Truly Active" value={stats.trulyActiveUsers} icon="🎯" color={colors.primary} subtitle="Last 60 seconds" onClick={() => handleMetricClick('Truly Active')} />
+        <StatCard title="Watching VOD" value={stats.liveWatching} icon="▶️" color={colors.purple} onClick={() => handleMetricClick('Watching VOD')} />
+        <StatCard title="Live TV" value={stats.liveTVViewers} icon="📺" color={colors.warning} onClick={() => handleMetricClick('Live TV')} />
+        <StatCard title="Browsing" value={stats.liveBrowsing} icon="🔍" color={colors.info} onClick={() => handleMetricClick('Browsing')} />
       </Grid>
 
       {/* Peak Stats */}
@@ -222,18 +351,22 @@ function RealtimeTab({ stats }: { stats: any }) {
   );
 }
 
-function ContentTab({ stats }: { stats: any }) {
+function ContentTab({ stats, onNavigate }: TabProps) {
+  const handleMetricClick = (route: string) => {
+    onNavigate(route);
+  };
+
   return (
     <>
       <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Sessions (24h)" value={stats.totalSessions} icon="📊" color={colors.primary} />
-        <StatCard title="Watch Time" value={formatDurationMinutes(stats.totalWatchTime)} icon="⏱️" color={colors.success} />
-        <StatCard title="Avg Duration" value={`${stats.avgSessionDuration}m`} icon="📈" color={colors.warning} />
-        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.pink} />
-        <StatCard title="Completed" value={stats.completedSessions} icon="🏆" color={colors.success} />
-        <StatCard title="Unique Content" value={stats.uniqueContentWatched} icon="🎬" color={colors.purple} />
-        <StatCard title="Total Pauses" value={stats.totalPauses} icon="⏸️" color={colors.info} />
-        <StatCard title="Total Seeks" value={stats.totalSeeks} icon="⏩" color={colors.cyan} />
+        <StatCard title="Sessions (24h)" value={stats.totalSessions} icon="📊" color={colors.primary} onClick={() => handleMetricClick('/admin/sessions')} />
+        <StatCard title="Watch Time" value={formatDurationMinutes(stats.totalWatchTime)} icon="⏱️" color={colors.success} onClick={() => handleMetricClick('/admin/analytics')} />
+        <StatCard title="Avg Duration" value={`${stats.avgSessionDuration}m`} icon="📈" color={colors.warning} onClick={() => handleMetricClick('/admin/analytics')} />
+        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.pink} onClick={() => handleMetricClick('/admin/analytics')} />
+        <StatCard title="Completed" value={stats.completedSessions} icon="🏆" color={colors.success} onClick={() => handleMetricClick('/admin/sessions')} />
+        <StatCard title="Unique Content" value={stats.uniqueContentWatched} icon="🎬" color={colors.purple} onClick={() => handleMetricClick('/admin/content')} />
+        <StatCard title="Total Pauses" value={stats.totalPauses} icon="⏸️" color={colors.info} onClick={() => handleMetricClick('/admin/analytics')} />
+        <StatCard title="Total Seeks" value={stats.totalSeeks} icon="⏩" color={colors.cyan} onClick={() => handleMetricClick('/admin/analytics')} />
       </Grid>
 
       <div style={{ marginTop: '24px' }}>
@@ -289,16 +422,20 @@ function ContentTab({ stats }: { stats: any }) {
   );
 }
 
-function UsersTab({ stats }: { stats: any }) {
+function UsersTab({ stats, onNavigate }: TabProps) {
+  const handleMetricClick = (route: string) => {
+    onNavigate(route);
+  };
+
   return (
     <>
       <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Total Users" value={stats.totalUsers} icon="👥" color={colors.primary} size="lg" />
-        <StatCard title="DAU" value={stats.activeToday} icon="📊" color={colors.success} subtitle="Daily Active" />
-        <StatCard title="WAU" value={stats.activeThisWeek} icon="📈" color={colors.warning} subtitle="Weekly Active" />
-        <StatCard title="MAU" value={stats.activeThisMonth} icon="📅" color={colors.info} subtitle="Monthly Active" />
-        <StatCard title="New Today" value={stats.newUsersToday} icon="🆕" color={colors.success} />
-        <StatCard title="Returning" value={stats.returningUsers} icon="🔄" color={colors.purple} />
+        <StatCard title="Total Users" value={stats.totalUsers} icon="👥" color={colors.primary} size="lg" onClick={() => handleMetricClick('/admin/users')} />
+        <StatCard title="DAU" value={stats.activeToday} icon="📊" color={colors.success} subtitle="Daily Active" onClick={() => handleMetricClick('/admin/users')} />
+        <StatCard title="WAU" value={stats.activeThisWeek} icon="📈" color={colors.warning} subtitle="Weekly Active" onClick={() => handleMetricClick('/admin/users')} />
+        <StatCard title="MAU" value={stats.activeThisMonth} icon="📅" color={colors.info} subtitle="Monthly Active" onClick={() => handleMetricClick('/admin/users')} />
+        <StatCard title="New Today" value={stats.newUsersToday} icon="🆕" color={colors.success} onClick={() => handleMetricClick('/admin/users')} />
+        <StatCard title="Returning" value={stats.returningUsers} icon="🔄" color={colors.purple} onClick={() => handleMetricClick('/admin/users')} />
       </Grid>
 
       <div style={{ marginTop: '24px' }}>

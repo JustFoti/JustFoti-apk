@@ -1,32 +1,32 @@
-import { NextRequest, NextResponse } from 'next/server';
+/**
+ * Admin Feedback API
+ * GET /api/admin/feedback - Get feedback items with filtering and pagination
+ * PATCH /api/admin/feedback - Update feedback status
+ * DELETE /api/admin/feedback - Delete feedback item
+ * 
+ * Implements standardized response format per Requirements 16.2, 16.4, 16.5
+ */
+
+import { NextRequest } from 'next/server';
 import { neon } from '@neondatabase/serverless';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
+import { verifyAdminAuth } from '@/lib/utils/admin-auth';
+import {
+  successResponse,
+  unauthorizedResponse,
+  badRequestResponse,
+  internalErrorResponse,
+  ErrorCodes,
+} from '@/app/lib/utils/api-response';
 
 const sql = neon(process.env.DATABASE_URL || '');
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const ADMIN_COOKIE = 'admin_token';
-
-// Verify admin authentication using JWT (matches /api/admin/auth)
-async function verifyAdmin() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(ADMIN_COOKIE)?.value;
-  
-  if (!token) return null;
-  
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username: string };
-    return decoded;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  try {
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status') || 'all';
@@ -70,41 +70,44 @@ export async function GET(request: NextRequest) {
       SELECT type, COUNT(*) as count FROM feedback GROUP BY type
     `;
 
-    return NextResponse.json({
+    return successResponse({
       feedback,
-      pagination: {
-        total: parseInt(countResult[0]?.total || '0'),
-        limit,
-        offset,
-      },
       stats: {
         byStatus: Object.fromEntries(statusCounts.map(r => [r.status, parseInt(r.count)])),
         byType: Object.fromEntries(typeCounts.map(r => [r.type, parseInt(r.count)])),
       }
+    }, {
+      pagination: {
+        page: Math.floor(offset / limit) + 1,
+        pageSize: limit,
+        total: parseInt(countResult[0]?.total || '0'),
+        hasMore: offset + limit < parseInt(countResult[0]?.total || '0'),
+      }
     });
   } catch (error) {
     console.error('Error fetching feedback:', error);
-    return NextResponse.json({ error: 'Failed to fetch feedback' }, { status: 500 });
+    return internalErrorResponse('Failed to fetch feedback', error instanceof Error ? error : undefined);
   }
 }
 
 export async function PATCH(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
+
     const body = await request.json();
     const { id, status } = body;
 
     if (!id || !status) {
-      return NextResponse.json({ error: 'Missing id or status' }, { status: 400 });
+      return badRequestResponse('Missing required fields: id and status', ErrorCodes.MISSING_REQUIRED_FIELD);
     }
 
     const validStatuses = ['new', 'reviewed', 'resolved', 'archived'];
     if (!validStatuses.includes(status)) {
-      return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+      return badRequestResponse(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, ErrorCodes.INVALID_INPUT);
     }
 
     await sql`
@@ -113,31 +116,33 @@ export async function PATCH(request: NextRequest) {
       WHERE id = ${id}
     `;
 
-    return NextResponse.json({ success: true });
+    return successResponse({ id, status }, { message: 'Feedback status updated successfully' });
   } catch (error) {
     console.error('Error updating feedback:', error);
-    return NextResponse.json({ error: 'Failed to update feedback' }, { status: 500 });
+    return internalErrorResponse('Failed to update feedback', error instanceof Error ? error : undefined);
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  const admin = await verifyAdmin();
-  if (!admin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-
-  if (!id) {
-    return NextResponse.json({ error: 'Missing feedback id' }, { status: 400 });
-  }
-
   try {
+    // Verify admin authentication - Requirements 16.3
+    const authResult = await verifyAdminAuth(request);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) {
+      return badRequestResponse('Missing required parameter: id', ErrorCodes.MISSING_REQUIRED_FIELD);
+    }
+
     await sql`DELETE FROM feedback WHERE id = ${parseInt(id)}`;
-    return NextResponse.json({ success: true });
+    
+    return successResponse({ id: parseInt(id) }, { message: 'Feedback deleted successfully' });
   } catch (error) {
     console.error('Error deleting feedback:', error);
-    return NextResponse.json({ error: 'Failed to delete feedback' }, { status: 500 });
+    return internalErrorResponse('Failed to delete feedback', error instanceof Error ? error : undefined);
   }
 }
