@@ -30,7 +30,7 @@ export default function AdminSidebar() {
         { icon: LayoutDashboard, label: 'Dashboard', href: '/admin/dashboard' },
         { icon: TrendingUp, label: 'Insights', href: '/admin/insights' },
         { icon: BarChart3, label: 'Analytics', href: '/admin/analytics' },
-        { icon: Globe, label: 'Traffic', href: '/admin/traffic' },
+        { icon: Globe, label: 'Traffic', href: '/admin/traffic-unified' },
         { icon: Users, label: 'Users', href: '/admin/users' },
         { icon: Film, label: 'Content', href: '/admin/content' },
         { icon: Map, label: 'Geographic', href: '/admin/geographic' },

@@ -1,32 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import AdminLayout from './components/AdminLayout';
 import AdminLogin from './components/AdminLogin';
-import { SecurityProvider } from './components/SecurityProvider';
+import { SecurityProvider, useSecurity } from './components/SecurityProvider';
 import LoadingSpinner from './components/LoadingSpinner';
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-    const [user, setUser] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        checkAuth();
-    }, []);
-
-    const checkAuth = async () => {
-        try {
-            const response = await fetch('/api/admin/me');
-            if (response.ok) {
-                const data = await response.json();
-                setUser(data.user);
-            }
-        } catch (err) {
-            console.error('Auth check failed:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
+function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
+    const { loading, isAuthenticated } = useSecurity();
 
     if (loading) {
         return (
@@ -38,13 +18,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         );
     }
 
-    if (!user) {
-        return <AdminLogin onLoginSuccess={setUser} />;
+    if (!isAuthenticated) {
+        return <AdminLogin onLoginSuccess={() => window.location.reload()} />;
     }
 
+    return <AdminLayout>{children}</AdminLayout>;
+}
+
+export default function Layout({ children }: { children: React.ReactNode }) {
     return (
         <SecurityProvider>
-            <AdminLayout>{children}</AdminLayout>
+            <AdminLayoutWrapper>{children}</AdminLayoutWrapper>
         </SecurityProvider>
     );
 }
