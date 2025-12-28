@@ -291,8 +291,8 @@ export function useLiveTVData() {
   const filteredEvents = useMemo(() => {
     let filtered = state.events;
 
-    // Filter by source
-    if (state.selectedSource !== 'all') {
+    // Filter by source (skip if 'cable' since that's for cable channels, not events)
+    if (state.selectedSource !== 'all' && state.selectedSource !== 'cable') {
       filtered = filtered.filter(event => event.source === state.selectedSource);
     }
 

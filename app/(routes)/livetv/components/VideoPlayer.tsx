@@ -62,30 +62,29 @@ export const VideoPlayer = memo(function VideoPlayer({
 
   // Load stream when event or channel changes
   useEffect(() => {
-    if ((event || channel) && isOpen) {
-      let source;
-      
-      if (event) {
-        source = {
-          type: event.source,
-          channelId: event.channels[0]?.channelId || event.ppvUriName || event.cdnliveEmbedId || event.id,
-          title: event.title,
-          poster: event.poster,
-        };
-      } else if (channel) {
-        // For cable channels, we'll use DLHD source with the channel ID
-        // The channel ID will be mapped to the appropriate stream
-        source = {
-          type: 'dlhd' as const,
-          channelId: channel.id,
-          title: channel.name,
-          poster: undefined,
-        };
-      }
-      
-      if (source) {
-        loadStream(source);
-      }
+    // Only load if player is open and we have something to play
+    if (!isOpen) {
+      stopStream();
+      return;
+    }
+    
+    if (event) {
+      const source = {
+        type: event.source,
+        channelId: event.channels[0]?.channelId || event.ppvUriName || event.cdnliveEmbedId || event.id,
+        title: event.title,
+        poster: event.poster,
+      };
+      loadStream(source);
+    } else if (channel) {
+      // For cable channels, we'll use DLHD source with the channel ID
+      const source = {
+        type: 'dlhd' as const,
+        channelId: channel.id,
+        title: channel.name,
+        poster: undefined,
+      };
+      loadStream(source);
     } else {
       stopStream();
     }
