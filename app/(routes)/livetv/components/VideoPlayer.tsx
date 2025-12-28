@@ -73,9 +73,10 @@ export const VideoPlayer = memo(function VideoPlayer({
           poster: event.poster,
         };
       } else if (channel) {
-        // For cable channels, we'll use the Stalker portal mapping
+        // For cable channels, we'll use DLHD source with the channel ID
+        // The channel ID will be mapped to the appropriate stream
         source = {
-          type: 'stalker' as const,
+          type: 'dlhd' as const,
           channelId: channel.id,
           title: channel.name,
           poster: undefined,
@@ -197,7 +198,7 @@ export const VideoPlayer = memo(function VideoPlayer({
                     });
                   } else if (channel) {
                     loadStream({
-                      type: 'stalker' as const,
+                      type: 'dlhd' as const,
                       channelId: channel.id,
                       title: channel.name,
                       poster: undefined,
