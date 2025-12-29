@@ -97,9 +97,22 @@ export const VideoPlayer = memo(function VideoPlayer({
     }
     
     if (event) {
+      let channelId: string;
+      
+      if (event.source === 'ppv' && event.ppvUriName) {
+        // PPV: use ppvUriName
+        channelId = event.ppvUriName;
+      } else if (event.source === 'dlhd' && event.channels && event.channels.length > 0) {
+        // DLHD: use the first channel's channelId (numeric ID)
+        channelId = event.channels[0].channelId;
+      } else {
+        // Fallback to event.id
+        channelId = event.id;
+      }
+      
       loadStream({
         type: event.source as 'dlhd' | 'ppv' | 'cdnlive',
-        channelId: event.id,
+        channelId,
         title: event.title,
         poster: event.poster,
       });
@@ -230,9 +243,17 @@ export const VideoPlayer = memo(function VideoPlayer({
               <button 
                 onClick={() => {
                   if (event) {
+                    let channelId: string;
+                    if (event.source === 'ppv' && event.ppvUriName) {
+                      channelId = event.ppvUriName;
+                    } else if (event.source === 'dlhd' && event.channels && event.channels.length > 0) {
+                      channelId = event.channels[0].channelId;
+                    } else {
+                      channelId = event.id;
+                    }
                     loadStream({
                       type: event.source as 'dlhd' | 'ppv' | 'cdnlive',
-                      channelId: event.id,
+                      channelId,
                       title: event.title,
                       poster: event.poster,
                     });
