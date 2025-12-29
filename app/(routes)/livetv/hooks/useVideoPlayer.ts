@@ -98,19 +98,19 @@ export function useVideoPlayer() {
         const apiResponse = await fetch(streamUrl);
         const apiData = await apiResponse.json();
         
-        // Handle streamed differently - it returns embedUrl instead of streamUrl
+        // Handle streamed differently - check for streamUrl first, then use embed
         if (source.type === 'streamed') {
           if (!apiData.success) {
             throw new Error(apiData.error || 'Failed to get stream');
           }
-          // Streamed returns an embed URL - we need to extract the m3u8 or use the embed
+          // Streamed returns streamUrl if extraction succeeded, otherwise use embed
           if (apiData.stream?.streamUrl) {
             streamUrl = apiData.stream.streamUrl;
           } else if (apiData.stream?.embedUrl) {
-            // For now, show error that direct streaming isn't available
-            throw new Error('This stream requires an embed player. Direct streaming not available.');
+            // Return embed info - the component will handle it
+            throw new Error(`EMBED:${apiData.stream.embedUrl}`);
           } else {
-            throw new Error('No stream URL available');
+            throw new Error('No stream available');
           }
         } else if (!apiData.success || !apiData.streamUrl) {
           // Check for specific offline error

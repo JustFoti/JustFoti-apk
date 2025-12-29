@@ -1,8 +1,10 @@
 /**
  * Streamed.pk Stream Extractor API
  * 
- * Fetches stream URLs from streamed.pk for a given match.
- * Returns embed URLs that can be used to play the stream.
+ * Returns stream information including embed URL.
+ * The client-side player will handle the embed directly.
+ * 
+ * For direct m3u8 extraction, a separate service with browser automation is needed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,6 +13,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 const API_BASE = 'https://streamed.pk/api';
+const EMBED_BASE = 'https://embedsports.top';
 
 interface StreamedStream {
   id: string;
@@ -38,56 +41,50 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 /**
- * Extract m3u8 URL from embed page
+ * Encode protobuf request body for /fetch endpoint
  */
-async function extractM3U8FromEmbed(embedUrl: string): Promise<string | null> {
+function encodeProtobuf(source: string, id: string, streamNo: string): Uint8Array {
+  const sourceBytes = new TextEncoder().encode(source);
+  const idBytes = new TextEncoder().encode(id);
+  const streamNoBytes = new TextEncoder().encode(streamNo);
+  
+  const result: number[] = [];
+  result.push(0x0a, sourceBytes.length, ...sourceBytes);
+  result.push(0x12, idBytes.length, ...idBytes);
+  result.push(0x1a, streamNoBytes.length, ...streamNoBytes);
+  
+  return new Uint8Array(result);
+}
+
+/**
+ * Try to extract m3u8 URL from the /fetch endpoint
+ * This is a best-effort attempt - the encoding is complex
+ */
+async function tryExtractM3U8(source: string, id: string, streamNo: string): Promise<string | null> {
   try {
-    const response = await fetch(embedUrl, {
+    const protoBody = encodeProtobuf(source, id, streamNo);
+    
+    const response = await fetch(`${EMBED_BASE}/fetch`, {
+      method: 'POST',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/html',
-        'Referer': 'https://streamed.pk/',
+        'Accept': '*/*',
+        'Content-Type': 'application/octet-stream',
+        'Origin': EMBED_BASE,
+        'Referer': `${EMBED_BASE}/embed/${source}/${id}/${streamNo}`,
       },
+      body: Buffer.from(protoBody),
     });
 
-    const html = await response.text();
-
-    // Look for m3u8 URLs in the page
-    const m3u8Patterns = [
-      /["']([^"']*\.m3u8[^"']*)["']/gi,
-      /source:\s*["']([^"']+\.m3u8[^"']*)["']/gi,
-      /file:\s*["']([^"']+\.m3u8[^"']*)["']/gi,
-      /src:\s*["']([^"']+\.m3u8[^"']*)["']/gi,
-      /hls\.loadSource\s*\(\s*["']([^"']+)["']/gi,
-    ];
-
-    for (const pattern of m3u8Patterns) {
-      let match;
-      while ((match = pattern.exec(html)) !== null) {
-        const url = match[1];
-        if (url.includes('.m3u8') && !url.includes('example')) {
-          return url;
-        }
-      }
+    const whatHeader = response.headers.get('what');
+    if (!whatHeader || !response.ok) {
+      return null;
     }
 
-    // Look for base64 encoded URLs
-    const base64Pattern = /atob\s*\(\s*["']([A-Za-z0-9+/=]+)["']\s*\)/gi;
-    let match;
-    while ((match = base64Pattern.exec(html)) !== null) {
-      try {
-        const decoded = Buffer.from(match[1], 'base64').toString('utf-8');
-        if (decoded.includes('.m3u8')) {
-          return decoded;
-        }
-      } catch {
-        // Ignore decode errors
-      }
-    }
-
+    // The response is encoded - we return the embed URL instead
+    // A browser-based solution is needed for full extraction
     return null;
-  } catch (error) {
-    console.error('Error extracting m3u8:', error);
+  } catch {
     return null;
   }
 }
@@ -120,11 +117,8 @@ export async function GET(request: NextRequest) {
     const streamIndex = parseInt(streamNo, 10) - 1;
     const stream = streams[streamIndex] || streams[0];
 
-    // Try to extract m3u8 from embed URL
-    let streamUrl: string | null = null;
-    if (stream.embedUrl) {
-      streamUrl = await extractM3U8FromEmbed(stream.embedUrl);
-    }
+    // Try to extract m3u8 (best effort)
+    const streamUrl = await tryExtractM3U8(source, id, streamNo);
 
     return NextResponse.json({
       success: true,
@@ -136,13 +130,19 @@ export async function GET(request: NextRequest) {
         source: stream.source,
         viewers: stream.viewers,
         embedUrl: stream.embedUrl,
-        streamUrl, // May be null if extraction failed
+        streamUrl, // Will be null - client should use embed
+        // Provide embed info for client-side handling
+        embedInfo: {
+          url: stream.embedUrl,
+          referer: 'https://streamed.pk/',
+        },
       },
       allStreams: streams.map(s => ({
         streamNo: s.streamNo,
         language: s.language,
         hd: s.hd,
         source: s.source,
+        embedUrl: s.embedUrl,
       })),
     });
 

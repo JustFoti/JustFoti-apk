@@ -25,8 +25,6 @@ interface StreamedMatch {
   }>;
 }
 
-
-
 const SPORT_ICONS: Record<string, string> = {
   football: '⚽',
   basketball: '🏀',

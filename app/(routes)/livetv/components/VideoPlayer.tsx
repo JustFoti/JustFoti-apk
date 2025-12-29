@@ -70,9 +70,18 @@ export const VideoPlayer = memo(function VideoPlayer({
   } = useVideoPlayer();
 
   const [showControls, setShowControls] = useState(true);
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Check if error is an embed URL
+  useEffect(() => {
+    if (error && error.startsWith('EMBED:')) {
+      setEmbedUrl(error.slice(6));
+    } else {
+      setEmbedUrl(null);
+    }
+  }, [error]);
 
   // Reset hide timer - shows controls and sets timeout to hide them
   const resetHideTimer = useCallback(() => {
@@ -220,17 +229,29 @@ export const VideoPlayer = memo(function VideoPlayer({
         onMouseMove={handleInteraction}
         onTouchStart={handleInteraction}
       >
-        {/* Video Element */}
-        <video
-          ref={videoRef}
-          className={styles.videoElement}
-          playsInline
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePlay();
-            handleInteraction();
-          }}
-        />
+        {/* Embed iframe for streamed sources */}
+        {embedUrl ? (
+          <iframe
+            src={embedUrl}
+            className={styles.videoElement}
+            style={{ border: 'none', width: '100%', height: '100%' }}
+            allowFullScreen
+            allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          /* Video Element */
+          <video
+            ref={videoRef}
+            className={styles.videoElement}
+            playsInline
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+              handleInteraction();
+            }}
+          />
+        )}
 
         {/* Loading Overlay */}
         {isLoading && (
@@ -240,8 +261,8 @@ export const VideoPlayer = memo(function VideoPlayer({
           </div>
         )}
 
-        {/* Error Overlay */}
-        {error && (
+        {/* Error Overlay - don't show for embed URLs */}
+        {error && !embedUrl && (
           <div className={styles.errorOverlay}>
             <div className={styles.errorContent}>
               <div className={styles.errorIcon}>Error</div>
