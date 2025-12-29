@@ -1,21 +1,11 @@
 /**
- * DLHD Channels Grid Component
- * Displays DLHD TV channels with infinite scroll
+ * Cable Channels Grid Component
+ * Simple flat grid layout - no category grouping to prevent layout shifts
  */
 
 import { memo, useState, useEffect, useRef } from 'react';
 import { DLHDChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
-
-const CATEGORY_INFO: Record<string, { name: string; icon: string }> = {
-  sports: { name: 'Sports', icon: '⚽' },
-  entertainment: { name: 'Entertainment', icon: '🎬' },
-  movies: { name: 'Movies', icon: '🎥' },
-  news: { name: 'News', icon: '📰' },
-  kids: { name: 'Kids', icon: '🧸' },
-  documentary: { name: 'Documentary', icon: '🌍' },
-  music: { name: 'Music', icon: '🎵' },
-};
 
 interface CableChannelsGridProps {
   channels: DLHDChannel[];
@@ -23,7 +13,7 @@ interface CableChannelsGridProps {
   loading?: boolean;
 }
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 48;
 
 export const CableChannelsGrid = memo(function CableChannelsGrid({
   channels,
@@ -33,10 +23,10 @@ export const CableChannelsGrid = memo(function CableChannelsGrid({
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Reset display count when channels change
+  // Reset display count when channels change significantly
   useEffect(() => {
     setDisplayCount(ITEMS_PER_PAGE);
-  }, [channels.length]);
+  }, [channels.length > 0 ? channels[0]?.id : null]);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -46,7 +36,7 @@ export const CableChannelsGrid = memo(function CableChannelsGrid({
           setDisplayCount(prev => Math.min(prev + ITEMS_PER_PAGE, channels.length));
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '100px' }
     );
 
     if (loadMoreRef.current) {
@@ -56,101 +46,67 @@ export const CableChannelsGrid = memo(function CableChannelsGrid({
     return () => observer.disconnect();
   }, [displayCount, channels.length]);
 
-  if (loading) {
-    return (
-      <div className={styles.loadingState}>
-        <div className={styles.loadingSpinner}></div>
-        <h3>Loading TV Channels...</h3>
-        <p>Fetching available DLHD channels</p>
-      </div>
-    );
-  }
-
-  if (channels.length === 0) {
-    return (
-      <div className={styles.emptyState}>
-        <div className={styles.emptyIcon}>📺</div>
-        <h3>No Channels Found</h3>
-        <p>No channels match your current filters</p>
-      </div>
-    );
-  }
-
-  // Get channels to display
   const displayedChannels = channels.slice(0, displayCount);
   const hasMore = displayCount < channels.length;
 
-  // Group displayed channels by category
-  const channelsByCategory = displayedChannels.reduce((acc, channel) => {
-    if (!acc[channel.category]) {
-      acc[channel.category] = [];
-    }
-    acc[channel.category].push(channel);
-    return acc;
-  }, {} as Record<string, DLHDChannel[]>);
-
   return (
-    <div className={styles.cableChannelsContainer}>
-      {Object.entries(channelsByCategory).map(([category, categoryChannels]) => {
-        const categoryInfo = CATEGORY_INFO[category] || { name: category, icon: '📺' };
-        
-        return (
-          <div key={category} className={styles.categorySection}>
-            <div className={styles.sectionHeader}>
-              <h3 className={styles.sectionTitle}>
-                <span>{categoryInfo.icon}</span>
-                {categoryInfo.name}
-                <span className={styles.sectionCount}>
-                  {categoryChannels.length} channels
-                </span>
-              </h3>
-            </div>
-            
-            <div className={styles.channelsGrid}>
-              {categoryChannels.map((channel) => (
-                <div
-                  key={channel.id}
-                  className={styles.channelCard}
-                  onClick={() => onChannelPlay(channel)}
-                >
-                  <div className={styles.channelHeader}>
-                    <div className={styles.channelIcon}>
-                      {channel.countryInfo?.flag || categoryInfo.icon}
-                    </div>
-                    <div className={styles.channelInfo}>
-                      <h4 className={styles.channelName}>{channel.name}</h4>
-                      <p className={styles.channelCategory}>
-                        {channel.countryInfo?.name || channel.country}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className={styles.channelMeta}>
-                    <span className={styles.channelShortName}>
-                      {categoryInfo.name}
-                    </span>
-                    <span className={styles.hdBadge}>HD</span>
-                  </div>
-                  
-                  <div className={styles.channelOverlay}>
-                    <button className={styles.playButton}>
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M8 5v14l11-7z"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+    <div className={styles.contentContainer}>
+      {/* Header */}
+      <div className={styles.contentHeader}>
+        <h2 className={styles.contentTitle}>
+          {loading ? 'Loading...' : `${channels.length} Channels`}
+        </h2>
+      </div>
 
-      {/* Infinite Scroll Trigger */}
+      {/* Loading State */}
+      {loading && channels.length === 0 && (
+        <div className={styles.gridPlaceholder}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className={styles.cardSkeleton} />
+          ))}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && channels.length === 0 && (
+        <div className={styles.messageBox}>
+          <span className={styles.messageIcon}>📺</span>
+          <p>No channels found. Try adjusting your filters.</p>
+        </div>
+      )}
+
+      {/* Channels Grid - Flat layout, no category grouping */}
+      {displayedChannels.length > 0 && (
+        <div className={styles.channelGrid}>
+          {displayedChannels.map((channel) => (
+            <div
+              key={channel.id}
+              className={styles.channelItem}
+              onClick={() => onChannelPlay(channel)}
+            >
+              <div className={styles.channelFlag}>
+                {channel.countryInfo?.flag || '📺'}
+              </div>
+              <div className={styles.channelDetails}>
+                <span className={styles.channelTitle}>{channel.name}</span>
+                <span className={styles.channelSub}>
+                  {channel.countryInfo?.name || channel.category}
+                </span>
+              </div>
+              <div className={styles.channelPlayIcon}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Load More Trigger */}
       {hasMore && (
         <div ref={loadMoreRef} className={styles.loadMoreTrigger}>
-          <div className={styles.loadingSpinner}></div>
-          <p>Loading more channels... ({displayCount} of {channels.length})</p>
+          <div className={styles.loadingSpinner} />
         </div>
       )}
     </div>
