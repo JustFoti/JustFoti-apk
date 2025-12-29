@@ -10,25 +10,26 @@ import { useVideoPlayer } from '../hooks/useVideoPlayer';
 import { LiveEvent, DLHDChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
 
+// Sport icon mapping
 const SPORT_ICONS: Record<string, string> = {
-  soccer: '\u26BD',
-  football: '\u26BD',
-  basketball: '\uD83C\uDFC0',
-  tennis: '\uD83C\uDFBE',
-  cricket: '\uD83C\uDFCF',
-  hockey: '\uD83C\uDFD2',
-  baseball: '\u26BE',
-  golf: '\u26F3',
-  rugby: '\uD83C\uDFC9',
-  motorsport: '\uD83C\uDFCE\uFE0F',
-  f1: '\uD83C\uDFCE\uFE0F',
-  boxing: '\uD83E\uDD4A',
-  mma: '\uD83E\uDD4A',
-  ufc: '\uD83E\uDD4A',
-  wwe: '\uD83E\uDD3C',
-  volleyball: '\uD83C\uDFD0',
-  nfl: '\uD83C\uDFC8',
-  darts: '\uD83C\uDFAF',
+  soccer: '⚽',
+  football: '⚽',
+  basketball: '🏀',
+  tennis: '🎾',
+  cricket: '🏏',
+  hockey: '🏒',
+  baseball: '⚾',
+  golf: '⛳',
+  rugby: '🏉',
+  motorsport: '🏎️',
+  f1: '🏎️',
+  boxing: '🥊',
+  mma: '🥊',
+  ufc: '🥊',
+  wwe: '🤼',
+  volleyball: '🏐',
+  nfl: '🏈',
+  darts: '🎯',
 };
 
 function getSportIcon(sport: string): string {
@@ -36,7 +37,7 @@ function getSportIcon(sport: string): string {
   for (const [key, icon] of Object.entries(SPORT_ICONS)) {
     if (lower.includes(key)) return icon;
   }
-  return '\uD83D\uDCFA';
+  return '📺';
 }
 
 interface VideoPlayerProps {
@@ -71,23 +72,7 @@ export const VideoPlayer = memo(function VideoPlayer({
 
   const [showControls, setShowControls] = useState(true);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-
-  // Reset hide timer - shows controls and sets timeout to hide them
-  const resetHideTimer = useCallback(() => {
-    setShowControls(true);
-    
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-    }
-    
-    hideTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !isLoading) {
-        setShowControls(false);
-      }
-    }, 3000);
-  }, [isPlaying, isLoading]);
 
   // Load stream when event or channel changes
   useEffect(() => {
@@ -95,73 +80,63 @@ export const VideoPlayer = memo(function VideoPlayer({
       stopStream();
       return;
     }
-    
+
     if (event) {
-      let channelId: string;
-      
-      if (event.source === 'ppv' && event.ppvUriName) {
-        // PPV: use ppvUriName
-        channelId = event.ppvUriName;
-      } else if (event.source === 'dlhd' && event.channels && event.channels.length > 0) {
-        // DLHD: use the first channel's channelId (numeric ID)
-        channelId = event.channels[0].channelId;
-      } else {
-        // Fallback to event.id
-        channelId = event.id;
-      }
-      
-      loadStream({
-        type: event.source as 'dlhd' | 'ppv' | 'cdnlive',
-        channelId,
+      const source = {
+        type: event.source,
+        channelId: event.channels[0]?.channelId || event.ppvUriName || event.cdnliveEmbedId || event.id,
         title: event.title,
         poster: event.poster,
-      });
+      };
+      loadStream(source);
     } else if (channel) {
-      loadStream({
-        type: 'dlhd',
+      const source = {
+        type: 'dlhd' as const,
         channelId: channel.id,
         title: channel.name,
         poster: undefined,
-      });
+      };
+      loadStream(source);
     } else {
       stopStream();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [event?.id, channel?.id, isOpen]);
+  }, [event, channel, isOpen, loadStream, stopStream]);
 
-  // Show/hide controls based on playing state
+  // Auto-hide controls after 3 seconds
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+    }
+    hideTimeoutRef.current = setTimeout(() => {
+      if (isPlaying && !isLoading) {
+        setShowControls(false);
+      }
+    }, 3000);
+  }, [isPlaying, isLoading]);
+
   useEffect(() => {
     if (isPlaying && !isLoading) {
       resetHideTimer();
     } else {
       setShowControls(true);
-      if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current);
-      }
     }
-  }, [isPlaying, isLoading, resetHideTimer]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
     return () => {
       if (hideTimeoutRef.current) {
         clearTimeout(hideTimeoutRef.current);
       }
     };
-  }, []);
+  }, [isPlaying, isLoading, resetHideTimer]);
 
-  // Handle mouse/touch interaction - reset hide timer
-  const handleInteraction = useCallback(() => {
+  const handleMouseMove = () => {
     resetHideTimer();
-  }, [resetHideTimer]);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      handleInteraction();
-      
       switch (e.code) {
         case 'Space':
           e.preventDefault();
@@ -177,7 +152,9 @@ export const VideoPlayer = memo(function VideoPlayer({
           break;
         case 'Escape':
           e.preventDefault();
-          if (!isFullscreen) {
+          if (isFullscreen) {
+            toggleFullscreen();
+          } else {
             onClose();
           }
           break;
@@ -194,41 +171,32 @@ export const VideoPlayer = memo(function VideoPlayer({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isFullscreen, volume, togglePlay, toggleMute, toggleFullscreen, setVolume, onClose, handleInteraction]);
+  }, [isOpen, togglePlay, toggleMute, toggleFullscreen, isFullscreen, onClose, volume, setVolume]);
 
   if (!isOpen || (!event && !channel)) {
     return null;
   }
 
   const displayTitle = event?.title || channel?.name || 'Stream';
-  const displaySport = event?.sport || channel?.category || '';
+  const displaySport = event?.sport || channel?.category;
   const isLive = event?.isLive ?? true;
 
 
   return (
     <div className={styles.playerModal}>
-      <div 
-        ref={containerRef}
-        className={styles.playerContainer}
-        onMouseMove={handleInteraction}
-        onTouchStart={handleInteraction}
-      >
+      <div className={styles.playerContainer} onMouseMove={handleMouseMove}>
         {/* Video Element */}
         <video
           ref={videoRef}
           className={styles.videoElement}
           playsInline
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePlay();
-            handleInteraction();
-          }}
+          onClick={togglePlay}
         />
 
         {/* Loading Overlay */}
         {isLoading && (
           <div className={styles.loadingOverlay}>
-            <div className={styles.loadingSpinner} />
+            <div className={styles.loadingSpinner}></div>
             <p>Loading stream...</p>
           </div>
         )}
@@ -237,29 +205,21 @@ export const VideoPlayer = memo(function VideoPlayer({
         {error && (
           <div className={styles.errorOverlay}>
             <div className={styles.errorContent}>
-              <div className={styles.errorIcon}>Error</div>
+              <div className={styles.errorIcon}>⚠️</div>
               <h3>Stream Error</h3>
               <p>{error}</p>
-              <button 
+              <button
                 onClick={() => {
                   if (event) {
-                    let channelId: string;
-                    if (event.source === 'ppv' && event.ppvUriName) {
-                      channelId = event.ppvUriName;
-                    } else if (event.source === 'dlhd' && event.channels && event.channels.length > 0) {
-                      channelId = event.channels[0].channelId;
-                    } else {
-                      channelId = event.id;
-                    }
                     loadStream({
-                      type: event.source as 'dlhd' | 'ppv' | 'cdnlive',
-                      channelId,
+                      type: event.source,
+                      channelId: event.channels[0]?.channelId || event.ppvUriName || event.cdnliveEmbedId || event.id,
                       title: event.title,
                       poster: event.poster,
                     });
                   } else if (channel) {
                     loadStream({
-                      type: 'dlhd',
+                      type: 'dlhd' as const,
                       channelId: channel.id,
                       title: channel.name,
                       poster: undefined,
@@ -275,11 +235,8 @@ export const VideoPlayer = memo(function VideoPlayer({
         )}
 
         {/* Controls */}
-        <div 
-          className={`${styles.playerControls} ${!showControls ? styles.hidden : ''}`}
-          onMouseMove={handleInteraction}
-        >
-          {/* Top Controls */}
+        <div className={`${styles.playerControls} ${!showControls ? styles.hidden : ''}`}>
+          {/* Top Bar */}
           <div className={styles.topControls}>
             <div className={styles.eventInfo}>
               <h3 className={styles.eventTitle}>{displayTitle}</h3>
@@ -297,20 +254,19 @@ export const VideoPlayer = memo(function VideoPlayer({
                 )}
               </div>
             </div>
-            
-            <button onClick={onClose} className={styles.closeButton}>
+
+            <button onClick={onClose} className={styles.closeButton} aria-label="Close player">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                 <path d="M18 6L6 18M6 6L18 18" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
               </svg>
             </button>
           </div>
 
-
           {/* Bottom Controls */}
           <div className={styles.bottomControls}>
             <div className={styles.controlsRow}>
-              {/* Play/Pause Button */}
-              <button onClick={togglePlay} className={styles.playPauseButton}>
+              {/* Play/Pause */}
+              <button onClick={togglePlay} className={styles.playPauseButton} aria-label={isPlaying ? 'Pause' : 'Play'}>
                 {isPlaying ? (
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                     <rect x="6" y="4" width="4" height="16" rx="1"/>
@@ -323,9 +279,9 @@ export const VideoPlayer = memo(function VideoPlayer({
                 )}
               </button>
 
-              {/* Volume Controls */}
+              {/* Volume */}
               <div className={styles.volumeControls}>
-                <button onClick={toggleMute} className={styles.muteButton}>
+                <button onClick={toggleMute} className={styles.muteButton} aria-label={isMuted ? 'Unmute' : 'Mute'}>
                   {isMuted || volume === 0 ? (
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                       <path d="M11 5L6 9H2v6h4l5 4V5z"/>
@@ -339,13 +295,12 @@ export const VideoPlayer = memo(function VideoPlayer({
                     </svg>
                   )}
                 </button>
-                
                 <input
                   type="range"
                   min="0"
                   max="1"
                   step="0.01"
-                  value={volume}
+                  value={isMuted ? 0 : volume}
                   onChange={(e) => setVolume(parseFloat(e.target.value))}
                   className={styles.volumeSlider}
                   aria-label="Volume"
@@ -354,15 +309,15 @@ export const VideoPlayer = memo(function VideoPlayer({
 
               <div className={styles.controlsSpacer}></div>
 
-              {/* Source Badge */}
+              {/* Source Info */}
               {currentSource && (
                 <span className={styles.sourceLabel}>
                   {currentSource.type.toUpperCase()}
                 </span>
               )}
 
-              {/* Fullscreen Button */}
-              <button onClick={toggleFullscreen} className={styles.fullscreenButton}>
+              {/* Fullscreen */}
+              <button onClick={toggleFullscreen} className={styles.fullscreenButton} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
                 {isFullscreen ? (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
                     <path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/>
