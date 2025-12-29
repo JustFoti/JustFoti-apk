@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
-import { getTvPlaylistUrl, getPpvStreamProxyUrl } from '@/app/lib/proxy-config';
+import { getTvPlaylistUrl, getPpvStreamProxyUrl, getCdnLiveStreamProxyUrl } from '@/app/lib/proxy-config';
 
 export interface PlayerState {
   isPlaying: boolean;
@@ -96,9 +96,11 @@ export function useVideoPlayer() {
           throw new Error(apiData.error || `Failed to get ${source.type.toUpperCase()} stream URL`);
         }
         
-        // For PPV, we need to proxy the stream through Cloudflare
+        // Proxy streams through Cloudflare for proper CORS and header handling
         if (source.type === 'ppv') {
           streamUrl = getPpvStreamProxyUrl(apiData.streamUrl);
+        } else if (source.type === 'cdnlive') {
+          streamUrl = getCdnLiveStreamProxyUrl(apiData.streamUrl);
         } else {
           streamUrl = apiData.streamUrl;
         }
