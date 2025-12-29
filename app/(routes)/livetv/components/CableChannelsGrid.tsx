@@ -1,9 +1,9 @@
 /**
  * DLHD Channels Grid Component
- * Displays DLHD TV channels in a grid layout
+ * Displays DLHD TV channels with infinite scroll
  */
 
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { DLHDChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
 
@@ -23,11 +23,39 @@ interface CableChannelsGridProps {
   loading?: boolean;
 }
 
+const ITEMS_PER_PAGE = 50;
+
 export const CableChannelsGrid = memo(function CableChannelsGrid({
   channels,
   onChannelPlay,
   loading = false,
 }: CableChannelsGridProps) {
+  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Reset display count when channels change
+  useEffect(() => {
+    setDisplayCount(ITEMS_PER_PAGE);
+  }, [channels.length]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayCount < channels.length) {
+          setDisplayCount(prev => Math.min(prev + ITEMS_PER_PAGE, channels.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [displayCount, channels.length]);
+
   if (loading) {
     return (
       <div className={styles.loadingState}>
@@ -48,8 +76,12 @@ export const CableChannelsGrid = memo(function CableChannelsGrid({
     );
   }
 
-  // Group channels by category
-  const channelsByCategory = channels.reduce((acc, channel) => {
+  // Get channels to display
+  const displayedChannels = channels.slice(0, displayCount);
+  const hasMore = displayCount < channels.length;
+
+  // Group displayed channels by category
+  const channelsByCategory = displayedChannels.reduce((acc, channel) => {
     if (!acc[channel.category]) {
       acc[channel.category] = [];
     }
@@ -113,6 +145,14 @@ export const CableChannelsGrid = memo(function CableChannelsGrid({
           </div>
         );
       })}
+
+      {/* Infinite Scroll Trigger */}
+      {hasMore && (
+        <div ref={loadMoreRef} className={styles.loadMoreTrigger}>
+          <div className={styles.loadingSpinner}></div>
+          <p>Loading more channels... ({displayCount} of {channels.length})</p>
+        </div>
+      )}
     </div>
   );
 });

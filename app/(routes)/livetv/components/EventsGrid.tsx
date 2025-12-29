@@ -1,9 +1,9 @@
 /**
  * Events Grid Component
- * Grid layout for displaying events with featured section
+ * Grid layout for displaying events with infinite scroll
  */
 
-import { memo } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { LiveEvent } from '../hooks/useLiveTVData';
 import { EventCard } from './EventCard';
 import styles from '../LiveTV.module.css';
@@ -15,12 +15,40 @@ interface EventsGridProps {
   error: string | null;
 }
 
+const ITEMS_PER_PAGE = 20;
+
 export const EventsGrid = memo(function EventsGrid({
   events,
   onPlayEvent,
   loading,
   error,
 }: EventsGridProps) {
+  const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Reset display count when events change
+  useEffect(() => {
+    setDisplayCount(ITEMS_PER_PAGE);
+  }, [events.length]);
+
+  // Infinite scroll observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && displayCount < events.length) {
+          setDisplayCount(prev => Math.min(prev + ITEMS_PER_PAGE, events.length));
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [displayCount, events.length]);
+
   // Separate featured events (live events with posters)
   const featuredEvents = events
     .filter(event => event.isLive && event.poster)
@@ -28,7 +56,9 @@ export const EventsGrid = memo(function EventsGrid({
   
   const regularEvents = events
     .filter(event => !featuredEvents.includes(event))
-    .slice(0, 20); // Limit to prevent performance issues
+    .slice(0, displayCount);
+
+  const hasMore = displayCount < events.length - featuredEvents.length;
 
   if (loading) {
     return (
@@ -121,10 +151,11 @@ export const EventsGrid = memo(function EventsGrid({
             ))}
           </div>
 
-          {/* Load More Indicator */}
-          {events.length > 20 && (
-            <div className={styles.loadMoreIndicator}>
-              <p>Showing first 20 events. Use filters to narrow results.</p>
+          {/* Infinite Scroll Trigger */}
+          {hasMore && (
+            <div ref={loadMoreRef} className={styles.loadMoreTrigger}>
+              <div className={styles.loadingSpinner}></div>
+              <p>Loading more events...</p>
             </div>
           )}
         </section>

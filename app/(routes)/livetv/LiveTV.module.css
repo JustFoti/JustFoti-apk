@@ -1456,3 +1456,28 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================
+   INFINITE SCROLL TRIGGER
+   ============================================ */
+
+.loadMoreTrigger {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.loadMoreTrigger .loadingSpinner {
+  width: 2rem;
+  height: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.loadMoreTrigger p {
+  margin: 0;
+}

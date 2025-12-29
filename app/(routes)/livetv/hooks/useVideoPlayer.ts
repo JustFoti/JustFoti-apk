@@ -126,12 +126,7 @@ export function useVideoPlayer() {
         maxFragLookUpTolerance: 0.25,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 10,
-        // Add headers for CDN Live streams
-        xhrSetup: (xhr: XMLHttpRequest) => {
-          if (source.type === 'cdnlive') {
-            xhr.setRequestHeader('Referer', 'https://cdn-live.tv/');
-          }
-        },
+        // Note: Referer headers are handled by the proxy, not the browser
       });
 
       hlsRef.current = hls;
