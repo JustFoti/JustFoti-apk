@@ -33,10 +33,10 @@ export const EventCard = memo(function EventCard({
     switch (event.source) {
       case 'dlhd':
         return { label: 'DLHD', color: 'blue' };
-      case 'ppv':
-        return { label: 'PPV', color: 'purple' };
       case 'cdnlive':
         return { label: 'CDN', color: 'green' };
+      case 'ppv':
+        return { label: 'PPV', color: 'purple' };
       default:
         return { label: 'LIVE', color: 'gray' };
     }

@@ -1,6 +1,6 @@
 /**
  * Provider Content Component
- * Renders content specific to each provider with their own categories
+ * Renders content for DLHD, CDN Live, and PPV providers
  */
 
 import { memo, useState, useEffect, useRef } from 'react';
@@ -24,6 +24,12 @@ type ViewMode = 'events' | 'channels';
 
 const ITEMS_PER_PAGE = 24;
 
+const PROVIDER_TITLES: Record<Provider, string> = {
+  dlhd: 'DaddyLive HD',
+  cdnlive: 'CDN Live TV',
+  ppv: 'PPV Events',
+};
+
 export const ProviderContent = memo(function ProviderContent({
   provider,
   events,
@@ -45,11 +51,10 @@ export const ProviderContent = memo(function ProviderContent({
     setSelectedCategory('all');
     setShowLiveOnly(false);
     setDisplayCount(ITEMS_PER_PAGE);
-    // DLHD defaults to events view, others don't have channels
-    setViewMode(provider === 'dlhd' ? 'events' : 'events');
+    setViewMode('events');
   }, [provider]);
 
-  // Filter events by category and live status
+  // Filter events
   const filteredEvents = events.filter(event => {
     if (selectedCategory !== 'all') {
       const eventCategory = event.sport?.toLowerCase() || '';
@@ -59,7 +64,7 @@ export const ProviderContent = memo(function ProviderContent({
     return true;
   });
 
-  // Filter channels by category
+  // Filter channels
   const filteredChannels = channels.filter(channel => {
     if (selectedCategory !== 'all') {
       if (channel.category !== selectedCategory) return false;
@@ -100,25 +105,13 @@ export const ProviderContent = memo(function ProviderContent({
     ? displayCount < filteredChannels.length 
     : displayCount < filteredEvents.length;
 
-  // Get provider-specific title
-  const getProviderTitle = () => {
-    switch (provider) {
-      case 'dlhd': return 'DaddyLive HD';
-      case 'cdnlive': return 'CDN Live TV';
-      case 'ppv': return 'PPV Events';
-      case 'streamed': return 'Streamed Sports';
-      default: return 'Live TV';
-    }
-  };
-
-  // Check if provider has channels (only DLHD)
   const hasChannels = provider === 'dlhd' && channels.length > 0;
 
   return (
     <div className={styles.providerContent}>
       {/* Provider Header */}
       <div className={styles.providerHeader}>
-        <h2 className={styles.providerTitle}>{getProviderTitle()}</h2>
+        <h2 className={styles.providerTitle}>{PROVIDER_TITLES[provider]}</h2>
         
         {/* View Mode Toggle (only for DLHD) */}
         {hasChannels && (
@@ -141,7 +134,6 @@ export const ProviderContent = memo(function ProviderContent({
 
       {/* Category Filters */}
       <div className={styles.filterBar}>
-        {/* Live Toggle (only for events) */}
         {viewMode === 'events' && (
           <button
             onClick={() => setShowLiveOnly(!showLiveOnly)}
@@ -152,7 +144,6 @@ export const ProviderContent = memo(function ProviderContent({
           </button>
         )}
 
-        {/* All Category */}
         <button
           onClick={() => setSelectedCategory('all')}
           className={`${styles.filterPill} ${selectedCategory === 'all' ? styles.active : ''}`}
@@ -160,7 +151,6 @@ export const ProviderContent = memo(function ProviderContent({
           🏆 All
         </button>
 
-        {/* Category Pills */}
         {categories.slice(0, 10).map((cat) => (
           <button
             key={cat.id}
@@ -174,7 +164,7 @@ export const ProviderContent = memo(function ProviderContent({
 
       {/* Content */}
       <div className={styles.contentContainer}>
-        {/* Loading State */}
+        {/* Loading */}
         {loading && (
           <div className={styles.gridPlaceholder}>
             {Array.from({ length: 12 }).map((_, i) => (
@@ -183,7 +173,7 @@ export const ProviderContent = memo(function ProviderContent({
           </div>
         )}
 
-        {/* Error State */}
+        {/* Error */}
         {error && !loading && (
           <div className={styles.messageBox}>
             <span className={styles.messageIcon}>⚠️</span>
@@ -209,11 +199,7 @@ export const ProviderContent = memo(function ProviderContent({
                 </div>
                 <div className={styles.simpleGrid}>
                   {displayedEvents.map((event) => (
-                    <EventCard
-                      key={event.id}
-                      event={event}
-                      onPlay={onPlayEvent}
-                    />
+                    <EventCard key={event.id} event={event} onPlay={onPlayEvent} />
                   ))}
                 </div>
               </>
@@ -232,9 +218,7 @@ export const ProviderContent = memo(function ProviderContent({
             ) : (
               <>
                 <div className={styles.contentHeader}>
-                  <span className={styles.contentCount}>
-                    {filteredChannels.length} channels
-                  </span>
+                  <span className={styles.contentCount}>{filteredChannels.length} channels</span>
                 </div>
                 <div className={styles.channelGrid}>
                   {displayedChannels.map((channel) => (
@@ -265,7 +249,7 @@ export const ProviderContent = memo(function ProviderContent({
           </>
         )}
 
-        {/* Load More Trigger */}
+        {/* Load More */}
         {hasMore && (
           <div ref={loadMoreRef} className={styles.loadMoreTrigger}>
             <div className={styles.loadingSpinner} />

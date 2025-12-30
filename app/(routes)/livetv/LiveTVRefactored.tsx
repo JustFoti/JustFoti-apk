@@ -1,6 +1,6 @@
 /**
- * LiveTV Component
- * Provider-based live TV experience with DLHD, CDN Live, PPV, and Streamed
+ * LiveTV Page
+ * Provider-based live TV with DLHD, CDN Live, and PPV
  */
 
 'use client';
@@ -34,37 +34,32 @@ export default function LiveTVRefactored() {
   const [selectedChannel, setSelectedChannel] = useState<DLHDChannel | null>(null);
   const [isPlayerOpen, setIsPlayerOpen] = useState(false);
 
-  // Handle event play
   const handlePlayEvent = useCallback((event: LiveEvent) => {
     setSelectedEvent(event);
     setSelectedChannel(null);
     setIsPlayerOpen(true);
   }, []);
 
-  // Handle DLHD channel play
   const handlePlayChannel = useCallback((channel: DLHDChannel) => {
     setSelectedChannel(channel);
     setSelectedEvent(null);
     setIsPlayerOpen(true);
   }, []);
 
-  // Handle player close
   const handleClosePlayer = useCallback(() => {
     setIsPlayerOpen(false);
     setSelectedEvent(null);
     setSelectedChannel(null);
   }, []);
 
-  // Calculate total stats for header
   const totalStats = {
-    live: stats.dlhd.live + stats.ppv.live + stats.streamed.live + stats.cdnlive.channels,
-    total: stats.dlhd.events + stats.dlhd.channels + stats.cdnlive.channels + stats.ppv.events + stats.streamed.events,
+    live: stats.dlhd.live + stats.ppv.live + stats.cdnlive.channels,
+    total: stats.dlhd.events + stats.dlhd.channels + stats.cdnlive.channels + stats.ppv.events,
     sources: {
       channels: stats.dlhd.channels,
       dlhd: stats.dlhd.events,
       ppv: stats.ppv.events,
       cdnlive: stats.cdnlive.channels,
-      streamed: stats.streamed.events,
     },
   };
 
@@ -73,7 +68,6 @@ export default function LiveTVRefactored() {
       <Navigation />
       
       <main className={styles.mainContent}>
-        {/* Header Section */}
         <LiveTVHeader
           stats={totalStats}
           searchQuery={searchQuery}
@@ -82,7 +76,6 @@ export default function LiveTVRefactored() {
           loading={loading}
         />
 
-        {/* Provider Tabs */}
         <ProviderTabs
           selectedProvider={selectedProvider}
           onProviderChange={setSelectedProvider}
@@ -90,7 +83,6 @@ export default function LiveTVRefactored() {
           loading={loading}
         />
 
-        {/* Provider Content */}
         <ProviderContent
           provider={selectedProvider}
           events={events}
@@ -103,7 +95,6 @@ export default function LiveTVRefactored() {
         />
       </main>
 
-      {/* Video Player Modal */}
       <VideoPlayer
         event={selectedEvent}
         channel={selectedChannel}

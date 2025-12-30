@@ -1,6 +1,6 @@
 /**
- * Custom hook for video player functionality
- * Handles HLS streaming, controls, and player state
+ * Video Player Hook
+ * Handles HLS streaming for DLHD, CDN Live, and PPV
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -20,7 +20,7 @@ export interface PlayerState {
 }
 
 export interface StreamSource {
-  type: 'dlhd' | 'ppv' | 'cdnlive' | 'streamed';
+  type: 'dlhd' | 'ppv' | 'cdnlive';
   channelId: string;
   title: string;
   poster?: string;
@@ -34,7 +34,7 @@ export function useVideoPlayer() {
   
   const [state, setState] = useState<PlayerState>({
     isPlaying: false,
-    isMuted: true, // Start muted for autoplay to work
+    isMuted: true,
     isFullscreen: false,
     isLoading: false,
     error: null,
@@ -46,32 +46,22 @@ export function useVideoPlayer() {
 
   const [currentSource, setCurrentSource] = useState<StreamSource | null>(null);
 
-  // Get stream URL based on source type
   const getStreamUrl = useCallback((source: StreamSource): string => {
     switch (source.type) {
       case 'dlhd':
         return getTvPlaylistUrl(source.channelId);
       case 'ppv':
-        // PPV needs to fetch stream URL from API first, return API endpoint
         return `/api/livetv/ppv-stream?uri=${encodeURIComponent(source.channelId)}`;
       case 'cdnlive':
-        // CDN Live channelId format: "channelName|countryCode"
         const cdnParts = source.channelId.split('|');
         const channelName = encodeURIComponent(cdnParts[0] || source.channelId);
         const countryCode = cdnParts[1] || 'us';
         return `/api/livetv/cdnlive-stream?channel=${channelName}&code=${countryCode}`;
-      case 'streamed':
-        // Streamed channelId format: "source:id"
-        const streamedParts = source.channelId.split(':');
-        const streamSource = streamedParts[0] || 'alpha';
-        const streamId = streamedParts[1] || source.channelId;
-        return `/api/livetv/streamed-stream?source=${streamSource}&id=${streamId}`;
       default:
         throw new Error(`Unsupported source type: ${source.type}`);
     }
   }, []);
 
-  // Load HLS stream
   const loadStream = useCallback(async (source: StreamSource) => {
     if (!videoRef.current) return;
 
@@ -79,59 +69,38 @@ export function useVideoPlayer() {
     setCurrentSource(source);
 
     try {
-      // Dynamic import HLS.js
       const Hls = (await import('hls.js')).default;
       
       if (!Hls.isSupported()) {
         throw new Error('HLS is not supported in this browser');
       }
 
-      // Destroy existing HLS instance
       if (hlsRef.current) {
         hlsRef.current.destroy();
       }
 
       let streamUrl = getStreamUrl(source);
       
-      // For CDN Live, PPV, and Streamed, we need to fetch the stream URL from the API first
-      if (source.type === 'cdnlive' || source.type === 'ppv' || source.type === 'streamed') {
+      // For CDN Live and PPV, fetch the stream URL from API first
+      if (source.type === 'cdnlive' || source.type === 'ppv') {
         const apiResponse = await fetch(streamUrl);
         const apiData = await apiResponse.json();
         
-        // Handle streamed differently - check for streamUrl first, then use embed
-        if (source.type === 'streamed') {
-          if (!apiData.success) {
-            throw new Error(apiData.error || 'Failed to get stream');
-          }
-          // Streamed returns streamUrl if extraction succeeded, otherwise use embed
-          if (apiData.stream?.streamUrl) {
-            streamUrl = apiData.stream.streamUrl;
-          } else if (apiData.stream?.embedUrl) {
-            // Return embed info - the component will handle it
-            throw new Error(`EMBED:${apiData.stream.embedUrl}`);
-          } else {
-            throw new Error('No stream available');
-          }
-        } else if (!apiData.success || !apiData.streamUrl) {
-          // Check for specific offline error
+        if (!apiData.success || !apiData.streamUrl) {
           const errorMsg = apiData.error || `Failed to get ${source.type.toUpperCase()} stream URL`;
           if (errorMsg.toLowerCase().includes('offline') || errorMsg.toLowerCase().includes('not live')) {
             throw new Error('This stream is not currently live. Please try again when the event starts.');
           }
           throw new Error(errorMsg);
-        } else {
-          // Proxy streams through Cloudflare for proper CORS and header handling
-          if (source.type === 'ppv') {
-            streamUrl = getPpvStreamProxyUrl(apiData.streamUrl);
-          } else if (source.type === 'cdnlive') {
-            streamUrl = getCdnLiveStreamProxyUrl(apiData.streamUrl);
-          } else {
-            streamUrl = apiData.streamUrl;
-          }
+        }
+        
+        if (source.type === 'ppv') {
+          streamUrl = getPpvStreamProxyUrl(apiData.streamUrl);
+        } else if (source.type === 'cdnlive') {
+          streamUrl = getCdnLiveStreamProxyUrl(apiData.streamUrl);
         }
       }
       
-      // Create new HLS instance
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -146,25 +115,19 @@ export function useVideoPlayer() {
         maxFragLookUpTolerance: 0.25,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 10,
-        // Note: Referer headers are handled by the proxy, not the browser
       });
 
       hlsRef.current = hls;
 
-      // HLS event handlers
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setState(prev => ({ ...prev, isLoading: false }));
         const video = videoRef.current;
         if (video) {
-          // Start muted for autoplay to work (browser policy)
           video.muted = true;
           setState(prev => ({ ...prev, isMuted: true }));
           
           video.play().then(() => {
-            // Update playing state immediately
             setState(prev => ({ ...prev, isPlaying: true }));
-            
-            // Try to unmute after successful play
             setTimeout(() => {
               if (videoRef.current) {
                 videoRef.current.muted = false;
@@ -182,7 +145,6 @@ export function useVideoPlayer() {
         console.error('HLS Error:', data);
         
         if (data.fatal) {
-          // Check if it's an offline stream error
           const errorMsg = data.details || 'Stream error';
           if (errorMsg.includes('image') || errorMsg.includes('offline')) {
             setState(prev => ({ 
@@ -214,18 +176,15 @@ export function useVideoPlayer() {
         }
       });
 
-      // Load the stream
       hls.loadSource(streamUrl);
       hls.attachMedia(videoRef.current);
 
-      // Start analytics session
       startLiveTVSession({
         channelId: source.channelId,
         channelName: source.title,
         category: source.type,
       });
 
-      // Track event
       trackLiveTVEvent({
         action: 'play_start',
         channelId: source.channelId,
@@ -243,7 +202,6 @@ export function useVideoPlayer() {
     }
   }, [getStreamUrl, trackLiveTVEvent, startLiveTVSession]);
 
-  // Stop stream
   const stopStream = useCallback(() => {
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -255,7 +213,6 @@ export function useVideoPlayer() {
       videoRef.current.src = '';
     }
 
-    // End analytics session
     endLiveTVSession();
 
     setState(prev => ({
@@ -271,10 +228,8 @@ export function useVideoPlayer() {
     setCurrentSource(null);
   }, [endLiveTVSession]);
 
-  // Play/pause
   const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
-
     if (state.isPlaying) {
       videoRef.current.pause();
     } else {
@@ -282,27 +237,21 @@ export function useVideoPlayer() {
     }
   }, [state.isPlaying]);
 
-  // Mute/unmute
   const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
-
     videoRef.current.muted = !videoRef.current.muted;
     setState(prev => ({ ...prev, isMuted: !prev.isMuted }));
   }, []);
 
-  // Set volume
   const setVolume = useCallback((volume: number) => {
     if (!videoRef.current) return;
-
     const clampedVolume = Math.max(0, Math.min(1, volume));
     videoRef.current.volume = clampedVolume;
     setState(prev => ({ ...prev, volume: clampedVolume }));
   }, []);
 
-  // Toggle fullscreen
   const toggleFullscreen = useCallback(() => {
     if (!videoRef.current) return;
-
     if (!document.fullscreenElement) {
       videoRef.current.requestFullscreen();
     } else {
@@ -310,26 +259,14 @@ export function useVideoPlayer() {
     }
   }, []);
 
-  // Video event handlers - re-attach when source changes
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handlePlay = () => {
-      console.log('Video play event');
-      setState(prev => ({ ...prev, isPlaying: true }));
-    };
-    const handlePlaying = () => {
-      console.log('Video playing event');
-      setState(prev => ({ ...prev, isPlaying: true }));
-    };
-    const handlePause = () => {
-      console.log('Video pause event');
-      setState(prev => ({ ...prev, isPlaying: false }));
-    };
-    const handleEnded = () => {
-      setState(prev => ({ ...prev, isPlaying: false }));
-    };
+    const handlePlay = () => setState(prev => ({ ...prev, isPlaying: true }));
+    const handlePlaying = () => setState(prev => ({ ...prev, isPlaying: true }));
+    const handlePause = () => setState(prev => ({ ...prev, isPlaying: false }));
+    const handleEnded = () => setState(prev => ({ ...prev, isPlaying: false }));
     const handleVolumeChange = () => {
       setState(prev => ({ 
         ...prev, 
@@ -353,7 +290,6 @@ export function useVideoPlayer() {
     };
   }, [currentSource]);
 
-  // Fullscreen change handler
   useEffect(() => {
     const handleFullscreenChange = () => {
       setState(prev => ({ ...prev, isFullscreen: !!document.fullscreenElement }));
@@ -363,22 +299,14 @@ export function useVideoPlayer() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      stopStream();
-    };
+    return () => { stopStream(); };
   }, [stopStream]);
 
   return {
-    // Refs
     videoRef,
-    
-    // State
     ...state,
     currentSource,
-    
-    // Actions
     loadStream,
     stopStream,
     togglePlay,

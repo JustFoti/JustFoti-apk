@@ -1,12 +1,12 @@
 /**
  * Provider Tabs Component
- * Main provider selection tabs (DLHD, CDN Live, PPV, Streamed)
+ * Navigation tabs for DLHD, CDN Live, and PPV
  */
 
 import { memo } from 'react';
 import styles from '../LiveTV.module.css';
 
-export type Provider = 'dlhd' | 'cdnlive' | 'ppv' | 'streamed';
+export type Provider = 'dlhd' | 'cdnlive' | 'ppv';
 
 interface ProviderTabsProps {
   selectedProvider: Provider;
@@ -15,7 +15,6 @@ interface ProviderTabsProps {
     dlhd: { events: number; channels: number };
     cdnlive: { channels: number };
     ppv: { events: number };
-    streamed: { events: number };
   };
   loading?: boolean;
 }
@@ -23,12 +22,27 @@ interface ProviderTabsProps {
 const PROVIDERS: Array<{
   id: Provider;
   label: string;
+  description: string;
   icon: string;
 }> = [
-  { id: 'dlhd', label: 'DaddyLive HD', icon: '📡' },
-  { id: 'cdnlive', label: 'CDN Live', icon: '🌐' },
-  { id: 'ppv', label: 'PPV', icon: '🥊' },
-  { id: 'streamed', label: 'Streamed', icon: '🎬' },
+  { 
+    id: 'dlhd', 
+    label: 'DLHD', 
+    description: 'Live Sports & Channels',
+    icon: '📡' 
+  },
+  { 
+    id: 'cdnlive', 
+    label: 'CDN Live', 
+    description: 'TV Channels',
+    icon: '🌐' 
+  },
+  { 
+    id: 'ppv', 
+    label: 'PPV', 
+    description: 'Pay-Per-View Events',
+    icon: '🥊' 
+  },
 ];
 
 export const ProviderTabs = memo(function ProviderTabs({
@@ -45,8 +59,6 @@ export const ProviderTabs = memo(function ProviderTabs({
         return stats.cdnlive.channels;
       case 'ppv':
         return stats.ppv.events;
-      case 'streamed':
-        return stats.streamed.events;
       default:
         return 0;
     }
@@ -54,7 +66,7 @@ export const ProviderTabs = memo(function ProviderTabs({
 
   return (
     <div className={styles.providerTabs}>
-      {PROVIDERS.map(({ id, label, icon }) => {
+      {PROVIDERS.map(({ id, label, description, icon }) => {
         const count = getCount(id);
         const isActive = selectedProvider === id;
         
