@@ -379,11 +379,11 @@ export function StatsProvider({ children }: { children: ReactNode }) {
     fetchAllStats(true);
   }, [fetchAllStats]);
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 60 seconds (increased from 30s to reduce D1 reads)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchAllStats(false);
-    }, 30000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [fetchAllStats]);
 

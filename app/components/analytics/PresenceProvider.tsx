@@ -39,19 +39,24 @@ export function usePresenceContext() {
   return useContext(PresenceContext);
 }
 
-// INTERVALS - Optimized for Cloudflare Workers (100k req/day free tier)
-// With CF routing, we can afford much more frequent tracking for real-time analytics
-// 100 users × 1 heartbeat/30s × 60min × 24hr = 288,000 req/day (still under 100k with realistic usage)
-// Most users aren't active 24/7, so actual usage is much lower
+// INTERVALS - Optimized for Memory-First Cloudflare Worker
+// The CF Worker now stores everything in memory and batches D1 writes every 30s
+// This means we can have more frequent heartbeats without D1 cost!
+// 
+// D1 Usage with memory-first architecture:
+// - Heartbeats: 0 D1 reads/writes (memory only)
+// - Batch flush: ~2 writes/min regardless of user count
+// - Stats queries: Cached for 30s, only 4 D1 reads per cache miss
 
 // Dynamic intervals based on routing
 const getIntervals = () => {
   if (isUsingCloudflareAnalytics()) {
-    // Cloudflare: More frequent for real-time analytics
+    // Cloudflare with memory-first worker: Can be more frequent!
+    // Heartbeats go to memory (instant), D1 batched every 30s
     return {
-      heartbeat: 30000,      // 30 seconds - real-time presence
+      heartbeat: 30000,      // 30 seconds - real-time tracking
       minGap: 10000,         // 10 seconds minimum between heartbeats
-      inactivity: 300000,    // 5 minutes - mark inactive
+      inactivity: 180000,    // 3 minutes - mark inactive
     };
   }
   // Vercel fallback: Conservative to stay within limits
