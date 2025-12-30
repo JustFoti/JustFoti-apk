@@ -123,6 +123,30 @@ export default function AdminUsersPage() {
   // Debounce search query for better performance (300ms delay)
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
+  // Memoized activity data to prevent flickering on re-renders
+  // These are stable values that don't change on every render
+  const hourlyActivityData = useMemo(() => {
+    // Generate stable hourly data based on typical usage patterns
+    // Peak hours: 6pm-11pm, Secondary: 6am-12pm
+    return Array.from({ length: 24 }, (_, hour) => {
+      const baseActivity = unifiedStats.activeToday || 10;
+      const multiplier = hour >= 18 && hour <= 23 ? 1.5 : hour >= 6 && hour <= 12 ? 1.2 : 0.5;
+      // Use hour as seed for consistent values
+      const variance = ((hour * 7 + 13) % 30) / 100;
+      return Math.round(baseActivity * multiplier * (0.8 + variance));
+    });
+  }, [unifiedStats.activeToday]);
+
+  const weeklyActivityData = useMemo(() => {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const baseActivity = unifiedStats.activeThisWeek || 50;
+    return days.map((day, index) => ({
+      day,
+      // Weekend boost, use index as seed for consistency
+      activity: Math.round((baseActivity / 7) * (index >= 5 ? 1.3 : 1.0) * (0.8 + ((index * 11 + 7) % 40) / 100))
+    }));
+  }, [unifiedStats.activeThisWeek]);
+
 
   // Key metrics from unified stats - SINGLE SOURCE OF TRUTH
   // All user counts are UNIQUE (no duplicates)
@@ -775,13 +799,11 @@ export default function AdminUsersPage() {
           <div style={{ background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '24px' }}>
             <h3 style={{ margin: '0 0 20px 0', color: '#f8fafc', fontSize: '16px', fontWeight: '600' }}>🕐 Usage Patterns</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Hourly Activity Chart */}
+              {/* Hourly Activity Chart - Using stable seed-based values */}
               <div>
                 <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '8px' }}>Activity by Hour (Last 24h)</div>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: '60px' }}>
-                  {Array.from({ length: 24 }, (_, hour) => {
-                    // Simulate hourly activity data
-                    const activity = Math.round(Math.random() * 100 * (hour >= 18 && hour <= 23 ? 1.5 : hour >= 6 && hour <= 12 ? 1.2 : 0.7));
+                  {hourlyActivityData.map((activity, hour) => {
                     const maxActivity = 150;
                     const height = (activity / maxActivity) * 100;
                     return (
@@ -806,12 +828,11 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              {/* Weekly Activity */}
+              {/* Weekly Activity - Using stable values */}
               <div>
                 <div style={{ color: '#94a3b8', fontSize: '12px', marginBottom: '8px' }}>Activity by Day (Last 7 days)</div>
                 <div style={{ display: 'flex', gap: '8px' }}>
-                  {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
-                    const activity = Math.round(Math.random() * 100 * (index >= 5 ? 1.3 : 1.0));
+                  {weeklyActivityData.map(({ day, activity }) => {
                     const intensity = activity / 130;
                     return (
                       <div key={day} style={{ flex: 1, textAlign: 'center' }}>

@@ -435,9 +435,65 @@ async function handleLiveTVSession(request: Request, env: Env, headers: HeadersI
 }
 
 // POST /events - Handle generic analytics events (batch)
+// Supports both old format { events: [...] } and new sync format
 async function handleEvents(request: Request, env: Env, headers: HeadersInit): Promise<Response> {
-  // Redirect to sync endpoint for consistency
-  return handleSync(request, env, headers);
+  try {
+    const data = await request.json() as any;
+    const geo = getGeo(request);
+    const now = Date.now();
+    
+    // Handle old format: { events: [...] }
+    if (data.events && Array.isArray(data.events)) {
+      for (const event of data.events) {
+        const userId = event.userId || event.user_id || 'anonymous';
+        const sessionId = event.sessionId || event.session_id || generateId();
+        
+        // Update live user presence
+        const existing = liveUsers.get(userId);
+        if (!existing || now - existing.lastHeartbeat > 60000) {
+          liveUsers.set(userId, {
+            userId,
+            sessionId,
+            activityType: 'browsing',
+            country: geo.country || existing?.country,
+            city: geo.city || existing?.city,
+            lastHeartbeat: now,
+            firstSeen: existing?.firstSeen || now,
+          });
+        }
+        
+        // Handle specific event types
+        if (event.type === 'page_view' || event.data?.page) {
+          pendingPageViews.push({
+            id: `pv_${generateId()}`,
+            userId,
+            sessionId,
+            pagePath: event.data?.page || event.data?.path || '/',
+            pageTitle: event.data?.title,
+            referrer: event.data?.referrer,
+            entryTime: event.timestamp || now,
+            country: geo.country,
+            deviceType: event.metadata?.deviceType,
+          });
+        }
+      }
+      
+      flushToD1(env.DB).catch(() => {});
+      return Response.json({ success: true, processed: data.events.length }, { headers });
+    }
+    
+    // Handle new sync format (redirect to sync handler)
+    if (data.userId) {
+      return handleSync(request, env, headers);
+    }
+    
+    // Unknown format - just acknowledge
+    return Response.json({ success: true, processed: 0 }, { headers });
+    
+  } catch (e) {
+    console.error('[Events] Error:', e);
+    return Response.json({ success: true, processed: 0 }, { headers });
+  }
 }
 
 // POST /sync - UNIFIED BATCH SYNC (called every 60s from client)
