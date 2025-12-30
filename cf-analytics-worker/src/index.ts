@@ -434,6 +434,135 @@ async function handleLiveTVSession(request: Request, env: Env, headers: HeadersI
   return Response.json({ success: true }, { headers });
 }
 
+// POST /events - Handle generic analytics events (batch)
+async function handleEvents(request: Request, env: Env, headers: HeadersInit): Promise<Response> {
+  // Redirect to sync endpoint for consistency
+  return handleSync(request, env, headers);
+}
+
+// POST /sync - UNIFIED BATCH SYNC (called every 60s from client)
+// This is the main endpoint - receives all analytics data in one request
+async function handleSync(request: Request, env: Env, headers: HeadersInit): Promise<Response> {
+  try {
+    const data = await request.json() as any;
+    if (!data.userId) {
+      return Response.json({ error: 'Missing userId' }, { status: 400, headers });
+    }
+
+    const geo = getGeo(request);
+    const now = Date.now();
+    const userId = data.userId;
+    const sessionId = data.sessionId || generateId();
+
+    // 1. Update live user presence in memory
+    const existing = liveUsers.get(userId);
+    liveUsers.set(userId, {
+      userId,
+      sessionId,
+      activityType: data.activityType || 'browsing',
+      contentId: data.currentContent?.contentId,
+      contentTitle: data.currentContent?.contentTitle,
+      contentType: data.currentContent?.contentType,
+      seasonNumber: data.currentContent?.seasonNumber,
+      episodeNumber: data.currentContent?.episodeNumber,
+      country: geo.country || existing?.country,
+      city: geo.city || existing?.city,
+      lastHeartbeat: now,
+      firstSeen: existing?.firstSeen || now,
+    });
+
+    // Remove user if they're leaving
+    if (!data.isActive && !data.isVisible) {
+      liveUsers.delete(userId);
+    }
+
+    // 2. Queue page views
+    if (data.pageViews && Array.isArray(data.pageViews)) {
+      for (const pv of data.pageViews) {
+        pendingPageViews.push({
+          id: `pv_${generateId()}`,
+          userId,
+          sessionId,
+          pagePath: pv.path || '/',
+          pageTitle: pv.title,
+          referrer: pv.referrer,
+          entryTime: pv.timestamp || now,
+          country: geo.country,
+          deviceType: data.device?.type,
+        });
+      }
+    }
+
+    // 3. Queue watch progress
+    if (data.watchProgress && Array.isArray(data.watchProgress)) {
+      for (const wp of data.watchProgress) {
+        if (!wp.contentId) continue;
+        
+        const key = `${userId}_${wp.contentId}_${wp.seasonNumber || 0}_${wp.episodeNumber || 0}`;
+        const existingSession = pendingWatchSessions.get(key);
+        
+        // Calculate watch time from position changes
+        const watchTime = wp.position || 0;
+        const completion = wp.duration > 0 ? Math.round((wp.position / wp.duration) * 100) : 0;
+        
+        pendingWatchSessions.set(key, {
+          id: existingSession?.id || `ws_${generateId()}`,
+          userId,
+          sessionId,
+          contentId: wp.contentId,
+          contentType: wp.contentType || 'movie',
+          contentTitle: wp.contentTitle,
+          seasonNumber: wp.seasonNumber,
+          episodeNumber: wp.episodeNumber,
+          startedAt: existingSession?.startedAt || wp.startedAt || now,
+          lastUpdate: now,
+          watchTime: Math.max(watchTime, existingSession?.watchTime || 0),
+          lastPosition: wp.position || 0,
+          duration: wp.duration || existingSession?.duration || 0,
+          completionPercentage: Math.max(completion, existingSession?.completionPercentage || 0),
+          isCompleted: completion >= 90 || existingSession?.isCompleted || false,
+        });
+      }
+    }
+
+    // 4. Store bot detection if suspicious
+    if (data.botDetection && data.botDetection.confidence >= 30) {
+      const userAgent = request.headers.get('User-Agent') || 'unknown';
+      const ipAddress = request.headers.get('CF-Connecting-IP') || 'unknown';
+      
+      const existingDetection = pendingBotDetections.get(userId);
+      if (!existingDetection || data.botDetection.confidence > existingDetection.confidenceScore) {
+        pendingBotDetections.set(userId, {
+          userId,
+          ipAddress,
+          userAgent,
+          confidenceScore: data.botDetection.confidence,
+          reasons: data.botDetection.reasons || [],
+          fingerprint: data.botDetection.fingerprint,
+          timestamp: now,
+        });
+      }
+    }
+
+    // 5. Trigger D1 flush in background (non-blocking)
+    flushToD1(env.DB).catch(() => {});
+
+    return Response.json({ 
+      success: true, 
+      synced: {
+        presence: true,
+        pageViews: data.pageViews?.length || 0,
+        watchProgress: data.watchProgress?.length || 0,
+      },
+      timestamp: now,
+    }, { headers });
+
+  } catch (e) {
+    console.error('[Sync] Error:', e);
+    return Response.json({ success: false, error: String(e) }, { status: 500, headers });
+  }
+}
+
 
 // GET /live-activity - Get current live users (FROM MEMORY - instant, no D1!)
 async function handleGetLiveActivity(headers: HeadersInit): Promise<Response> {
@@ -892,6 +1021,12 @@ export default {
           case '/livetv-session':
           case '/api/livetv-session':
             return handleLiveTVSession(request, env, headers);
+          case '/events':
+          case '/api/events':
+            return handleEvents(request, env, headers);
+          case '/sync':
+          case '/api/sync':
+            return handleSync(request, env, headers);
         }
       }
       
