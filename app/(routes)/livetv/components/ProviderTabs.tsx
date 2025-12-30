@@ -66,7 +66,7 @@ export const ProviderTabs = memo(function ProviderTabs({
 
   return (
     <div className={styles.providerTabs}>
-      {PROVIDERS.map(({ id, label, description, icon }) => {
+      {PROVIDERS.map(({ id, label, icon }) => {
         const count = getCount(id);
         const isActive = selectedProvider === id;
         

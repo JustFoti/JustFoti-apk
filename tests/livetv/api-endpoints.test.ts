@@ -1,7 +1,6 @@
 /**
  * LiveTV API Endpoints Tests
- * 
- * Tests all LiveTV API routes for proper functionality.
+ * Tests all LiveTV API routes: DLHD, CDN Live, PPV
  * Run with: bun test tests/livetv/api-endpoints.test.ts
  */
 
@@ -12,10 +11,7 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 async function fetchApi(endpoint: string) {
   const response = await fetch(`${LOCAL_API}${endpoint}`, {
-    headers: {
-      'User-Agent': USER_AGENT,
-      'Accept': 'application/json',
-    },
+    headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' },
   });
   return { response, data: await response.json() };
 }
@@ -36,10 +32,6 @@ describe('LiveTV API Endpoints', () => {
         if (data.success) {
           expect(data.channels).toBeDefined();
           expect(Array.isArray(data.channels)).toBe(true);
-          
-          if (data.channels.length > 0) {
-            console.log('Sample channel:', JSON.stringify(data.channels[0], null, 2));
-          }
         }
       } catch (err) {
         console.log('API not available:', (err as Error).message);
@@ -59,7 +51,6 @@ describe('LiveTV API Endpoints', () => {
             (sum: number, cat: any) => sum + (cat.events?.length || 0), 0
           ) || 0;
           console.log('Total events:', totalEvents);
-          console.log('Categories:', data.schedule.categories?.length || 0);
         }
       } catch (err) {
         console.log('API not available:', (err as Error).message);
@@ -82,17 +73,6 @@ describe('LiveTV API Endpoints', () => {
             (sum: number, cat: any) => sum + (cat.streams?.length || 0), 0
           ) || 0;
           console.log('Total streams:', totalStreams);
-          console.log('Categories:', data.categories?.length || 0);
-          
-          // Find a live stream for testing
-          for (const cat of data.categories || []) {
-            const liveStream = cat.streams?.find((s: any) => s.isLive);
-            if (liveStream) {
-              console.log('Live stream found:', liveStream.name);
-              console.log('URI:', liveStream.uriName);
-              break;
-            }
-          }
         }
       } catch (err) {
         console.log('API not available:', (err as Error).message);
@@ -101,7 +81,6 @@ describe('LiveTV API Endpoints', () => {
     
     test('GET /ppv-stream - should return stream URL', async () => {
       try {
-        // First get a PPV event
         const { data: ppvData } = await fetchApi('/ppv-streams');
         
         if (!ppvData.success || !ppvData.categories?.length) {
@@ -109,7 +88,6 @@ describe('LiveTV API Endpoints', () => {
           return;
         }
         
-        // Find any stream
         let testUri = '';
         for (const cat of ppvData.categories) {
           if (cat.streams?.length > 0) {
@@ -118,21 +96,14 @@ describe('LiveTV API Endpoints', () => {
           }
         }
         
-        if (!testUri) {
-          console.log('No PPV streams available');
-          return;
-        }
+        if (!testUri) return;
         
         console.log('\n=== PPV Stream API ===');
-        console.log('Testing URI:', testUri);
-        
         const { response, data } = await fetchApi(`/ppv-stream?uri=${encodeURIComponent(testUri)}`);
         
         console.log('Status:', response.status);
         console.log('Success:', data.success);
         console.log('Stream URL:', data.streamUrl ? 'Available' : 'Not available');
-        console.log('Error:', data.error || 'None');
-        
       } catch (err) {
         console.log('API not available:', (err as Error).message);
       }
@@ -152,128 +123,32 @@ describe('LiveTV API Endpoints', () => {
         if (data.channels?.length > 0) {
           const online = data.channels.filter((c: any) => c.status === 'online');
           console.log('Online:', online.length);
-          
-          if (online.length > 0) {
-            console.log('Sample online channel:', JSON.stringify(online[0], null, 2));
-          }
-        }
-      } catch (err) {
-        console.log('API not available:', (err as Error).message);
-      }
-    });
-  });
-  
-  describe('Streamed APIs', () => {
-    
-    test('GET /streamed-events - should return Streamed events', async () => {
-      try {
-        const { response, data } = await fetchApi('/streamed-events');
-        
-        console.log('\n=== Streamed Events API ===');
-        console.log('Status:', response.status);
-        console.log('Success:', data.success);
-        console.log('Events:', data.events?.length || 0);
-        console.log('Live:', data.stats?.live || 0);
-        
-        if (data.events?.length > 0) {
-          // Group by category
-          const byCategory: Record<string, number> = {};
-          for (const event of data.events) {
-            byCategory[event.sport] = (byCategory[event.sport] || 0) + 1;
-          }
-          
-          console.log('\nBy category:');
-          for (const [cat, count] of Object.entries(byCategory).sort((a, b) => b[1] - a[1]).slice(0, 5)) {
-            console.log(`  ${cat}: ${count}`);
-          }
-        }
-        
-        if (data.success) {
-          expect(data.events).toBeDefined();
-          expect(Array.isArray(data.events)).toBe(true);
         }
       } catch (err) {
         console.log('API not available:', (err as Error).message);
       }
     });
     
-    test('GET /streamed-events?live=true - should return only live events', async () => {
+    test('GET /cdnlive-stream - should return stream URL', async () => {
       try {
-        const { response, data } = await fetchApi('/streamed-events?live=true');
+        const { data: channelsData } = await fetchApi('/cdn-live-channels');
         
-        console.log('\n=== Streamed Live Events ===');
-        console.log('Status:', response.status);
-        console.log('Live events:', data.events?.length || 0);
-        
-        if (data.events?.length > 0) {
-          for (const event of data.events.slice(0, 3)) {
-            console.log(`  ${event.title} (${event.sport})`);
-          }
-        }
-      } catch (err) {
-        console.log('API not available:', (err as Error).message);
-      }
-    });
-    
-    test('GET /streamed-events?sport=football - should filter by sport', async () => {
-      try {
-        const { response, data } = await fetchApi('/streamed-events?sport=football');
-        
-        console.log('\n=== Streamed Football Events ===');
-        console.log('Status:', response.status);
-        console.log('Football events:', data.events?.length || 0);
-        
-        if (data.events?.length > 0) {
-          // Verify all are football
-          const allFootball = data.events.every((e: any) => e.sport === 'football');
-          console.log('All football:', allFootball);
-          expect(allFootball).toBe(true);
-        }
-      } catch (err) {
-        console.log('API not available:', (err as Error).message);
-      }
-    });
-    
-    test('GET /streamed-stream - should return stream info', async () => {
-      try {
-        // First get events
-        const { data: eventsData } = await fetchApi('/streamed-events');
-        
-        if (!eventsData.success || !eventsData.events?.length) {
-          console.log('No events available');
+        if (!channelsData.channels?.length) {
+          console.log('No CDN channels available');
           return;
         }
         
-        // Find event with sources
-        const event = eventsData.events.find((e: any) => e.streamedSources?.length > 0);
-        if (!event) {
-          console.log('No events with sources');
-          return;
-        }
+        const onlineChannel = channelsData.channels.find((c: any) => c.status === 'online');
+        if (!onlineChannel) return;
         
-        const source = event.streamedSources[0];
-        
-        console.log('\n=== Streamed Stream API ===');
-        console.log('Event:', event.title);
-        console.log('Source:', `${source.source}:${source.id}`);
-        
+        console.log('\n=== CDN Live Stream API ===');
         const { response, data } = await fetchApi(
-          `/streamed-stream?source=${source.source}&id=${source.id}`
+          `/cdnlive-stream?channel=${encodeURIComponent(onlineChannel.name)}&code=${onlineChannel.code}`
         );
         
         console.log('Status:', response.status);
         console.log('Success:', data.success);
-        
-        if (data.stream) {
-          console.log('Stream #:', data.stream.streamNo);
-          console.log('Language:', data.stream.language);
-          console.log('HD:', data.stream.hd);
-          console.log('Embed URL:', data.stream.embedUrl ? 'Available' : 'Not available');
-          console.log('Stream URL:', data.stream.streamUrl || 'Not extracted');
-        }
-        
-        console.log('All streams:', data.allStreams?.length || 0);
-        
+        console.log('Stream URL:', data.streamUrl ? 'Available' : 'Not available');
       } catch (err) {
         console.log('API not available:', (err as Error).message);
       }
@@ -282,31 +157,25 @@ describe('LiveTV API Endpoints', () => {
   
   describe('Error Handling', () => {
     
-    test('should handle missing parameters', async () => {
+    test('should handle missing PPV parameters', async () => {
       try {
-        const { response, data } = await fetchApi('/streamed-stream');
+        const { response, data } = await fetchApi('/ppv-stream');
         
         console.log('\n=== Missing Parameters Test ===');
         console.log('Status:', response.status);
-        console.log('Success:', data.success);
-        console.log('Error:', data.error);
-        
         expect(data.success).toBe(false);
-        expect(data.error).toBeDefined();
       } catch (err) {
         console.log('API not available:', (err as Error).message);
       }
     });
     
-    test('should handle invalid source', async () => {
+    test('should handle missing CDN Live parameters', async () => {
       try {
-        const { response, data } = await fetchApi('/streamed-stream?source=invalid&id=test');
+        const { response, data } = await fetchApi('/cdnlive-stream');
         
-        console.log('\n=== Invalid Source Test ===');
+        console.log('\n=== Missing CDN Parameters Test ===');
         console.log('Status:', response.status);
-        console.log('Success:', data.success);
-        console.log('Error:', data.error);
-        
+        expect(data.success).toBe(false);
       } catch (err) {
         console.log('API not available:', (err as Error).message);
       }
