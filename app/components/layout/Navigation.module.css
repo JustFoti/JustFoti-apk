@@ -266,7 +266,6 @@
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
 }
 
 .discordButton:hover {
@@ -359,7 +358,6 @@
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
 }
 
 .supportButton:hover {
@@ -382,7 +380,6 @@
   text-decoration: none;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
 }
 
 .githubButton:hover {

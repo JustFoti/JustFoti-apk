@@ -428,7 +428,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   className={styles.supportButton}
                 >
                   <HeartIcon />
-                  <span>Buy Me a Monster</span>
+                  <span>Support</span>
                 </a>
                 <button className={styles.searchButton} onClick={toggleSearch} aria-label="Search">
                   <SearchIcon />
