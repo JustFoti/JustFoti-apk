@@ -19,6 +19,9 @@ import { useAdmin } from './context/AdminContext';
 import OverviewStats from './components/OverviewStats';
 import LiveActivitySummary from './components/LiveActivitySummary';
 import ImprovedLiveDashboard from './components/ImprovedLiveDashboard';
+import DetailedRealtimeAnalytics from './components/DetailedRealtimeAnalytics';
+import DetailedContentAnalytics from './components/DetailedContentAnalytics';
+import ContentPerformanceBreakdown from './components/ContentPerformanceBreakdown';
 import { colors, formatTimeAgo, StatCard, Card, Grid, ProgressBar, gradients } from './components/ui';
 
 type TabId = 'overview' | 'realtime' | 'content' | 'geographic';
@@ -160,67 +163,19 @@ function OverviewTab() {
 }
 
 function RealtimeTab() {
-  return <ImprovedLiveDashboard />;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <ImprovedLiveDashboard />
+      <DetailedRealtimeAnalytics />
+    </div>
+  );
 }
 
 function ContentTab() {
-  const { stats } = useStats();
-  
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Content Metrics */}
-      <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Total Sessions" value={stats.totalSessions} icon="📊" color={colors.primary} />
-        <StatCard title="Watch Time" value={`${stats.totalWatchTime}m`} icon="⏱️" color={colors.success} />
-        <StatCard title="Avg Duration" value={`${stats.avgSessionDuration}m`} icon="📈" color={colors.warning} />
-        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.pink} />
-        <StatCard title="Movies" value={stats.movieSessions} icon="🎬" color={colors.info} />
-        <StatCard title="TV Shows" value={stats.tvSessions} icon="📺" color={colors.purple} />
-      </Grid>
-
-      {/* Top Content */}
-      <Card title="🔥 Top Content (7 days)" icon="">
-        {stats.topContent?.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {stats.topContent.slice(0, 10).map((content, i) => (
-              <div key={content.contentId} style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                background: i === 0 ? 'rgba(255,215,0,0.1)' : 'rgba(255,255,255,0.02)',
-                borderRadius: '8px',
-                border: i === 0 ? '1px solid rgba(255,215,0,0.2)' : 'none',
-              }}>
-                <span style={{
-                  width: '28px',
-                  height: '28px',
-                  borderRadius: '50%',
-                  background: i < 3 ? ['#ffd700', '#c0c0c0', '#cd7f32'][i] : 'rgba(255,255,255,0.1)',
-                  color: i < 3 ? '#000' : colors.text.secondary,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '700',
-                  fontSize: '12px',
-                }}>{i + 1}</span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ color: colors.text.primary, fontSize: '14px', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {content.contentTitle || content.contentId}
-                  </div>
-                  <div style={{ color: colors.text.muted, fontSize: '12px' }}>{content.contentType}</div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: colors.success, fontWeight: '600' }}>{content.watchCount} views</div>
-                  <div style={{ color: colors.text.muted, fontSize: '11px' }}>{content.totalWatchTime}m watched</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{ color: colors.text.muted, textAlign: 'center', padding: '40px' }}>No content data yet</div>
-        )}
-      </Card>
+      <DetailedContentAnalytics />
+      <ContentPerformanceBreakdown />
     </div>
   );
 }
