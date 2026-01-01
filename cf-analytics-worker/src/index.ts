@@ -1,34 +1,36 @@
 /**
- * Flyx Analytics Worker - MEMORY-FIRST ARCHITECTURE
+ * Flyx Analytics Worker - DURABLE OBJECT ARCHITECTURE
  * 
  * ARCHITECTURE:
- * - All tracking data stored in memory first (instant, no D1 cost)
- * - Periodic flush to D1 every 30 seconds (batched writes)
- * - GET requests served from memory (instant, no D1 reads for real-time)
+ * - All real-time tracking goes through a Durable Object (single instance)
+ * - Durable Object maintains in-memory state shared across ALL requests
+ * - Periodic flush to D1 every 60 seconds (batched writes)
+ * - GET requests served from DO memory (instant, accurate)
  * - D1 only used for persistence and historical queries
  * 
- * This handles hundreds of concurrent users with minimal D1 usage:
- * - 500 users × 1 heartbeat/30s = 1000 heartbeats/min
- * - But only 1-2 D1 batch writes/min (flush every 30s)
- * 
- * D1 Usage Estimate:
- * - Writes: ~2 batches/min × 60 min × 24 hr = ~2,880 batch operations/day
- * - Reads: Only for historical stats, cached for 30s
+ * This solves the distributed worker problem:
+ * - Regular workers are stateless - each request can hit different instance
+ * - Durable Objects guarantee all requests to same ID go to same instance
+ * - Memory persists across requests = accurate live user count
  * 
  * Endpoints:
- *   POST /presence      - Heartbeat (memory only, instant)
- *   POST /page-view     - Track page views (memory + eventual D1)
- *   POST /watch-session - Track watch sessions (memory + eventual D1)
- *   POST /livetv-session - Track LiveTV sessions
- *   GET  /live-activity - Get current activity (from memory, instant)
- *   GET  /unified-stats - Get stats (memory + D1 for historical)
+ *   POST /presence      - Heartbeat (routed to DO)
+ *   POST /sync          - Batch sync (routed to DO)
+ *   POST /page-view     - Track page views
+ *   POST /watch-session - Track watch sessions
+ *   GET  /live-activity - Get current activity (from DO)
+ *   GET  /unified-stats - Get stats (DO + D1 for historical)
+ *   GET  /admin/stats   - Admin dashboard stats (from DO)
  *   GET  /health        - Health check
  *   POST /init-db       - Initialize database tables
- *   POST /flush         - Force flush to D1
  */
+
+// Re-export the Durable Object class
+export { AnalyticsDO } from './analytics-do';
 
 export interface Env {
   DB: D1Database;
+  ANALYTICS_DO: DurableObjectNamespace;
   ALLOWED_ORIGINS?: string;
 }
 
@@ -183,6 +185,9 @@ async function flushToD1(db: D1Database, force = false): Promise<void> {
   const now = Date.now();
   if (!force && now - lastFlushTime < FLUSH_INTERVAL) return;
   lastFlushTime = now;
+  
+  const userCount = liveUsers.size;
+  console.log(`[Flush] Starting flush with ${userCount} users in memory`);
   
   const batch: D1PreparedStatement[] = [];
   
@@ -448,19 +453,20 @@ async function handleEvents(request: Request, env: Env, headers: HeadersInit): P
         const userId = event.userId || event.user_id || 'anonymous';
         const sessionId = event.sessionId || event.session_id || generateId();
         
-        // Update live user presence
+        // ALWAYS update live user presence (fix: was only updating if >60s old)
         const existing = liveUsers.get(userId);
-        if (!existing || now - existing.lastHeartbeat > 60000) {
-          liveUsers.set(userId, {
-            userId,
-            sessionId,
-            activityType: 'browsing',
-            country: geo.country || existing?.country,
-            city: geo.city || existing?.city,
-            lastHeartbeat: now,
-            firstSeen: existing?.firstSeen || now,
-          });
-        }
+        liveUsers.set(userId, {
+          userId,
+          sessionId,
+          activityType: existing?.activityType || 'browsing',
+          contentId: existing?.contentId,
+          contentTitle: existing?.contentTitle,
+          contentType: existing?.contentType,
+          country: geo.country || existing?.country,
+          city: geo.city || existing?.city,
+          lastHeartbeat: now,
+          firstSeen: existing?.firstSeen || now,
+        });
         
         // Handle specific event types
         if (event.type === 'page_view' || event.data?.page) {
@@ -701,14 +707,74 @@ async function handleLiveActivityPost(request: Request, env: Env, headers: Heade
 }
 
 
-// GET /live-activity - Get current live users (FROM MEMORY - instant, no D1!)
-async function handleGetLiveActivity(headers: HeadersInit): Promise<Response> {
-  const { stats, users } = getRealtimeStats();
+// GET /live-activity - Get current live users (FROM D1 + MEMORY)
+async function handleGetLiveActivity(env: Env, headers: HeadersInit): Promise<Response> {
+  const now = Date.now();
+  const fiveMinutesAgo = now - 5 * 60 * 1000;
+  
+  // Get memory stats first
+  const { stats: memoryStats, users: memoryUsers } = getRealtimeStats();
+  
+  // If memory is empty (cold start), query D1
+  let stats = memoryStats;
+  let users = memoryUsers;
+  
+  if (memoryUsers.length === 0) {
+    try {
+      // Get live users from D1
+      const result = await env.DB.prepare(`
+        SELECT user_id, activity_type, content_id, content_title, content_type, country, city, last_heartbeat
+        FROM live_activity 
+        WHERE is_active = 1 AND last_heartbeat >= ?
+        ORDER BY last_heartbeat DESC
+        LIMIT 500
+      `).bind(fiveMinutesAgo).all();
+      
+      const d1Users = (result.results || []).map((u: any) => ({
+        userId: u.user_id,
+        activityType: u.activity_type,
+        contentId: u.content_id,
+        contentTitle: u.content_title,
+        contentType: u.content_type,
+        country: u.country,
+        city: u.city,
+        lastHeartbeat: u.last_heartbeat,
+      }));
+      
+      // Recalculate stats from D1 users
+      stats = {
+        total: d1Users.length,
+        watching: d1Users.filter((u: any) => u.activityType === 'watching').length,
+        browsing: d1Users.filter((u: any) => u.activityType === 'browsing').length,
+        livetv: d1Users.filter((u: any) => u.activityType === 'livetv').length,
+      };
+      
+      // Return D1 data directly
+      return Response.json({
+        success: true,
+        summary: stats,
+        activities: d1Users.map((u: any) => ({
+          user_id: u.userId,
+          activity_type: u.activityType,
+          content_id: u.contentId,
+          content_title: u.contentTitle,
+          content_type: u.contentType,
+          country: u.country,
+          city: u.city,
+          last_heartbeat: u.lastHeartbeat,
+        })),
+        timestamp: now,
+        source: 'd1',
+      }, { headers });
+    } catch (e) {
+      console.error('[LiveActivity] D1 query error:', e);
+    }
+  }
   
   return Response.json({
     success: true,
     summary: stats,
-    activities: users.map(u => ({
+    activities: users.map((u) => ({
       user_id: u.userId,
       activity_type: u.activityType,
       content_id: u.contentId,
@@ -718,18 +784,70 @@ async function handleGetLiveActivity(headers: HeadersInit): Promise<Response> {
       city: u.city,
       last_heartbeat: u.lastHeartbeat,
     })),
-    timestamp: Date.now(),
+    timestamp: now,
+    source: 'memory',
   }, { headers });
 }
 
-// GET /unified-stats - Get all stats (memory for realtime, D1 for historical)
+// GET /unified-stats - Get all stats (D1 for realtime + historical)
 async function handleGetUnifiedStats(env: Env, headers: HeadersInit): Promise<Response> {
   const now = Date.now();
-  const { stats, peak, users } = getRealtimeStats();
   
+  // Get memory stats (may be partial due to worker distribution)
+  const { stats: memoryStats, peak } = getRealtimeStats();
+  
+  const fiveMinutesAgo = now - 5 * 60 * 1000;
   const oneDayAgo = now - 24 * 60 * 60 * 1000;
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+  
+  // ALWAYS query D1 for real-time stats (workers are distributed, memory is partial)
+  let realtimeFromD1 = { total: 0, watching: 0, browsing: 0, livetv: 0 };
+  let realtimeUsers: any[] = [];
+  try {
+    // Get live users from D1 (users with heartbeat in last 5 minutes)
+    const liveResult = await env.DB.prepare(`
+      SELECT activity_type, COUNT(DISTINCT user_id) as count
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ?
+      GROUP BY activity_type
+    `).bind(fiveMinutesAgo).all();
+    
+    for (const row of (liveResult.results || [])) {
+      const count = parseInt(String(row.count)) || 0;
+      realtimeFromD1.total += count;
+      if (row.activity_type === 'watching') realtimeFromD1.watching = count;
+      else if (row.activity_type === 'browsing') realtimeFromD1.browsing = count;
+      else if (row.activity_type === 'livetv') realtimeFromD1.livetv = count;
+    }
+    
+    // Get user details for geographic breakdown
+    const usersResult = await env.DB.prepare(`
+      SELECT user_id, activity_type, content_id, content_title, content_type, country, city, last_heartbeat
+      FROM live_activity 
+      WHERE is_active = 1 AND last_heartbeat >= ?
+      ORDER BY last_heartbeat DESC
+      LIMIT 500
+    `).bind(fiveMinutesAgo).all();
+    realtimeUsers = usersResult.results || [];
+    
+    console.log('[UnifiedStats] D1 realtime:', realtimeFromD1.total, 'users, memory:', memoryStats.total);
+  } catch (e) {
+    console.error('[UnifiedStats] D1 realtime query error:', e);
+  }
+  
+  // Use D1 data (authoritative) - memory is only partial due to worker distribution
+  const stats = realtimeFromD1;
+  const users = realtimeUsers.map(u => ({
+    userId: u.user_id,
+    activityType: u.activity_type,
+    contentId: u.content_id,
+    contentTitle: u.content_title,
+    contentType: u.content_type,
+    country: u.country,
+    city: u.city,
+    lastHeartbeat: u.last_heartbeat,
+  }));
   
   // Get historical data from cache or D1
   let historical = historicalStatsCache;
@@ -1103,6 +1221,12 @@ async function handleInitDb(env: Env, headers: HeadersInit): Promise<Response> {
 // MAIN HANDLER - Route requests to appropriate handlers
 // =============================================================================
 
+// Helper to get the Durable Object stub
+function getAnalyticsDO(env: Env): DurableObjectStub {
+  const id = env.ANALYTICS_DO.idFromName('global-analytics');
+  return env.ANALYTICS_DO.get(id);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -1120,8 +1244,8 @@ export default {
       const { stats } = getRealtimeStats();
       return Response.json({
         status: 'ok',
-        architecture: 'memory-first',
-        liveUsers: stats.total,
+        architecture: 'durable-object',
+        memoryUsers: stats.total,
         pendingPageViews: pendingPageViews.length,
         pendingWatchSessions: pendingWatchSessions.size,
         pendingBotDetections: pendingBotDetections.size,
@@ -1143,12 +1267,40 @@ export default {
     
     // Route handlers
     try {
+      // =========================================================================
+      // DURABLE OBJECT ROUTES - Real-time tracking goes through DO
+      // =========================================================================
+      
+      // Admin stats endpoint - routed to DO
+      if (method === 'GET' && (path === '/admin/stats' || path === '/api/admin/stats')) {
+        const doStub = getAnalyticsDO(env);
+        const doRequest = new Request(new URL('/stats', request.url).toString(), {
+          method: 'GET',
+          headers: request.headers,
+        });
+        return doStub.fetch(doRequest);
+      }
+      
       // POST endpoints - write to memory (instant)
       if (method === 'POST') {
         switch (path) {
           case '/presence':
-          case '/api/presence':
-            return handlePresence(request, env, headers);
+          case '/api/presence': {
+            // Route presence to Durable Object for accurate counting
+            const doStub = getAnalyticsDO(env);
+            const body = await request.text();
+            const geo = getGeo(request);
+            const doRequest = new Request(new URL('/heartbeat', request.url).toString(), {
+              method: 'POST',
+              headers: request.headers,
+              body: JSON.stringify({
+                ...JSON.parse(body),
+                country: geo.country,
+                city: geo.city,
+              }),
+            });
+            return doStub.fetch(doRequest);
+          }
           case '/page-view':
           case '/api/page-view':
             return handlePageView(request, env, headers);
@@ -1166,8 +1318,48 @@ export default {
           case '/api/events':
             return handleEvents(request, env, headers);
           case '/sync':
-          case '/api/sync':
-            return handleSync(request, env, headers);
+          case '/api/sync': {
+            // Route sync to Durable Object for accurate counting
+            const doStub = getAnalyticsDO(env);
+            const body = await request.text();
+            const geo = getGeo(request);
+            const parsed = JSON.parse(body);
+            
+            // Also handle in local memory for page views and watch sessions
+            // (DO handles presence, we handle the rest)
+            if (parsed.pageViews?.length || parsed.watchProgress?.length) {
+              await handleSync(request.clone(), env, headers);
+            }
+            
+            const doRequest = new Request(new URL('/heartbeat', request.url).toString(), {
+              method: 'POST',
+              headers: request.headers,
+              body: JSON.stringify({
+                userId: parsed.userId,
+                sessionId: parsed.sessionId,
+                activity: parsed.activityType,
+                activityType: parsed.activityType,
+                contentId: parsed.currentContent?.contentId,
+                contentTitle: parsed.currentContent?.contentTitle,
+                contentType: parsed.currentContent?.contentType,
+                country: geo.country,
+                city: geo.city,
+              }),
+            });
+            const doResponse = await doStub.fetch(doRequest);
+            const doData = await doResponse.json() as any;
+            
+            return Response.json({
+              success: true,
+              synced: {
+                presence: true,
+                pageViews: parsed.pageViews?.length || 0,
+                watchProgress: parsed.watchProgress?.length || 0,
+              },
+              liveUsers: doData.liveUsers,
+              timestamp: Date.now(),
+            }, { headers });
+          }
         }
       }
       
@@ -1175,8 +1367,15 @@ export default {
       if (method === 'GET') {
         switch (path) {
           case '/live-activity':
-          case '/api/live-activity':
-            return handleGetLiveActivity(headers);
+          case '/api/live-activity': {
+            // Route to Durable Object for accurate count
+            const doStub = getAnalyticsDO(env);
+            const doRequest = new Request(new URL('/live', request.url).toString(), {
+              method: 'GET',
+              headers: request.headers,
+            });
+            return doStub.fetch(doRequest);
+          }
           case '/unified-stats':
           case '/api/unified-stats':
             return handleGetUnifiedStats(env, headers);

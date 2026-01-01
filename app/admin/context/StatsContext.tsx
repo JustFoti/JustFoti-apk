@@ -280,13 +280,20 @@ export function StatsProvider({ children }: { children: ReactNode }) {
       
       // Fetch all data in parallel from a single unified endpoint
       const url = `${getAdminAnalyticsUrl('unified-stats')}${params.toString() ? '?' + params.toString() : ''}`;
+      console.log('[StatsContext] Fetching from:', url);
       const response = await fetch(url);
       
       if (!response.ok) {
+        console.error('[StatsContext] Response not OK:', response.status, response.statusText);
         throw new Error('Failed to fetch stats');
       }
       
       const data = await response.json();
+      console.log('[StatsContext] Response data:', { 
+        success: data.success, 
+        realtime: data.realtime,
+        liveUsers: data.realtime?.totalActive 
+      });
       
       if (data.success) {
         setStats({

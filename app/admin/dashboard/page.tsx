@@ -1,572 +1,478 @@
 'use client';
 
 /**
- * Refactored Admin Dashboard
- * Efficient, detailed, and uses unified components
+ * Admin Dashboard - Clean Rewrite
+ * 
+ * Shows:
+ * 1. Live user count (real-time, updates every 10s)
+ * 2. Activity breakdown (watching/browsing/livetv)
+ * 3. Geographic distribution
+ * 4. DAU/WAU/MAU metrics
+ * 5. Top content being watched
+ * 
+ * Data source: Single API endpoint that returns all stats
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { useStats } from '../context/StatsContext';
-import {
-  StatCard,
-  MetricCard,
-  Card,
-  Grid,
-  PageHeader,
-  TabSelector,
-  TimeRangeSelector,
-  ProgressBar,
-  LoadingState,
-  LiveIndicator,
-  Badge,
-  formatDurationMinutes,
-  formatNumber,
-  formatTimeAgo,
-  colors,
-  gradients,
-  getPercentage,
-} from '../components/ui';
+import { useAdmin } from '../context/AdminContext';
 
-type DashboardTab = 'overview' | 'realtime' | 'content' | 'users';
+// Types for our analytics data
+interface LiveStats {
+  // Real-time (users active in last 5 minutes)
+  liveUsers: number;
+  watching: number;
+  browsing: number;
+  livetv: number;
+  
+  // Peak today
+  peakToday: number;
+  peakTime: string | null;
+  
+  // User metrics
+  dau: number;  // Daily active users (24h)
+  wau: number;  // Weekly active users (7d)
+  mau: number;  // Monthly active users (30d)
+  totalUsers: number;
+  newToday: number;
+  
+  // Content metrics (24h)
+  totalSessions: number;
+  totalWatchTimeMinutes: number;
+  avgSessionMinutes: number;
+  completionRate: number;
+  
+  // Geographic (top 10 countries)
+  topCountries: Array<{ country: string; code: string; count: number }>;
+  
+  // Top content (currently being watched)
+  topContent: Array<{ 
+    id: string; 
+    title: string; 
+    type: 'movie' | 'tv' | 'livetv';
+    viewers: number;
+  }>;
+  
+  // Live users list (for detailed view)
+  liveUsersList: Array<{
+    oderId: string;
+    odertivity: 'watching' | 'browsing' | 'livetv';
+    country: string;
+    contentTitle?: string;
+    lastSeen: number;
+  }>;
+  
+  // Metadata
+  timestamp: number;
+  source: 'worker' | 'fallback';
+}
 
-// Auto-refresh interval in milliseconds (30 seconds)
-export const AUTO_REFRESH_INTERVAL = 30000;
-
-// Drill-down navigation targets for metric cards
-const METRIC_DRILL_DOWN_ROUTES: Record<string, string> = {
-  'Live Users': '/admin/live',
-  'DAU': '/admin/users',
-  'WAU': '/admin/users',
-  'MAU': '/admin/users',
-  'Sessions (24h)': '/admin/sessions',
-  'Watch Time': '/admin/analytics',
-  'Completion': '/admin/analytics',
-  'Page Views': '/admin/traffic',
-  'Total Active': '/admin/live',
-  'Truly Active': '/admin/live',
-  'Watching VOD': '/admin/sessions',
-  'Live TV': '/admin/live',
-  'Browsing': '/admin/traffic',
-  'Total Users': '/admin/users',
-  'New Today': '/admin/users',
-  'Returning': '/admin/users',
-};
+const ANALYTICS_URL = process.env.NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL || 'https://flyx-analytics.vynx.workers.dev';
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const { stats, loading, lastRefresh, refresh, timeRange, setTimeRange } = useStats();
-  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [nextRefreshIn, setNextRefreshIn] = useState(AUTO_REFRESH_INTERVAL / 1000);
+  useAdmin();
+  
+  const [stats, setStats] = useState<LiveStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  // Manual refresh handler
-  const handleManualRefresh = useCallback(async () => {
-    setIsRefreshing(true);
+  const fetchStats = useCallback(async () => {
     try {
-      await refresh();
-      setNextRefreshIn(AUTO_REFRESH_INTERVAL / 1000);
+      const response = await fetch(`${ANALYTICS_URL}/admin/stats`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data = await response.json();
+      if (data.success) {
+        setStats(data.stats);
+        setLastUpdate(new Date());
+        setError(null);
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (e) {
+      console.error('Failed to fetch stats:', e);
+      setError(e instanceof Error ? e.message : 'Failed to fetch');
     } finally {
-      setIsRefreshing(false);
+      setLoading(false);
     }
-  }, [refresh]);
-
-  // Countdown timer for next auto-refresh
-  useEffect(() => {
-    const countdownInterval = setInterval(() => {
-      setNextRefreshIn((prev) => {
-        if (prev <= 1) {
-          return AUTO_REFRESH_INTERVAL / 1000;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(countdownInterval);
   }, []);
 
-  // Reset countdown when lastRefresh changes (data was refreshed)
+  // Initial fetch and auto-refresh
   useEffect(() => {
-    if (lastRefresh) {
-      setNextRefreshIn(AUTO_REFRESH_INTERVAL / 1000);
+    fetchStats();
+    
+    if (autoRefresh) {
+      const interval = setInterval(fetchStats, 10000); // 10 second refresh
+      return () => clearInterval(interval);
     }
-  }, [lastRefresh]);
+  }, [fetchStats, autoRefresh]);
 
-  if (loading && !stats.lastUpdated) {
-    return <LoadingState message="Loading dashboard..." />;
+  const formatNumber = (n: number) => n.toLocaleString();
+  const formatTime = (minutes: number) => {
+    if (minutes < 60) return `${Math.round(minutes)}m`;
+    return `${Math.floor(minutes / 60)}h ${Math.round(minutes % 60)}m`;
+  };
+  
+  const getCountryFlag = (code: string) => {
+    if (!code || code.length !== 2) return '🌍';
+    try {
+      return String.fromCodePoint(...code.toUpperCase().split('').map(c => 127397 + c.charCodeAt(0)));
+    } catch { return '🌍'; }
+  };
+
+  if (loading && !stats) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+        Loading dashboard...
+      </div>
+    );
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: '📊' },
-    { id: 'realtime', label: 'Real-time', icon: '🟢', count: stats.liveUsers },
-    { id: 'content', label: 'Content', icon: '🎬', count: stats.totalSessions },
-    { id: 'users', label: 'Users', icon: '👥', count: stats.activeToday },
-  ];
-
   return (
-    <div>
-      <PageHeader
-        title="Dashboard"
-        subtitle="Platform performance at a glance"
-        icon="📈"
-        actions={
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <TimeRangeSelector value={timeRange} onChange={setTimeRange} options={[
-              { value: '24h', label: '24h' },
-              { value: '7d', label: '7d' },
-              { value: '30d', label: '30d' },
-            ]} />
-            <LiveIndicator active={stats.liveUsers > 0} />
-            {/* Refresh indicator and button */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={handleManualRefresh}
-                disabled={isRefreshing}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 12px',
-                  background: isRefreshing ? 'rgba(120, 119, 198, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                  border: `1px solid ${isRefreshing ? colors.primary : colors.border.default}`,
-                  borderRadius: '8px',
-                  color: isRefreshing ? colors.primary : colors.text.secondary,
-                  fontSize: '12px',
-                  cursor: isRefreshing ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                }}
-                title="Refresh data"
-              >
-                {isRefreshing ? (
-                  <>
-                    <span style={{ 
-                      display: 'inline-block', 
-                      animation: 'spin 1s linear infinite',
-                      fontSize: '14px'
-                    }}>🔄</span>
-                    Refreshing...
-                  </>
-                ) : (
-                  <>
-                    <span style={{ fontSize: '14px' }}>🔄</span>
-                    Refresh
-                  </>
-                )}
-              </button>
-              {/* Auto-refresh countdown */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '4px 8px',
-                background: 'rgba(255, 255, 255, 0.03)',
-                borderRadius: '6px',
-                fontSize: '11px',
-                color: colors.text.muted,
-              }}>
-                <span>⏱️</span>
-                <span>{nextRefreshIn}s</span>
-              </div>
-            </div>
-            {/* Last updated timestamp */}
-            <span style={{ color: colors.text.muted, fontSize: '12px' }}>
-              {lastRefresh ? `Updated ${formatTimeAgo(lastRefresh.getTime())}` : ''}
-            </span>
-          </div>
-        }
-      />
-
-      <TabSelector
-        tabs={tabs}
-        activeTab={activeTab}
-        onChange={(id) => setActiveTab(id as DashboardTab)}
-      />
-
-      {activeTab === 'overview' && <OverviewTab stats={stats} onNavigate={(route) => router.push(route)} />}
-      {activeTab === 'realtime' && <RealtimeTab stats={stats} onNavigate={(route) => router.push(route)} />}
-      {activeTab === 'content' && <ContentTab stats={stats} onNavigate={(route) => router.push(route)} />}
-      {activeTab === 'users' && <UsersTab stats={stats} onNavigate={(route) => router.push(route)} />}
-    </div>
-  );
-}
-
-interface TabProps {
-  stats: any;
-  onNavigate: (route: string) => void;
-}
-
-function OverviewTab({ stats, onNavigate }: TabProps) {
-  const handleMetricClick = (title: string) => {
-    const route = METRIC_DRILL_DOWN_ROUTES[title];
-    if (route) {
-      onNavigate(route);
-    }
-  };
-
-  return (
-    <>
-      {/* Key Metrics */}
-      <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Live Users" value={stats.liveUsers} icon="🟢" color={colors.success} pulse={stats.liveUsers > 0} onClick={() => handleMetricClick('Live Users')} />
-        <StatCard title="DAU" value={stats.activeToday} icon="📊" color={colors.primary} subtitle="Active today" onClick={() => handleMetricClick('DAU')} />
-        <StatCard title="WAU" value={stats.activeThisWeek} icon="📈" color={colors.warning} subtitle="This week" onClick={() => handleMetricClick('WAU')} />
-        <StatCard title="MAU" value={stats.activeThisMonth} icon="📅" color={colors.info} subtitle="This month" onClick={() => handleMetricClick('MAU')} />
-        <StatCard title="Sessions (24h)" value={stats.totalSessions} icon="▶️" color={colors.pink} onClick={() => handleMetricClick('Sessions (24h)')} />
-        <StatCard title="Watch Time" value={formatDurationMinutes(stats.totalWatchTime)} icon="⏱️" color={colors.purple} subtitle={`All time: ${formatDurationMinutes(stats.allTimeWatchTime)}`} onClick={() => handleMetricClick('Watch Time')} />
-        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.success} onClick={() => handleMetricClick('Completion')} />
-        <StatCard title="Page Views" value={stats.pageViews} icon="👁️" color={colors.cyan} onClick={() => handleMetricClick('Page Views')} />
-      </Grid>
-
-      {/* Secondary Metrics */}
-      <div style={{ marginTop: '24px' }}>
-        <Grid cols={2} gap="24px">
-          {/* Activity Breakdown */}
-          <Card title="Current Activity" icon="🎯">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <ActivityRow label="Watching VOD" value={stats.liveWatching} total={stats.liveUsers} icon="▶️" color={colors.primary} />
-              <ActivityRow label="Live TV" value={stats.liveTVViewers} total={stats.liveUsers} icon="📺" color={colors.warning} />
-              <ActivityRow label="Browsing" value={stats.liveBrowsing} total={stats.liveUsers} icon="🔍" color={colors.info} />
-            </div>
-          </Card>
-
-          {/* User Metrics */}
-          <Card title="User Metrics" icon="👥">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <MetricRow label="Total Users" value={stats.totalUsers} />
-              <MetricRow label="New Today" value={stats.newUsersToday} color={colors.success} />
-              <MetricRow label="Returning" value={stats.returningUsers} color={colors.info} />
-              <MetricRow 
-                label="Retention Rate" 
-                value={`${stats.activeToday > 0 ? Math.round((stats.returningUsers / stats.activeToday) * 100) : 0}%`} 
-                color={colors.purple} 
-              />
-            </div>
-          </Card>
-        </Grid>
-      </div>
-
-      {/* Top Content & Countries */}
-      <div style={{ marginTop: '24px' }}>
-        <Grid cols={2} gap="24px">
-          <Card title="Top Content (7d)" icon="🔥">
-            {stats.topContent?.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {stats.topContent.slice(0, 5).map((item: any, i: number) => (
-                  <div key={item.contentId} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ color: colors.text.muted, fontSize: '12px', width: '20px' }}>#{i + 1}</span>
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <div style={{ color: colors.text.primary, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.contentTitle}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                        <Badge color={item.contentType === 'movie' ? colors.success : colors.warning}>
-                          {item.contentType}
-                        </Badge>
-                        <span style={{ color: colors.text.muted, fontSize: '12px' }}>
-                          {item.watchCount} views
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: colors.text.muted, textAlign: 'center', padding: '20px' }}>No content data</div>
-            )}
-          </Card>
-
-          <Card title="Top Countries (7d)" icon="🌍">
-            {stats.topCountries?.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {stats.topCountries.slice(0, 5).map((country: any) => {
-                  const total = stats.topCountries.reduce((sum: number, c: any) => sum + c.count, 0);
-                  return (
-                    <div key={country.country}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: colors.text.primary, fontSize: '14px' }}>
-                          {country.countryName || country.country}
-                        </span>
-                        <span style={{ color: colors.text.muted, fontSize: '13px' }}>
-                          {country.count} ({getPercentage(country.count, total)}%)
-                        </span>
-                      </div>
-                      <ProgressBar value={country.count} max={total} gradient={gradients.mixed} height={6} />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ color: colors.text.muted, textAlign: 'center', padding: '20px' }}>No geographic data</div>
-            )}
-          </Card>
-        </Grid>
-      </div>
-    </>
-  );
-}
-
-function RealtimeTab({ stats, onNavigate }: TabProps) {
-  const handleMetricClick = (title: string) => {
-    const route = METRIC_DRILL_DOWN_ROUTES[title];
-    if (route) {
-      onNavigate(route);
-    }
-  };
-
-  return (
-    <>
-      <Grid cols="auto-fit" minWidth="200px" gap="16px">
-        <StatCard title="Total Active" value={stats.liveUsers} icon="👥" color={colors.success} pulse size="lg" onClick={() => handleMetricClick('Total Active')} />
-        <StatCard title="Truly Active" value={stats.trulyActiveUsers} icon="🎯" color={colors.primary} subtitle="Last 60 seconds" onClick={() => handleMetricClick('Truly Active')} />
-        <StatCard title="Watching VOD" value={stats.liveWatching} icon="▶️" color={colors.purple} onClick={() => handleMetricClick('Watching VOD')} />
-        <StatCard title="Live TV" value={stats.liveTVViewers} icon="📺" color={colors.warning} onClick={() => handleMetricClick('Live TV')} />
-        <StatCard title="Browsing" value={stats.liveBrowsing} icon="🔍" color={colors.info} onClick={() => handleMetricClick('Browsing')} />
-      </Grid>
-
-      {/* Peak Stats */}
-      {stats.peakStats && (
-        <div style={{ marginTop: '24px' }}>
-          <Card title="Today's Peak Activity" icon="📈">
-            <Grid cols={4} gap="16px">
-              <PeakStat label="Peak Total" value={stats.peakStats.peakTotal} time={stats.peakStats.peakTotalTime} />
-              <PeakStat label="Peak Watching" value={stats.peakStats.peakWatching} time={stats.peakStats.peakWatchingTime} />
-              <PeakStat label="Peak Live TV" value={stats.peakStats.peakLiveTV} time={stats.peakStats.peakLiveTVTime} />
-              <PeakStat label="Peak Browsing" value={stats.peakStats.peakBrowsing} time={stats.peakStats.peakBrowsingTime} />
-            </Grid>
-          </Card>
+    <div style={{ padding: '24px', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+        <div>
+          <h1 style={{ margin: 0, color: '#f8fafc', fontSize: '24px' }}>📊 Dashboard</h1>
+          <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '13px' }}>
+            {lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString()}` : 'Loading...'}
+            {error && <span style={{ color: '#ef4444', marginLeft: '12px' }}>⚠️ {error}</span>}
+          </p>
         </div>
-      )}
-
-      {/* Activity Distribution */}
-      <div style={{ marginTop: '24px' }}>
-        <Card title="Activity Distribution" icon="📊">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <ActivityBar label="Watching VOD" value={stats.liveWatching} total={stats.liveUsers} color={colors.purple} icon="▶️" />
-            <ActivityBar label="Live TV" value={stats.liveTVViewers} total={stats.liveUsers} color={colors.warning} icon="📺" />
-            <ActivityBar label="Browsing" value={stats.liveBrowsing} total={stats.liveUsers} color={colors.info} icon="🔍" />
-          </div>
-        </Card>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            style={{
+              padding: '8px 16px',
+              background: autoRefresh ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${autoRefresh ? 'rgba(16, 185, 129, 0.3)' : 'rgba(255,255,255,0.1)'}`,
+              borderRadius: '8px',
+              color: autoRefresh ? '#10b981' : '#94a3b8',
+              cursor: 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            {autoRefresh ? '⏸️ Pause' : '▶️ Resume'}
+          </button>
+          <button
+            onClick={fetchStats}
+            disabled={loading}
+            style={{
+              padding: '8px 16px',
+              background: 'rgba(120, 119, 198, 0.2)',
+              border: '1px solid rgba(120, 119, 198, 0.3)',
+              borderRadius: '8px',
+              color: '#7877c6',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '13px',
+            }}
+          >
+            🔄 Refresh
+          </button>
+        </div>
       </div>
-    </>
-  );
-}
 
-function ContentTab({ stats, onNavigate }: TabProps) {
-  const handleMetricClick = (route: string) => {
-    onNavigate(route);
-  };
+      {/* Live Stats Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
+        <StatCard 
+          icon="🟢" 
+          label="Live Users" 
+          value={stats?.liveUsers || 0} 
+          color="#10b981"
+          pulse
+          subtitle={`Peak today: ${stats?.peakToday || 0}`}
+        />
+        <StatCard 
+          icon="▶️" 
+          label="Watching" 
+          value={stats?.watching || 0} 
+          color="#8b5cf6"
+        />
+        <StatCard 
+          icon="📺" 
+          label="Live TV" 
+          value={stats?.livetv || 0} 
+          color="#f59e0b"
+        />
+        <StatCard 
+          icon="🔍" 
+          label="Browsing" 
+          value={stats?.browsing || 0} 
+          color="#3b82f6"
+        />
+        <StatCard 
+          icon="🏆" 
+          label="7-Day Peak" 
+          value={(stats as any)?.allTimePeak || stats?.peakToday || 0} 
+          color="#ec4899"
+          subtitle={(stats as any)?.allTimePeakDate || 'Today'}
+        />
+      </div>
 
-  return (
-    <>
-      <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Sessions (24h)" value={stats.totalSessions} icon="📊" color={colors.primary} onClick={() => handleMetricClick('/admin/sessions')} />
-        <StatCard title="Watch Time" value={formatDurationMinutes(stats.totalWatchTime)} icon="⏱️" color={colors.success} onClick={() => handleMetricClick('/admin/analytics')} />
-        <StatCard title="Avg Duration" value={`${stats.avgSessionDuration}m`} icon="📈" color={colors.warning} onClick={() => handleMetricClick('/admin/analytics')} />
-        <StatCard title="Completion" value={`${stats.completionRate}%`} icon="✅" color={colors.pink} onClick={() => handleMetricClick('/admin/analytics')} />
-        <StatCard title="Completed" value={stats.completedSessions} icon="🏆" color={colors.success} onClick={() => handleMetricClick('/admin/sessions')} />
-        <StatCard title="Unique Content" value={stats.uniqueContentWatched} icon="🎬" color={colors.purple} onClick={() => handleMetricClick('/admin/content')} />
-        <StatCard title="Total Pauses" value={stats.totalPauses} icon="⏸️" color={colors.info} onClick={() => handleMetricClick('/admin/analytics')} />
-        <StatCard title="Total Seeks" value={stats.totalSeeks} icon="⏩" color={colors.cyan} onClick={() => handleMetricClick('/admin/analytics')} />
-      </Grid>
+      {/* Secondary Stats Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
+        <StatCard 
+          icon="📊" 
+          label="DAU" 
+          value={stats?.dau || 0} 
+          color="#7877c6"
+          subtitle="24 hours"
+          size="sm"
+        />
+        <StatCard 
+          icon="📈" 
+          label="WAU" 
+          value={stats?.wau || 0} 
+          color="#f59e0b"
+          subtitle="7 days"
+          size="sm"
+        />
+        <StatCard 
+          icon="📅" 
+          label="MAU" 
+          value={stats?.mau || 0} 
+          color="#ec4899"
+          subtitle="30 days"
+          size="sm"
+        />
+        <StatCard 
+          icon="⏱️" 
+          label="Watch Time" 
+          value={formatTime(stats?.totalWatchTimeMinutes || 0)} 
+          color="#06b6d4"
+          subtitle="24 hours"
+          size="sm"
+        />
+        <StatCard 
+          icon="🆕" 
+          label="New Users" 
+          value={stats?.newToday || 0} 
+          color="#10b981"
+          subtitle="Today"
+          size="sm"
+        />
+      </div>
 
-      <div style={{ marginTop: '24px' }}>
-        <Grid cols={2} gap="24px">
-          {/* Content Type Breakdown */}
-          <Card title="Content Type" icon="🎭">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <ContentTypeRow label="Movies" value={stats.movieSessions} total={stats.totalSessions} color={colors.success} icon="🎬" />
-              <ContentTypeRow label="TV Shows" value={stats.tvSessions} total={stats.totalSessions} color={colors.warning} icon="📺" />
-            </div>
-          </Card>
-
-          {/* Device Breakdown */}
-          <Card title="Devices" icon="📱">
-            {stats.deviceBreakdown?.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {stats.deviceBreakdown.map((device: any) => {
-                  const total = stats.deviceBreakdown.reduce((sum: number, d: any) => sum + d.count, 0);
-                  const icons: Record<string, string> = { desktop: '💻', mobile: '📱', tablet: '📲', unknown: '🖥️' };
-                  return (
-                    <div key={device.device}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ color: colors.text.primary, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {icons[device.device] || '🖥️'} {device.device || 'Unknown'}
-                        </span>
-                        <span style={{ color: colors.text.muted, fontSize: '13px' }}>
-                          {device.count} ({getPercentage(device.count, total)}%)
+      {/* Daily Peaks Chart */}
+      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
+        <h3 style={{ margin: '0 0 16px', color: '#f8fafc', fontSize: '16px' }}>📈 Daily Peak Users (Last 14 Days)</h3>
+        {(stats as any)?.dailyPeaks && (stats as any).dailyPeaks.length > 0 ? (
+          <div>
+            {/* Bar Chart */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', height: '200px', marginBottom: '12px' }}>
+              {[...(stats as any).dailyPeaks].reverse().map((day: { date: string; peak: number }) => {
+                const maxPeak = Math.max(...(stats as any).dailyPeaks.map((d: any) => d.peak));
+                const heightPct = maxPeak > 0 ? (day.peak / maxPeak) * 100 : 0;
+                const isToday = day.date === new Date().toISOString().split('T')[0];
+                return (
+                  <div key={day.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%' }}>
+                    <div style={{ 
+                      flex: 1, 
+                      width: '100%', 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      justifyContent: 'flex-end' 
+                    }}>
+                      <div style={{ 
+                        width: '100%', 
+                        height: `${heightPct}%`, 
+                        minHeight: day.peak > 0 ? '4px' : '0',
+                        background: isToday ? 'linear-gradient(180deg, #10b981, #059669)' : 'linear-gradient(180deg, #7877c6, #5b5a9e)',
+                        borderRadius: '4px 4px 0 0',
+                        position: 'relative',
+                      }}>
+                        <span style={{ 
+                          position: 'absolute', 
+                          top: '-20px', 
+                          left: '50%', 
+                          transform: 'translateX(-50%)',
+                          fontSize: '11px',
+                          color: '#f8fafc',
+                          fontWeight: '600',
+                          whiteSpace: 'nowrap',
+                        }}>
+                          {day.peak > 0 ? day.peak : ''}
                         </span>
                       </div>
-                      <ProgressBar value={device.count} max={total} gradient={gradients.mixed} height={6} />
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ color: colors.text.muted, textAlign: 'center', padding: '20px' }}>No device data</div>
-            )}
-          </Card>
-        </Grid>
-      </div>
-
-      {/* All-time Stats */}
-      <div style={{ marginTop: '24px' }}>
-        <Card title="All-Time Statistics" icon="📈">
-          <Grid cols={3} gap="16px">
-            <MetricCard label="Total Watch Time" value={formatDurationMinutes(stats.allTimeWatchTime)} icon="⏱️" />
-            <MetricCard label="Total Users" value={stats.totalUsers} icon="👥" />
-            <MetricCard label="Unique Visitors (24h)" value={stats.uniqueVisitors} icon="🧑‍💻" />
-          </Grid>
-        </Card>
-      </div>
-    </>
-  );
-}
-
-function UsersTab({ stats, onNavigate }: TabProps) {
-  const handleMetricClick = (route: string) => {
-    onNavigate(route);
-  };
-
-  return (
-    <>
-      <Grid cols="auto-fit" minWidth="180px" gap="16px">
-        <StatCard title="Total Users" value={stats.totalUsers} icon="👥" color={colors.primary} size="lg" onClick={() => handleMetricClick('/admin/users')} />
-        <StatCard title="DAU" value={stats.activeToday} icon="📊" color={colors.success} subtitle="Daily Active" onClick={() => handleMetricClick('/admin/users')} />
-        <StatCard title="WAU" value={stats.activeThisWeek} icon="📈" color={colors.warning} subtitle="Weekly Active" onClick={() => handleMetricClick('/admin/users')} />
-        <StatCard title="MAU" value={stats.activeThisMonth} icon="📅" color={colors.info} subtitle="Monthly Active" onClick={() => handleMetricClick('/admin/users')} />
-        <StatCard title="New Today" value={stats.newUsersToday} icon="🆕" color={colors.success} onClick={() => handleMetricClick('/admin/users')} />
-        <StatCard title="Returning" value={stats.returningUsers} icon="🔄" color={colors.purple} onClick={() => handleMetricClick('/admin/users')} />
-      </Grid>
-
-      <div style={{ marginTop: '24px' }}>
-        <Grid cols={2} gap="24px">
-          {/* User Funnel */}
-          <Card title="User Funnel" icon="📊">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <FunnelRow label="Total Users" value={stats.totalUsers} percentage={100} color={colors.primary} />
-              <FunnelRow label="Active This Month" value={stats.activeThisMonth} percentage={getPercentage(stats.activeThisMonth, stats.totalUsers)} color={colors.info} />
-              <FunnelRow label="Active This Week" value={stats.activeThisWeek} percentage={getPercentage(stats.activeThisWeek, stats.totalUsers)} color={colors.warning} />
-              <FunnelRow label="Active Today" value={stats.activeToday} percentage={getPercentage(stats.activeToday, stats.totalUsers)} color={colors.success} />
-              <FunnelRow label="Online Now" value={stats.liveUsers} percentage={getPercentage(stats.liveUsers, stats.totalUsers)} color={colors.pink} />
+                    <span style={{ 
+                      fontSize: '10px', 
+                      color: isToday ? '#10b981' : '#64748b', 
+                      marginTop: '8px',
+                      fontWeight: isToday ? '600' : '400',
+                    }}>
+                      {new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-          </Card>
+            {/* Summary */}
+            <div style={{ display: 'flex', gap: '24px', justifyContent: 'center', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#f8fafc' }}>
+                  {Math.max(...(stats as any).dailyPeaks.map((d: any) => d.peak))}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>Highest Peak</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#f8fafc' }}>
+                  {Math.round((stats as any).dailyPeaks.reduce((sum: number, d: any) => sum + d.peak, 0) / (stats as any).dailyPeaks.length)}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>Avg Peak</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: '700', color: '#10b981' }}>
+                  {(stats as any).dailyPeaks[0]?.peak || 0}
+                </div>
+                <div style={{ fontSize: '12px', color: '#94a3b8' }}>Today&apos;s Peak</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: '#64748b', textAlign: 'center', padding: '40px' }}>No peak data available yet</p>
+        )}
+      </div>
 
-          {/* Retention */}
-          <Card title="Retention Metrics" icon="💪">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: colors.text.secondary }}>Daily Retention</span>
-                  <span style={{ color: colors.text.primary, fontWeight: '600' }}>
-                    {stats.activeToday > 0 ? Math.round((stats.returningUsers / stats.activeToday) * 100) : 0}%
+      {/* Content Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        {/* Top Countries */}
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '20px' }}>
+          <h3 style={{ margin: '0 0 16px', color: '#f8fafc', fontSize: '16px' }}>🌍 Top Countries</h3>
+          {stats?.topCountries && stats.topCountries.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {stats.topCountries.slice(0, 8).map((country) => (
+                <div key={country.code} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '20px' }}>{getCountryFlag(country.code)}</span>
+                  <span style={{ flex: 1, color: '#f8fafc' }}>{country.country}</span>
+                  <span style={{ 
+                    color: '#94a3b8',
+                    fontWeight: '400',
+                  }}>
+                    {formatNumber(country.count)}
                   </span>
                 </div>
-                <ProgressBar 
-                  value={stats.returningUsers} 
-                  max={stats.activeToday || 1} 
-                  color={colors.success} 
-                  height={10} 
-                />
-              </div>
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <span style={{ color: colors.text.secondary }}>New vs Returning</span>
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <div style={{ flex: stats.newUsersToday || 1, background: colors.success, height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: 'white', fontWeight: '600' }}>
-                    New: {stats.newUsersToday}
-                  </div>
-                  <div style={{ flex: stats.returningUsers || 1, background: colors.info, height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', color: 'white', fontWeight: '600' }}>
-                    Returning: {stats.returningUsers}
-                  </div>
-                </div>
-              </div>
+              ))}
             </div>
-          </Card>
-        </Grid>
-      </div>
-    </>
-  );
-}
-
-// Helper Components
-function ActivityRow({ label, value, total, icon, color }: { label: string; value: number; total: number; icon: string; color: string }) {
-  const pct = getPercentage(value, total);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <span style={{ fontSize: '20px' }}>{icon}</span>
-      <div style={{ flex: 1 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ color: colors.text.primary, fontSize: '14px' }}>{label}</span>
-          <span style={{ color: colors.text.muted, fontSize: '13px' }}>{value} ({pct}%)</span>
+          ) : (
+            <p style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No data yet</p>
+          )}
         </div>
-        <ProgressBar value={pct} max={100} color={color} height={6} />
+
+        {/* Currently Watching */}
+        <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '20px' }}>
+          <h3 style={{ margin: '0 0 16px', color: '#f8fafc', fontSize: '16px' }}>🎬 Currently Watching</h3>
+          {stats?.topContent && stats.topContent.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {stats.topContent.slice(0, 8).map((content) => (
+                <div key={content.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '16px' }}>
+                    {content.type === 'tv' ? '📺' : content.type === 'livetv' ? '📡' : '🎬'}
+                  </span>
+                  <span style={{ flex: 1, color: '#f8fafc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {content.title}
+                  </span>
+                  <span style={{ 
+                    color: '#10b981',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                  }}>
+                    {content.viewers} watching
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#64748b', textAlign: 'center', padding: '20px' }}>No one watching</p>
+          )}
+        </div>
       </div>
+
+      {/* Debug Info */}
+      <details style={{ marginTop: '24px' }}>
+        <summary style={{ color: '#64748b', cursor: 'pointer', fontSize: '13px' }}>
+          Debug Info (source: {stats?.source || 'unknown'})
+        </summary>
+        <pre style={{ 
+          background: 'rgba(0,0,0,0.3)', 
+          padding: '16px', 
+          borderRadius: '8px', 
+          overflow: 'auto', 
+          fontSize: '11px',
+          color: '#94a3b8',
+          marginTop: '8px',
+        }}>
+          {JSON.stringify(stats, null, 2)}
+        </pre>
+      </details>
     </div>
   );
 }
 
-function ActivityBar({ label, value, total, color, icon }: { label: string; value: number; total: number; color: string; icon: string }) {
-  const pct = getPercentage(value, total);
+// Stat Card Component
+function StatCard({ 
+  icon, 
+  label, 
+  value, 
+  color, 
+  subtitle,
+  pulse = false,
+  size = 'md'
+}: { 
+  icon: string; 
+  label: string; 
+  value: number | string; 
+  color: string;
+  subtitle?: string;
+  pulse?: boolean;
+  size?: 'sm' | 'md';
+}) {
+  const isSmall = size === 'sm';
+  
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <span style={{ color: colors.text.primary, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {icon} {label}
+    <div style={{
+      background: 'rgba(255,255,255,0.03)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      borderRadius: '12px',
+      padding: isSmall ? '14px' : '18px',
+      borderTop: `3px solid ${color}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+        <span style={{ fontSize: isSmall ? '14px' : '18px', position: 'relative' }}>
+          {icon}
+          {pulse && (
+            <span style={{
+              position: 'absolute',
+              top: '-2px',
+              right: '-2px',
+              width: '8px',
+              height: '8px',
+              background: color,
+              borderRadius: '50%',
+              animation: 'pulse 2s infinite',
+            }} />
+          )}
         </span>
-        <span style={{ color, fontSize: '18px', fontWeight: '700' }}>{value} <span style={{ fontSize: '12px', fontWeight: '500', opacity: 0.7 }}>({pct}%)</span></span>
+        <span style={{ color: '#94a3b8', fontSize: isSmall ? '11px' : '12px' }}>{label}</span>
       </div>
-      <ProgressBar value={pct} max={100} color={color} height={12} />
-    </div>
-  );
-}
-
-function MetricRow({ label, value, color = colors.text.primary }: { label: string; value: string | number; color?: string }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ color: colors.text.secondary, fontSize: '14px' }}>{label}</span>
-      <span style={{ color, fontSize: '18px', fontWeight: '700' }}>{typeof value === 'number' ? formatNumber(value) : value}</span>
-    </div>
-  );
-}
-
-function ContentTypeRow({ label, value, total, color, icon }: { label: string; value: number; total: number; color: string; icon: string }) {
-  const pct = getPercentage(value, total);
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <span style={{ color: colors.text.primary, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {icon} {label}
-        </span>
-        <span style={{ color: colors.text.muted, fontSize: '13px' }}>{value} sessions ({pct}%)</span>
+      <div style={{ 
+        fontSize: isSmall ? '20px' : '28px', 
+        fontWeight: '700', 
+        color: '#f8fafc',
+      }}>
+        {typeof value === 'number' ? value.toLocaleString() : value}
       </div>
-      <ProgressBar value={value} max={total || 1} color={color} height={8} />
-    </div>
-  );
-}
-
-function PeakStat({ label, value, time }: { label: string; value: number; time: number }) {
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ color: colors.text.muted, fontSize: '12px', marginBottom: '4px' }}>{label}</div>
-      <div style={{ color: colors.text.primary, fontSize: '28px', fontWeight: '700' }}>{value}</div>
-      <div style={{ color: colors.text.muted, fontSize: '11px', marginTop: '4px' }}>
-        at {new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </div>
-    </div>
-  );
-}
-
-function FunnelRow({ label, value, percentage, color }: { label: string; value: number; percentage: number; color: string }) {
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-        <span style={{ color: colors.text.primary, fontSize: '14px' }}>{label}</span>
-        <span style={{ color: colors.text.muted, fontSize: '13px' }}>{formatNumber(value)} ({percentage}%)</span>
-      </div>
-      <div style={{ height: '8px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${percentage}%`, background: color, borderRadius: '4px', transition: 'width 0.3s' }} />
-      </div>
+      {subtitle && (
+        <div style={{ color: '#64748b', fontSize: '11px', marginTop: '4px' }}>{subtitle}</div>
+      )}
+      
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(1.2); }
+        }
+      `}</style>
     </div>
   );
 }

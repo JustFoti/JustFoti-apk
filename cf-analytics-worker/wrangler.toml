@@ -18,6 +18,18 @@ LOG_LEVEL = "info"
 HEARTBEAT_INTERVAL = "60"
 
 # =============================================================================
+# DURABLE OBJECTS - Single instance for all analytics (solves distributed worker issue)
+# =============================================================================
+[durable_objects]
+bindings = [
+  { name = "ANALYTICS_DO", class_name = "AnalyticsDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["AnalyticsDO"]
+
+# =============================================================================
 # D1 DATABASE - Create with: wrangler d1 create flyx-analytics-db
 # =============================================================================
 [[d1_databases]]
@@ -44,6 +56,11 @@ HEARTBEAT_INTERVAL = "60"
 [env.production.observability]
 enabled = true
 
+[env.production.durable_objects]
+bindings = [
+  { name = "ANALYTICS_DO", class_name = "AnalyticsDO" }
+]
+
 # Development environment
 [env.development]
 name = "flyx-analytics-dev"
@@ -54,3 +71,8 @@ HEARTBEAT_INTERVAL = "10"
 
 [env.development.observability]
 enabled = true
+
+[env.development.durable_objects]
+bindings = [
+  { name = "ANALYTICS_DO", class_name = "AnalyticsDO" }
+]
