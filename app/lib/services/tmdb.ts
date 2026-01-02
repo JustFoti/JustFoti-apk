@@ -143,6 +143,7 @@ function transformToSearchResult(item: any): SearchResult {
       mediaType: 'person',
       releaseDate: '',
       rating: item.popularity || 0,
+      popularity: item.popularity || 0,
     };
   }
 
@@ -153,6 +154,7 @@ function transformToSearchResult(item: any): SearchResult {
     mediaType: mediaType === 'movie' ? 'movie' : 'tv',
     releaseDate: mediaType === 'movie' ? item.release_date : item.first_air_date,
     rating: item.vote_average || 0,
+    popularity: item.popularity || 0,
   };
 }
 
@@ -281,7 +283,8 @@ export const tmdbService = {
 
     return response.data.results
       .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv' || item.media_type === 'person')
-      .map(transformToSearchResult);
+      .map(transformToSearchResult)
+      .sort((a: SearchResult, b: SearchResult) => (b.popularity || 0) - (a.popularity || 0));
   },
 
   /**

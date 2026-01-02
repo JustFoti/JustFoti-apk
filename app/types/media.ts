@@ -60,6 +60,7 @@ export interface SearchResult {
   mediaType: 'movie' | 'tv' | 'person';
   releaseDate: string;
   rating: number;
+  popularity?: number;
 }
 
 export interface StreamSource {
