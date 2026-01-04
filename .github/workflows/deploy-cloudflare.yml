@@ -11,20 +11,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: bun install
       
       - name: Build for Cloudflare
-        run: npm run build:cloudflare
+        run: bun run build:cloudflare
       
       - name: Deploy to Cloudflare
-        run: npx @opennextjs/cloudflare deploy
+        run: bunx @opennextjs/cloudflare deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
