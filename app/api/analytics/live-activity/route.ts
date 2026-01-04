@@ -95,7 +95,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Forward to CF Analytics Worker
-    const response = await fetch(`${CF_ANALYTICS_URL}/live-activity?id=${activityId}`, {
+    await fetch(`${CF_ANALYTICS_URL}/live-activity?id=${activityId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     });
