@@ -3,12 +3,14 @@
  * POST /api/analytics/live-activity - Update live activity heartbeat
  * GET /api/analytics/live-activity - Get current live activities
  * DELETE /api/analytics/live-activity - Deactivate activity
- * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
+ * 
+ * OPTIMIZED: Forwards to CF Analytics Worker to avoid duplicate D1 writes.
+ * The CF Worker handles all D1 operations with batching for efficiency.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdapter } from '@/lib/db/adapter';
-import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
+
+const CF_ANALYTICS_URL = process.env.NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL || 'https://flyx-analytics.vynx.workers.dev';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,157 +23,62 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adapter = getAdapter();
-    const activityId = `live_${data.userId}_${data.sessionId}`;
-    const now = Date.now();
+    // Forward to CF Analytics Worker - it handles D1 writes with batching
+    const response = await fetch(`${CF_ANALYTICS_URL}/live-activity`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Forward geo headers
+        'CF-IPCountry': request.headers.get('CF-IPCountry') || '',
+        'X-Vercel-IP-Country': request.headers.get('X-Vercel-IP-Country') || '',
+        'User-Agent': request.headers.get('User-Agent') || '',
+      },
+      body: JSON.stringify(data),
+    });
 
-    const userAgent = request.headers.get('user-agent') || '';
-    const deviceType = userAgent.includes('Mobile') ? 'mobile' : 
-                      userAgent.includes('Tablet') ? 'tablet' : 'desktop';
-
-    const locationData = getLocationFromHeaders(request);
-
-    // Upsert live activity
-    const existingResult = await adapter.query<{ id: string }>(
-      'SELECT id FROM live_activity WHERE id = ?',
-      [activityId]
-    );
-
-    if (existingResult.data && existingResult.data.length > 0) {
-      await adapter.execute(
-        `UPDATE live_activity SET 
-          activity_type = ?, content_id = ?, content_title = ?, content_type = ?,
-          season_number = ?, episode_number = ?, current_position = ?, duration = ?,
-          quality = ?, device_type = ?, country = ?, city = ?, region = ?,
-          last_heartbeat = ?, is_active = 1
-        WHERE id = ?`,
-        [
-          data.activityType, data.contentId || null, data.contentTitle || null, data.contentType || null,
-          data.seasonNumber || null, data.episodeNumber || null, data.currentPosition || 0, data.duration || 0,
-          data.quality || null, deviceType, locationData.countryCode || null, locationData.city || null, locationData.region || null,
-          now, activityId
-        ]
-      );
-    } else {
-      await adapter.execute(
-        `INSERT INTO live_activity (
-          id, user_id, session_id, activity_type, content_id, content_title, content_type,
-          season_number, episode_number, current_position, duration, quality, device_type,
-          country, city, region, last_heartbeat, is_active, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-        [
-          activityId, data.userId, data.sessionId, data.activityType,
-          data.contentId || null, data.contentTitle || null, data.contentType || null,
-          data.seasonNumber || null, data.episodeNumber || null, data.currentPosition || 0, data.duration || 0,
-          data.quality || null, deviceType, locationData.countryCode || null, locationData.city || null, locationData.region || null,
-          now, now
-        ]
-      );
+    if (!response.ok) {
+      console.error('[live-activity] CF Worker error:', response.status);
+      return NextResponse.json({ success: true, forwarded: false });
     }
 
-    return NextResponse.json({ success: true, activityId });
+    const result = await response.json();
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error('Failed to update live activity:', error);
-    return NextResponse.json(
-      { error: 'Failed to update live activity' },
-      { status: 500 }
-    );
+    // Don't fail the request - analytics shouldn't break the app
+    return NextResponse.json({ success: true, forwarded: false });
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const maxAge = parseInt(searchParams.get('maxAge') || '5');
+    const maxAge = searchParams.get('maxAge') || '5';
 
-    const adapter = getAdapter();
-    const cutoff = Date.now() - (maxAge * 60 * 1000);
-
-    const activitiesResult = await adapter.query<Record<string, unknown>>(
-      `SELECT * FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ? ORDER BY last_heartbeat DESC`,
-      [cutoff]
-    );
-    const activities = activitiesResult.data || [];
-
-    // Cleanup stale activities
-    const staleTime = Date.now() - (maxAge * 2 * 60 * 1000);
-    await adapter.execute(
-      'UPDATE live_activity SET is_active = 0 WHERE is_active = 1 AND last_heartbeat < ?',
-      [staleTime]
-    );
-
-    // Calculate stats
-    const uniqueUsers = new Set(activities.map(a => a.user_id));
-    const watchingUsers = new Set(activities.filter(a => a.activity_type === 'watching').map(a => a.user_id));
-    const browsingUsers = new Set(activities.filter(a => a.activity_type === 'browsing').map(a => a.user_id));
-    const livetvUsers = new Set(activities.filter(a => a.activity_type === 'livetv').map(a => a.user_id));
-    
-    const byDevice: Record<string, Set<unknown>> = {};
-    const byCountry: Record<string, Set<unknown>> = {};
-    const topContentMap: Record<string, { contentId: unknown; contentTitle: unknown; contentType: unknown; users: Set<unknown> }> = {};
-
-    activities.forEach(a => {
-      const device = (a.device_type as string) || 'unknown';
-      if (!byDevice[device]) byDevice[device] = new Set();
-      byDevice[device].add(a.user_id);
-
-      const country = (a.country as string) || 'unknown';
-      if (!byCountry[country]) byCountry[country] = new Set();
-      byCountry[country].add(a.user_id);
-
-      if (a.content_id) {
-        const key = a.content_id as string;
-        if (!topContentMap[key]) {
-          topContentMap[key] = {
-            contentId: a.content_id,
-            contentTitle: a.content_title,
-            contentType: a.content_type,
-            users: new Set(),
-          };
-        }
-        topContentMap[key].users.add(a.user_id);
-      }
+    // Forward to CF Analytics Worker
+    const response = await fetch(`${CF_ANALYTICS_URL}/live-activity?maxAge=${maxAge}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
     });
 
-    const byDeviceCounts: Record<string, number> = {};
-    for (const [device, users] of Object.entries(byDevice)) {
-      byDeviceCounts[device] = users.size;
-    }
-    
-    const byCountryCounts: Record<string, number> = {};
-    for (const [country, users] of Object.entries(byCountry)) {
-      byCountryCounts[country] = users.size;
+    if (!response.ok) {
+      console.error('[live-activity] CF Worker GET error:', response.status);
+      return NextResponse.json({
+        success: true,
+        activities: [],
+        stats: { totalActive: 0, watching: 0, browsing: 0, livetv: 0 },
+      });
     }
 
-    const topContentArray = Object.values(topContentMap)
-      .map((content) => ({
-        contentId: content.contentId,
-        contentTitle: content.contentTitle,
-        contentType: content.contentType,
-        count: content.users.size,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-
-    return NextResponse.json({
-      success: true,
-      activities,
-      stats: {
-        totalActive: uniqueUsers.size,
-        watching: watchingUsers.size,
-        browsing: browsingUsers.size,
-        livetv: livetvUsers.size,
-        byDevice: byDeviceCounts,
-        byCountry: byCountryCounts,
-        topContent: topContentArray,
-      },
-    });
+    const result = await response.json();
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Failed to get live activities:', error);
-    return NextResponse.json(
-      { error: 'Failed to get live activities' },
-      { status: 500 }
-    );
+    return NextResponse.json({
+      success: true,
+      activities: [],
+      stats: { totalActive: 0, watching: 0, browsing: 0, livetv: 0 },
+    });
   }
 }
 
@@ -187,18 +94,15 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const adapter = getAdapter();
-    await adapter.execute(
-      'UPDATE live_activity SET is_active = 0 WHERE id = ?',
-      [activityId]
-    );
+    // Forward to CF Analytics Worker
+    const response = await fetch(`${CF_ANALYTICS_URL}/live-activity?id=${activityId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to deactivate activity:', error);
-    return NextResponse.json(
-      { error: 'Failed to deactivate activity' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true });
   }
 }

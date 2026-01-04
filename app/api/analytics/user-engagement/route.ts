@@ -2,23 +2,13 @@
  * User Engagement Tracking API
  * POST /api/analytics/user-engagement - Track user engagement metrics
  * GET /api/analytics/user-engagement - Get user engagement analytics
+ * 
+ * OPTIMIZED: POST forwards to CF Analytics Worker to avoid duplicate D1 writes.
+ * GET still reads from D1 (reads are cheap).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdapter } from '@/app/lib/db/adapter';
-import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
-
-function getDeviceType(userAgent: string): string {
-  const ua = userAgent.toLowerCase();
-  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
-    return 'mobile';
-  } else if (ua.includes('tablet') || ua.includes('ipad')) {
-    return 'tablet';
-  } else if (ua.includes('smart-tv') || ua.includes('smarttv')) {
-    return 'tv';
-  }
-  return 'desktop';
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,127 +21,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adapter = getAdapter();
+    // Forward to CF Analytics Worker - it handles D1 writes with batching
+    // This avoids duplicate writes and reduces D1 operations
+    const CF_ANALYTICS_URL = process.env.NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL || 'https://flyx-analytics.vynx.workers.dev';
     
-    const userAgent = request.headers.get('user-agent') || '';
-    const deviceType = getDeviceType(userAgent);
-    const location = getLocationFromHeaders(request);
-    const now = Date.now();
-
-    // Normalize values with explicit types
-    const pageViews = parseInt(String(data.pageViews || 1));
-    const sessionDuration = parseInt(String(data.sessionDuration || 0));
-    const bounceCount = data.isBounce ? 1 : 0;
-    const engagementScore = Math.min(100, Math.round(sessionDuration / 60 * 2));
-    const countryCode = location.countryCode || 'Unknown';
-
-    // SQLite (D1) - upsert user engagement
-    await adapter.execute(`
-      INSERT INTO user_engagement (
-        user_id, first_visit, last_visit, total_visits, total_page_views,
-        total_time_on_site, avg_session_duration, avg_pages_per_session,
-        device_types, countries, bounce_count, return_visits,
-        engagement_score, created_at, updated_at
-      ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-      ON CONFLICT (user_id) DO UPDATE SET
-        last_visit = ?,
-        total_visits = total_visits + 1,
-        total_page_views = total_page_views + ?,
-        total_time_on_site = total_time_on_site + ?,
-        avg_session_duration = (total_time_on_site + ?) / (total_visits + 1),
-        avg_pages_per_session = CAST((total_page_views + ?) AS FLOAT) / (total_visits + 1),
-        device_types = CASE 
-          WHEN device_types NOT LIKE '%' || ? || '%' 
-          THEN device_types || ',' || ? 
-          ELSE device_types 
-        END,
-        countries = CASE 
-          WHEN countries NOT LIKE '%' || ? || '%' 
-          THEN countries || ',' || ? 
-          ELSE countries 
-        END,
-        bounce_count = bounce_count + ?,
-        return_visits = return_visits + 1,
-        engagement_score = MIN(100, engagement_score + CASE 
-          WHEN ? > 300 THEN 5
-          WHEN ? > 60 THEN 3
-          ELSE 1
-        END),
-        updated_at = ?
-    `, [
-      data.userId,
-      now,
-      now,
-      pageViews,
-      sessionDuration,
-      sessionDuration,
-      pageViews,
-      deviceType,
-      countryCode,
-      bounceCount,
-      engagementScore,
-      now,
-      now,
-      // For ON CONFLICT UPDATE
-      now,
-      pageViews,
-      sessionDuration,
-      sessionDuration,
-      pageViews,
-      deviceType,
-      deviceType,
-      countryCode,
-      countryCode,
-      bounceCount,
-      sessionDuration,
-      sessionDuration,
-      now
-    ]);
-
-    // Also update/insert session details
-    if (data.sessionId) {
-      await adapter.execute(`
-        INSERT INTO session_details (
-          session_id, user_id, started_at, ended_at, duration,
-          page_views, device_type, country, city, is_bounce,
-          is_returning, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT (session_id) DO UPDATE SET
-          ended_at = ?,
-          duration = ?,
-          page_views = ?,
-          is_bounce = ?,
-          updated_at = ?
-      `, [
-        data.sessionId,
-        data.userId,
-        now - (sessionDuration * 1000),
-        now,
-        sessionDuration,
-        pageViews,
-        deviceType,
-        location.countryCode,
-        location.city,
-        bounceCount,
-        data.isReturning ? 1 : 0,
-        now,
-        now,
-        // For ON CONFLICT UPDATE
-        now,
-        sessionDuration,
-        pageViews,
-        bounceCount,
-        now
-      ]);
+    try {
+      await fetch(`${CF_ANALYTICS_URL}/sync`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-IPCountry': request.headers.get('CF-IPCountry') || '',
+          'User-Agent': request.headers.get('User-Agent') || '',
+        },
+        body: JSON.stringify({
+          userId: data.userId,
+          sessionId: data.sessionId,
+          activityType: 'browsing',
+          pageViews: data.pageViews ? [{ path: '/', timestamp: Date.now() }] : undefined,
+        }),
+      });
+    } catch (e) {
+      console.warn('[user-engagement] CF Worker forward failed:', e);
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Failed to track user engagement:', error);
-    return NextResponse.json(
-      { error: 'Failed to track user engagement' },
-      { status: 500 }
-    );
+    // Don't fail analytics requests
+    return NextResponse.json({ success: true });
   }
 }
 

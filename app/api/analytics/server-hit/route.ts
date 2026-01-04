@@ -3,6 +3,9 @@
  * POST /api/analytics/server-hit - Track server-side page hits (non-JS tracking)
  * GET /api/analytics/server-hit - Get server hit analytics
  * 
+ * OPTIMIZED: POST forwards to CF Analytics Worker for batched D1 writes.
+ * GET still reads from D1 (reads are cheap).
+ * 
  * This tracks hits that don't come from browsers or don't execute JavaScript:
  * - Bots and crawlers
  * - API requests
@@ -14,23 +17,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdapter } from '@/app/lib/db/adapter';
-import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
-import { getClientIP } from '@/lib/utils/api-rate-limiter';
-
-function generateId() {
-  return `sh_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`;
-}
-
-// Hash IP for privacy
-function hashIP(ip: string): string {
-  try {
-    const crypto = require('crypto');
-    const salt = process.env.IP_SALT || 'server_hit_salt';
-    return crypto.createHash('sha256').update(ip + salt).digest('hex').substring(0, 16);
-  } catch {
-    return 'hash_error';
-  }
-}
 
 // Classify the request source
 function classifySource(userAgent: string, referer: string | null): {
@@ -204,68 +190,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adapter = getAdapter();
-    
     const userAgent = request.headers.get('user-agent') || '';
     const referer = request.headers.get('referer');
-    const clientIP = getClientIP(request);
-    const location = getLocationFromHeaders(request);
-    const now = Date.now();
-    
-    const hitId = data.id || generateId();
-    const ipHash = hashIP(clientIP);
     
     // Classify the source
     const { sourceType, sourceName, isBot } = classifySource(userAgent, referer);
     
     // Parse referrer
-    const { referrerDomain, referrerPath, referrerSource, referrerMedium } = parseReferrer(referer);
+    const { referrerMedium } = parseReferrer(referer);
     
-    // Create server hit record - SQLite (D1)
-    await adapter.execute(`
-      INSERT INTO server_hits (
-        id, page_path, ip_hash, user_agent,
-        source_type, source_name, is_bot,
-        referrer_full, referrer_domain, referrer_path, referrer_source, referrer_medium,
-        country, city, region,
-        timestamp, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      hitId,
-      data.pagePath,
-      ipHash,
-      userAgent.substring(0, 500),
-      sourceType,
-      sourceName,
-      isBot ? 1 : 0,
-      referer?.substring(0, 1000) || null,
-      referrerDomain,
-      referrerPath,
-      referrerSource,
-      referrerMedium,
-      location.countryCode,
-      location.city,
-      location.region,
-      now,
-      now
-    ]);
+    // Forward to CF Analytics Worker for batched D1 writes
+    const CF_ANALYTICS_URL = process.env.NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL || 'https://flyx-analytics.vynx.workers.dev';
     
-    // Update aggregated referrer stats
-    if (referrerDomain) {
-      await adapter.execute(`
-        INSERT INTO referrer_stats (
-          referrer_domain, hit_count, last_hit, referrer_medium, created_at, updated_at
-        ) VALUES (?, 1, ?, ?, ?, ?)
-        ON CONFLICT (referrer_domain) DO UPDATE SET
-          hit_count = hit_count + 1,
-          last_hit = ?,
-          updated_at = ?
-      `, [referrerDomain, now, referrerMedium, now, now, now, now]);
+    try {
+      await fetch(`${CF_ANALYTICS_URL}/server-hit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'CF-IPCountry': request.headers.get('CF-IPCountry') || '',
+          'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '',
+          'User-Agent': userAgent,
+          'Referer': referer || '',
+        },
+        body: JSON.stringify({
+          pagePath: data.pagePath,
+          sourceType,
+          sourceName,
+          isBot,
+        }),
+      });
+    } catch (e) {
+      // Log but don't fail - server hits are non-critical
+      console.warn('[server-hit] CF Worker forward failed:', e);
     }
 
     return NextResponse.json({ 
       success: true, 
-      id: hitId,
       sourceType,
       sourceName,
       isBot,
@@ -273,10 +233,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Failed to track server hit:', error);
-    return NextResponse.json(
-      { error: 'Failed to track server hit' },
-      { status: 500 }
-    );
+    // Don't fail - analytics shouldn't break the app
+    return NextResponse.json({ success: true });
   }
 }
 

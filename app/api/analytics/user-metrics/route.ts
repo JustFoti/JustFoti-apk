@@ -1,11 +1,14 @@
 /**
  * User Metrics API
  * GET /api/analytics/user-metrics - Get DAU, WAU, MAU, and other user metrics
+ * POST /api/analytics/user-metrics - Forward to CF Analytics Worker
+ * 
+ * OPTIMIZED: POST forwards to CF Analytics Worker to avoid duplicate D1 writes.
+ * GET still reads from D1 (reads are cheap).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdapter } from '@/app/lib/db/adapter';
-import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -152,38 +155,41 @@ export async function GET(request: NextRequest) {
 }
 
 // POST endpoint to update user activity and daily metrics
+// OPTIMIZED: Forwards to CF Analytics Worker to avoid duplicate D1 writes
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
-    const adapter = getAdapter();
 
     // Handle different types of updates
     if (data.date) {
-      // Update metrics for the specified date (simplified - just return success)
+      // Update metrics for the specified date (handled by CF Worker cron)
       return NextResponse.json({
         success: true,
-        message: `Daily metrics updated for ${data.date}`,
+        message: `Daily metrics update delegated to CF Worker`,
       });
     }
 
     if (data.userId && data.sessionId) {
-      // Update user activity with watch time
-      const userAgent = request.headers.get('user-agent') || '';
-      const deviceType = getDeviceType(userAgent);
+      // Forward to CF Analytics Worker - it handles D1 writes with batching
+      const CF_ANALYTICS_URL = process.env.NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL || 'https://flyx-analytics.vynx.workers.dev';
       
-      // Get geo data from headers using utility
-      const locationData = getLocationFromHeaders(request);
-
-      // Use the upsertUserActivity function from track route
-      await upsertUserActivity(adapter, {
-        userId: data.userId,
-        sessionId: data.sessionId,
-        deviceType,
-        userAgent,
-        country: locationData.countryCode,
-        city: locationData.city,
-        region: locationData.region,
-      });
+      try {
+        await fetch(`${CF_ANALYTICS_URL}/presence`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'CF-IPCountry': request.headers.get('CF-IPCountry') || '',
+            'User-Agent': request.headers.get('User-Agent') || '',
+          },
+          body: JSON.stringify({
+            userId: data.userId,
+            sessionId: data.sessionId,
+            activityType: 'browsing',
+          }),
+        });
+      } catch (e) {
+        console.warn('[user-metrics] CF Worker forward failed:', e);
+      }
 
       return NextResponse.json({ success: true });
     }
@@ -194,67 +200,6 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error('Failed to update metrics:', error);
-    return NextResponse.json(
-      { error: 'Failed to update metrics' },
-      { status: 500 }
-    );
-  }
-}
-
-function getDeviceType(userAgent: string): string {
-  const ua = userAgent.toLowerCase();
-  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
-    return 'mobile';
-  } else if (ua.includes('tablet') || ua.includes('ipad')) {
-    return 'tablet';
-  } else if (ua.includes('smart-tv') || ua.includes('smarttv')) {
-    return 'tv';
-  }
-  return 'desktop';
-}
-
-// Upsert user activity using adapter
-async function upsertUserActivity(adapter: any, data: {
-  userId: string;
-  sessionId: string;
-  deviceType?: string;
-  userAgent?: string;
-  country?: string;
-  city?: string;
-  region?: string;
-}): Promise<void> {
-  const now = Date.now();
-  const id = `ua_${data.userId}`;
-  
-  const existingResult = await adapter.query(
-    'SELECT id FROM user_activity WHERE user_id = ?',
-    [data.userId]
-  );
-
-  if (existingResult.data && existingResult.data.length > 0) {
-    await adapter.execute(
-      `UPDATE user_activity SET 
-        session_id = ?, last_seen = ?, device_type = COALESCE(?, device_type),
-        user_agent = COALESCE(?, user_agent), country = COALESCE(?, country),
-        city = COALESCE(?, city), region = COALESCE(?, region),
-        total_sessions = total_sessions + 1, updated_at = ?
-      WHERE user_id = ?`,
-      [
-        data.sessionId, now, data.deviceType || null, data.userAgent || null,
-        data.country || null, data.city || null, data.region || null, now, data.userId
-      ]
-    );
-  } else {
-    await adapter.execute(
-      `INSERT INTO user_activity (
-        id, user_id, session_id, first_seen, last_seen, total_sessions,
-        device_type, user_agent, country, city, region, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id, data.userId, data.sessionId, now, now,
-        data.deviceType || 'unknown', data.userAgent || null,
-        data.country || null, data.city || null, data.region || null, now, now
-      ]
-    );
+    return NextResponse.json({ success: true }); // Don't fail analytics
   }
 }

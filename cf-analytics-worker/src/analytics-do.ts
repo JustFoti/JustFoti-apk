@@ -51,6 +51,10 @@ export class AnalyticsDO {
   private lastFlush: number = 0;
   private initialized: boolean = false;
   
+  // Cache for historical stats (prevents excessive D1 reads)
+  private historicalStatsCache: { data: any; timestamp: number } | null = null;
+  private readonly STATS_CACHE_TTL = 300000; // 5 minutes
+  
   // Constants
   private readonly USER_TIMEOUT = 5 * 60 * 1000; // 5 minutes
   private readonly FLUSH_INTERVAL = 60 * 1000; // 60 seconds
@@ -363,7 +367,7 @@ export class AnalyticsDO {
     const users = Array.from(this.liveUsers.values());
     const now = Date.now();
     
-    // Build country stats
+    // Build country stats from memory (no D1 needed)
     const countryMap = new Map<string, { country: string; code: string; count: number }>();
     for (const user of users) {
       if (user.country) {
@@ -383,7 +387,7 @@ export class AnalyticsDO {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
     
-    // Build content stats
+    // Build content stats from memory (no D1 needed)
     const contentMap = new Map<string, { id: string; title: string; type: string; viewers: number }>();
     for (const user of users) {
       if (user.contentId && user.contentTitle && user.activity === 'watching') {
@@ -405,199 +409,188 @@ export class AnalyticsDO {
       .sort((a, b) => b.viewers - a.viewers)
       .slice(0, 10);
     
-    // Get historical stats from D1
+    // Check if we have cached historical stats
+    const cacheKey = `stats_${range}`;
+    if (this.historicalStatsCache && 
+        this.historicalStatsCache.data.range === range &&
+        now - this.historicalStatsCache.timestamp < this.STATS_CACHE_TTL) {
+      // Return cached data with fresh real-time stats
+      const cached = this.historicalStatsCache.data;
+      return Response.json({
+        success: true,
+        stats: {
+          // Real-time from memory (always fresh)
+          liveUsers: stats.total,
+          watching: stats.watching,
+          browsing: stats.browsing,
+          livetv: stats.livetv,
+          peakToday: this.peakToday.total,
+          peakTime: this.peakToday.time ? new Date(this.peakToday.time).toISOString() : null,
+          topCountries,
+          topContent,
+          liveUsersList: users.slice(0, 100).map(u => ({
+            oderId: u.userId.substring(0, 8) + '...',
+            activity: u.activity,
+            country: u.country || 'Unknown',
+            contentTitle: u.contentTitle,
+            lastSeen: u.lastHeartbeat,
+          })),
+          // Historical from cache
+          ...cached.historical,
+          timestamp: now,
+          source: 'durable-object-cached',
+        },
+      }, { headers });
+    }
+    
+    // Need to fetch historical stats from D1
     let dau = 0, wau = 0, mau = 0, totalUsers = 0, newToday = 0, returningUsers = 0;
     let totalSessions = 0, totalWatchTime = 0, avgSessionDuration = 0, completionRate = 0;
     let pageViews = 0, uniqueVisitors = 0;
+    let dailyPeaks: Array<{ date: string; peak: number }> = [];
     
-    // Historical peak - we know from D1 analysis the peak was ~425 on Dec 30
+    // Historical peak
     const allTimePeak = 425;
     const allTimePeakDate = '2025-12-30';
     
-    // Get daily peaks for the last 14 days
-    let dailyPeaks: Array<{ date: string; peak: number }> = [];
-    try {
-      const peaksResult = await this.env.DB.prepare(`
-        SELECT date, MAX(hourly_users) as daily_peak 
-        FROM (
-          SELECT strftime('%Y-%m-%d', datetime(last_heartbeat/1000, 'unixepoch')) as date, 
-                 strftime('%H', datetime(last_heartbeat/1000, 'unixepoch')) as hour, 
-                 COUNT(DISTINCT user_id) as hourly_users 
-          FROM live_activity 
-          GROUP BY date, hour
-        ) 
-        GROUP BY date 
-        ORDER BY date DESC 
-        LIMIT 14
-      `).all();
-      
-      dailyPeaks = (peaksResult.results || []).map((row: any) => ({
-        date: row.date as string,
-        peak: parseInt(String(row.daily_peak)) || 0,
-      }));
-    } catch (e) {
-      console.error('[AnalyticsDO] Daily peaks query error:', e);
-    }
-    
-    // Calculate time bounds based on range parameter
+    // Calculate time bounds
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
     const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
     const yearAgo = now - 365 * 24 * 60 * 60 * 1000;
     
-    // Determine the time window for session/watch stats based on range
     let rangeStart: number;
-    let rangeLabel: string;
     switch (range) {
-      case '24h':
-        rangeStart = oneDayAgo;
-        rangeLabel = '24 hours';
-        break;
-      case '30d':
-        rangeStart = thirtyDaysAgo;
-        rangeLabel = '30 days';
-        break;
-      case '365d':
-        rangeStart = yearAgo;
-        rangeLabel = '1 year';
-        break;
-      case '7d':
-      default:
-        rangeStart = sevenDaysAgo;
-        rangeLabel = '7 days';
-        break;
+      case '24h': rangeStart = oneDayAgo; break;
+      case '30d': rangeStart = thirtyDaysAgo; break;
+      case '365d': rangeStart = yearAgo; break;
+      default: rangeStart = sevenDaysAgo; break;
     }
     
-    console.log('[AnalyticsDO] Time bounds:', { range, rangeStart, rangeLabel });
-    
-    // User activity stats - split into simple queries for reliability
+    // Batch all D1 queries into a single Promise.all to minimize round trips
     try {
-      console.log('[AnalyticsDO] Querying user_activity with bounds:', { oneDayAgo, sevenDaysAgo, thirtyDaysAgo });
+      const [
+        userStatsResult,
+        watchStatsResult,
+        pageStatsResult,
+        peaksResult
+      ] = await Promise.all([
+        // Combined user stats query (1 query instead of 6)
+        this.env.DB.prepare(`
+          SELECT 
+            COUNT(DISTINCT user_id) as total,
+            COUNT(DISTINCT CASE WHEN last_seen >= ? THEN user_id END) as dau,
+            COUNT(DISTINCT CASE WHEN last_seen >= ? THEN user_id END) as wau,
+            COUNT(DISTINCT CASE WHEN last_seen >= ? THEN user_id END) as mau,
+            COUNT(DISTINCT CASE WHEN first_seen >= ? THEN user_id END) as new_today,
+            COUNT(DISTINCT CASE WHEN first_seen < ? AND last_seen >= ? THEN user_id END) as returning
+          FROM user_activity
+        `).bind(oneDayAgo, sevenDaysAgo, thirtyDaysAgo, oneDayAgo, oneDayAgo, oneDayAgo).first(),
+        
+        // Combined watch stats query (1 query instead of 4)
+        this.env.DB.prepare(`
+          SELECT 
+            COUNT(*) as sessions,
+            COALESCE(SUM(CASE WHEN last_position > 0 AND last_position < 36000 THEN last_position ELSE 0 END), 0) as watch_time,
+            COALESCE(AVG(CASE WHEN last_position > 0 AND last_position < 36000 THEN last_position END), 0) as avg_duration,
+            COALESCE(AVG(CASE WHEN completion_percentage >= 0 AND completion_percentage <= 100 THEN completion_percentage END), 0) as avg_completion
+          FROM watch_sessions WHERE started_at >= ?
+        `).bind(rangeStart).first(),
+        
+        // Page views query
+        this.env.DB.prepare(`
+          SELECT COUNT(*) as total, COUNT(DISTINCT user_id) as unique_visitors
+          FROM page_views WHERE entry_time >= ?
+        `).bind(rangeStart).first(),
+        
+        // Daily peaks query
+        this.env.DB.prepare(`
+          SELECT date, peak_total as daily_peak
+          FROM peak_stats
+          ORDER BY date DESC
+          LIMIT 14
+        `).all()
+      ]);
       
-      // Total users (no time filter)
-      const totalResult = await this.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM user_activity`).first();
-      totalUsers = totalResult ? parseInt(String(totalResult.cnt)) || 0 : 0;
-      
-      // DAU - users active in last 24h
-      const dauResult = await this.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM user_activity WHERE last_seen >= ?`).bind(oneDayAgo).first();
-      dau = dauResult ? parseInt(String(dauResult.cnt)) || 0 : 0;
-      
-      // WAU - users active in last 7 days
-      const wauResult = await this.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM user_activity WHERE last_seen >= ?`).bind(sevenDaysAgo).first();
-      wau = wauResult ? parseInt(String(wauResult.cnt)) || 0 : 0;
-      
-      // MAU - users active in last 30 days
-      const mauResult = await this.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM user_activity WHERE last_seen >= ?`).bind(thirtyDaysAgo).first();
-      mau = mauResult ? parseInt(String(mauResult.cnt)) || 0 : 0;
-      
-      // New users today
-      const newResult = await this.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM user_activity WHERE first_seen >= ?`).bind(oneDayAgo).first();
-      newToday = newResult ? parseInt(String(newResult.cnt)) || 0 : 0;
-      
-      // Returning users (first seen before today, but active today)
-      const returningResult = await this.env.DB.prepare(`SELECT COUNT(DISTINCT user_id) as cnt FROM user_activity WHERE first_seen < ? AND last_seen >= ?`).bind(oneDayAgo, oneDayAgo).first();
-      returningUsers = returningResult ? parseInt(String(returningResult.cnt)) || 0 : 0;
-      
-      console.log('[AnalyticsDO] User stats:', { totalUsers, dau, wau, mau, newToday, returningUsers });
-    } catch (e) {
-      console.error('[AnalyticsDO] User stats query error:', e);
-    }
-    
-    // Watch sessions stats - use selected time range
-    try {
-      // Total sessions
-      const sessionsResult = await this.env.DB.prepare(`SELECT COUNT(*) as cnt FROM watch_sessions WHERE started_at >= ?`).bind(rangeStart).first();
-      totalSessions = sessionsResult ? parseInt(String(sessionsResult.cnt)) || 0 : 0;
-      
-      // Total watch time (last_position is in seconds, cap at 10 hours to filter bad data)
-      const watchTimeResult = await this.env.DB.prepare(`SELECT SUM(last_position) as total FROM watch_sessions WHERE started_at >= ? AND last_position > 0 AND last_position < 36000`).bind(rangeStart).first();
-      totalWatchTime = watchTimeResult ? parseInt(String(watchTimeResult.total)) || 0 : 0;
-      
-      // Average session duration
-      const avgResult = await this.env.DB.prepare(`SELECT AVG(last_position) as avg FROM watch_sessions WHERE started_at >= ? AND last_position > 0 AND last_position < 36000`).bind(rangeStart).first();
-      avgSessionDuration = avgResult ? parseInt(String(avgResult.avg)) || 0 : 0;
-      
-      // Average completion rate
-      const completionResult = await this.env.DB.prepare(`SELECT AVG(completion_percentage) as avg FROM watch_sessions WHERE started_at >= ? AND completion_percentage >= 0 AND completion_percentage <= 100`).bind(rangeStart).first();
-      completionRate = completionResult ? Math.round(parseFloat(String(completionResult.avg)) || 0) : 0;
-      
-      console.log('[AnalyticsDO] Watch stats:', { range, totalSessions, totalWatchTime, avgSessionDuration, completionRate });
-    } catch (e) {
-      console.error('[AnalyticsDO] Watch stats query error:', e);
-    }
-    
-    // Page views stats - use selected time range
-    try {
-      const pageStats = await this.env.DB.prepare(`
-        SELECT 
-          COUNT(*) as total,
-          COUNT(DISTINCT user_id) as unique_visitors
-        FROM page_views 
-        WHERE entry_time >= ?
-      `).bind(rangeStart).first();
-      
-      if (pageStats) {
-        pageViews = parseInt(String(pageStats.total)) || 0;
-        uniqueVisitors = parseInt(String(pageStats.unique_visitors)) || 0;
+      // Parse user stats
+      if (userStatsResult) {
+        totalUsers = parseInt(String(userStatsResult.total)) || 0;
+        dau = parseInt(String(userStatsResult.dau)) || 0;
+        wau = parseInt(String(userStatsResult.wau)) || 0;
+        mau = parseInt(String(userStatsResult.mau)) || 0;
+        newToday = parseInt(String(userStatsResult.new_today)) || 0;
+        returningUsers = parseInt(String(userStatsResult.returning)) || 0;
       }
+      
+      // Parse watch stats
+      if (watchStatsResult) {
+        totalSessions = parseInt(String(watchStatsResult.sessions)) || 0;
+        totalWatchTime = parseInt(String(watchStatsResult.watch_time)) || 0;
+        avgSessionDuration = parseInt(String(watchStatsResult.avg_duration)) || 0;
+        completionRate = Math.round(parseFloat(String(watchStatsResult.avg_completion)) || 0);
+      }
+      
+      // Parse page stats
+      if (pageStatsResult) {
+        pageViews = parseInt(String(pageStatsResult.total)) || 0;
+        uniqueVisitors = parseInt(String(pageStatsResult.unique_visitors)) || 0;
+      }
+      
+      // Parse daily peaks
+      dailyPeaks = (peaksResult.results || []).map((row: any) => ({
+        date: row.date as string,
+        peak: parseInt(String(row.daily_peak)) || 0,
+      }));
+      
     } catch (e) {
-      console.error('[AnalyticsDO] Page views query error:', e);
+      console.error('[AnalyticsDO] D1 query error:', e);
     }
+    
+    // Cache the historical data
+    const historicalData = {
+      allTimePeak,
+      allTimePeakDate,
+      dailyPeaks,
+      dau,
+      wau,
+      mau,
+      totalUsers,
+      newToday,
+      returningUsers,
+      totalSessions,
+      totalWatchTimeMinutes: Math.round(totalWatchTime / 60),
+      avgSessionMinutes: Math.round(avgSessionDuration / 60),
+      completionRate,
+      pageViews,
+      uniqueVisitors,
+    };
+    
+    this.historicalStatsCache = {
+      timestamp: now,
+      data: { range, historical: historicalData }
+    };
     
     return Response.json({
       success: true,
       stats: {
-        // Real-time
+        // Real-time from memory
         liveUsers: stats.total,
         watching: stats.watching,
         browsing: stats.browsing,
         livetv: stats.livetv,
-        
-        // Peak today
         peakToday: this.peakToday.total,
         peakTime: this.peakToday.time ? new Date(this.peakToday.time).toISOString() : null,
-        
-        // All-time peak (calculated from D1)
-        allTimePeak,
-        allTimePeakDate,
-        
-        // Daily peaks (last 14 days)
-        dailyPeaks,
-        
-        // User metrics
-        dau,
-        wau,
-        mau,
-        totalUsers,
-        newToday,
-        returningUsers,
-        
-        // Content metrics (watch time in minutes)
-        totalSessions,
-        totalWatchTimeMinutes: Math.round(totalWatchTime / 60),
-        avgSessionMinutes: Math.round(avgSessionDuration / 60),
-        completionRate,
-        
-        // Page views
-        pageViews,
-        uniqueVisitors,
-        
-        // Geographic
         topCountries,
-        
-        // Top content
         topContent,
-        
-        // Live users list (limited)
         liveUsersList: users.slice(0, 100).map(u => ({
-          oderId: u.userId.substring(0, 8) + '...', // Anonymize
+          oderId: u.userId.substring(0, 8) + '...',
           activity: u.activity,
           country: u.country || 'Unknown',
           contentTitle: u.contentTitle,
           lastSeen: u.lastHeartbeat,
         })),
-        
-        // Meta
+        // Historical from D1
+        ...historicalData,
         timestamp: now,
         source: 'durable-object',
       },

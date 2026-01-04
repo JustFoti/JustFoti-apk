@@ -111,7 +111,7 @@ const USER_TIMEOUT = 180000; // 3 minutes inactive = gone (allows for 2 missed s
 
 // Stats cache for historical data
 let historicalStatsCache: { data: any; timestamp: number } | null = null;
-const HISTORICAL_CACHE_TTL = 30000; // 30 seconds
+const HISTORICAL_CACHE_TTL = 300000; // 5 minutes - reduced from 30s to prevent excessive D1 reads
 
 // Peak tracking
 let currentDate = new Date().toISOString().split('T')[0];
