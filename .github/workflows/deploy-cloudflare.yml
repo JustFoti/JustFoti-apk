@@ -26,9 +26,12 @@ jobs:
       
       - name: Build for Cloudflare
         run: bun run build:cloudflare
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          NEXT_PUBLIC_TMDB_API_KEY: ${{ secrets.NEXT_PUBLIC_TMDB_API_KEY }}
       
       - name: Deploy to Cloudflare
-        run: bunx @opennextjs/cloudflare deploy
+        run: npx @opennextjs/cloudflare deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
