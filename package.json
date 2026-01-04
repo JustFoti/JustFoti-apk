@@ -115,7 +115,8 @@
     "tweetnacl": "^1.0.3",
     "typescript": "^5.9.3",
     "vm2": "^3.10.0",
-    "wabt": "^1.0.39"
+    "wabt": "^1.0.39",
+    "wrangler": "^4.4.0"
   },
   "jest": {
     "testEnvironment": "jsdom",
