@@ -63,6 +63,7 @@ export default {
         logger.warn('Blocked leecher request', { origin: requestOrigin, referer: requestReferer });
         
         // Return the ORIGINAL URL - let them proxy it themselves
+        // Note: CORS headers must be valid even for 403 responses, otherwise browser shows CORS error instead of 403
         return new Response(JSON.stringify({
           error: 'Access denied - use the original URL',
           originalUrl: decodedUrl,
@@ -71,7 +72,7 @@ export default {
           status: 403,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': 'null',
+            ...corsHeaders(requestOrigin),
           },
         });
       }
@@ -377,6 +378,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3001',
   // Allow Vercel preview deployments
   '.vercel.app',
+  // Cloudflare Workers deployments
+  '.workers.dev',
 ];
 
 function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
