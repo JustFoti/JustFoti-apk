@@ -3,12 +3,15 @@
  * GET /api/admin/analytics - Get analytics data for admin dashboard
  * 
  * OPTIMIZED: Uses parallel queries and in-memory caching
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
+ * 
+ * Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.8
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 import { isValidCountryCode, getCountryName } from '@/app/lib/utils/geolocation';
+import { getAdapter } from '@/lib/db/adapter';
 
 // In-memory cache for analytics data
 interface CachedAnalytics {
@@ -80,188 +83,128 @@ export async function GET(request: NextRequest) {
     const startTimestamp = start.getTime();
     const endTimestamp = end.getTime();
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
+    // Get database adapter - uses D1 in Cloudflare, falls back to Neon
+    const adapter = getAdapter();
+    const dbType = adapter.getDatabaseType();
+    const isD1 = dbType === 'd1';
 
     // Run ALL queries in parallel for maximum performance
+    // Using SQLite syntax for D1 compatibility
     const [
-      overviewRaw,
-      dailyMetricsRaw,
-      contentPerformanceRaw,
-      geographicRaw,
-      deviceBreakdownRaw,
-      peakHoursRaw,
-      advancedMetricsRaw,
+      overviewResult,
+      dailyMetricsResult,
+      contentPerformanceResult,
+      geographicResult,
+      deviceBreakdownResult,
+      peakHoursResult,
+      advancedMetricsResult,
     ] = await Promise.all([
       // 1. Overview Statistics
-      adapter.query(
-        isNeon
-          ? `SELECT 
-              COUNT(*) as "totalViews",
-              COALESCE(SUM(total_watch_time), 0) / 60 as "totalWatchTime",
-              COUNT(DISTINCT session_id) as "uniqueSessions",
-              COUNT(DISTINCT user_id) as "uniqueUsers"
-            FROM watch_sessions
-            WHERE started_at BETWEEN $1 AND $2`
-          : `SELECT 
-              COUNT(*) as totalViews,
-              COALESCE(SUM(total_watch_time), 0) / 60 as totalWatchTime,
-              COUNT(DISTINCT session_id) as uniqueSessions,
-              COUNT(DISTINCT user_id) as uniqueUsers
-            FROM watch_sessions
-            WHERE started_at BETWEEN ? AND ?`,
+      adapter.query<any>(
+        `SELECT 
+          COUNT(*) as totalViews,
+          COALESCE(SUM(total_watch_time), 0) / 60 as totalWatchTime,
+          COUNT(DISTINCT session_id) as uniqueSessions,
+          COUNT(DISTINCT user_id) as uniqueUsers
+        FROM watch_sessions
+        WHERE started_at BETWEEN ? AND ?`,
         [startTimestamp, endTimestamp]
       ),
 
       // 2. Daily Metrics
-      adapter.query(
-        isNeon
-          ? `SELECT 
-              TO_CHAR(TO_TIMESTAMP(started_at / 1000), 'YYYY-MM-DD') as date,
-              COUNT(*) as views,
-              COALESCE(SUM(total_watch_time), 0) / 60 as "watchTime",
-              COUNT(DISTINCT session_id) as sessions
-            FROM watch_sessions
-            WHERE started_at BETWEEN $1 AND $2
-            GROUP BY TO_CHAR(TO_TIMESTAMP(started_at / 1000), 'YYYY-MM-DD')
-            ORDER BY date ASC`
-          : `SELECT 
-              DATE(started_at / 1000, 'unixepoch') as date,
-              COUNT(*) as views,
-              COALESCE(SUM(total_watch_time), 0) / 60 as watchTime,
-              COUNT(DISTINCT session_id) as sessions
-            FROM watch_sessions
-            WHERE started_at BETWEEN ? AND ?
-            GROUP BY DATE(started_at / 1000, 'unixepoch')
-            ORDER BY date ASC`,
+      adapter.query<any>(
+        `SELECT 
+          DATE(started_at / 1000, 'unixepoch') as date,
+          COUNT(*) as views,
+          COALESCE(SUM(total_watch_time), 0) / 60 as watchTime,
+          COUNT(DISTINCT session_id) as sessions
+        FROM watch_sessions
+        WHERE started_at BETWEEN ? AND ?
+        GROUP BY DATE(started_at / 1000, 'unixepoch')
+        ORDER BY date ASC`,
         [startTimestamp, endTimestamp]
       ),
 
       // 3. Content Performance
-      adapter.query(
-        isNeon
-          ? `SELECT 
-              content_id as "contentId",
-              MAX(content_title) as "contentTitle",
-              MAX(content_type) as "contentType",
-              COUNT(*) as views,
-              COALESCE(SUM(total_watch_time), 0) / 60 as "totalWatchTime",
-              AVG(CASE WHEN completion_percentage >= 0 AND completion_percentage <= 100 THEN completion_percentage ELSE NULL END) as "avgCompletion",
-              COUNT(DISTINCT user_id) as "uniqueViewers"
-            FROM watch_sessions
-            WHERE started_at BETWEEN $1 AND $2
-            GROUP BY content_id
-            ORDER BY views DESC
-            LIMIT 20`
-          : `SELECT 
-              content_id as contentId,
-              MAX(content_title) as contentTitle,
-              MAX(content_type) as contentType,
-              COUNT(*) as views,
-              COALESCE(SUM(total_watch_time), 0) / 60 as totalWatchTime,
-              AVG(CASE WHEN completion_percentage >= 0 AND completion_percentage <= 100 THEN completion_percentage ELSE NULL END) as avgCompletion,
-              COUNT(DISTINCT user_id) as uniqueViewers
-            FROM watch_sessions
-            WHERE started_at BETWEEN ? AND ?
-            GROUP BY content_id
-            ORDER BY views DESC
-            LIMIT 20`,
+      adapter.query<any>(
+        `SELECT 
+          content_id as contentId,
+          MAX(content_title) as contentTitle,
+          MAX(content_type) as contentType,
+          COUNT(*) as views,
+          COALESCE(SUM(total_watch_time), 0) / 60 as totalWatchTime,
+          AVG(CASE WHEN completion_percentage >= 0 AND completion_percentage <= 100 THEN completion_percentage ELSE NULL END) as avgCompletion,
+          COUNT(DISTINCT user_id) as uniqueViewers
+        FROM watch_sessions
+        WHERE started_at BETWEEN ? AND ?
+        GROUP BY content_id
+        ORDER BY views DESC
+        LIMIT 20`,
         [startTimestamp, endTimestamp]
       ),
 
       // 4. Geographic Data
-      adapter.query(
-        isNeon
-          ? `SELECT 
-              UPPER(country) as country,
-              COUNT(DISTINCT user_id) as unique_users,
-              COUNT(DISTINCT session_id) as sessions
-            FROM user_activity
-            WHERE last_seen BETWEEN $1 AND $2
-            AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
-            GROUP BY UPPER(country)
-            ORDER BY unique_users DESC
-            LIMIT 50`
-          : `SELECT 
-              UPPER(country) as country,
-              COUNT(DISTINCT user_id) as unique_users,
-              COUNT(DISTINCT session_id) as sessions
-            FROM user_activity
-            WHERE last_seen BETWEEN ? AND ?
-            AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
-            GROUP BY UPPER(country)
-            ORDER BY unique_users DESC
-            LIMIT 50`,
+      adapter.query<any>(
+        `SELECT 
+          UPPER(country) as country,
+          COUNT(DISTINCT user_id) as unique_users,
+          COUNT(DISTINCT session_id) as sessions
+        FROM user_activity
+        WHERE last_seen BETWEEN ? AND ?
+        AND country IS NOT NULL AND country != '' AND LENGTH(country) = 2
+        GROUP BY UPPER(country)
+        ORDER BY unique_users DESC
+        LIMIT 50`,
         [startTimestamp, endTimestamp]
       ),
 
       // 5. Device Breakdown
-      adapter.query(
-        isNeon
-          ? `SELECT device_type as "deviceType", COUNT(*) as count
-            FROM watch_sessions
-            WHERE started_at BETWEEN $1 AND $2
-            GROUP BY device_type
-            ORDER BY count DESC`
-          : `SELECT device_type as deviceType, COUNT(*) as count
-            FROM watch_sessions
-            WHERE started_at BETWEEN ? AND ?
-            GROUP BY device_type
-            ORDER BY count DESC`,
+      adapter.query<any>(
+        `SELECT device_type as deviceType, COUNT(*) as count
+        FROM watch_sessions
+        WHERE started_at BETWEEN ? AND ?
+        GROUP BY device_type
+        ORDER BY count DESC`,
         [startTimestamp, endTimestamp]
       ),
 
       // 6. Peak Hours
-      adapter.query(
-        isNeon
-          ? `SELECT 
-              EXTRACT(HOUR FROM TO_TIMESTAMP(started_at / 1000)) as hour,
-              COUNT(*) as count
-            FROM watch_sessions
-            WHERE started_at BETWEEN $1 AND $2
-            GROUP BY hour
-            ORDER BY hour ASC`
-          : `SELECT 
-              strftime('%H', datetime(started_at / 1000, 'unixepoch')) as hour,
-              COUNT(*) as count
-            FROM watch_sessions
-            WHERE started_at BETWEEN ? AND ?
-            GROUP BY hour
-            ORDER BY hour ASC`,
+      adapter.query<any>(
+        `SELECT 
+          strftime('%H', datetime(started_at / 1000, 'unixepoch')) as hour,
+          COUNT(*) as count
+        FROM watch_sessions
+        WHERE started_at BETWEEN ? AND ?
+        GROUP BY hour
+        ORDER BY hour ASC`,
         [startTimestamp, endTimestamp]
       ),
 
       // 7. Advanced Metrics
-      adapter.query(
-        isNeon
-          ? `WITH session_stats AS (
-              SELECT session_id, COUNT(*) as view_count, SUM(total_watch_time) as session_duration
-              FROM watch_sessions
-              WHERE started_at BETWEEN $1 AND $2
-              GROUP BY session_id
-            )
-            SELECT
-              COUNT(*) as "uniqueViewers",
-              AVG(session_duration) / 60 as "avgSessionDuration",
-              (COUNT(*) FILTER (WHERE view_count = 1)::float / NULLIF(COUNT(*), 0)) * 100 as "bounceRate"
-            FROM session_stats`
-          : `SELECT
-              COUNT(*) as uniqueViewers,
-              AVG(session_duration) / 60 as avgSessionDuration,
-              (CAST(SUM(CASE WHEN view_count = 1 THEN 1 ELSE 0 END) AS FLOAT) / NULLIF(COUNT(*), 0)) * 100 as bounceRate
-            FROM (
-              SELECT session_id, COUNT(*) as view_count, SUM(total_watch_time) as session_duration
-              FROM watch_sessions
-              WHERE started_at BETWEEN ? AND ?
-              GROUP BY session_id
-            )`,
+      adapter.query<any>(
+        `SELECT
+          COUNT(*) as uniqueViewers,
+          AVG(session_duration) / 60 as avgSessionDuration,
+          (CAST(SUM(CASE WHEN view_count = 1 THEN 1 ELSE 0 END) AS FLOAT) / NULLIF(COUNT(*), 0)) * 100 as bounceRate
+        FROM (
+          SELECT session_id, COUNT(*) as view_count, SUM(total_watch_time) as session_duration
+          FROM watch_sessions
+          WHERE started_at BETWEEN ? AND ?
+          GROUP BY session_id
+        )`,
         [startTimestamp, endTimestamp]
       ),
     ]);
 
     // Process results
+    const overviewRaw = overviewResult.data || [];
+    const dailyMetricsRaw = dailyMetricsResult.data || [];
+    const contentPerformanceRaw = contentPerformanceResult.data || [];
+    const geographicRaw = geographicResult.data || [];
+    const deviceBreakdownRaw = deviceBreakdownResult.data || [];
+    const peakHoursRaw = peakHoursResult.data || [];
+    const advancedMetricsRaw = advancedMetricsResult.data || [];
+
     const overview = {
       totalViews: parseInt(overviewRaw[0]?.totalViews) || 0,
       totalWatchTime: Math.round(parseFloat(overviewRaw[0]?.totalWatchTime) || 0),
@@ -327,7 +270,8 @@ export async function GET(request: NextRequest) {
           start: start.toISOString(),
           end: end.toISOString()
         }
-      }
+      },
+      source: isD1 ? 'd1' : 'neon'
     };
     
     // Cache the results

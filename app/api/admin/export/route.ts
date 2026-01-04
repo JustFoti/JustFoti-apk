@@ -2,6 +2,8 @@
  * Data Export API - Multi-format export functionality
  * POST /api/admin/export
  * 
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
+ * 
  * Supports exporting analytics data in multiple formats (CSV, JSON, PDF)
  * with custom date range selection and comprehensive metadata inclusion.
  * 
@@ -11,51 +13,36 @@
  * - Comprehensive metadata inclusion
  * - Bot filtering options
  * - Scheduled report generation
+ * 
+ * Requirements: 13.9
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
+import { getAdapter, type DatabaseAdapter } from '@/lib/db/adapter';
 
-// Export request interface
 interface ExportRequest {
   exportType: 'analytics' | 'users' | 'content' | 'traffic' | 'system-health';
   format: 'csv' | 'json' | 'pdf';
-  dateRange: {
-    startDate: number;
-    endDate: number;
-  };
-  filters?: {
-    country?: string;
-    deviceType?: string;
-    contentType?: string;
-    includeBots?: boolean;
-  };
+  dateRange: { startDate: number; endDate: number };
+  filters?: { country?: string; deviceType?: string; contentType?: string; includeBots?: boolean };
   includeMetadata?: boolean;
 }
 
-// Export metadata interface
 interface ExportMetadata {
   exportId: string;
   exportType: string;
   generatedAt: number;
   generatedBy: string;
   dataSource: string;
-  dateRange: {
-    startDate: number;
-    endDate: number;
-  };
+  dateRange: { startDate: number; endDate: number };
   recordCount: number;
   exportFormat: string;
   version: string;
   filters?: Record<string, any>;
-  additionalInfo: {
-    processingTimeMs: number;
-    serverInstance: string;
-    apiVersion: string;
-    queryExecutionTime?: number;
-  };
+  additionalInfo: { processingTimeMs: number; serverInstance: string; apiVersion: string; queryExecutionTime?: number };
 }
+
 
 class DataExportService {
   private static readonly VERSION = '1.0.0';
@@ -65,26 +52,25 @@ class DataExportService {
   static async exportAnalyticsData(
     request: ExportRequest,
     userId: string,
-    adapter: any,
-    isNeon: boolean
+    adapter: DatabaseAdapter
   ): Promise<{ data: any[]; metadata: ExportMetadata }> {
     const startTime = Date.now();
     let data: any[] = [];
-    let queryStartTime = Date.now();
+    const queryStartTime = Date.now();
 
     try {
       switch (request.exportType) {
         case 'analytics':
-          data = await this.getAnalyticsData(request, adapter, isNeon);
+          data = await this.getAnalyticsData(request, adapter);
           break;
         case 'users':
-          data = await this.getUsersData(request, adapter, isNeon);
+          data = await this.getUsersData(request, adapter);
           break;
         case 'content':
-          data = await this.getContentData(request, adapter, isNeon);
+          data = await this.getContentData(request, adapter);
           break;
         case 'traffic':
-          data = await this.getTrafficData(request, adapter, isNeon);
+          data = await this.getTrafficData(request, adapter);
           break;
         case 'system-health':
           data = await this.getSystemHealthData();
@@ -122,37 +108,23 @@ class DataExportService {
     return { data, metadata };
   }
 
-  private static async getAnalyticsData(
-    request: ExportRequest,
-    adapter: any,
-    isNeon: boolean
-  ): Promise<any[]> {
+  private static async getAnalyticsData(request: ExportRequest, adapter: DatabaseAdapter): Promise<any[]> {
     const { startDate, endDate } = request.dateRange;
     
-    // Get page views and events
-    const query = isNeon
-      ? `SELECT 
-           event_type,
-           COUNT(*) as count,
-           COUNT(DISTINCT session_id) as unique_sessions,
-           DATE(to_timestamp(timestamp / 1000)) as date
-         FROM analytics_events 
-         WHERE timestamp >= $1 AND timestamp <= $2
-         GROUP BY event_type, DATE(to_timestamp(timestamp / 1000))
-         ORDER BY date DESC, count DESC`
-      : `SELECT 
-           event_type,
-           COUNT(*) as count,
-           COUNT(DISTINCT session_id) as unique_sessions,
-           DATE(timestamp / 1000, 'unixepoch') as date
-         FROM analytics_events 
-         WHERE timestamp >= ? AND timestamp <= ?
-         GROUP BY event_type, DATE(timestamp / 1000, 'unixepoch')
-         ORDER BY date DESC, count DESC`;
-
-    const result = await adapter.query(query, [startDate, endDate]);
+    const result = await adapter.query<any>(
+      `SELECT 
+         event_type,
+         COUNT(*) as count,
+         COUNT(DISTINCT session_id) as unique_sessions,
+         DATE(timestamp / 1000, 'unixepoch') as date
+       FROM analytics_events 
+       WHERE timestamp >= ? AND timestamp <= ?
+       GROUP BY event_type, DATE(timestamp / 1000, 'unixepoch')
+       ORDER BY date DESC, count DESC`,
+      [startDate, endDate]
+    );
     
-    return result.map((row: any) => ({
+    return (result.data || []).map((row: any) => ({
       eventType: row.event_type,
       count: parseInt(row.count) || 0,
       uniqueSessions: parseInt(row.unique_sessions) || 0,
@@ -161,42 +133,20 @@ class DataExportService {
     }));
   }
 
-  private static async getUsersData(
-    request: ExportRequest,
-    adapter: any,
-    isNeon: boolean
-  ): Promise<any[]> {
+  private static async getUsersData(request: ExportRequest, adapter: DatabaseAdapter): Promise<any[]> {
     const { startDate, endDate } = request.dateRange;
     
-    const query = isNeon
-      ? `SELECT 
-           user_id,
-           country,
-           device_type,
-           first_seen,
-           last_seen,
-           total_sessions,
-           total_watch_time
-         FROM user_activity 
-         WHERE last_seen >= $1 AND last_seen <= $2
-         ORDER BY last_seen DESC
-         LIMIT 10000`
-      : `SELECT 
-           user_id,
-           country,
-           device_type,
-           first_seen,
-           last_seen,
-           total_sessions,
-           total_watch_time
-         FROM user_activity 
-         WHERE last_seen >= ? AND last_seen <= ?
-         ORDER BY last_seen DESC
-         LIMIT 10000`;
-
-    const result = await adapter.query(query, [startDate, endDate]);
+    const result = await adapter.query<any>(
+      `SELECT 
+         user_id, country, device_type, first_seen, last_seen, total_sessions, total_watch_time
+       FROM user_activity 
+       WHERE last_seen >= ? AND last_seen <= ?
+       ORDER BY last_seen DESC
+       LIMIT 10000`,
+      [startDate, endDate]
+    );
     
-    return result.map((row: any) => ({
+    return (result.data || []).map((row: any) => ({
       userId: row.user_id,
       country: row.country,
       deviceType: row.device_type,
@@ -207,81 +157,49 @@ class DataExportService {
     }));
   }
 
-  private static async getContentData(
-    request: ExportRequest,
-    adapter: any,
-    isNeon: boolean
-  ): Promise<any[]> {
+  private static async getContentData(request: ExportRequest, adapter: DatabaseAdapter): Promise<any[]> {
     const { startDate, endDate } = request.dateRange;
     
-    const query = isNeon
-      ? `SELECT 
-           content_id,
-           content_title,
-           content_type,
-           COUNT(*) as watch_count,
-           SUM(total_watch_time) as total_watch_time,
-           AVG(completion_percentage) as avg_completion
-         FROM watch_sessions 
-         WHERE started_at >= $1 AND started_at <= $2
-         GROUP BY content_id, content_title, content_type
-         ORDER BY watch_count DESC
-         LIMIT 1000`
-      : `SELECT 
-           content_id,
-           content_title,
-           content_type,
-           COUNT(*) as watch_count,
-           SUM(total_watch_time) as total_watch_time,
-           AVG(completion_percentage) as avg_completion
-         FROM watch_sessions 
-         WHERE started_at >= ? AND started_at <= ?
-         GROUP BY content_id, content_title, content_type
-         ORDER BY watch_count DESC
-         LIMIT 1000`;
-
-    const result = await adapter.query(query, [startDate, endDate]);
+    const result = await adapter.query<any>(
+      `SELECT 
+         content_id, content_title, content_type,
+         COUNT(*) as watch_count,
+         SUM(total_watch_time) as total_watch_time,
+         AVG(completion_percentage) as avg_completion
+       FROM watch_sessions 
+       WHERE started_at >= ? AND started_at <= ?
+       GROUP BY content_id, content_title, content_type
+       ORDER BY watch_count DESC
+       LIMIT 1000`,
+      [startDate, endDate]
+    );
     
-    return result.map((row: any) => ({
+    return (result.data || []).map((row: any) => ({
       contentId: row.content_id,
       contentTitle: row.content_title || 'Unknown',
       contentType: row.content_type || 'unknown',
       watchCount: parseInt(row.watch_count) || 0,
-      totalWatchTime: Math.round(parseFloat(row.total_watch_time) / 60) || 0, // Convert to minutes
+      totalWatchTime: Math.round(parseFloat(row.total_watch_time) / 60) || 0,
       avgCompletion: Math.round(parseFloat(row.avg_completion)) || 0
     }));
   }
 
-  private static async getTrafficData(
-    request: ExportRequest,
-    adapter: any,
-    isNeon: boolean
-  ): Promise<any[]> {
+  private static async getTrafficData(request: ExportRequest, adapter: DatabaseAdapter): Promise<any[]> {
     const { startDate, endDate } = request.dateRange;
     
-    const query = isNeon
-      ? `SELECT 
-           country,
-           device_type,
-           COUNT(DISTINCT user_id) as unique_users,
-           COUNT(*) as total_sessions
-         FROM user_activity 
-         WHERE last_seen >= $1 AND last_seen <= $2
-         GROUP BY country, device_type
-         ORDER BY unique_users DESC`
-      : `SELECT 
-           country,
-           device_type,
-           COUNT(DISTINCT user_id) as unique_users,
-           COUNT(*) as total_sessions
-         FROM user_activity 
-         WHERE last_seen >= ? AND last_seen <= ?
-         GROUP BY country, device_type
-         ORDER BY unique_users DESC`;
-
-    const result = await adapter.query(query, [startDate, endDate]);
+    const result = await adapter.query<any>(
+      `SELECT 
+         country, device_type,
+         COUNT(DISTINCT user_id) as unique_users,
+         COUNT(*) as total_sessions
+       FROM user_activity 
+       WHERE last_seen >= ? AND last_seen <= ?
+       GROUP BY country, device_type
+       ORDER BY unique_users DESC`,
+      [startDate, endDate]
+    );
     
-    return result.map((row: any) => ({
+    return (result.data || []).map((row: any) => ({
       country: row.country || 'unknown',
       deviceType: row.device_type || 'unknown',
       uniqueUsers: parseInt(row.unique_users) || 0,
@@ -290,34 +208,14 @@ class DataExportService {
   }
 
   private static async getSystemHealthData(): Promise<any[]> {
-    // Mock system health data - in real implementation this would come from monitoring systems
     return [
-      {
-        metric: 'cpu_usage',
-        value: Math.random() * 100,
-        timestamp: Date.now(),
-        unit: 'percentage'
-      },
-      {
-        metric: 'memory_usage',
-        value: Math.random() * 100,
-        timestamp: Date.now(),
-        unit: 'percentage'
-      },
-      {
-        metric: 'disk_usage',
-        value: Math.random() * 100,
-        timestamp: Date.now(),
-        unit: 'percentage'
-      },
-      {
-        metric: 'active_connections',
-        value: Math.floor(Math.random() * 1000),
-        timestamp: Date.now(),
-        unit: 'count'
-      }
+      { metric: 'cpu_usage', value: Math.random() * 100, timestamp: Date.now(), unit: 'percentage' },
+      { metric: 'memory_usage', value: Math.random() * 100, timestamp: Date.now(), unit: 'percentage' },
+      { metric: 'disk_usage', value: Math.random() * 100, timestamp: Date.now(), unit: 'percentage' },
+      { metric: 'active_connections', value: Math.floor(Math.random() * 1000), timestamp: Date.now(), unit: 'count' }
     ];
   }
+
 
   static formatExport(
     data: any[],
@@ -329,28 +227,11 @@ class DataExportService {
 
     switch (format.toLowerCase()) {
       case 'json':
-        return {
-          content: JSON.stringify({ data, metadata }, null, 2),
-          contentType: 'application/json',
-          filename
-        };
-
+        return { content: JSON.stringify({ data, metadata }, null, 2), contentType: 'application/json', filename };
       case 'csv':
-        const csvContent = this.formatAsCSV(data, metadata);
-        return {
-          content: csvContent,
-          contentType: 'text/csv',
-          filename
-        };
-
+        return { content: this.formatAsCSV(data, metadata), contentType: 'text/csv', filename };
       case 'pdf':
-        const pdfContent = this.formatAsPDF(data, metadata);
-        return {
-          content: pdfContent,
-          contentType: 'application/pdf',
-          filename
-        };
-
+        return { content: this.formatAsPDF(data, metadata), contentType: 'application/pdf', filename };
       default:
         throw new Error(`Unsupported format: ${format}`);
     }
@@ -366,22 +247,17 @@ class DataExportService {
       `# Data Source: ${metadata.dataSource}`,
       `# Date Range: ${new Date(metadata.dateRange.startDate).toISOString()} to ${new Date(metadata.dateRange.endDate).toISOString()}`,
       `# Record Count: ${metadata.recordCount}`,
-      `# Export Format: ${metadata.exportFormat}`,
-      `# Version: ${metadata.version}`,
       `# Processing Time: ${metadata.additionalInfo.processingTimeMs}ms`,
       ''
     ];
 
     if (data.length > 0) {
-      // Get headers from first record
       const headers = Object.keys(data[0]);
       lines.push(headers.join(','));
       
-      // Add data rows
       for (const record of data) {
         const values = headers.map(header => {
           const value = record[header];
-          // Escape commas and quotes in CSV
           if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
             return `"${value.replace(/"/g, '""')}"`;
           }
@@ -397,7 +273,6 @@ class DataExportService {
   }
 
   private static formatAsPDF(data: any[], metadata: ExportMetadata): string {
-    // Mock PDF content - in real implementation this would generate actual PDF binary
     const content = [
       '%PDF-1.4',
       `Analytics Export Report`,
@@ -407,11 +282,7 @@ class DataExportService {
       `- Export Type: ${metadata.exportType}`,
       `- Generated At: ${new Date(metadata.generatedAt).toISOString()}`,
       `- Generated By: ${metadata.generatedBy}`,
-      `- Data Source: ${metadata.dataSource}`,
-      `- Date Range: ${new Date(metadata.dateRange.startDate).toISOString()} to ${new Date(metadata.dateRange.endDate).toISOString()}`,
       `- Record Count: ${metadata.recordCount}`,
-      `- Export Format: ${metadata.exportFormat}`,
-      `- Version: ${metadata.version}`,
       `- Processing Time: ${metadata.additionalInfo.processingTimeMs}ms`,
       '',
       'Data Summary:',
@@ -422,12 +293,9 @@ class DataExportService {
       content.push('');
       content.push('Sample Data:');
       
-      // Show first 10 records
       const sampleData = data.slice(0, 10);
       for (const record of sampleData) {
-        const recordStr = Object.entries(record)
-          .map(([key, value]) => `${key}: ${value}`)
-          .join(', ');
+        const recordStr = Object.entries(record).map(([key, value]) => `${key}: ${value}`).join(', ');
         content.push(`- ${recordStr}`);
       }
       
@@ -442,6 +310,7 @@ class DataExportService {
   }
 }
 
+
 export async function POST(request: NextRequest) {
   try {
     const authResult = await verifyAdminAuth(request);
@@ -454,14 +323,13 @@ export async function POST(request: NextRequest) {
       exportType: body.exportType || 'analytics',
       format: body.format || 'json',
       dateRange: body.dateRange || {
-        startDate: Date.now() - 7 * 24 * 60 * 60 * 1000, // Default to last 7 days
+        startDate: Date.now() - 7 * 24 * 60 * 60 * 1000,
         endDate: Date.now()
       },
       filters: body.filters,
-      includeMetadata: body.includeMetadata !== false // Default to true
+      includeMetadata: body.includeMetadata !== false
     };
 
-    // Validate request
     if (!['analytics', 'users', 'content', 'traffic', 'system-health'].includes(exportRequest.exportType)) {
       return NextResponse.json({ error: 'Invalid export type' }, { status: 400 });
     }
@@ -474,27 +342,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid date range' }, { status: 400 });
     }
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
+    const adapter = getAdapter();
+    const dbType = adapter.getDatabaseType();
 
-    // Generate export
     const exportResult = await DataExportService.exportAnalyticsData(
       exportRequest,
       authResult.user?.username || 'unknown',
-      adapter,
-      isNeon
+      adapter
     );
 
-    // Format export
     const formattedExport = DataExportService.formatExport(
       exportResult.data,
       exportResult.metadata,
       exportRequest.format
     );
 
-    // Return formatted export
     return new NextResponse(formattedExport.content, {
       status: 200,
       headers: {
@@ -502,20 +364,17 @@ export async function POST(request: NextRequest) {
         'Content-Disposition': `attachment; filename="${formattedExport.filename}"`,
         'X-Export-ID': exportResult.metadata.exportId,
         'X-Record-Count': exportResult.metadata.recordCount.toString(),
-        'X-Processing-Time': exportResult.metadata.additionalInfo.processingTimeMs.toString()
+        'X-Processing-Time': exportResult.metadata.additionalInfo.processingTimeMs.toString(),
+        'X-Data-Source': dbType === 'd1' ? 'd1' : 'neon'
       }
     });
 
   } catch (error) {
     console.error('Export API error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to generate export' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Failed to generate export' }, { status: 500 });
   }
 }
 
-// GET endpoint for scheduled reports and export status
 export async function GET(request: NextRequest) {
   try {
     const authResult = await verifyAdminAuth(request);
@@ -531,34 +390,19 @@ export async function GET(request: NextRequest) {
         success: true,
         supportedFormats: ['csv', 'json', 'pdf'],
         supportedTypes: ['analytics', 'users', 'content', 'traffic', 'system-health'],
-        maxDateRange: 365 * 24 * 60 * 60 * 1000, // 1 year
+        maxDateRange: 365 * 24 * 60 * 60 * 1000,
         maxRecords: 100000
       });
     }
 
     if (action === 'scheduled') {
-      // Mock scheduled reports - in real implementation this would come from database
       return NextResponse.json({
         success: true,
         scheduledReports: [
-          {
-            id: 'weekly-analytics',
-            name: 'Weekly Analytics Report',
-            exportType: 'analytics',
-            format: 'pdf',
-            schedule: 'weekly',
-            nextRun: Date.now() + 7 * 24 * 60 * 60 * 1000,
-            enabled: true
-          },
-          {
-            id: 'monthly-users',
-            name: 'Monthly User Report',
-            exportType: 'users',
-            format: 'csv',
-            schedule: 'monthly',
-            nextRun: Date.now() + 30 * 24 * 60 * 60 * 1000,
-            enabled: true
-          }
+          { id: 'weekly-analytics', name: 'Weekly Analytics Report', exportType: 'analytics', format: 'pdf',
+            schedule: 'weekly', nextRun: Date.now() + 7 * 24 * 60 * 60 * 1000, enabled: true },
+          { id: 'monthly-users', name: 'Monthly User Report', exportType: 'users', format: 'csv',
+            schedule: 'monthly', nextRun: Date.now() + 30 * 24 * 60 * 60 * 1000, enabled: true }
         ]
       });
     }
@@ -567,9 +411,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Export GET API error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Failed to fetch export information' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: 'Failed to fetch export information' }, { status: 500 });
   }
 }

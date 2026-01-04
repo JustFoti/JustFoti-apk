@@ -131,7 +131,7 @@ Manually trigger daily metrics calculation.
 
 ### GET /api/cron/update-metrics
 
-Automated endpoint for daily metrics updates (called by Vercel Cron).
+Automated endpoint for daily metrics updates (called by Cloudflare Cron Trigger).
 
 **Headers:**
 - `Authorization: Bearer YOUR_CRON_SECRET`
@@ -190,20 +190,14 @@ Navigate to `/admin/users` to view comprehensive user analytics.
 
 ## Automated Metrics Updates
 
-### Vercel Cron Job
+### Cloudflare Cron Trigger
 
-The system automatically updates daily metrics at midnight UTC using Vercel Cron.
+The system automatically updates daily metrics at midnight UTC using Cloudflare Workers Cron Triggers.
 
-**Configuration** (in `vercel.json`):
-```json
-{
-  "crons": [
-    {
-      "path": "/api/cron/update-metrics",
-      "schedule": "0 0 * * *"
-    }
-  ]
-}
+**Configuration** (in `cf-analytics-worker/wrangler.toml`):
+```toml
+[triggers]
+crons = ["0 0 * * *"]
 ```
 
 ### Manual Updates
@@ -211,7 +205,7 @@ The system automatically updates daily metrics at midnight UTC using Vercel Cron
 You can manually trigger metrics updates:
 
 ```bash
-curl -X POST https://your-app.vercel.app/api/cron/update-metrics \
+curl -X POST https://your-app.pages.dev/api/cron/update-metrics \
   -H "Authorization: Bearer YOUR_CRON_SECRET" \
   -H "Content-Type: application/json"
 ```
@@ -219,7 +213,7 @@ curl -X POST https://your-app.vercel.app/api/cron/update-metrics \
 Or via the API:
 
 ```bash
-curl -X POST https://your-app.vercel.app/api/analytics/user-metrics \
+curl -X POST https://your-app.pages.dev/api/analytics/user-metrics \
   -H "Content-Type: application/json" \
   -d '{"date": "2024-01-15"}'
 ```
@@ -263,7 +257,7 @@ When a user interacts with the app:
 ### 2. Daily Aggregation
 
 Every day at midnight:
-1. Cron job triggers `/api/cron/update-metrics`
+1. Cron trigger activates the analytics worker
 2. System calculates metrics for yesterday and today
 3. Results stored in `daily_user_metrics` table
 4. Historical data preserved for trending
@@ -318,7 +312,7 @@ Optimized indexes for fast queries:
 ### Caching Strategy
 
 Consider implementing:
-- Redis cache for current day metrics
+- KV cache for current day metrics
 - CDN caching for historical data
 - In-memory cache for frequently accessed data
 
@@ -333,18 +327,18 @@ Consider implementing:
 
 **Solutions:**
 - Check if analytics service is initialized
-- Verify DATABASE_URL is set
+- Verify D1 database is configured
 - Check browser console for errors
 
 ### Metrics Not Updating
 
 **Possible causes:**
-1. Cron job not running
+1. Cron trigger not running
 2. CRON_SECRET not set
 3. Database write permissions
 
 **Solutions:**
-- Check Vercel Cron logs
+- Check Cloudflare Workers logs
 - Verify CRON_SECRET environment variable
 - Test manual update endpoint
 - Check database permissions
@@ -455,8 +449,8 @@ for (const date of dates) {
 ## Support
 
 For issues or questions:
-1. Check Vercel deployment logs
-2. Review database query logs
+1. Check Cloudflare Workers logs
+2. Review D1 database query logs
 3. Verify environment variables
 4. Test API endpoints manually
 5. Check browser console for errors

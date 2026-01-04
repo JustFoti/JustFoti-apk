@@ -1,11 +1,14 @@
 /**
  * Server-side Admin Authentication Service
  * Database operations and server-only authentication logic
+ * 
+ * Updated for D1 database compatibility (Cloudflare Workers)
+ * Requirements: 6.3
  */
 
 import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/server-connection';
+import { getAdapter } from '@/lib/db/adapter';
 import { 
   AdminUser, 
   AuthResult, 
@@ -42,10 +45,10 @@ export class AdminAuthService {
       }
 
       // Verify JWT token
-      let decoded: any;
+      let decoded: { userId?: string };
       try {
-        decoded = jwt.verify(token, JWT_SECRET);
-      } catch (jwtError) {
+        decoded = jwt.verify(token, JWT_SECRET) as { userId?: string };
+      } catch {
         return {
           success: false,
           error: 'Invalid or expired token',
@@ -61,20 +64,15 @@ export class AdminAuthService {
         };
       }
 
-      // Initialize database
-      await initializeDB();
-      const db = getDB();
-      const adapter = db.getAdapter();
+      // Get database adapter (D1 only)
+      const adapter = getAdapter();
 
-      // Get user from database
-      let userQuery;
-      if (db.isUsingNeon()) {
-        userQuery = 'SELECT * FROM admin_users WHERE id = $1';
-      } else {
-        userQuery = 'SELECT * FROM admin_users WHERE id = ?';
-      }
-      
-      const users = await adapter.query(userQuery, [decoded.userId]);
+      // Get user from database using SQLite-style placeholder
+      const result = await adapter.query<Record<string, unknown>>(
+        'SELECT * FROM admin_users WHERE id = ?',
+        [decoded.userId]
+      );
+      const users = result.data || [];
 
       if (users.length === 0) {
         return {
@@ -88,13 +86,13 @@ export class AdminAuthService {
 
       // Construct admin user object
       const user: AdminUser = {
-        id: dbUser.id,
-        username: dbUser.username,
+        id: dbUser.id as string,
+        username: dbUser.username as string,
         role: (dbUser.role || 'viewer') as AdminRole,
-        permissions: dbUser.permissions ? JSON.parse(dbUser.permissions) : ['read'],
-        specificPermissions: dbUser.specific_permissions ? JSON.parse(dbUser.specific_permissions) : [],
-        lastLogin: dbUser.last_login || Date.now(),
-        createdAt: dbUser.created_at || Date.now()
+        permissions: dbUser.permissions ? JSON.parse(dbUser.permissions as string) : ['read'],
+        specificPermissions: dbUser.specific_permissions ? JSON.parse(dbUser.specific_permissions as string) : [],
+        lastLogin: (dbUser.last_login as number) || Date.now(),
+        createdAt: (dbUser.created_at as number) || Date.now()
       };
 
       return {
@@ -146,18 +144,11 @@ export class AdminAuthService {
    */
   static async updateLastLogin(userId: string): Promise<void> {
     try {
-      await initializeDB();
-      const db = getDB();
-      const adapter = db.getAdapter();
-      
-      let updateQuery;
-      if (db.isUsingNeon()) {
-        updateQuery = 'UPDATE admin_users SET last_login = $1 WHERE id = $2';
-      } else {
-        updateQuery = 'UPDATE admin_users SET last_login = ? WHERE id = ?';
-      }
-      
-      await adapter.execute(updateQuery, [Date.now(), userId]);
+      const adapter = getAdapter();
+      await adapter.execute(
+        'UPDATE admin_users SET last_login = ? WHERE id = ?',
+        [Date.now(), userId]
+      );
     } catch (error) {
       console.error('Failed to update last login:', error);
     }
@@ -174,13 +165,11 @@ export class AuditLogService {
   static async logAction(
     userId: string,
     action: string,
-    details: Record<string, any> = {},
+    details: Record<string, unknown> = {},
     ipAddress?: string
   ): Promise<void> {
     try {
-      await initializeDB();
-      const db = getDB();
-      const adapter = db.getAdapter();
+      const adapter = getAdapter();
 
       const logEntry = {
         id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -192,16 +181,9 @@ export class AuditLogService {
         created_at: Date.now()
       };
 
-      let insertQuery;
-      if (db.isUsingNeon()) {
-        insertQuery = `INSERT INTO audit_logs (id, user_id, action, details, ip_address, timestamp, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`;
-      } else {
-        insertQuery = `INSERT INTO audit_logs (id, user_id, action, details, ip_address, timestamp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`;
-      }
-
-      await adapter.execute(insertQuery,
+      await adapter.execute(
+        `INSERT INTO audit_logs (id, user_id, action, details, ip_address, timestamp, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           logEntry.id,
           logEntry.user_id,
@@ -229,90 +211,61 @@ export class AuditLogService {
     startDate?: number,
     endDate?: number
   ): Promise<{
-    logs: any[];
+    logs: Record<string, unknown>[];
     total: number;
     page: number;
     totalPages: number;
   }> {
     try {
-      await initializeDB();
-      const db = getDB();
-      const adapter = db.getAdapter();
+      const adapter = getAdapter();
 
       let whereClause = 'WHERE 1=1';
-      const params: any[] = [];
-      let paramIndex = 1;
+      const params: unknown[] = [];
 
       if (userId) {
-        if (db.isUsingNeon()) {
-          whereClause += ` AND user_id = $${paramIndex++}`;
-        } else {
-          whereClause += ' AND user_id = ?';
-        }
+        whereClause += ' AND user_id = ?';
         params.push(userId);
       }
 
       if (action) {
-        if (db.isUsingNeon()) {
-          whereClause += ` AND action LIKE $${paramIndex++}`;
-        } else {
-          whereClause += ' AND action LIKE ?';
-        }
+        whereClause += ' AND action LIKE ?';
         params.push(`%${action}%`);
       }
 
       if (startDate) {
-        if (db.isUsingNeon()) {
-          whereClause += ` AND timestamp >= $${paramIndex++}`;
-        } else {
-          whereClause += ' AND timestamp >= ?';
-        }
+        whereClause += ' AND timestamp >= ?';
         params.push(startDate);
       }
 
       if (endDate) {
-        if (db.isUsingNeon()) {
-          whereClause += ` AND timestamp <= $${paramIndex++}`;
-        } else {
-          whereClause += ' AND timestamp <= ?';
-        }
+        whereClause += ' AND timestamp <= ?';
         params.push(endDate);
       }
 
       // Get total count
-      const countResult = await adapter.query(
+      const countResult = await adapter.query<{ total: number }>(
         `SELECT COUNT(*) as total FROM audit_logs ${whereClause}`,
         params
       );
-      const total = countResult[0]?.total || 0;
+      const total = (countResult.data || [])[0]?.total || 0;
 
       // Get paginated logs
       const offset = (page - 1) * limit;
-      let logsQuery;
-      if (db.isUsingNeon()) {
-        logsQuery = `SELECT al.*, au.username 
+      const logsResult = await adapter.query<Record<string, unknown>>(
+        `SELECT al.*, au.username 
          FROM audit_logs al 
          LEFT JOIN admin_users au ON al.user_id = au.id 
          ${whereClause} 
          ORDER BY al.timestamp DESC 
-         LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      } else {
-        logsQuery = `SELECT al.*, au.username 
-         FROM audit_logs al 
-         LEFT JOIN admin_users au ON al.user_id = au.id 
-         ${whereClause} 
-         ORDER BY al.timestamp DESC 
-         LIMIT ? OFFSET ?`;
-      }
-      
-      const logs = await adapter.query(logsQuery,
+         LIMIT ? OFFSET ?`,
         [...params, limit, offset]
       );
+      const logs = logsResult.data || [];
 
       return {
-        logs: logs.map(log => ({
+        logs: logs.map((log) => ({
           ...log,
-          details: log.details ? JSON.parse(log.details) : {}
+          details: log.details ? JSON.parse(log.details as string) : {}
         })),
         total,
         page,

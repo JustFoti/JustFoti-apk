@@ -2,15 +2,15 @@
  * Admin Audit Log API
  * POST /api/admin/audit-log - Log administrative action
  * GET /api/admin/audit-log - Retrieve audit logs
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { AdminAuthService, AuditLogService } from '@/app/admin/middleware/auth-server';
-import { initializeDB, getDB } from '@/lib/db/server-connection';
+import { getAdapter } from '@/lib/db/adapter';
 
 export async function POST(request: NextRequest) {
   try {
-    // Authenticate user
     const authResult = await AdminAuthService.authenticateRequest(request);
     if (!authResult.success || !authResult.user) {
       return NextResponse.json(
@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check audit logging permission
     const permissionCheck = AdminAuthService.checkPermissions(
       authResult.user,
       'audit_logs',
@@ -43,7 +42,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log the action
     const enrichedDetails = {
       ...details,
       success,
@@ -76,7 +74,6 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
     const authResult = await AdminAuthService.authenticateRequest(request);
     if (!authResult.success || !authResult.user) {
       return NextResponse.json(
@@ -85,7 +82,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check audit log viewing permission
     const permissionCheck = AdminAuthService.checkPermissions(
       authResult.user,
       'audit_logs',
@@ -107,65 +103,37 @@ export async function GET(request: NextRequest) {
     const startTime = searchParams.get('startTime');
     const endTime = searchParams.get('endTime');
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
+    const adapter = getAdapter();
 
-    // Build query
+    // Build query with SQLite-style placeholders
     let query = 'SELECT * FROM audit_logs WHERE 1=1';
-    const params: any[] = [];
-    let paramIndex = 1;
+    const params: unknown[] = [];
 
     if (userId) {
-      if (db.isUsingNeon()) {
-        query += ` AND user_id = $${paramIndex}`;
-      } else {
-        query += ` AND user_id = ?`;
-      }
+      query += ' AND user_id = ?';
       params.push(userId);
-      paramIndex++;
     }
 
     if (actionType) {
-      if (db.isUsingNeon()) {
-        query += ` AND action_type = $${paramIndex}`;
-      } else {
-        query += ` AND action_type = ?`;
-      }
+      query += ' AND action_type = ?';
       params.push(actionType);
-      paramIndex++;
     }
 
     if (startTime) {
-      if (db.isUsingNeon()) {
-        query += ` AND timestamp >= $${paramIndex}`;
-      } else {
-        query += ` AND timestamp >= ?`;
-      }
+      query += ' AND timestamp >= ?';
       params.push(parseInt(startTime));
-      paramIndex++;
     }
 
     if (endTime) {
-      if (db.isUsingNeon()) {
-        query += ` AND timestamp <= $${paramIndex}`;
-      } else {
-        query += ` AND timestamp <= ?`;
-      }
+      query += ' AND timestamp <= ?';
       params.push(parseInt(endTime));
-      paramIndex++;
     }
 
-    query += ' ORDER BY timestamp DESC';
-
-    if (db.isUsingNeon()) {
-      query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
-    } else {
-      query += ` LIMIT ? OFFSET ?`;
-    }
+    query += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
     params.push(limit, offset);
 
-    const logs = await adapter.query(query, params);
+    const result = await adapter.query<Record<string, unknown>>(query, params);
+    const logs = result.data || [];
 
     // Parse JSON fields
     const parsedLogs = logs.map(log => ({

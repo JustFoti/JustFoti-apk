@@ -2,17 +2,19 @@
  * DLHD Stream Proxy API
  * 
  * Routes all DLHD requests through Cloudflare Worker → RPI Proxy
- * This ensures requests come from residential IP, not Vercel datacenter.
+ * This ensures requests come from residential IP, not datacenter.
  * 
  * The Cloudflare Worker handles:
  *   - M3U8 playlist fetching and rewriting
  *   - Key proxying through RPI residential IP
  *   - Segment proxying
  * 
- * This Vercel route just forwards to the CF Worker.
+ * This route forwards to the CF Worker.
  * Route is determined by NEXT_PUBLIC_USE_DLHD_PROXY:
  *   - true: /dlhd (Oxylabs residential proxy)
  *   - false: /tv (direct fetch with RPI fallback)
+ * 
+ * Updated for Cloudflare Workers compatibility - uses edge runtime
  */
 
 import { NextRequest, NextResponse } from 'next/server';

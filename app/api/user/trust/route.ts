@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getAdapter } from '@/app/lib/db/adapter';
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,38 +22,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'userId required' }, { status: 400 });
     }
     
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
+    const adapter = getAdapter();
     
-    const query = isNeon
-      ? `SELECT 
-           user_id,
-           first_seen,
-           last_seen,
-           mouse_entropy_avg,
-           total_mouse_samples,
-           total_scroll_samples,
-           human_score,
-           last_validation_score
-         FROM user_activity 
-         WHERE user_id = $1 
-         LIMIT 1`
-      : `SELECT 
-           user_id,
-           first_seen,
-           last_seen,
-           mouse_entropy_avg,
-           total_mouse_samples,
-           total_scroll_samples,
-           human_score,
-           last_validation_score
-         FROM user_activity 
-         WHERE user_id = ? 
-         LIMIT 1`;
+    const query = `SELECT 
+       user_id,
+       first_seen,
+       last_seen,
+       mouse_entropy_avg,
+       total_mouse_samples,
+       total_scroll_samples,
+       human_score,
+       last_validation_score
+     FROM user_activity 
+     WHERE user_id = ? 
+     LIMIT 1`;
     
-    const results = await adapter.query(query, [userId]);
+    const result = await adapter.query(query, [userId]);
+    const results = result.data || [];
     
     if (results.length === 0) {
       return NextResponse.json({
@@ -66,7 +51,7 @@ export async function GET(request: NextRequest) {
       });
     }
     
-    const user = results[0];
+    const user = results[0] as any;
     const now = Date.now();
     const accountAge = now - (user.first_seen || now);
     const daysSinceFirstSeen = accountAge / (1000 * 60 * 60 * 24);

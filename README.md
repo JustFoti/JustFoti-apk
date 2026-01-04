@@ -1,10 +1,11 @@
 # Flyx
 
-A modern streaming platform built with Next.js 15, featuring movies, TV shows, live TV, and cross-device sync.
+A modern streaming platform built with Next.js 16, featuring movies, TV shows, live TV, and cross-device sync. Deployed on Cloudflare's edge network for maximum performance.
 
-![Next.js](https://img.shields.io/badge/Next.js-15-black?style=flat-square)
+![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?style=flat-square)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?style=flat-square)
+![Cloudflare](https://img.shields.io/badge/Cloudflare-Pages-F38020?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
 ## Features
@@ -18,175 +19,198 @@ A modern streaming platform built with Next.js 15, featuring movies, TV shows, l
 
 ---
 
-## Quick Deploy
+## Deployment
 
-Choose your deployment platform:
+Flyx runs entirely on Cloudflare's edge network using:
+- **Cloudflare Pages** - Next.js app via `@opennextjs/cloudflare`
+- **Cloudflare Workers** - Analytics, sync, and stream proxy
+- **Cloudflare D1** - SQLite database at the edge
 
-### Option A: Vercel (Easiest)
+### Prerequisites
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FVynx-Velvet%2Fflyx-main&env=TMDB_API_KEY,NEXT_PUBLIC_TMDB_API_KEY&envDescription=TMDB%20API%20keys%20required%20for%20movie%20and%20TV%20data&envLink=https%3A%2F%2Fwww.themoviedb.org%2Fsettings%2Fapi&project-name=flyx&repository-name=flyx)
+1. [Cloudflare account](https://dash.cloudflare.com/sign-up) (free tier works)
+2. [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) installed
+3. [TMDB API key](https://www.themoviedb.org/settings/api)
 
-Required environment variables:
-- `TMDB_API_KEY` - [Get from TMDB](https://www.themoviedb.org/settings/api) (Bearer token)
-- `NEXT_PUBLIC_TMDB_API_KEY` - TMDB API key (v3 auth)
+```bash
+# Install Wrangler globally
+npm install -g wrangler
+
+# Login to Cloudflare
+wrangler login
+```
 
 ---
 
-### Option B: Cloudflare Pages (100% Cloudflare Stack)
+## Quick Start
 
-Deploy the entire app to Cloudflare Pages using `@opennextjs/cloudflare`:
-
-[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy%20to-Cloudflare%20Pages-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://dash.cloudflare.com/?to=/:account/pages/new/provider/github)
-
-**Quick Setup:**
-
-1. Click the button above → Sign in to Cloudflare
-2. Connect your GitHub account if not already connected
-3. Select the `Vynx-Velvet/flyx-main` repository (or fork it first)
-4. Configure build settings:
-   | Setting | Value |
-   |---------|-------|
-   | Build command | `npm run build:cloudflare` |
-   | Build output directory | `.open-next/assets` |
-   | Root directory | `/` |
-5. Add environment variables:
-   - `TMDB_API_KEY` - Your TMDB Bearer token
-   - `NEXT_PUBLIC_TMDB_API_KEY` - Your TMDB API key
-6. Click **Save and Deploy**!
-
-<details>
-<summary>Manual CLI deployment</summary>
+### 1. Clone and Install
 
 ```bash
-# Clone the repo
 git clone https://github.com/Vynx-Velvet/flyx-main.git
 cd flyx-main
-
-# Install dependencies
 npm install
-
-# Build for Cloudflare
-npm run build:cloudflare
-
-# Deploy to Cloudflare Pages
-npm run deploy:cloudflare
-
-# Or preview locally first
-npm run preview:cloudflare
 ```
 
-</details>
-
-**Cloudflare Pages Benefits:**
-- ✅ Unlimited bandwidth (free tier)
-- ✅ Global CDN with 300+ edge locations
-- ✅ Automatic SSL
-- ✅ Preview deployments for PRs
-- ✅ Native D1/KV/R2 integration
-- ✅ No vendor lock-in
-
----
-
-## Cloudflare Workers + D1 (Optional but Recommended)
-
-Deploy workers for cross-device sync, analytics, and stream proxying. Each uses **Cloudflare D1** (SQLite at the edge) - no external database needed!
-
-### Sync Worker (Cross-Device Sync)
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cf-sync-worker)
-
-<details>
-<summary>Manual deployment steps</summary>
+### 2. Configure Environment
 
 ```bash
-cd cf-sync-worker
-npm install
-
-# Create D1 database
-npx wrangler d1 create flyx-sync-db
-
-# Copy the database_id from output to wrangler.toml
-
-# Initialize schema
-npx wrangler d1 execute flyx-sync-db --file=schema.sql
-
-# Deploy worker
-npx wrangler deploy
-```
-
-</details>
-
-Then add env var: `NEXT_PUBLIC_CF_SYNC_URL=https://flyx-sync.YOUR-SUBDOMAIN.workers.dev`
-
----
-
-### Analytics Worker (Real-time Analytics)
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cf-analytics-worker)
-
-<details>
-<summary>Manual deployment steps</summary>
-
-```bash
-cd cf-analytics-worker
-npm install
-
-# Create D1 database
-npx wrangler d1 create flyx-analytics-db
-
-# Copy the database_id from output to wrangler.toml
-
-# Initialize schema
-npx wrangler d1 execute flyx-analytics-db --file=schema.sql
-
-# Deploy worker
-npx wrangler deploy
-```
-
-</details>
-
-Then add env var: `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL=https://flyx-analytics.YOUR-SUBDOMAIN.workers.dev`
-
----
-
-### Stream Proxy (HLS/Live TV)
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Vynx-Velvet/flyx-main/tree/main/cloudflare-proxy)
-
-<details>
-<summary>Manual deployment steps</summary>
-
-```bash
-cd cloudflare-proxy
-npm install
-npx wrangler deploy
-```
-
-</details>
-
-Then add env vars:
-- `NEXT_PUBLIC_CF_STREAM_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev/stream`
-- `NEXT_PUBLIC_CF_TV_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev`
-
----
-
-## Local Development
-
-```bash
-# Clone and install
-git clone https://github.com/Vynx-Velvet/flyx-main.git
-cd flyx-main
-npm install  # or: bun install
-
-# Configure environment
 cp .env.example .env.local
-# Edit .env.local with your TMDB API keys
-
-# Start dev server
-npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+Edit `.env.local` with your configuration:
+
+```env
+# Required - TMDB API
+TMDB_API_KEY=your_tmdb_bearer_token
+NEXT_PUBLIC_TMDB_API_KEY=your_tmdb_api_key
+
+# Cloudflare Worker URLs (update after deploying workers)
+NEXT_PUBLIC_CF_SYNC_URL=https://flyx-sync.YOUR-SUBDOMAIN.workers.dev
+NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL=https://flyx-analytics.YOUR-SUBDOMAIN.workers.dev
+NEXT_PUBLIC_CF_PROXY_URL=https://media-proxy.YOUR-SUBDOMAIN.workers.dev
+```
+
+### 3. Set Up D1 Databases
+
+Create the required D1 databases:
+
+```bash
+# Admin database (for main app)
+wrangler d1 create flyx-admin-db
+
+# Analytics database (for analytics worker)
+cd cf-analytics-worker
+wrangler d1 create flyx-analytics-db
+cd ..
+
+# Sync database (for sync worker)
+cd cf-sync-worker
+wrangler d1 create flyx-sync-db
+cd ..
+```
+
+**Important:** Copy the `database_id` from each command output and update the respective `wrangler.toml` files.
+
+### 4. Initialize Database Schemas
+
+```bash
+# Initialize admin database schema
+npm run d1:init
+
+# Initialize analytics worker schema
+cd cf-analytics-worker
+wrangler d1 execute flyx-analytics-db --file=schema.sql
+cd ..
+
+# Initialize sync worker schema
+cd cf-sync-worker
+wrangler d1 execute flyx-sync-db --file=schema.sql
+cd ..
+```
+
+### 5. Configure Secrets
+
+```bash
+# Set secrets for main app
+wrangler secret put TMDB_API_KEY
+wrangler secret put JWT_SECRET
+
+# Set secrets for media proxy (if using RPI proxy)
+cd cloudflare-proxy
+wrangler secret put RPI_PROXY_URL
+wrangler secret put RPI_PROXY_KEY
+cd ..
+```
+
+### 6. Deploy Everything
+
+```bash
+# Deploy all workers and the main app
+npm run deploy:all
+```
+
+Or deploy individually:
+
+```bash
+# Deploy workers first
+npm run deploy:analytics-worker
+npm run deploy:sync-worker
+npm run deploy:media-proxy
+
+# Then deploy the main app
+npm run deploy:cloudflare
+```
+
+---
+
+## Deployment Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run build:cloudflare` | Build Next.js app for Cloudflare Pages |
+| `npm run deploy:cloudflare` | Build and deploy main app to Cloudflare Pages |
+| `npm run deploy:analytics-worker` | Deploy analytics worker |
+| `npm run deploy:sync-worker` | Deploy sync worker |
+| `npm run deploy:media-proxy` | Deploy media proxy worker |
+| `npm run deploy:workers` | Deploy all three workers |
+| `npm run deploy:all` | Deploy workers + main app (full deployment) |
+| `npm run preview:cloudflare` | Preview Cloudflare build locally |
+
+---
+
+## D1 Database Setup
+
+### Database Structure
+
+Flyx uses three D1 databases:
+
+| Database | Purpose | Used By |
+|----------|---------|---------|
+| `flyx-admin-db` | Admin users, feedback, bot detection, daily metrics | Main App |
+| `flyx-analytics-db` | Page views, watch sessions, presence tracking | Analytics Worker |
+| `flyx-sync-db` | Watch progress, watchlist, user preferences | Sync Worker |
+
+### Updating wrangler.toml
+
+After creating databases, update the `database_id` in each `wrangler.toml`:
+
+**Root `wrangler.toml`:**
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "flyx-admin-db"
+database_id = "YOUR-ADMIN-DB-ID"
+```
+
+**`cf-analytics-worker/wrangler.toml`:**
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "flyx-analytics-db"
+database_id = "YOUR-ANALYTICS-DB-ID"
+```
+
+**`cf-sync-worker/wrangler.toml`:**
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "flyx-sync-db"
+database_id = "YOUR-SYNC-DB-ID"
+```
+
+### Database Commands
+
+```bash
+# Initialize admin database
+npm run d1:init
+
+# Initialize locally (for development)
+npm run d1:init:local
+
+# Query database directly
+wrangler d1 execute flyx-admin-db --command="SELECT * FROM admin_users"
+```
 
 ---
 
@@ -199,56 +223,40 @@ Open [http://localhost:3000](http://localhost:3000)
 | `TMDB_API_KEY` | TMDB Bearer token (Read Access Token) |
 | `NEXT_PUBLIC_TMDB_API_KEY` | TMDB API key (v3 auth) |
 
-### Optional (Enhanced Features)
+### Cloudflare Worker URLs
 
 | Variable | Description |
 |----------|-------------|
-| `NEXT_PUBLIC_CF_SYNC_URL` | Sync Worker URL (cross-device sync) |
+| `NEXT_PUBLIC_CF_SYNC_URL` | Sync Worker URL for cross-device sync |
 | `NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL` | Analytics Worker URL |
-| `NEXT_PUBLIC_CF_STREAM_PROXY_URL` | Stream proxy for HLS content |
-| `NEXT_PUBLIC_CF_TV_PROXY_URL` | Live TV proxy URL |
-| `DATABASE_URL` | Neon PostgreSQL (alternative to D1) |
+| `NEXT_PUBLIC_CF_PROXY_URL` | Media proxy worker URL |
 
-See [.env.example](.env.example) for all options.
+### Optional
+
+| Variable | Description |
+|----------|-------------|
+| `JWT_SECRET` | Secret for admin JWT tokens |
+| `RPI_PROXY_URL` | RPI proxy URL for DLHD streams |
+| `RPI_PROXY_KEY` | RPI proxy authentication key |
 
 ---
 
-## Architecture
+## Local Development
 
-### Vercel + Cloudflare Workers
-```
-┌─────────────────┐     ┌──────────────────────────────────────┐
-│                 │     │         Cloudflare Edge              │
-│   Vercel        │     │  ┌─────────────┐  ┌──────────────┐  │
-│   (Next.js)     │────▶│  │ Sync Worker │  │Analytics     │  │
-│                 │     │  │ + D1 SQLite │  │Worker + D1   │  │
-└─────────────────┘     │  └─────────────┘  └──────────────┘  │
-                        │  ┌─────────────────────────────────┐ │
-                        │  │      Stream Proxy Worker        │ │
-                        │  └─────────────────────────────────┘ │
-                        └──────────────────────────────────────┘
-```
+```bash
+# Start Next.js dev server
+npm run dev
 
-### 100% Cloudflare Stack
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Cloudflare Edge                           │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │              Cloudflare Pages (Next.js)                │ │
-│  │              via @opennextjs/cloudflare                │ │
-│  └────────────────────────────────────────────────────────┘ │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ Sync Worker │  │Analytics     │  │  Stream Proxy     │  │
-│  │ + D1 SQLite │  │Worker + D1   │  │  Worker           │  │
-│  └─────────────┘  └──────────────┘  └───────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+# Preview Cloudflare build locally
+npm run preview:cloudflare
+
+# Run workers locally
+cd cf-analytics-worker && npm run dev
+cd cf-sync-worker && npm run dev
+cd cloudflare-proxy && npm run dev
 ```
 
-**Why Cloudflare?**
-- **Free tier**: 100k requests/day, 5GB D1 storage, unlimited Pages bandwidth
-- **Global edge**: <50ms latency worldwide
-- **No cold starts**: Always warm, instant responses
-- **SQLite at edge**: D1 is SQLite, simple and fast
+Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
@@ -258,7 +266,9 @@ Access at `/admin` after deployment.
 
 **Default credentials:** `vynx` / `defaultPassword`
 
-⚠️ Change password immediately after first login!
+⚠️ **Change password immediately after first login!**
+
+### Admin Commands
 
 ```bash
 # Create new admin
@@ -266,20 +276,44 @@ npm run admin:create <username> <password>
 
 # Reset password  
 npm run admin:reset-password <username> <new-password>
+
+# List all admins
+npm run admin:list
+
+# Delete admin
+npm run admin:delete <username>
 ```
 
 ---
 
-## Tech Stack
+## Architecture
 
-| Category | Technology |
-|----------|------------|
-| Framework | Next.js 15 (App Router) |
-| Language | TypeScript |
-| Styling | Tailwind CSS |
-| Edge Database | Cloudflare D1 (SQLite) |
-| Deployment | Vercel or Cloudflare Pages |
-| API | TMDB |
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    Cloudflare Edge Network                   │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │              Cloudflare Pages (Next.js)                │ │
+│  │              via @opennextjs/cloudflare                │ │
+│  │                        │                               │ │
+│  │                   D1: flyx-admin-db                    │ │
+│  └────────────────────────────────────────────────────────┘ │
+│                           │                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │ Sync Worker │  │  Analytics   │  │   Media Proxy     │  │
+│  │             │  │   Worker     │  │     Worker        │  │
+│  │ D1: sync-db │  │ D1: analytics│  │                   │  │
+│  └─────────────┘  └──────────────┘  └───────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### Why Cloudflare?
+
+- **Free tier**: 100k requests/day, 5GB D1 storage, unlimited Pages bandwidth
+- **Global edge**: <50ms latency worldwide with 300+ edge locations
+- **No cold starts**: Always warm, instant responses
+- **SQLite at edge**: D1 is SQLite, simple and fast
+- **Automatic SSL**: Free SSL certificates
+- **Preview deployments**: Automatic previews for PRs
 
 ---
 
@@ -292,32 +326,76 @@ flyx-main/
 │   ├── admin/             # Admin panel
 │   ├── api/               # API routes
 │   ├── components/        # React components
-│   └── lib/               # Utilities & services
+│   ├── lib/               # Utilities & services
+│   │   ├── db/           # D1 database utilities
+│   │   ├── analytics/    # Analytics client
+│   │   └── sync/         # Sync client
+│   └── types/             # TypeScript types
 ├── cf-analytics-worker/   # Analytics Worker + D1
 ├── cf-sync-worker/        # Sync Worker + D1
 ├── cloudflare-proxy/      # Stream proxy worker
-├── server/                # Server utilities
-└── scripts/               # CLI scripts
+├── scripts/               # CLI scripts
+│   ├── init-d1-admin.sql # D1 schema initialization
+│   └── create-admin.js   # Admin user creation
+├── wrangler.toml          # Main app Cloudflare config
+└── open-next.config.ts    # OpenNext configuration
 ```
 
 ---
 
-## Scripts
+## Troubleshooting
+
+### Build Fails
 
 ```bash
-# Development
-npm run dev              # Start dev server
-npm run build            # Build for Vercel
-npm run build:cloudflare # Build for Cloudflare Pages
-npm run deploy:cloudflare # Deploy to Cloudflare Pages
-npm run preview:cloudflare # Preview Cloudflare build locally
+# Clear build cache and rebuild
+rm -rf .open-next .next
+npm run build:cloudflare
+```
 
-# Database
-npm run db:init          # Initialize database
-npm run db:migrate       # Run migrations
+### D1 Database Issues
 
-# Admin
-npm run admin:create     # Create admin user
+```bash
+# Check database exists
+wrangler d1 list
+
+# Check tables
+wrangler d1 execute flyx-admin-db --command="SELECT name FROM sqlite_master WHERE type='table'"
+
+# Re-initialize schema
+npm run d1:init
+```
+
+### Worker Deployment Issues
+
+```bash
+# Check worker status
+wrangler deployments list
+
+# View worker logs
+cd cf-analytics-worker && wrangler tail
+```
+
+### Environment Variables Not Working
+
+1. Verify secrets are set: `wrangler secret list`
+2. Check `wrangler.toml` has correct `[vars]` section
+3. Redeploy after adding secrets
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test suites
+npm run test:livetv
+npm run test:livetv:api
+
+# Type checking
+npm run type-check
 ```
 
 ---
@@ -326,6 +404,7 @@ npm run admin:create     # Create admin user
 
 - **Movie & TV Data** - [TMDB](https://www.themoviedb.org/)
 - **IPTV Help** - [MoldyTaint/Cinephage](https://github.com/MoldyTaint/Cinephage)
+- **Cloudflare Adapter** - [@opennextjs/cloudflare](https://opennext.js.org/cloudflare)
 
 ## License
 

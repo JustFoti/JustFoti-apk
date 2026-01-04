@@ -1,12 +1,11 @@
 /**
  * Admin Sessions API
  * GET /api/admin/sessions - Get watch sessions with pagination
- * 
- * Implements standardized response format per Requirements 16.2, 16.3, 16.4, 16.5
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
  */
 
 import { NextRequest } from 'next/server';
-import { initializeDB } from '@/app/lib/db/neon-connection';
+import { getAdapter } from '@/lib/db/adapter';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 import {
   successResponse,
@@ -15,23 +14,21 @@ import {
 } from '@/app/lib/utils/api-response';
 
 export async function GET(req: NextRequest) {
-    try {
-        // Verify admin authentication - Requirements 16.3
-        const authResult = await verifyAdminAuth(req);
-        if (!authResult.success) {
-            return unauthorizedResponse(authResult.error || 'Authentication required');
-        }
+  try {
+    const authResult = await verifyAdminAuth(req);
+    if (!authResult.success) {
+      return unauthorizedResponse(authResult.error || 'Authentication required');
+    }
 
-        const searchParams = req.nextUrl.searchParams;
-        const page = parseInt(searchParams.get('page') || '1');
-        const limit = parseInt(searchParams.get('limit') || '20');
-        const offset = (page - 1) * limit;
+    const searchParams = req.nextUrl.searchParams;
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = parseInt(searchParams.get('limit') || '20');
+    const offset = (page - 1) * limit;
 
-        const db = await initializeDB();
+    const adapter = getAdapter();
 
-        // Fetch sessions with user and content details
-        const sessionsQuery = `
-      SELECT 
+    const sessionsResult = await adapter.query<Record<string, unknown>>(
+      `SELECT 
         ws.id,
         ws.user_id,
         ws.content_id,
@@ -45,40 +42,31 @@ export async function GET(req: NextRequest) {
       FROM watch_sessions ws
       LEFT JOIN users u ON ws.user_id = u.id
       ORDER BY ws.started_at DESC
-      LIMIT $1 OFFSET $2
-    `;
+      LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
 
-        const countQuery = `SELECT COUNT(*) as total FROM watch_sessions`;
+    const countResult = await adapter.query<{ total: number }>(
+      'SELECT COUNT(*) as total FROM watch_sessions'
+    );
 
-        // Use getAdapter().query() as the db instance itself doesn't expose query()
-        const sessionsResult = await db.getAdapter().query(sessionsQuery, [limit, offset]);
-        const countResult = await db.getAdapter().query(countQuery);
+    const sessions = sessionsResult.data || [];
+    const total = parseInt(String((countResult.data || [])[0]?.total)) || 0;
 
-        // Handle potential difference in return type (rows array vs result object)
-        const sessions = Array.isArray(sessionsResult) ? sessionsResult : (sessionsResult as any).rows || [];
-
-        // Handle count result safely
-        let total = 0;
-        if (Array.isArray(countResult) && countResult.length > 0) {
-            total = parseInt(countResult[0].total || countResult[0].count || '0');
-        } else if ((countResult as any).rows && (countResult as any).rows.length > 0) {
-            total = parseInt((countResult as any).rows[0].total || (countResult as any).rows[0].count || '0');
+    return successResponse(
+      { sessions },
+      {
+        pagination: {
+          page,
+          pageSize: limit,
+          total,
+          hasMore: page * limit < total,
         }
+      }
+    );
 
-        return successResponse(
-            { sessions },
-            {
-                pagination: {
-                    page,
-                    pageSize: limit,
-                    total,
-                    hasMore: page * limit < total,
-                }
-            }
-        );
-
-    } catch (error) {
-        console.error('Failed to fetch sessions:', error);
-        return internalErrorResponse('Failed to fetch sessions', error instanceof Error ? error : undefined);
-    }
+  } catch (error) {
+    console.error('Failed to fetch sessions:', error);
+    return internalErrorResponse('Failed to fetch sessions', error instanceof Error ? error : undefined);
+  }
 }

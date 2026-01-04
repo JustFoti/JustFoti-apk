@@ -85,8 +85,15 @@ export const searchRateLimiter = new APIRateLimiter(30, 60 * 1000);   // 30 requ
 
 /**
  * Get client IP from request headers
+ * Supports both Cloudflare and other proxy headers
  */
 export function getClientIP(request: Request): string {
+  // Cloudflare-specific header (most reliable when using Cloudflare)
+  const cfConnectingIP = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIP) {
+    return cfConnectingIP;
+  }
+
   // Try various headers that might contain the real IP
   const forwarded = request.headers.get('x-forwarded-for');
   if (forwarded) {

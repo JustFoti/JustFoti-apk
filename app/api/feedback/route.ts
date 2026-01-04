@@ -1,23 +1,13 @@
+/**
+ * Feedback Submission API
+ * POST /api/feedback - Submit user feedback
+ * 
+ * Migrated from Neon PostgreSQL to Cloudflare D1
+ * Requirements: 13.9
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
-
-const sql = neon(process.env.DATABASE_URL || '');
-
-// Ensure feedback table has screenshot column
-let tableChecked = false;
-async function ensureScreenshotColumn() {
-  if (tableChecked) return;
-  try {
-    // Try to add the column if it doesn't exist
-    await sql`
-      ALTER TABLE feedback 
-      ADD COLUMN IF NOT EXISTS screenshot TEXT
-    `;
-  } catch {
-    // Column might already exist or table structure is different
-  }
-  tableChecked = true;
-}
+import { getAdapter } from '@/app/lib/db/adapter';
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,19 +55,37 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get client IP for rate limiting
-    const ip = request.headers.get('x-forwarded-for')?.split(',')[0] || 
+    // Get client IP - prefer Cloudflare's cf-connecting-ip header
+    const ip = request.headers.get('cf-connecting-ip') ||
+               request.headers.get('x-forwarded-for')?.split(',')[0] || 
                request.headers.get('x-real-ip') || 
                'unknown';
 
-    // Ensure screenshot column exists
-    await ensureScreenshotColumn();
+    // Get database adapter (uses D1 in Cloudflare environment)
+    const db = getAdapter();
 
-    // Store feedback in database
-    await sql`
-      INSERT INTO feedback (type, message, email, url, user_agent, ip_address, screenshot, created_at)
-      VALUES (${type}, ${message.trim()}, ${email || null}, ${url || null}, ${userAgent || null}, ${ip}, ${screenshot || null}, NOW())
-    `;
+    // Store feedback in database using D1-compatible SQL
+    const result = await db.execute(
+      `INSERT INTO feedback (type, message, email, url, user_agent, ip_address, screenshot, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'new', datetime('now'), datetime('now'))`,
+      [
+        type,
+        message.trim(),
+        email || null,
+        url || null,
+        userAgent || null,
+        ip,
+        screenshot || null
+      ]
+    );
+
+    if (!result.success) {
+      console.error('Error storing feedback:', result.error);
+      return NextResponse.json(
+        { error: 'Failed to submit feedback' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -1,10 +1,11 @@
 /**
  * Debug Traffic API - Check traffic and presence data
  * GET /api/admin/debug/traffic
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getAdapter } from '@/lib/db/adapter';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 
 export async function GET(request: NextRequest) {
@@ -14,17 +15,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
-
+    const adapter = getAdapter();
     const now = Date.now();
     const thirtyMinutesAgo = now - 30 * 60 * 1000;
     const twoMinutesAgo = now - 2 * 60 * 1000;
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
 
-    const results: Record<string, any> = {
+    const results: Record<string, unknown> = {
       currentTime: now,
       currentTimeISO: new Date(now).toISOString(),
       thirtyMinutesAgo,
@@ -33,117 +30,63 @@ export async function GET(request: NextRequest) {
 
     // Check server_hits table
     try {
-      const serverHitsCount = await adapter.query('SELECT COUNT(*) as count FROM server_hits');
+      const serverHitsResult = await adapter.query<{ count: number }>('SELECT COUNT(*) as count FROM server_hits');
+      const totalCount = parseInt(String((serverHitsResult.data || [])[0]?.count)) || 0;
+      
+      const last24hResult = await adapter.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM server_hits WHERE timestamp > ?',
+        [oneDayAgo]
+      );
+      
       results.serverHits = {
-        totalCount: parseInt(serverHitsCount[0]?.count) || 0,
+        totalCount,
+        last24hCount: parseInt(String((last24hResult.data || [])[0]?.count)) || 0,
       };
-
-      if (results.serverHits.totalCount > 0) {
-        // Get recent hits
-        const recentHits = isNeon
-          ? await adapter.query('SELECT * FROM server_hits ORDER BY timestamp DESC LIMIT 5')
-          : await adapter.query('SELECT * FROM server_hits ORDER BY timestamp DESC LIMIT 5');
-        results.serverHits.recentSamples = recentHits;
-
-        // Get hits in last 24h
-        const last24h = isNeon
-          ? await adapter.query('SELECT COUNT(*) as count FROM server_hits WHERE timestamp > $1', [oneDayAgo])
-          : await adapter.query('SELECT COUNT(*) as count FROM server_hits WHERE timestamp > ?', [oneDayAgo]);
-        results.serverHits.last24hCount = parseInt(last24h[0]?.count) || 0;
-      }
     } catch (e) {
       results.serverHits = { error: String(e) };
     }
 
-    // Check referrer_stats table
+    // Check live_activity
     try {
-      const referrerCount = await adapter.query('SELECT COUNT(*) as count FROM referrer_stats');
-      results.referrerStats = {
-        totalCount: parseInt(referrerCount[0]?.count) || 0,
-      };
+      const totalLiveResult = await adapter.query<{ count: number }>('SELECT COUNT(*) as count FROM live_activity');
+      const activeResult = await adapter.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM live_activity WHERE is_active = 1'
+      );
+      const recentActiveResult = await adapter.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ?',
+        [twoMinutesAgo]
+      );
+      const thirtyMinResult = await adapter.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ?',
+        [thirtyMinutesAgo]
+      );
 
-      if (results.referrerStats.totalCount > 0) {
-        const topReferrers = await adapter.query('SELECT * FROM referrer_stats ORDER BY hit_count DESC LIMIT 5');
-        results.referrerStats.topReferrers = topReferrers;
-      }
-    } catch (e) {
-      results.referrerStats = { error: String(e) };
-    }
-
-    // Check live_activity - ACTIVE users
-    try {
-      // Total records
-      const totalLive = await adapter.query('SELECT COUNT(*) as count FROM live_activity');
       results.liveActivity = {
-        totalRecords: parseInt(totalLive[0]?.count) || 0,
+        totalRecords: parseInt(String((totalLiveResult.data || [])[0]?.count)) || 0,
+        activeRecords: parseInt(String((activeResult.data || [])[0]?.count)) || 0,
+        activeInLast2Min: parseInt(String((recentActiveResult.data || [])[0]?.count)) || 0,
+        activeInLast30Min: parseInt(String((thirtyMinResult.data || [])[0]?.count)) || 0,
       };
-
-      // Active records (is_active = true)
-      const activeQuery = isNeon
-        ? 'SELECT COUNT(*) as count FROM live_activity WHERE is_active = TRUE'
-        : 'SELECT COUNT(*) as count FROM live_activity WHERE is_active = 1';
-      const activeCount = await adapter.query(activeQuery);
-      results.liveActivity.activeRecords = parseInt(activeCount[0]?.count) || 0;
-
-      // Active in last 2 minutes
-      const recentActiveQuery = isNeon
-        ? 'SELECT COUNT(*) as count FROM live_activity WHERE is_active = TRUE AND last_heartbeat >= $1'
-        : 'SELECT COUNT(*) as count FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ?';
-      const recentActive = await adapter.query(recentActiveQuery, [twoMinutesAgo]);
-      results.liveActivity.activeInLast2Min = parseInt(recentActive[0]?.count) || 0;
-
-      // Active in last 30 minutes
-      const thirtyMinQuery = isNeon
-        ? 'SELECT COUNT(*) as count FROM live_activity WHERE is_active = TRUE AND last_heartbeat >= $1'
-        : 'SELECT COUNT(*) as count FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ?';
-      const thirtyMinActive = await adapter.query(thirtyMinQuery, [thirtyMinutesAgo]);
-      results.liveActivity.activeInLast30Min = parseInt(thirtyMinActive[0]?.count) || 0;
-
-      // Get most recent heartbeats
-      const recentHeartbeats = isNeon
-        ? await adapter.query('SELECT user_id, activity_type, last_heartbeat, is_active FROM live_activity ORDER BY last_heartbeat DESC LIMIT 5')
-        : await adapter.query('SELECT user_id, activity_type, last_heartbeat, is_active FROM live_activity ORDER BY last_heartbeat DESC LIMIT 5');
-      
-      results.liveActivity.mostRecentHeartbeats = recentHeartbeats.map((r: any) => ({
-        ...r,
-        last_heartbeat_iso: new Date(parseInt(r.last_heartbeat)).toISOString(),
-        age_seconds: Math.round((now - parseInt(r.last_heartbeat)) / 1000),
-      }));
-
-      // Check for future timestamps (bug indicator)
-      const futureQuery = isNeon
-        ? 'SELECT COUNT(*) as count FROM live_activity WHERE last_heartbeat > $1'
-        : 'SELECT COUNT(*) as count FROM live_activity WHERE last_heartbeat > ?';
-      const futureCount = await adapter.query(futureQuery, [now + 60000]); // 1 minute in future
-      results.liveActivity.futureTimestamps = parseInt(futureCount[0]?.count) || 0;
-
     } catch (e) {
       results.liveActivity = { error: String(e) };
     }
 
-    // Check user_activity recent data
+    // Check user_activity
     try {
-      const recentUsers = isNeon
-        ? await adapter.query('SELECT COUNT(*) as count FROM user_activity WHERE last_seen >= $1', [thirtyMinutesAgo])
-        : await adapter.query('SELECT COUNT(*) as count FROM user_activity WHERE last_seen >= ?', [thirtyMinutesAgo]);
+      const recentUsersResult = await adapter.query<{ count: number }>(
+        'SELECT COUNT(*) as count FROM user_activity WHERE last_seen >= ?',
+        [thirtyMinutesAgo]
+      );
       results.userActivity = {
-        activeInLast30Min: parseInt(recentUsers[0]?.count) || 0,
+        activeInLast30Min: parseInt(String((recentUsersResult.data || [])[0]?.count)) || 0,
       };
-
-      // Most recent user activity
-      const recentUserSamples = await adapter.query('SELECT user_id, last_seen, country, human_score FROM user_activity ORDER BY last_seen DESC LIMIT 5');
-      results.userActivity.mostRecent = recentUserSamples.map((r: any) => ({
-        ...r,
-        last_seen_iso: new Date(parseInt(r.last_seen)).toISOString(),
-        age_seconds: Math.round((now - parseInt(r.last_seen)) / 1000),
-      }));
     } catch (e) {
       results.userActivity = { error: String(e) };
     }
 
     return NextResponse.json({
       success: true,
-      databaseType: isNeon ? 'PostgreSQL (Neon)' : 'SQLite',
+      databaseType: 'D1 (SQLite)',
       ...results,
       timestamp: new Date().toISOString(),
     });

@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getAdapter } from '@/app/lib/db/adapter';
 import { getClientIP } from '@/lib/utils/api-rate-limiter';
 
 // GET endpoint for testing
@@ -15,20 +15,18 @@ export async function GET(_request: NextRequest) {
   
   try {
     // Test database connection
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
+    const adapter = getAdapter();
     
     // Test basic query
-    const testQuery = await adapter.query('SELECT 1 as test');
+    const testResult = await adapter.query('SELECT 1 as test');
     
-    console.log(`[${requestId}] Database test successful`, testQuery[0]);
+    console.log(`[${requestId}] Database test successful`, testResult.data?.[0]);
     
     return NextResponse.json({
       success: true,
       message: 'Analytics track endpoint is working',
       database: 'connected',
-      dbType: db.isUsingNeon() ? 'neon' : 'sqlite',
+      dbType: 'd1',
       timestamp: new Date().toISOString(),
       requestId
     });
@@ -195,11 +193,10 @@ export async function POST(request: NextRequest) {
 
     // Step 3: Initialize database
     console.log(`[${requestId}] Step 3: Initializing database`);
-    let db;
+    let adapter;
     
     try {
-      await initializeDB();
-      db = getDB();
+      adapter = getAdapter();
       console.log(`[${requestId}] Database initialized successfully`);
     } catch (dbError) {
       console.error(`[${requestId}] Database initialization failed`, dbError);
@@ -264,7 +261,7 @@ export async function POST(request: NextRequest) {
         };
 
         try {
-          await db.insertAnalyticsEvent({
+          await insertAnalyticsEvent(adapter, {
             id: event.id,
             sessionId: event.sessionId,
             timestamp: event.timestamp,
@@ -302,7 +299,7 @@ export async function POST(request: NextRequest) {
       const uniqueUserArray = Array.from(uniqueUsers);
       
       for (const userId of uniqueUserArray) {
-        await db.upsertUserActivity({
+        await upsertUserActivity(adapter, {
           userId,
           sessionId,
           deviceType: userAgent.includes('Mobile') ? 'mobile' : 'desktop',
@@ -434,6 +431,76 @@ function hashIP(ip: string): string {
   }
 }
 
+// Insert analytics event using adapter
+async function insertAnalyticsEvent(adapter: any, event: {
+  id: string;
+  sessionId: string;
+  timestamp: number;
+  eventType: string;
+  metadata?: Record<string, unknown>;
+  userId?: string;
+}): Promise<void> {
+  await adapter.execute(
+    `INSERT INTO analytics_events (id, session_id, user_id, timestamp, event_type, metadata, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      event.id,
+      event.sessionId,
+      event.userId || null,
+      event.timestamp,
+      event.eventType,
+      event.metadata ? JSON.stringify(event.metadata) : null,
+      Date.now()
+    ]
+  );
+}
+
+// Upsert user activity using adapter
+async function upsertUserActivity(adapter: any, data: {
+  userId: string;
+  sessionId: string;
+  deviceType?: string;
+  userAgent?: string;
+  country?: string;
+  city?: string;
+  region?: string;
+}): Promise<void> {
+  const now = Date.now();
+  const id = `ua_${data.userId}`;
+  
+  const existingResult = await adapter.query(
+    'SELECT id FROM user_activity WHERE user_id = ?',
+    [data.userId]
+  );
+
+  if (existingResult.data && existingResult.data.length > 0) {
+    await adapter.execute(
+      `UPDATE user_activity SET 
+        session_id = ?, last_seen = ?, device_type = COALESCE(?, device_type),
+        user_agent = COALESCE(?, user_agent), country = COALESCE(?, country),
+        city = COALESCE(?, city), region = COALESCE(?, region),
+        total_sessions = total_sessions + 1, updated_at = ?
+      WHERE user_id = ?`,
+      [
+        data.sessionId, now, data.deviceType || null, data.userAgent || null,
+        data.country || null, data.city || null, data.region || null, now, data.userId
+      ]
+    );
+  } else {
+    await adapter.execute(
+      `INSERT INTO user_activity (
+        id, user_id, session_id, first_seen, last_seen, total_sessions,
+        device_type, user_agent, country, city, region, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id, data.userId, data.sessionId, now, now,
+        data.deviceType || 'unknown', data.userAgent || null,
+        data.country || null, data.city || null, data.region || null, now, now
+      ]
+    );
+  }
+}
+
 // Update content statistics with debugging
 async function updateContentStats(event: { content_id?: string; content_type?: string; watch_time?: number }, requestId: string) {
   try {
@@ -448,55 +515,30 @@ async function updateContentStats(event: { content_id?: string; content_type?: s
       watch_time: event.watch_time
     });
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
+    const adapter = getAdapter();
     
     const watchTime = Math.round(event.watch_time || 0);
     const now = Date.now();
 
-    // Use different SQL syntax based on database type
-    if (db.isUsingNeon()) {
-      // PostgreSQL syntax for Neon
-      await adapter.execute(`
-        INSERT INTO content_stats (content_id, content_type, view_count, total_watch_time, last_viewed, updated_at)
-        VALUES ($1, $2, 1, $3, $4, $5)
-        ON CONFLICT(content_id) DO UPDATE SET
-          view_count = content_stats.view_count + 1,
-          total_watch_time = content_stats.total_watch_time + $6,
-          last_viewed = $7,
-          updated_at = $8
-      `, [
-        event.content_id,
-        event.content_type || 'unknown',
-        watchTime,
-        now,
-        now,
-        watchTime,
-        now,
-        now
-      ]);
-    } else {
-      // SQLite syntax
-      await adapter.execute(`
-        INSERT INTO content_stats (content_id, content_type, view_count, total_watch_time, last_viewed, updated_at)
-        VALUES (?, ?, 1, ?, ?, ?)
-        ON CONFLICT(content_id) DO UPDATE SET
-          view_count = view_count + 1,
-          total_watch_time = total_watch_time + ?,
-          last_viewed = ?,
-          updated_at = ?
-      `, [
-        event.content_id,
-        event.content_type || 'unknown',
-        watchTime,
-        now,
-        now,
-        watchTime,
-        now,
-        now
-      ]);
-    }
+    // SQLite syntax for D1
+    await adapter.execute(`
+      INSERT INTO content_stats (content_id, content_type, view_count, total_watch_time, last_viewed, updated_at)
+      VALUES (?, ?, 1, ?, ?, ?)
+      ON CONFLICT(content_id) DO UPDATE SET
+        view_count = view_count + 1,
+        total_watch_time = total_watch_time + ?,
+        last_viewed = ?,
+        updated_at = ?
+    `, [
+      event.content_id,
+      event.content_type || 'unknown',
+      watchTime,
+      now,
+      now,
+      watchTime,
+      now,
+      now
+    ]);
     
     console.log(`[${requestId}] Content stats updated successfully`, {
       content_id: event.content_id,

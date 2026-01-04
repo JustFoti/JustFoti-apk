@@ -61,6 +61,12 @@ bindings = [
   { name = "ANALYTICS_DO", class_name = "AnalyticsDO" }
 ]
 
+# =============================================================================
+# CRON TRIGGERS - Scheduled tasks
+# =============================================================================
+[triggers]
+crons = ["0 0 * * *"]  # Daily at midnight UTC - aggregate daily metrics
+
 # Development environment
 [env.development]
 name = "flyx-analytics-dev"

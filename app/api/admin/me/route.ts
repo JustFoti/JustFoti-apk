@@ -1,23 +1,21 @@
 /**
  * Admin User Info API
  * GET /api/admin/me - Get current admin user info with roles and permissions
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
+ * Requirements: 6.3
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/server-connection';
+import { getAdapter } from '@/lib/db/adapter';
 import { AdminAuthService } from '@/app/admin/middleware/auth-server';
 
 export async function GET(request: NextRequest) {
   const requestId = `admin_me_${Date.now()}`;
   
-  console.log(`[${requestId}] Admin me endpoint called`);
-  
   try {
-    // Use the enhanced authentication service
     const authResult = await AdminAuthService.authenticateRequest(request);
     
     if (!authResult.success || !authResult.user) {
-      console.log(`[${requestId}] Authentication failed:`, authResult.error);
       return NextResponse.json(
         { error: authResult.error || 'Authentication required' },
         { status: 401 }
@@ -25,34 +23,18 @@ export async function GET(request: NextRequest) {
     }
 
     const user = authResult.user;
-    console.log(`[${requestId}] Successfully authenticated user:`, user.username);
-
-    // Update last login timestamp
     const now = Date.now();
     
     try {
-      await initializeDB();
-      const db = getDB();
-      const adapter = db.getAdapter();
-      
-      if (db.isUsingNeon()) {
-        await adapter.execute(
-          'UPDATE admin_users SET last_login = $1 WHERE id = $2',
-          [now, user.id]
-        );
-      } else {
-        await adapter.execute(
-          'UPDATE admin_users SET last_login = ? WHERE id = ?',
-          [now, user.id]
-        );
-      }
-      console.log(`[${requestId}] Updated last login for user:`, user.username);
+      const adapter = getAdapter();
+      await adapter.execute(
+        'UPDATE admin_users SET last_login = ? WHERE id = ?',
+        [now, user.id]
+      );
     } catch (updateError) {
       console.error(`[${requestId}] Failed to update last login:`, updateError);
-      // Don't fail the request for this
     }
 
-    // Return enhanced user info with permissions
     const userInfo = {
       id: user.id,
       username: user.username,
@@ -64,8 +46,6 @@ export async function GET(request: NextRequest) {
       permissionScope: AdminAuthService.getUserPermissionScope(user)
     };
 
-    console.log(`[${requestId}] Successfully retrieved enhanced user info for:`, user.username);
-    
     return NextResponse.json({
       success: true,
       user: userInfo,
@@ -96,7 +76,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Handle OPTIONS for CORS
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,

@@ -1,19 +1,21 @@
 /**
  * Admin Password Change API
  * POST /api/admin/change-password - Change admin password
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
+ * Requirements: 6.3
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { initializeDB, getDB } from '@/lib/db/server-connection';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const ADMIN_COOKIE = 'admin_token';
+import { getAdapter } from '@/lib/db/adapter';
+import { 
+  verifyJWTWithFallback, 
+  verifyPasswordWithFallback, 
+  hashPassword,
+  ADMIN_COOKIE 
+} from '@/lib/utils/admin-auth';
 
 export async function POST(request: NextRequest) {
   try {
-    // Get token from cookie or Authorization header
     const token = request.cookies.get(ADMIN_COOKIE)?.value || 
                  request.headers.get('Authorization')?.replace('Bearer ', '');
     
@@ -24,11 +26,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify JWT token
-    let decoded;
-    try {
-      decoded = jwt.verify(token, JWT_SECRET) as { userId: string; username: string };
-    } catch {
+    const decoded = await verifyJWTWithFallback(token);
+    
+    if (!decoded) {
       return NextResponse.json(
         { error: 'Invalid or expired token' },
         { status: 401 }
@@ -51,22 +51,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize database and get admin user
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
+    const adapter = getAdapter();
     
-    let adminQuery, updateQuery;
-    if (db.isUsingNeon()) {
-      adminQuery = 'SELECT * FROM admin_users WHERE id = $1';
-      updateQuery = 'UPDATE admin_users SET password_hash = $1 WHERE id = $2';
-    } else {
-      adminQuery = 'SELECT * FROM admin_users WHERE id = ?';
-      updateQuery = 'UPDATE admin_users SET password_hash = ? WHERE id = ?';
-    }
-    
-    const adminResult = await adapter.query(adminQuery, [decoded.userId]);
-    const admin = adminResult[0];
+    // Query for admin user (D1/SQLite syntax)
+    const adminResult = await adapter.query<Record<string, unknown>>(
+      'SELECT * FROM admin_users WHERE id = ?',
+      [decoded.userId]
+    );
+    const admin = (adminResult.data || [])[0];
 
     if (!admin) {
       return NextResponse.json(
@@ -75,17 +67,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify current password
-    if (!bcrypt.compareSync(currentPassword, admin.password_hash)) {
+    const isValid = await verifyPasswordWithFallback(currentPassword, admin.password_hash as string);
+    
+    if (!isValid) {
       return NextResponse.json(
         { error: 'Current password is incorrect' },
         { status: 401 }
       );
     }
 
-    // Hash new password and update
-    const newPasswordHash = bcrypt.hashSync(newPassword, 10);
-    await adapter.execute(updateQuery, [newPasswordHash, decoded.userId]);
+    const newPasswordHash = await hashPassword(newPassword);
+    
+    await adapter.execute(
+      'UPDATE admin_users SET password_hash = ? WHERE id = ?',
+      [newPasswordHash, decoded.userId]
+    );
 
     return NextResponse.json({
       success: true,

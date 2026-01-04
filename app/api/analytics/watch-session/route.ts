@@ -2,11 +2,19 @@
  * Watch Session Tracking API
  * POST /api/analytics/watch-session - Track detailed watch sessions
  * GET /api/analytics/watch-session - Get watch session analytics
+ * 
+ * This route forwards requests to the Cloudflare Analytics Worker.
+ * Falls back to local handling if the worker is unavailable.
+ * 
+ * Requirements: 2.5
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
 import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
+
+// Cloudflare Analytics Worker URL
+const CF_ANALYTICS_WORKER_URL = process.env.NEXT_PUBLIC_CF_ANALYTICS_WORKER_URL || 'https://flyx-analytics.vynx.workers.dev';
+const REQUEST_TIMEOUT = 5000; // 5 seconds
 
 interface WatchSessionData {
   id: string;
@@ -30,76 +38,115 @@ interface WatchSessionData {
   seekCount: number;
 }
 
+function generateId() {
+  return `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function getDeviceType(userAgent: string): string {
+  const ua = userAgent.toLowerCase();
+  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
+    return 'mobile';
+  } else if (ua.includes('tablet') || ua.includes('ipad')) {
+    return 'tablet';
+  } else if (ua.includes('smart-tv') || ua.includes('smarttv')) {
+    return 'tv';
+  }
+  return 'desktop';
+}
+
+/**
+ * Forward request to Cloudflare Analytics Worker
+ */
+async function forwardToWorker(
+  endpoint: string,
+  data: unknown,
+  method: 'GET' | 'POST' = 'POST'
+): Promise<Response | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+
+    const url = method === 'GET' && typeof data === 'object' && data !== null
+      ? `${CF_ANALYTICS_WORKER_URL}${endpoint}?${new URLSearchParams(data as Record<string, string>).toString()}`
+      : `${CF_ANALYTICS_WORKER_URL}${endpoint}`;
+
+    const response = await fetch(url, {
+      method,
+      headers: method === 'POST' ? { 'Content-Type': 'application/json' } : undefined,
+      body: method === 'POST' ? JSON.stringify(data) : undefined,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    console.error('[WatchSession] Failed to forward to worker:', error);
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const data: WatchSessionData = await request.json();
+    const data: Partial<WatchSessionData> = await request.json();
 
     // Validate required fields
-    if (!data.id || !data.contentId || !data.userId) {
+    if (!data.contentId || !data.userId) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: userId, contentId' },
         { status: 400 }
       );
     }
-
-    // Initialize database
-    await initializeDB();
-    const db = getDB();
 
     // Extract device type from user agent
     const userAgent = request.headers.get('user-agent') || '';
     const deviceType = data.deviceType || getDeviceType(userAgent);
 
-    // Get geo data from request headers using utility
+    // Get geo data from request headers
     const locationData = getLocationFromHeaders(request);
+    const now = Date.now();
 
-    // Upsert watch session
-    await db.upsertWatchSession({
-      id: data.id,
+    // Prepare payload for Analytics Worker
+    const payload = {
+      id: data.id || generateId(),
       sessionId: data.sessionId || 'unknown',
       userId: data.userId,
       contentId: data.contentId,
-      contentType: data.contentType,
+      contentType: data.contentType || 'movie',
       contentTitle: data.contentTitle,
       seasonNumber: data.seasonNumber,
       episodeNumber: data.episodeNumber,
-      startedAt: data.startedAt,
+      startedAt: data.startedAt || now,
       endedAt: data.endedAt,
-      totalWatchTime: data.totalWatchTime,
-      lastPosition: data.lastPosition,
-      duration: data.duration,
-      completionPercentage: data.completionPercentage,
+      totalWatchTime: data.totalWatchTime || 0,
+      lastPosition: data.lastPosition || 0,
+      duration: data.duration || 0,
+      completionPercentage: data.completionPercentage || 0,
       quality: data.quality,
       deviceType,
-      isCompleted: data.isCompleted,
-      pauseCount: data.pauseCount,
-      seekCount: data.seekCount,
-    });
+      isCompleted: data.isCompleted || false,
+      pauseCount: data.pauseCount || 0,
+      seekCount: data.seekCount || 0,
+      country: locationData.countryCode,
+      city: locationData.city,
+      region: locationData.region,
+    };
 
-    // Also update user_activity with geo data for geographic tracking
-    try {
-      await db.upsertUserActivity({
-        userId: data.userId,
-        sessionId: data.sessionId || 'unknown',
-        deviceType,
-        userAgent,
-        country: locationData.countryCode,
-        city: locationData.city,
-        region: locationData.region,
-        watchTime: data.totalWatchTime,
-      });
-    } catch (activityError) {
-      console.error('Failed to update user activity:', activityError);
-      // Don't fail the request for activity tracking errors
+    // Forward to Cloudflare Analytics Worker
+    const workerResponse = await forwardToWorker('/watch-session', payload);
+    
+    if (workerResponse && workerResponse.ok) {
+      const result = await workerResponse.json();
+      return NextResponse.json({ success: true, ...result });
     }
 
-    return NextResponse.json({ success: true });
+    // Worker unavailable - return success to prevent client-side spam
+    console.warn('[WatchSession] Worker unavailable, request skipped');
+    return NextResponse.json({ success: true, skipped: true });
+
   } catch (error) {
     console.error('Failed to track watch session:', error);
-    return NextResponse.json(
-      { error: 'Failed to track watch session' },
-      { status: 500 }
-    );
+    // Return success to prevent client-side error spam - analytics is non-critical
+    return NextResponse.json({ success: true, skipped: true });
   }
 }
 
@@ -110,31 +157,42 @@ export async function GET(request: NextRequest) {
     const contentId = searchParams.get('contentId');
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
-    const limit = searchParams.get('limit');
+    const limit = searchParams.get('limit') || '50';
 
-    // Initialize database
-    await initializeDB();
-    const db = getDB();
+    // Build query params
+    const params: Record<string, string> = { limit };
+    if (userId) params.userId = userId;
+    if (contentId) params.contentId = contentId;
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
 
-    // Build filters
-    const filters: any = {};
-    if (userId) filters.userId = userId;
-    if (contentId) filters.contentId = contentId;
-    if (startDate) filters.startDate = parseInt(startDate);
-    if (endDate) filters.endDate = parseInt(endDate);
-    if (limit) filters.limit = parseInt(limit);
+    // Forward to Cloudflare Analytics Worker
+    const workerResponse = await forwardToWorker('/watch-session', params, 'GET');
+    
+    if (workerResponse && workerResponse.ok) {
+      const result = await workerResponse.json();
+      return NextResponse.json(result);
+    }
 
-    // Get watch sessions
-    const sessions = await db.getWatchSessions(filters);
-
-    // Calculate analytics
-    const analytics = calculateWatchAnalytics(sessions);
-
+    // Worker unavailable - return empty data
+    console.warn('[WatchSession] Worker unavailable for GET request');
     return NextResponse.json({
       success: true,
-      sessions,
-      analytics,
+      sessions: [],
+      analytics: {
+        totalSessions: 0,
+        totalWatchTime: 0,
+        averageWatchTime: 0,
+        averageCompletionRate: 0,
+        totalPauses: 0,
+        totalSeeks: 0,
+        completedSessions: 0,
+        deviceBreakdown: {},
+        qualityBreakdown: {},
+      },
+      workerUnavailable: true,
     });
+
   } catch (error) {
     console.error('Failed to get watch sessions:', error);
     return NextResponse.json(
@@ -142,67 +200,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
-
-function getDeviceType(userAgent: string): string {
-  const ua = userAgent.toLowerCase();
-  
-  if (ua.includes('mobile') || ua.includes('android') || ua.includes('iphone')) {
-    return 'mobile';
-  } else if (ua.includes('tablet') || ua.includes('ipad')) {
-    return 'tablet';
-  } else if (ua.includes('smart-tv') || ua.includes('smarttv')) {
-    return 'tv';
-  } else {
-    return 'desktop';
-  }
-}
-
-function calculateWatchAnalytics(sessions: any[]) {
-  if (sessions.length === 0) {
-    return {
-      totalSessions: 0,
-      totalWatchTime: 0,
-      averageWatchTime: 0,
-      averageCompletionRate: 0,
-      totalPauses: 0,
-      totalSeeks: 0,
-      completedSessions: 0,
-      deviceBreakdown: {},
-      qualityBreakdown: {},
-    };
-  }
-
-  const totalWatchTime = sessions.reduce((sum, s) => sum + (s.total_watch_time || 0), 0);
-  const totalPauses = sessions.reduce((sum, s) => sum + (s.pause_count || 0), 0);
-  const totalSeeks = sessions.reduce((sum, s) => sum + (s.seek_count || 0), 0);
-  const completedSessions = sessions.filter(s => s.is_completed || s.completion_percentage >= 90).length;
-  const avgCompletion = sessions.reduce((sum, s) => sum + (s.completion_percentage || 0), 0) / sessions.length;
-
-  // Device breakdown
-  const deviceBreakdown: Record<string, number> = {};
-  sessions.forEach(s => {
-    const device = s.device_type || 'unknown';
-    deviceBreakdown[device] = (deviceBreakdown[device] || 0) + 1;
-  });
-
-  // Quality breakdown
-  const qualityBreakdown: Record<string, number> = {};
-  sessions.forEach(s => {
-    const quality = s.quality || 'unknown';
-    qualityBreakdown[quality] = (qualityBreakdown[quality] || 0) + 1;
-  });
-
-  return {
-    totalSessions: sessions.length,
-    totalWatchTime: Math.round(totalWatchTime),
-    averageWatchTime: Math.round(totalWatchTime / sessions.length),
-    averageCompletionRate: Math.round(avgCompletion * 10) / 10,
-    totalPauses,
-    totalSeeks,
-    completedSessions,
-    completionRate: Math.round((completedSessions / sessions.length) * 100),
-    deviceBreakdown,
-    qualityBreakdown,
-  };
 }

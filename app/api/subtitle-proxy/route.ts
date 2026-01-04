@@ -1,13 +1,32 @@
 /**
  * Subtitle Proxy - Downloads and serves subtitles with proper CORS headers
  * Converts SRT to VTT format if needed
+ * 
+ * Updated for Cloudflare Workers compatibility - uses Web APIs instead of Node.js zlib
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import zlib from 'zlib';
-import { promisify } from 'util';
 
-const gunzip = promisify(zlib.gunzip);
+// Use edge runtime for Cloudflare Workers compatibility
+export const runtime = 'edge';
+
+/**
+ * Decompress gzip data using Web APIs (DecompressionStream)
+ * Falls back to returning raw data if decompression fails
+ */
+async function decompressGzip(buffer: ArrayBuffer): Promise<string> {
+  try {
+    // Use DecompressionStream API (available in modern browsers and Cloudflare Workers)
+    const ds = new DecompressionStream('gzip');
+    const decompressedStream = new Response(buffer).body!.pipeThrough(ds);
+    const decompressedBuffer = await new Response(decompressedStream).arrayBuffer();
+    return new TextDecoder('utf-8').decode(decompressedBuffer);
+  } catch (error) {
+    console.warn('[SUBTITLE-PROXY] Gzip decompression failed, trying as raw text:', error);
+    // If decompression fails, try to decode as raw text
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+}
 
 function convertSrtToVtt(srtContent: string): string {
   // Check if already VTT
@@ -65,8 +84,7 @@ export async function GET(request: NextRequest) {
     if (isGzipped) {
       console.log('[SUBTITLE-PROXY] Decompressing gzip content');
       const buffer = await response.arrayBuffer();
-      const decompressed = await gunzip(Buffer.from(buffer));
-      content = decompressed.toString('utf-8');
+      content = await decompressGzip(buffer);
     } else {
       content = await response.text();
     }

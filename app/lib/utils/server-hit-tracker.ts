@@ -34,9 +34,7 @@ export async function trackServerHit(data: ServerHitData): Promise<void> {
     }
     
     // Use internal API to track the hit
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3000';
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
     
     // Fire and forget - don't await
     fetch(`${baseUrl}/api/analytics/server-hit`, {

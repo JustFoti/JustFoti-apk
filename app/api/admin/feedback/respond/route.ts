@@ -1,10 +1,18 @@
+/**
+ * Admin Feedback Response API
+ * 
+ * POST - Send email response to feedback and update status
+ * GET - Check email configuration status
+ * 
+ * Uses D1 database after Cloudflare migration (Requirement 12.8)
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 import { sendFeedbackResponse, isEmailConfigured } from '@/app/lib/services/email';
+import { getD1Database } from '@/app/lib/db/d1-connection';
 
-const sql = neon(process.env.DATABASE_URL || '');
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const ADMIN_COOKIE = 'admin_token';
 
@@ -54,16 +62,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get the feedback entry
-    const feedbackResult = await sql`
-      SELECT id, type, message, email, status FROM feedback WHERE id = ${feedbackId}
-    `;
+    // Get D1 database
+    const db = getD1Database();
 
-    if (feedbackResult.length === 0) {
+    // Get the feedback entry
+    const feedback = await db.prepare(
+      'SELECT id, type, message, email, status FROM feedback WHERE id = ?'
+    ).bind(feedbackId).first<{
+      id: number;
+      type: string;
+      message: string;
+      email: string | null;
+      status: string;
+    }>();
+
+    if (!feedback) {
       return NextResponse.json({ error: 'Feedback not found' }, { status: 404 });
     }
-
-    const feedback = feedbackResult[0];
 
     if (!feedback.email) {
       return NextResponse.json(
@@ -88,15 +103,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Update feedback status to 'resolved' and store the response
-    await sql`
+    await db.prepare(`
       UPDATE feedback 
       SET status = 'resolved', 
-          updated_at = NOW(),
-          admin_response = ${responseMessage},
-          responded_at = NOW(),
-          responded_by = ${admin.username}
-      WHERE id = ${feedbackId}
-    `;
+          updated_at = datetime('now'),
+          admin_response = ?,
+          responded_at = datetime('now')
+      WHERE id = ?
+    `).bind(responseMessage, feedbackId).run();
 
     return NextResponse.json({
       success: true,

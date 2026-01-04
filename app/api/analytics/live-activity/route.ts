@@ -3,71 +3,71 @@
  * POST /api/analytics/live-activity - Update live activity heartbeat
  * GET /api/analytics/live-activity - Get current live activities
  * DELETE /api/analytics/live-activity - Deactivate activity
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getAdapter } from '@/lib/db/adapter';
 import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
 
-// POST - Update/create live activity
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json();
 
-    console.log('[Live Activity] Received heartbeat:', {
-      userId: data.userId?.substring(0, 8),
-      sessionId: data.sessionId?.substring(0, 8),
-      activityType: data.activityType,
-      contentId: data.contentId,
-    });
-
     if (!data.userId || !data.sessionId || !data.activityType) {
-      console.error('[Live Activity] Missing required fields:', data);
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    await initializeDB();
-    const db = getDB();
-
+    const adapter = getAdapter();
     const activityId = `live_${data.userId}_${data.sessionId}`;
+    const now = Date.now();
 
-    // Extract device type from user agent
     const userAgent = request.headers.get('user-agent') || '';
     const deviceType = userAgent.includes('Mobile') ? 'mobile' : 
                       userAgent.includes('Tablet') ? 'tablet' : 'desktop';
 
-    // Get location using utility
     const locationData = getLocationFromHeaders(request);
 
-    console.log('[Live Activity] Location:', {
-      country: locationData.countryCode,
-      city: locationData.city,
-      region: locationData.region,
-    }, 'Device:', deviceType);
+    // Upsert live activity
+    const existingResult = await adapter.query<{ id: string }>(
+      'SELECT id FROM live_activity WHERE id = ?',
+      [activityId]
+    );
 
-    await db.upsertLiveActivity({
-      id: activityId,
-      userId: data.userId,
-      sessionId: data.sessionId,
-      activityType: data.activityType,
-      contentId: data.contentId,
-      contentTitle: data.contentTitle,
-      contentType: data.contentType,
-      seasonNumber: data.seasonNumber,
-      episodeNumber: data.episodeNumber,
-      currentPosition: data.currentPosition,
-      duration: data.duration,
-      quality: data.quality,
-      deviceType,
-      country: locationData.countryCode,
-      city: locationData.city,
-      region: locationData.region,
-    });
-
-    console.log('[Live Activity] Activity saved:', activityId);
+    if (existingResult.data && existingResult.data.length > 0) {
+      await adapter.execute(
+        `UPDATE live_activity SET 
+          activity_type = ?, content_id = ?, content_title = ?, content_type = ?,
+          season_number = ?, episode_number = ?, current_position = ?, duration = ?,
+          quality = ?, device_type = ?, country = ?, city = ?, region = ?,
+          last_heartbeat = ?, is_active = 1
+        WHERE id = ?`,
+        [
+          data.activityType, data.contentId || null, data.contentTitle || null, data.contentType || null,
+          data.seasonNumber || null, data.episodeNumber || null, data.currentPosition || 0, data.duration || 0,
+          data.quality || null, deviceType, locationData.countryCode || null, locationData.city || null, locationData.region || null,
+          now, activityId
+        ]
+      );
+    } else {
+      await adapter.execute(
+        `INSERT INTO live_activity (
+          id, user_id, session_id, activity_type, content_id, content_title, content_type,
+          season_number, episode_number, current_position, duration, quality, device_type,
+          country, city, region, last_heartbeat, is_active, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+        [
+          activityId, data.userId, data.sessionId, data.activityType,
+          data.contentId || null, data.contentTitle || null, data.contentType || null,
+          data.seasonNumber || null, data.episodeNumber || null, data.currentPosition || 0, data.duration || 0,
+          data.quality || null, deviceType, locationData.countryCode || null, locationData.city || null, locationData.region || null,
+          now, now
+        ]
+      );
+    }
 
     return NextResponse.json({ success: true, activityId });
   } catch (error) {
@@ -79,102 +79,88 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET - Retrieve live activities
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    // Default to 5 minutes for more stable counts (increased from 2)
-    // This matches the unified-stats API and accounts for users with slower heartbeat intervals
     const maxAge = parseInt(searchParams.get('maxAge') || '5');
 
-    console.log('[Live Activity] Fetching activities, maxAge:', maxAge);
+    const adapter = getAdapter();
+    const cutoff = Date.now() - (maxAge * 60 * 1000);
 
-    await initializeDB();
-    const db = getDB();
+    const activitiesResult = await adapter.query<Record<string, unknown>>(
+      `SELECT * FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ? ORDER BY last_heartbeat DESC`,
+      [cutoff]
+    );
+    const activities = activitiesResult.data || [];
 
-    // Get live activities
-    const activities = await db.getLiveActivities(maxAge);
+    // Cleanup stale activities
+    const staleTime = Date.now() - (maxAge * 2 * 60 * 1000);
+    await adapter.execute(
+      'UPDATE live_activity SET is_active = 0 WHERE is_active = 1 AND last_heartbeat < ?',
+      [staleTime]
+    );
 
-    console.log('[Live Activity] Found', activities.length, 'active users');
-
-    // Clean up stale activities (use 10 min = 2x the maxAge window)
-    const cleaned = await db.cleanupStaleActivities(maxAge * 2);
-    if (cleaned > 0) {
-      console.log('[Live Activity] Cleaned up', cleaned, 'stale activities');
-    }
-
-    // Calculate summary stats using UNIQUE user_ids to avoid duplicates
+    // Calculate stats
     const uniqueUsers = new Set(activities.map(a => a.user_id));
     const watchingUsers = new Set(activities.filter(a => a.activity_type === 'watching').map(a => a.user_id));
     const browsingUsers = new Set(activities.filter(a => a.activity_type === 'browsing').map(a => a.user_id));
     const livetvUsers = new Set(activities.filter(a => a.activity_type === 'livetv').map(a => a.user_id));
     
-    const stats = {
-      totalActive: uniqueUsers.size,
-      watching: watchingUsers.size,
-      browsing: browsingUsers.size,
-      livetv: livetvUsers.size,
-      byDevice: activities.reduce((acc: any, a) => {
-        const device = a.device_type || 'unknown';
-        // Count unique users per device
-        if (!acc[device]) acc[device] = new Set();
-        acc[device].add(a.user_id);
-        return acc;
-      }, {}),
-      byCountry: activities.reduce((acc: any, a) => {
-        const country = a.country || 'unknown';
-        // Count unique users per country
-        if (!acc[country]) acc[country] = new Set();
-        acc[country].add(a.user_id);
-        return acc;
-      }, {}),
-      topContent: activities
-        .filter(a => a.content_id)
-        .reduce((acc: any, a) => {
-          const key = a.content_id;
-          if (!acc[key]) {
-            acc[key] = {
-              contentId: a.content_id,
-              contentTitle: a.content_title,
-              contentType: a.content_type,
-              users: new Set(),
-            };
-          }
-          acc[key].users.add(a.user_id);
-          return acc;
-        }, {}),
-    };
-    
-    // Convert Sets to counts for JSON serialization
+    const byDevice: Record<string, Set<unknown>> = {};
+    const byCountry: Record<string, Set<unknown>> = {};
+    const topContentMap: Record<string, { contentId: unknown; contentTitle: unknown; contentType: unknown; users: Set<unknown> }> = {};
+
+    activities.forEach(a => {
+      const device = (a.device_type as string) || 'unknown';
+      if (!byDevice[device]) byDevice[device] = new Set();
+      byDevice[device].add(a.user_id);
+
+      const country = (a.country as string) || 'unknown';
+      if (!byCountry[country]) byCountry[country] = new Set();
+      byCountry[country].add(a.user_id);
+
+      if (a.content_id) {
+        const key = a.content_id as string;
+        if (!topContentMap[key]) {
+          topContentMap[key] = {
+            contentId: a.content_id,
+            contentTitle: a.content_title,
+            contentType: a.content_type,
+            users: new Set(),
+          };
+        }
+        topContentMap[key].users.add(a.user_id);
+      }
+    });
+
     const byDeviceCounts: Record<string, number> = {};
-    for (const [device, users] of Object.entries(stats.byDevice)) {
-      byDeviceCounts[device] = (users as Set<string>).size;
+    for (const [device, users] of Object.entries(byDevice)) {
+      byDeviceCounts[device] = users.size;
     }
     
     const byCountryCounts: Record<string, number> = {};
-    for (const [country, users] of Object.entries(stats.byCountry)) {
-      byCountryCounts[country] = (users as Set<string>).size;
+    for (const [country, users] of Object.entries(byCountry)) {
+      byCountryCounts[country] = users.size;
     }
 
-    // Convert topContent to array and sort by unique viewer count
-    const topContentArray = Object.values(stats.topContent)
-      .map((content: any) => ({
+    const topContentArray = Object.values(topContentMap)
+      .map((content) => ({
         contentId: content.contentId,
         contentTitle: content.contentTitle,
         contentType: content.contentType,
         count: content.users.size,
       }))
-      .sort((a: any, b: any) => b.count - a.count)
+      .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
     return NextResponse.json({
       success: true,
       activities,
       stats: {
-        totalActive: stats.totalActive,
-        watching: stats.watching,
-        browsing: stats.browsing,
-        livetv: stats.livetv,
+        totalActive: uniqueUsers.size,
+        watching: watchingUsers.size,
+        browsing: browsingUsers.size,
+        livetv: livetvUsers.size,
         byDevice: byDeviceCounts,
         byCountry: byCountryCounts,
         topContent: topContentArray,
@@ -189,7 +175,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// DELETE - Deactivate activity
 export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -202,10 +187,11 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    await initializeDB();
-    const db = getDB();
-
-    await db.deactivateLiveActivity(activityId);
+    const adapter = getAdapter();
+    await adapter.execute(
+      'UPDATE live_activity SET is_active = 0 WHERE id = ?',
+      [activityId]
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

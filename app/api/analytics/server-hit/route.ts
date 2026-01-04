@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getAdapter } from '@/app/lib/db/adapter';
 import { getLocationFromHeaders } from '@/app/lib/utils/geolocation';
 import { getClientIP } from '@/lib/utils/api-rate-limiter';
 
@@ -204,10 +204,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
+    const adapter = getAdapter();
     
     const userAgent = request.headers.get('user-agent') || '';
     const referer = request.headers.get('referer');
@@ -224,88 +221,46 @@ export async function POST(request: NextRequest) {
     // Parse referrer
     const { referrerDomain, referrerPath, referrerSource, referrerMedium } = parseReferrer(referer);
     
-    // Create server hit record
-    if (isNeon) {
-      await adapter.execute(`
-        INSERT INTO server_hits (
-          id, page_path, ip_hash, user_agent, 
-          source_type, source_name, is_bot,
-          referrer_full, referrer_domain, referrer_path, referrer_source, referrer_medium,
-          country, city, region,
-          timestamp, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-      `, [
-        hitId,
-        data.pagePath,
-        ipHash,
-        userAgent.substring(0, 500),
-        sourceType,
-        sourceName,
-        isBot,
-        referer?.substring(0, 1000) || null,
-        referrerDomain,
-        referrerPath,
-        referrerSource,
-        referrerMedium,
-        location.countryCode,
-        location.city,
-        location.region,
-        now,
-        now
-      ]);
-    } else {
-      await adapter.execute(`
-        INSERT INTO server_hits (
-          id, page_path, ip_hash, user_agent,
-          source_type, source_name, is_bot,
-          referrer_full, referrer_domain, referrer_path, referrer_source, referrer_medium,
-          country, city, region,
-          timestamp, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        hitId,
-        data.pagePath,
-        ipHash,
-        userAgent.substring(0, 500),
-        sourceType,
-        sourceName,
-        isBot ? 1 : 0,
-        referer?.substring(0, 1000) || null,
-        referrerDomain,
-        referrerPath,
-        referrerSource,
-        referrerMedium,
-        location.countryCode,
-        location.city,
-        location.region,
-        now,
-        now
-      ]);
-    }
+    // Create server hit record - SQLite (D1)
+    await adapter.execute(`
+      INSERT INTO server_hits (
+        id, page_path, ip_hash, user_agent,
+        source_type, source_name, is_bot,
+        referrer_full, referrer_domain, referrer_path, referrer_source, referrer_medium,
+        country, city, region,
+        timestamp, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      hitId,
+      data.pagePath,
+      ipHash,
+      userAgent.substring(0, 500),
+      sourceType,
+      sourceName,
+      isBot ? 1 : 0,
+      referer?.substring(0, 1000) || null,
+      referrerDomain,
+      referrerPath,
+      referrerSource,
+      referrerMedium,
+      location.countryCode,
+      location.city,
+      location.region,
+      now,
+      now
+    ]);
     
     // Update aggregated referrer stats
     if (referrerDomain) {
-      if (isNeon) {
-        await adapter.execute(`
-          INSERT INTO referrer_stats (
-            referrer_domain, hit_count, last_hit, referrer_medium, created_at, updated_at
-          ) VALUES ($1, 1, $2, $3, $2, $2)
-          ON CONFLICT (referrer_domain) DO UPDATE SET
-            hit_count = referrer_stats.hit_count + 1,
-            last_hit = $2,
-            updated_at = $2
-        `, [referrerDomain, now, referrerMedium]);
-      } else {
-        await adapter.execute(`
-          INSERT INTO referrer_stats (
-            referrer_domain, hit_count, last_hit, referrer_medium, created_at, updated_at
-          ) VALUES (?, 1, ?, ?, ?, ?)
-          ON CONFLICT (referrer_domain) DO UPDATE SET
-            hit_count = hit_count + 1,
-            last_hit = ?,
-            updated_at = ?
-        `, [referrerDomain, now, referrerMedium, now, now, now, now]);
-      }
+      await adapter.execute(`
+        INSERT INTO referrer_stats (
+          referrer_domain, hit_count, last_hit, referrer_medium, created_at, updated_at
+        ) VALUES (?, 1, ?, ?, ?, ?)
+        ON CONFLICT (referrer_domain) DO UPDATE SET
+          hit_count = hit_count + 1,
+          last_hit = ?,
+          updated_at = ?
+      `, [referrerDomain, now, referrerMedium, now, now, now, now]);
     }
 
     return NextResponse.json({ 
@@ -331,110 +286,68 @@ export async function GET(request: NextRequest) {
     const days = parseInt(searchParams.get('days') || '7');
     const limit = parseInt(searchParams.get('limit') || '50');
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
+    const adapter = getAdapter();
 
     const startTime = Date.now() - (days * 24 * 60 * 60 * 1000);
 
-    // Get hits by source type
-    const sourceStats = isNeon
-      ? await adapter.query(`
-          SELECT 
-            source_type,
-            source_name,
-            COUNT(*) as hit_count,
-            COUNT(DISTINCT ip_hash) as unique_visitors
-          FROM server_hits
-          WHERE timestamp > $1
-          GROUP BY source_type, source_name
-          ORDER BY hit_count DESC
-          LIMIT $2
-        `, [startTime, limit])
-      : await adapter.query(`
-          SELECT 
-            source_type,
-            source_name,
-            COUNT(*) as hit_count,
-            COUNT(DISTINCT ip_hash) as unique_visitors
-          FROM server_hits
-          WHERE timestamp > ?
-          GROUP BY source_type, source_name
-          ORDER BY hit_count DESC
-          LIMIT ?
-        `, [startTime, limit]);
+    // Get hits by source type - SQLite (D1)
+    const sourceStatsResult = await adapter.query(`
+      SELECT 
+        source_type,
+        source_name,
+        COUNT(*) as hit_count,
+        COUNT(DISTINCT ip_hash) as unique_visitors
+      FROM server_hits
+      WHERE timestamp > ?
+      GROUP BY source_type, source_name
+      ORDER BY hit_count DESC
+      LIMIT ?
+    `, [startTime, limit]);
+    
+    const sourceStats = sourceStatsResult.data || [];
 
     // Get top referrers
-    const topReferrers = isNeon
-      ? await adapter.query(`
-          SELECT 
-            referrer_domain,
-            referrer_medium,
-            hit_count,
-            last_hit
-          FROM referrer_stats
-          WHERE last_hit > $1
-          ORDER BY hit_count DESC
-          LIMIT $2
-        `, [startTime, limit])
-      : await adapter.query(`
-          SELECT 
-            referrer_domain,
-            referrer_medium,
-            hit_count,
-            last_hit
-          FROM referrer_stats
-          WHERE last_hit > ?
-          ORDER BY hit_count DESC
-          LIMIT ?
-        `, [startTime, limit]);
+    const topReferrersResult = await adapter.query(`
+      SELECT 
+        referrer_domain,
+        referrer_medium,
+        hit_count,
+        last_hit
+      FROM referrer_stats
+      WHERE last_hit > ?
+      ORDER BY hit_count DESC
+      LIMIT ?
+    `, [startTime, limit]);
+    
+    const topReferrers = topReferrersResult.data || [];
 
     // Get bot vs human breakdown
-    const botStats = isNeon
-      ? await adapter.query(`
-          SELECT 
-            is_bot,
-            COUNT(*) as hit_count
-          FROM server_hits
-          WHERE timestamp > $1
-          GROUP BY is_bot
-        `, [startTime])
-      : await adapter.query(`
-          SELECT 
-            is_bot,
-            COUNT(*) as hit_count
-          FROM server_hits
-          WHERE timestamp > ?
-          GROUP BY is_bot
-        `, [startTime]);
+    const botStatsResult = await adapter.query(`
+      SELECT 
+        is_bot,
+        COUNT(*) as hit_count
+      FROM server_hits
+      WHERE timestamp > ?
+      GROUP BY is_bot
+    `, [startTime]);
+    
+    const botStats = botStatsResult.data || [];
 
     // Get hits by page
-    const pageStats = isNeon
-      ? await adapter.query(`
-          SELECT 
-            page_path,
-            COUNT(*) as hit_count,
-            COUNT(DISTINCT ip_hash) as unique_visitors,
-            SUM(CASE WHEN is_bot THEN 1 ELSE 0 END) as bot_hits
-          FROM server_hits
-          WHERE timestamp > $1
-          GROUP BY page_path
-          ORDER BY hit_count DESC
-          LIMIT $2
-        `, [startTime, limit])
-      : await adapter.query(`
-          SELECT 
-            page_path,
-            COUNT(*) as hit_count,
-            COUNT(DISTINCT ip_hash) as unique_visitors,
-            SUM(CASE WHEN is_bot THEN 1 ELSE 0 END) as bot_hits
-          FROM server_hits
-          WHERE timestamp > ?
-          GROUP BY page_path
-          ORDER BY hit_count DESC
-          LIMIT ?
-        `, [startTime, limit]);
+    const pageStatsResult = await adapter.query(`
+      SELECT 
+        page_path,
+        COUNT(*) as hit_count,
+        COUNT(DISTINCT ip_hash) as unique_visitors,
+        SUM(CASE WHEN is_bot THEN 1 ELSE 0 END) as bot_hits
+      FROM server_hits
+      WHERE timestamp > ?
+      GROUP BY page_path
+      ORDER BY hit_count DESC
+      LIMIT ?
+    `, [startTime, limit]);
+    
+    const pageStats = pageStatsResult.data || [];
 
     return NextResponse.json({
       success: true,

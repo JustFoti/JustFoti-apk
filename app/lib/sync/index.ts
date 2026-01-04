@@ -58,6 +58,18 @@ export {
   isSyncInProgress,
 } from './auto-sync';
 
+// Cloudflare sync client
+export {
+  syncWatchProgress,
+  loadSyncData,
+  pushSyncData,
+  deleteSyncAccount,
+  syncWatchlist,
+  checkSyncHealth,
+  isSyncWorkerAvailable,
+  resetWorkerAvailability,
+} from './cloudflare-client';
+
 // React hook
 export { useSync } from './useSync';
 

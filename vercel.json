@@ -1,9 +1,0 @@
-{
-  "buildCommand": "npm run build && npm run vercel:setup-admin",
-  "crons": [
-    {
-      "path": "/api/cron/update-metrics",
-      "schedule": "0 0 * * *"
-    }
-  ]
-}

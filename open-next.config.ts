@@ -9,6 +9,7 @@ const config: OpenNextConfig = {
     override: {
       wrapper: "cloudflare-node",
       converter: "edge",
+      proxyExternalRequest: "fetch",
       // Use Cloudflare's cache API
       incrementalCache: "dummy",
       tagCache: "dummy",
@@ -16,13 +17,21 @@ const config: OpenNextConfig = {
     },
   },
 
+  // External modules for edge runtime
+  edgeExternals: ["node:crypto"],
+
   // Middleware configuration
   middleware: {
     external: true,
+    override: {
+      wrapper: "cloudflare-edge",
+      converter: "edge",
+      proxyExternalRequest: "fetch",
+      incrementalCache: "dummy",
+      tagCache: "dummy",
+      queue: "dummy",
+    },
   },
-
-  // Build options
-  buildCommand: "npx next build",
 
   // Dangerous options (use with caution)
   dangerous: {

@@ -4,19 +4,18 @@
  * POST /api/admin/banner - Update banner (admin only)
  * DELETE /api/admin/banner - Disable banner (admin only)
  * 
+ * Uses D1 database after Cloudflare migration (Requirement 12.8)
  * Implements standardized response format per Requirements 16.2, 16.3, 16.4, 16.5
  */
 
 import { NextRequest } from 'next/server';
-import { neon } from '@neondatabase/serverless';
 import { verifyAdminAuth } from '../../../lib/utils/admin-auth';
+import { getD1Database } from '../../../lib/db/d1-connection';
 import {
   successResponse,
   unauthorizedResponse,
   internalErrorResponse,
 } from '../../../lib/utils/api-response';
-
-const sql = neon(process.env.DATABASE_URL!);
 
 export interface BannerConfig {
   id: string;
@@ -34,17 +33,19 @@ export interface BannerConfig {
 // GET - Fetch current banner (public endpoint for display)
 export async function GET(request: NextRequest) {
   try {
+    const db = getD1Database();
+    
     // Check if this is an admin request (should return banner even if disabled)
     const url = new URL(request.url);
     const isAdminRequest = url.searchParams.get('admin') === 'true';
     
     // Try to get banner from database
-    const result = await sql`
-      SELECT * FROM site_settings WHERE key = 'banner' LIMIT 1
-    `;
+    const result = await db.prepare(
+      "SELECT * FROM site_settings WHERE key = 'banner' LIMIT 1"
+    ).first<{ key: string; value: string }>();
     
-    if (result.length > 0 && result[0].value) {
-      const banner = JSON.parse(result[0].value) as BannerConfig;
+    if (result && result.value) {
+      const banner = JSON.parse(result.value) as BannerConfig;
       
       // For admin requests, always return the banner for editing
       if (isAdminRequest) {
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse(authResult.error || 'Authentication required');
     }
     
+    const db = getD1Database();
     const body = await request.json();
     const { message, type = 'info', enabled = true, dismissible = true, linkText, linkUrl, expiresAt } = body;
     
@@ -107,22 +109,22 @@ export async function POST(request: NextRequest) {
     };
     
     // Ensure site_settings table exists
-    await sql`
+    await db.prepare(`
       CREATE TABLE IF NOT EXISTS site_settings (
         key TEXT PRIMARY KEY,
         value TEXT,
-        updated_at TIMESTAMP DEFAULT NOW()
+        updated_at TEXT DEFAULT (datetime('now'))
       )
-    `;
+    `).run();
     
-    // Upsert banner
-    await sql`
+    // Upsert banner using SQLite syntax
+    await db.prepare(`
       INSERT INTO site_settings (key, value, updated_at)
-      VALUES ('banner', ${JSON.stringify(banner)}, NOW())
+      VALUES ('banner', ?, datetime('now'))
       ON CONFLICT (key) DO UPDATE SET
-        value = ${JSON.stringify(banner)},
-        updated_at = NOW()
-    `;
+        value = excluded.value,
+        updated_at = datetime('now')
+    `).bind(JSON.stringify(banner)).run();
     
     return successResponse({ banner }, { message: 'Banner updated successfully' });
   } catch (error) {
@@ -140,13 +142,25 @@ export async function DELETE(request: NextRequest) {
       return unauthorizedResponse(authResult.error || 'Authentication required');
     }
     
-    // Set banner to disabled
-    await sql`
-      UPDATE site_settings 
-      SET value = jsonb_set(value::jsonb, '{enabled}', 'false')::text,
-          updated_at = NOW()
-      WHERE key = 'banner'
-    `;
+    const db = getD1Database();
+    
+    // Get current banner, update enabled to false
+    const result = await db.prepare(
+      "SELECT value FROM site_settings WHERE key = 'banner'"
+    ).first<{ value: string }>();
+    
+    if (result && result.value) {
+      const banner = JSON.parse(result.value) as BannerConfig;
+      banner.enabled = false;
+      banner.updatedAt = new Date().toISOString();
+      
+      await db.prepare(`
+        UPDATE site_settings 
+        SET value = ?,
+            updated_at = datetime('now')
+        WHERE key = 'banner'
+      `).bind(JSON.stringify(banner)).run();
+    }
     
     return successResponse(null, { message: 'Banner disabled successfully' });
   } catch (error) {

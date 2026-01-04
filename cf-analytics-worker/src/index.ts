@@ -28,6 +28,9 @@
 // Re-export the Durable Object class
 export { AnalyticsDO } from './analytics-do';
 
+// Import cron handler
+import { handleScheduled } from './cron';
+
 export interface Env {
   DB: D1Database;
   ANALYTICS_DO: DurableObjectNamespace;
@@ -1544,5 +1547,11 @@ export default {
       console.error('[Worker] Error:', error);
       return Response.json({ error: 'Internal error' }, { status: 500, headers });
     }
+  },
+
+  // Scheduled handler for cron jobs (daily metrics aggregation)
+  // Runs at midnight UTC daily - configured in wrangler.toml
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(handleScheduled(event, env));
   },
 };

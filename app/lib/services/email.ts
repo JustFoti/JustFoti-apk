@@ -7,6 +7,8 @@
  * - Port: 465 (SSL) or 587 (TLS)
  * - Username: Your full email address (e.g., support@vynx.cc)
  * - Password: Your Forward Email generated password
+ * 
+ * Updated for Cloudflare Workers compatibility - uses btoa instead of Buffer
  */
 
 interface EmailOptions {
@@ -31,6 +33,20 @@ const FROM_EMAIL = process.env.FROM_EMAIL || 'support@vynx.cc';
 const FROM_NAME = process.env.FROM_NAME || 'Vynx Support';
 
 /**
+ * Encode string to base64 (Cloudflare Workers compatible)
+ */
+function encodeBase64(str: string): string {
+  // Use btoa which is available in both browsers and Cloudflare Workers
+  // For non-ASCII characters, we need to encode to UTF-8 first
+  try {
+    return btoa(str);
+  } catch {
+    // Fallback for non-ASCII characters
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+}
+
+/**
  * Send an email using Forward Email SMTP via fetch (Vercel-compatible)
  * Uses the Forward Email HTTP API as an alternative to SMTP
  */
@@ -49,7 +65,7 @@ export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${Buffer.from(`${SMTP_USER}:${SMTP_PASS}`).toString('base64')}`,
+        'Authorization': `Basic ${encodeBase64(`${SMTP_USER}:${SMTP_PASS}`)}`,
       },
       body: JSON.stringify({
         from: `${FROM_NAME} <${FROM_EMAIL}>`,

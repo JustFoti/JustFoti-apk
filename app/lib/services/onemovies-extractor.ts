@@ -8,9 +8,9 @@
  * 2. Encode pageData: AES-256-CBC encrypt → hex → XOR → UTF-8 → Base64 → char substitution
  * 3. Call sources API: /{API_HASH}/{encoded}/sr
  * 4. Call stream API: /{API_HASH}/{source.data} to get m3u8 URL
+ * 
+ * Updated for Cloudflare Workers compatibility - uses Web Crypto API instead of Node.js crypto
  */
-
-import * as crypto from 'crypto';
 
 const BASE_URL = 'https://111movies.com';
 
@@ -18,9 +18,9 @@ const BASE_URL = 'https://111movies.com';
 const API_HASH = 'fcd552c4321aeac1e62c5304913b3420be75a19d390807281a425aabbb5dc4c0';
 
 // Encryption keys (from 860-58807119fccb267b.js)
-const AES_KEY = Buffer.from([3,75,207,198,39,85,65,255,64,89,191,251,35,214,209,210,62,164,155,85,247,158,167,48,172,84,13,18,19,166,19,57]);
-const AES_IV = Buffer.from([162,231,173,134,84,100,241,33,5,233,223,132,245,189,171,237]);
-const XOR_KEY = Buffer.from([170,162,126,126,60,255,136,130,133]);
+const AES_KEY = new Uint8Array([3,75,207,198,39,85,65,255,64,89,191,251,35,214,209,210,62,164,155,85,247,158,167,48,172,84,13,18,19,166,19,57]);
+const AES_IV = new Uint8Array([162,231,173,134,84,100,241,33,5,233,223,132,245,189,171,237]);
+const XOR_KEY = new Uint8Array([170,162,126,126,60,255,136,130,133]);
 
 // Alphabet substitution
 const STANDARD_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
@@ -78,29 +78,69 @@ const HEADERS = {
 };
 
 /**
- * Encode page data for API request
+ * Convert Uint8Array to hex string
+ */
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Convert string to Uint8Array (UTF-8)
+ */
+function stringToBytes(str: string): Uint8Array {
+  return new TextEncoder().encode(str);
+}
+
+/**
+ * Convert Uint8Array to base64url string
+ */
+function bytesToBase64Url(bytes: Uint8Array): string {
+  // Convert to regular base64 first
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = btoa(binary);
+  // Convert to base64url
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Encode page data for API request using Web Crypto API
  * Flow: AES-256-CBC encrypt → hex → XOR → UTF-8 → Base64 → char substitution
  */
-function encodePageData(pageData: string): string {
-  // AES-256-CBC encrypt
-  const cipher = crypto.createCipheriv('aes-256-cbc', AES_KEY, AES_IV);
-  const encrypted = cipher.update(pageData, 'utf8', 'hex') + cipher.final('hex');
+async function encodePageData(pageData: string): Promise<string> {
+  // Import the AES key
+  const key = await crypto.subtle.importKey(
+    'raw',
+    AES_KEY.buffer as ArrayBuffer,
+    { name: 'AES-CBC' },
+    false,
+    ['encrypt']
+  );
+  
+  // Encrypt with AES-256-CBC
+  const plaintext = stringToBytes(pageData);
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-CBC', iv: AES_IV.buffer as ArrayBuffer },
+    key,
+    plaintext.buffer as ArrayBuffer
+  );
+  
+  // Convert to hex string
+  const hexString = toHex(new Uint8Array(encrypted));
   
   // XOR each character
   let xored = '';
-  for (let i = 0; i < encrypted.length; i++) {
-    const charCode = encrypted.charCodeAt(i);
+  for (let i = 0; i < hexString.length; i++) {
+    const charCode = hexString.charCodeAt(i);
     const xorByte = XOR_KEY[i % XOR_KEY.length];
     xored += String.fromCharCode(charCode ^ xorByte);
   }
   
-  // UTF-8 encode and Base64
-  const utf8Bytes = Buffer.from(xored, 'utf8');
-  const base64 = utf8Bytes
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+  // UTF-8 encode and Base64url
+  const utf8Bytes = stringToBytes(xored);
+  const base64 = bytesToBase64Url(utf8Bytes);
   
   // Character substitution
   let result = '';
@@ -283,7 +323,7 @@ export async function extractOneMoviesStreams(
     }
     
     // Step 2: Encode page data
-    const encoded = encodePageData(pageData);
+    const encoded = await encodePageData(pageData);
     console.log(`[1movies] Encoded data length: ${encoded.length}`);
     
     // Step 3: Fetch sources
@@ -389,7 +429,7 @@ export async function fetchOneMoviesSourceByName(
     if (!pageData) return null;
     
     // Encode and fetch sources
-    const encoded = encodePageData(pageData);
+    const encoded = await encodePageData(pageData);
     const sources = await fetchSources(encoded);
     
     // Find the matching source

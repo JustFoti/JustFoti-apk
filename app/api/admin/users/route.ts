@@ -2,12 +2,37 @@
  * Admin Users API - Single Source of Truth for User Data
  * GET /api/admin/users - Get all users with their activity data
  * GET /api/admin/users?userId=xxx - Get detailed profile for a specific user
+ * MIGRATED: Uses D1 database adapter for Cloudflare compatibility
+ * Requirements: 6.3
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { initializeDB, getDB } from '@/lib/db/neon-connection';
+import { getAdapter } from '@/lib/db/adapter';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
 import { getCountryName } from '@/app/lib/utils/geolocation';
+
+function isValidTimestamp(ts: number): boolean {
+  if (!ts || ts <= 0 || isNaN(ts)) return false;
+  const now = Date.now();
+  const minValidDate = new Date('2020-01-01').getTime();
+  const oneHourFromNow = now + (60 * 60 * 1000);
+  return ts >= minValidDate && ts <= oneHourFromNow;
+}
+
+function normalizeTimestamp(ts: unknown): number {
+  if (!ts) return 0;
+  const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
+  if (isNaN(num) || num <= 0) return 0;
+  if (num < 1000000000000) return num * 1000;
+  return num;
+}
+
+function getMostCommon(arr: string[]): string | null {
+  if (arr.length === 0) return null;
+  const counts: Record<string, number> = {};
+  arr.forEach(item => { counts[item] = (counts[item] || 0) + 1; });
+  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,11 +41,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    await initializeDB();
-    const db = getDB();
-    const adapter = db.getAdapter();
-    const isNeon = db.isUsingNeon();
-
+    const adapter = getAdapter();
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     const limit = parseInt(searchParams.get('limit') || '100');
@@ -31,13 +52,11 @@ export async function GET(request: NextRequest) {
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-    // If userId is provided, return detailed user profile
     if (userId) {
-      return await getUserProfile(adapter, isNeon, userId, now);
+      return await getUserProfile(adapter, userId, now, fiveMinutesAgo);
     }
 
-    // Otherwise return list of all users
-    return await getAllUsers(adapter, isNeon, limit, offset, fiveMinutesAgo, oneDayAgo, oneWeekAgo);
+    return await getAllUsers(adapter, limit, offset, fiveMinutesAgo, oneDayAgo, oneWeekAgo);
 
   } catch (error) {
     console.error('Admin users API error:', error);
@@ -45,170 +64,85 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper to validate timestamps - must be after Jan 1, 2020 and not in the future
-function isValidTimestamp(ts: number): boolean {
-  if (!ts || ts <= 0 || isNaN(ts)) return false;
-  const now = Date.now();
-  const minValidDate = new Date('2020-01-01').getTime(); // 1577836800000
-  const oneHourFromNow = now + (60 * 60 * 1000);
-  return ts >= minValidDate && ts <= oneHourFromNow;
-}
-
-function normalizeTimestamp(ts: any): number {
-  if (!ts) return 0;
-  const num = typeof ts === 'string' ? parseInt(ts, 10) : Number(ts);
-  if (isNaN(num) || num <= 0) return 0;
-  // If timestamp looks like seconds (before year 2001 in ms), convert to ms
-  if (num < 1000000000000) return num * 1000;
-  return num;
-}
-
 async function getAllUsers(
-  adapter: any, 
-  isNeon: boolean, 
+  adapter: ReturnType<typeof getAdapter>, 
   limit: number, 
   offset: number,
   fiveMinutesAgo: number,
   oneDayAgo: number,
   oneWeekAgo: number
 ) {
-  // First, check what columns exist in user_activity table
-  let users: any[] = [];
+  let users: Record<string, unknown>[] = [];
   
   try {
-    // Query to get unique users with aggregated watch time from watch_sessions
-    // This ensures we get accurate total watch time per user
-    const usersQuery = isNeon
-      ? `SELECT 
-           ua.user_id, 
-           ua.session_id, 
-           ua.first_seen, 
-           ua.last_seen,
-           ua.total_sessions, 
-           COALESCE(ws.actual_watch_time, ua.total_watch_time, 0) as total_watch_time,
-           ua.country, 
-           ua.city, 
-           ua.region,
-           ua.device_type, 
-           ua.user_agent
-         FROM (
-           SELECT DISTINCT ON (user_id)
-             id, user_id, session_id, first_seen, last_seen,
-             total_sessions, total_watch_time, country, city, region,
-             device_type, user_agent
-           FROM user_activity
-           WHERE first_seen > 0 AND last_seen > 0
-           ORDER BY user_id, last_seen DESC
-         ) ua
-         LEFT JOIN (
-           SELECT user_id, SUM(total_watch_time) as actual_watch_time
-           FROM watch_sessions
-           GROUP BY user_id
-         ) ws ON ua.user_id = ws.user_id
-         ORDER BY ua.last_seen DESC
-         LIMIT $1 OFFSET $2`
-      : `SELECT 
-           ua.user_id, 
-           ua.session_id, 
-           ua.first_seen, 
-           ua.last_seen,
-           ua.total_sessions, 
-           COALESCE(ws.actual_watch_time, ua.total_watch_time, 0) as total_watch_time,
-           ua.country, 
-           ua.city, 
-           ua.region,
-           ua.device_type, 
-           ua.user_agent
-         FROM (
-           SELECT 
-             id, user_id, session_id, first_seen, last_seen,
-             total_sessions, total_watch_time, country, city, region,
-             device_type, user_agent
-           FROM user_activity
-           WHERE first_seen > 0 AND last_seen > 0
-           GROUP BY user_id
-           HAVING last_seen = MAX(last_seen)
-         ) ua
-         LEFT JOIN (
-           SELECT user_id, SUM(total_watch_time) as actual_watch_time
-           FROM watch_sessions
-           GROUP BY user_id
-         ) ws ON ua.user_id = ws.user_id
-         ORDER BY ua.last_seen DESC
-         LIMIT ? OFFSET ?`;
-
-    users = await adapter.query(usersQuery, isNeon ? [limit, offset] : [limit, offset]);
+    const usersResult = await adapter.query<Record<string, unknown>>(
+      `SELECT 
+         ua.user_id, ua.session_id, ua.first_seen, ua.last_seen,
+         ua.total_sessions, 
+         COALESCE(ws.actual_watch_time, ua.total_watch_time, 0) as total_watch_time,
+         ua.country, ua.city, ua.region, ua.device_type, ua.user_agent
+       FROM (
+         SELECT id, user_id, session_id, first_seen, last_seen,
+           total_sessions, total_watch_time, country, city, region,
+           device_type, user_agent
+         FROM user_activity
+         WHERE first_seen > 0 AND last_seen > 0
+         GROUP BY user_id
+         HAVING last_seen = MAX(last_seen)
+       ) ua
+       LEFT JOIN (
+         SELECT user_id, SUM(total_watch_time) as actual_watch_time
+         FROM watch_sessions
+         GROUP BY user_id
+       ) ws ON ua.user_id = ws.user_id
+       ORDER BY ua.last_seen DESC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+    users = usersResult.data || [];
   } catch (e) {
-    console.error('Error fetching users with watch time join:', e);
-    // Fallback: simpler query without the join
-    try {
-      const fallbackQuery = isNeon
-        ? `SELECT DISTINCT ON (user_id)
-             id, user_id, session_id, first_seen, last_seen,
-             total_sessions, total_watch_time, country, city, region,
-             device_type, user_agent
-           FROM user_activity
-           WHERE first_seen > 0 AND last_seen > 0
-           ORDER BY user_id, last_seen DESC
-           LIMIT $1 OFFSET $2`
-        : `SELECT 
-             id, user_id, session_id, first_seen, last_seen,
-             total_sessions, total_watch_time, country, city, region,
-             device_type, user_agent
-           FROM user_activity
-           WHERE first_seen > 0 AND last_seen > 0
-           GROUP BY user_id
-           ORDER BY last_seen DESC
-           LIMIT ? OFFSET ?`;
-      users = await adapter.query(fallbackQuery, isNeon ? [limit, offset] : [limit, offset]);
-    } catch (e2) {
-      console.error('Fallback query also failed:', e2);
-      users = [];
-    }
+    console.error('Error fetching users:', e);
   }
   
-  // Get live activity separately
-  let liveUsers: Record<string, any> = {};
+  let liveUsers: Record<string, { activity: string; content: string }> = {};
   try {
-    const liveQuery = isNeon
-      ? `SELECT user_id, activity_type, content_title FROM live_activity WHERE is_active = TRUE AND last_heartbeat >= $1`
-      : `SELECT user_id, activity_type, content_title FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ?`;
-    const liveResult = await adapter.query(liveQuery, [fiveMinutesAgo]);
-    liveResult.forEach((l: any) => {
-      liveUsers[l.user_id] = { activity: l.activity_type, content: l.content_title };
+    const liveResult = await adapter.query<Record<string, unknown>>(
+      `SELECT user_id, activity_type, content_title FROM live_activity WHERE is_active = 1 AND last_heartbeat >= ?`,
+      [fiveMinutesAgo]
+    );
+    (liveResult.data || []).forEach((l) => {
+      liveUsers[l.user_id as string] = { activity: l.activity_type as string, content: l.content_title as string };
     });
   } catch (e) {
     console.error('Error fetching live activity:', e);
   }
 
-  // Get total count of UNIQUE users with valid timestamps
   let totalUsers = 0;
   try {
-    const countQuery = isNeon
-      ? 'SELECT COUNT(DISTINCT user_id) as count FROM user_activity WHERE first_seen > 0 AND last_seen > 0'
-      : 'SELECT COUNT(DISTINCT user_id) as count FROM user_activity WHERE first_seen > 0 AND last_seen > 0';
-    const countResult = await adapter.query(countQuery);
-    totalUsers = parseInt(countResult[0]?.count) || 0;
+    const countResult = await adapter.query<{ count: number }>(
+      'SELECT COUNT(DISTINCT user_id) as count FROM user_activity WHERE first_seen > 0 AND last_seen > 0'
+    );
+    totalUsers = parseInt(String((countResult.data || [])[0]?.count)) || 0;
   } catch (e) {
     console.error('Error counting users:', e);
   }
 
-  // Filter and validate all user data
   const validUsers = users
-    .map((u: any) => {
+    .map((u) => {
       const firstSeen = normalizeTimestamp(u.first_seen);
       const lastSeen = normalizeTimestamp(u.last_seen);
-      const live = liveUsers[u.user_id];
+      const live = liveUsers[u.user_id as string];
+      const country = u.country as string;
       
       return {
         userId: u.user_id,
         sessionId: u.session_id,
         firstSeen: isValidTimestamp(firstSeen) ? firstSeen : 0,
         lastSeen: isValidTimestamp(lastSeen) ? lastSeen : 0,
-        totalSessions: Math.max(0, parseInt(u.total_sessions) || 0),
-        totalWatchTime: Math.max(0, Math.round((parseInt(u.total_watch_time) || 0) / 60)),
-        country: u.country && u.country.length === 2 ? u.country.toUpperCase() : null,
-        countryName: u.country && u.country.length === 2 ? (getCountryName(u.country.toUpperCase()) || u.country) : null,
+        totalSessions: Math.max(0, parseInt(String(u.total_sessions)) || 0),
+        totalWatchTime: Math.max(0, Math.round((parseInt(String(u.total_watch_time)) || 0) / 60)),
+        country: country && country.length === 2 ? country.toUpperCase() : null,
+        countryName: country && country.length === 2 ? (getCountryName(country.toUpperCase()) || country) : null,
         city: u.city || null,
         region: u.region || null,
         deviceType: u.device_type || 'unknown',
@@ -218,253 +152,115 @@ async function getAllUsers(
         currentContent: live?.content || null,
       };
     })
-    .filter((u: any) => u.userId && (u.firstSeen > 0 || u.lastSeen > 0));
+    .filter((u) => u.userId && (u.firstSeen > 0 || u.lastSeen > 0));
 
-  // Calculate summary from validated data
-  const activeToday = validUsers.filter((u: any) => u.lastSeen >= oneDayAgo).length;
-  const activeThisWeek = validUsers.filter((u: any) => u.lastSeen >= oneWeekAgo).length;
-  const onlineNow = validUsers.filter((u: any) => u.isOnline).length;
+  const activeToday = validUsers.filter((u) => u.lastSeen >= oneDayAgo).length;
+  const activeThisWeek = validUsers.filter((u) => u.lastSeen >= oneWeekAgo).length;
+  const onlineNow = validUsers.filter((u) => u.isOnline).length;
 
   return NextResponse.json({
     success: true,
     users: validUsers,
-    pagination: {
-      total: totalUsers,
-      limit,
-      offset,
-      hasMore: offset + limit < totalUsers,
-    },
-    summary: {
-      totalUsers,
-      activeToday,
-      activeThisWeek,
-      onlineNow,
-    },
+    pagination: { total: totalUsers, limit, offset, hasMore: offset + limit < totalUsers },
+    summary: { totalUsers, activeToday, activeThisWeek, onlineNow },
   });
 }
 
-async function getUserProfile(adapter: any, isNeon: boolean, userId: string, now: number) {
-  const fiveMinutesAgo = now - 5 * 60 * 1000;
-
+async function getUserProfile(adapter: ReturnType<typeof getAdapter>, userId: string, _now: number, fiveMinutesAgo: number) {
   try {
-    // 1. Get basic user info - get the most recent record for this user
-    const userQuery = isNeon
-      ? `SELECT * FROM user_activity WHERE user_id = $1 ORDER BY last_seen DESC LIMIT 1`
-      : `SELECT * FROM user_activity WHERE user_id = ? ORDER BY last_seen DESC LIMIT 1`;
-    const userResult = await adapter.query(userQuery, [userId]);
+    const userResult = await adapter.query<Record<string, unknown>>(
+      `SELECT * FROM user_activity WHERE user_id = ? ORDER BY last_seen DESC LIMIT 1`,
+      [userId]
+    );
     
-    if (!userResult || userResult.length === 0) {
+    if (!userResult.data || userResult.data.length === 0) {
       return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
     }
 
-    const user = userResult[0];
-    
-    // Validate user timestamps
+    const user = userResult.data[0];
     const userFirstSeen = normalizeTimestamp(user.first_seen);
     const userLastSeen = normalizeTimestamp(user.last_seen);
 
-    // 2. Get current live activity (with error handling)
-    let liveActivity = null;
+    let liveActivity: Record<string, unknown> | null = null;
     try {
-      const liveQuery = isNeon
-        ? `SELECT * FROM live_activity WHERE user_id = $1 AND is_active = TRUE AND last_heartbeat >= $2`
-        : `SELECT * FROM live_activity WHERE user_id = ? AND is_active = 1 AND last_heartbeat >= ?`;
-      const liveResult = await adapter.query(liveQuery, [userId, fiveMinutesAgo]);
-      liveActivity = liveResult[0] || null;
+      const liveResult = await adapter.query<Record<string, unknown>>(
+        `SELECT * FROM live_activity WHERE user_id = ? AND is_active = 1 AND last_heartbeat >= ?`,
+        [userId, fiveMinutesAgo]
+      );
+      liveActivity = (liveResult.data || [])[0] || null;
     } catch (e) {
       console.error('Error fetching live activity:', e);
     }
 
-    // 3. Get watch history (last 100 sessions) - with error handling
-    let watchHistory: any[] = [];
+    let watchHistory: Record<string, unknown>[] = [];
     try {
-      const watchQuery = isNeon
-        ? `SELECT 
-             content_id, content_type, content_title, 
-             season_number, episode_number,
-             started_at, ended_at, total_watch_time, 
-             last_position, duration, completion_percentage,
-             quality, device_type, is_completed, pause_count, seek_count
-           FROM watch_sessions 
-           WHERE user_id = $1 
-           ORDER BY started_at DESC 
-           LIMIT 100`
-        : `SELECT 
-             content_id, content_type, content_title, 
-             season_number, episode_number,
-             started_at, ended_at, total_watch_time, 
-             last_position, duration, completion_percentage,
-             quality, device_type, is_completed, pause_count, seek_count
-           FROM watch_sessions 
-           WHERE user_id = ? 
-           ORDER BY started_at DESC 
-           LIMIT 100`;
-      watchHistory = await adapter.query(watchQuery, [userId]) || [];
+      const watchResult = await adapter.query<Record<string, unknown>>(
+        `SELECT content_id, content_type, content_title, season_number, episode_number,
+           started_at, ended_at, total_watch_time, last_position, duration, completion_percentage,
+           quality, device_type, is_completed, pause_count, seek_count
+         FROM watch_sessions WHERE user_id = ? ORDER BY started_at DESC LIMIT 100`,
+        [userId]
+      );
+      watchHistory = watchResult.data || [];
     } catch (e) {
       console.error('Error fetching watch history:', e);
     }
 
-    // 4. Get page view history (last 100 events) - with error handling
-    let events: any[] = [];
-    try {
-      const eventsQuery = isNeon
-        ? `SELECT event_type, timestamp, metadata 
-           FROM analytics_events 
-           WHERE user_id = $1 OR session_id = $1
-           ORDER BY timestamp DESC 
-           LIMIT 100`
-        : `SELECT event_type, timestamp, metadata 
-           FROM analytics_events 
-           WHERE user_id = ? OR session_id = ?
-           ORDER BY timestamp DESC 
-           LIMIT 100`;
-      events = await adapter.query(eventsQuery, isNeon ? [userId] : [userId, userId]) || [];
-    } catch (e) {
-      console.error('Error fetching events:', e);
-    }
+    const totalWatchTime = watchHistory.reduce((sum, w) => sum + (parseInt(String(w.total_watch_time)) || 0), 0);
+    const avgCompletion = watchHistory.length > 0 
+      ? watchHistory.reduce((sum, w) => sum + (parseFloat(String(w.completion_percentage)) || 0), 0) / watchHistory.length 
+      : 0;
+    const completedCount = watchHistory.filter((w) => w.is_completed).length;
+    const movieCount = watchHistory.filter((w) => w.content_type === 'movie').length;
+    const tvCount = watchHistory.filter((w) => w.content_type === 'tv').length;
 
-  // 5. Calculate engagement metrics
-  const totalWatchTime = watchHistory.reduce((sum: number, w: any) => sum + (parseInt(w.total_watch_time) || 0), 0);
-  const avgCompletion = watchHistory.length > 0 
-    ? watchHistory.reduce((sum: number, w: any) => sum + (parseFloat(w.completion_percentage) || 0), 0) / watchHistory.length 
-    : 0;
-  const completedCount = watchHistory.filter((w: any) => w.is_completed).length;
-  const totalPauses = watchHistory.reduce((sum: number, w: any) => sum + (parseInt(w.pause_count) || 0), 0);
-  const totalSeeks = watchHistory.reduce((sum: number, w: any) => sum + (parseInt(w.seek_count) || 0), 0);
+    const country = user.country as string;
 
-  // 6. Get content preferences (most watched genres/types)
-  const movieCount = watchHistory.filter((w: any) => w.content_type === 'movie').length;
-  const tvCount = watchHistory.filter((w: any) => w.content_type === 'tv').length;
-
-  // 7. Get visit patterns (by hour and day)
-  const visitsByHour: Record<number, number> = {};
-  const visitsByDay: Record<number, number> = {};
-  
-  events.forEach((e: any) => {
-    const ts = parseInt(e.timestamp);
-    if (ts) {
-      const date = new Date(ts);
-      const hour = date.getHours();
-      const day = date.getDay();
-      visitsByHour[hour] = (visitsByHour[hour] || 0) + 1;
-      visitsByDay[day] = (visitsByDay[day] || 0) + 1;
-    }
-  });
-
-  // 8. Get recent activity timeline
-  const recentActivity = events.slice(0, 20).map((e: any) => {
-    let metadata = {};
-    try {
-      metadata = typeof e.metadata === 'string' ? JSON.parse(e.metadata) : e.metadata || {};
-    } catch {}
-    return {
-      type: e.event_type,
-      timestamp: parseInt(e.timestamp),
-      page: (metadata as any).page || (metadata as any).path,
-      contentId: (metadata as any).contentId,
-      contentTitle: (metadata as any).contentTitle,
-    };
-  });
-
-  // 9. Calculate activity streaks
-  const watchDates = new Set(
-    watchHistory.map((w: any) => {
-      const ts = parseInt(w.started_at);
-      return ts ? new Date(ts).toDateString() : null;
-    }).filter(Boolean)
-  );
-  
-  const eventDates = new Set(
-    events.map((e: any) => {
-      const ts = parseInt(e.timestamp);
-      return ts ? new Date(ts).toDateString() : null;
-    }).filter(Boolean)
-  );
-
-  const allDates = new Set(Array.from(watchDates).concat(Array.from(eventDates)));
-  const daysActive = allDates.size;
-
-  // Calculate current streak
-  let currentStreak = 0;
-  let checkDate = new Date();
-  while (allDates.has(checkDate.toDateString())) {
-    currentStreak++;
-    checkDate.setDate(checkDate.getDate() - 1);
-  }
-
-  return NextResponse.json({
-    success: true,
-    profile: {
-      userId: user.user_id,
-      sessionId: user.session_id,
-      firstSeen: isValidTimestamp(userFirstSeen) ? userFirstSeen : 0,
-      lastSeen: isValidTimestamp(userLastSeen) ? userLastSeen : 0,
-      totalSessions: Math.max(0, parseInt(user.total_sessions) || 0),
-      country: user.country && user.country.length === 2 ? user.country.toUpperCase() : null,
-      countryName: user.country && user.country.length === 2 ? (getCountryName(user.country.toUpperCase()) || user.country) : null,
-      city: user.city || null,
-      region: user.region || null,
-      deviceType: user.device_type || 'unknown',
-      userAgent: user.user_agent,
-    },
-    liveStatus: liveActivity ? {
-      isOnline: true,
-      activityType: liveActivity.activity_type,
-      contentId: liveActivity.content_id,
-      contentTitle: liveActivity.content_title,
-      currentPosition: parseInt(liveActivity.current_position) || 0,
-      lastHeartbeat: parseInt(liveActivity.last_heartbeat) || 0,
-    } : {
-      isOnline: false,
-    },
-    engagement: {
-      totalWatchTime: Math.round(totalWatchTime / 60), // minutes
-      avgCompletion: Math.round(avgCompletion),
-      completedCount,
-      totalPauses,
-      totalSeeks,
-      daysActive,
-      currentStreak,
-    },
-    preferences: {
-      movieCount,
-      tvCount,
-      preferredType: movieCount > tvCount ? 'movies' : tvCount > movieCount ? 'tv' : 'mixed',
-      topQuality: getMostCommon(watchHistory.map((w: any) => w.quality).filter(Boolean)),
-      topDevice: getMostCommon(watchHistory.map((w: any) => w.device_type).filter(Boolean)),
-    },
-    patterns: {
-      visitsByHour: Object.entries(visitsByHour).map(([hour, count]) => ({ hour: parseInt(hour), count })).sort((a, b) => a.hour - b.hour),
-      visitsByDay: Object.entries(visitsByDay).map(([day, count]) => ({ day: parseInt(day), count })).sort((a, b) => a.day - b.day),
-      peakHour: Object.entries(visitsByHour).sort((a, b) => b[1] - a[1])[0]?.[0] || null,
-      peakDay: Object.entries(visitsByDay).sort((a, b) => b[1] - a[1])[0]?.[0] || null,
-    },
-    watchHistory: watchHistory
-      .map((w: any) => {
-        const startedAt = normalizeTimestamp(w.started_at);
-        const endedAt = normalizeTimestamp(w.ended_at);
-        return {
-          contentId: w.content_id,
-          contentType: w.content_type,
-          contentTitle: w.content_title || `Content ${w.content_id}`,
-          seasonNumber: w.season_number ? parseInt(w.season_number) : null,
-          episodeNumber: w.episode_number ? parseInt(w.episode_number) : null,
-          startedAt: isValidTimestamp(startedAt) ? startedAt : 0,
-          endedAt: isValidTimestamp(endedAt) ? endedAt : 0,
-          watchTime: Math.max(0, Math.round((parseInt(w.total_watch_time) || 0) / 60)),
-          lastPosition: Math.max(0, parseInt(w.last_position) || 0),
-          duration: Math.max(0, parseInt(w.duration) || 0),
-          completion: Math.min(100, Math.max(0, Math.round(parseFloat(w.completion_percentage) || 0))),
-          quality: w.quality || 'auto',
-          deviceType: w.device_type || 'unknown',
-          isCompleted: !!w.is_completed,
-          pauseCount: Math.max(0, parseInt(w.pause_count) || 0),
-          seekCount: Math.max(0, parseInt(w.seek_count) || 0),
-        };
-      })
-      .filter((w: any) => w.startedAt > 0),
-    recentActivity,
-  });
+    return NextResponse.json({
+      success: true,
+      profile: {
+        userId: user.user_id,
+        sessionId: user.session_id,
+        firstSeen: isValidTimestamp(userFirstSeen) ? userFirstSeen : 0,
+        lastSeen: isValidTimestamp(userLastSeen) ? userLastSeen : 0,
+        totalSessions: Math.max(0, Number(user.total_sessions) || 0),
+        country: country && country.length === 2 ? country.toUpperCase() : null,
+        countryName: country && country.length === 2 ? (getCountryName(country.toUpperCase()) || country) : null,
+        city: user.city || null,
+        region: user.region || null,
+        deviceType: user.device_type || 'unknown',
+        userAgent: user.user_agent,
+      },
+      liveStatus: liveActivity ? {
+        isOnline: true,
+        activityType: liveActivity.activity_type,
+        contentId: liveActivity.content_id,
+        contentTitle: liveActivity.content_title,
+        currentPosition: Number(liveActivity.current_position) || 0,
+        lastHeartbeat: Number(liveActivity.last_heartbeat) || 0,
+      } : { isOnline: false },
+      engagement: {
+        totalWatchTime: Math.round(totalWatchTime / 60),
+        avgCompletion: Math.round(avgCompletion),
+        completedCount,
+      },
+      preferences: {
+        movieCount,
+        tvCount,
+        preferredType: movieCount > tvCount ? 'movies' : tvCount > movieCount ? 'tv' : 'mixed',
+        topQuality: getMostCommon(watchHistory.map((w) => w.quality as string).filter(Boolean)),
+        topDevice: getMostCommon(watchHistory.map((w) => w.device_type as string).filter(Boolean)),
+      },
+      watchHistory: watchHistory.slice(0, 20).map((w) => ({
+        contentId: w.content_id,
+        contentType: w.content_type,
+        contentTitle: w.content_title || `Content ${w.content_id}`,
+        startedAt: normalizeTimestamp(w.started_at),
+        watchTime: Math.max(0, Math.round((parseInt(String(w.total_watch_time)) || 0) / 60)),
+        completion: Math.min(100, Math.max(0, Math.round(parseFloat(String(w.completion_percentage)) || 0))),
+        isCompleted: !!w.is_completed,
+      })),
+    });
   } catch (error) {
     console.error('Error in getUserProfile:', error);
     return NextResponse.json({ 
@@ -473,11 +269,4 @@ async function getUserProfile(adapter: any, isNeon: boolean, userId: string, now
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
-
-function getMostCommon(arr: string[]): string | null {
-  if (arr.length === 0) return null;
-  const counts: Record<string, number> = {};
-  arr.forEach(item => { counts[item] = (counts[item] || 0) + 1; });
-  return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 }

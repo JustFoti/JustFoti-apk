@@ -1,51 +1,15 @@
 /**
  * Database Connection for Scripts
- * JavaScript version of the neon-connection for use in Node.js scripts
- * This is a standalone version that doesn't require TypeScript compilation
+ * 
+ * This script provides database connectivity for local development and scripts.
+ * After the Cloudflare migration, D1 is the primary database.
+ * SQLite is used for local development/testing.
+ * 
+ * For D1 operations, use wrangler d1 commands or the D1 REST API.
  */
 
-const { neon } = require('@neondatabase/serverless');
 const path = require('path');
 const fs = require('fs');
-
-// Database interface for consistent API
-class NeonAdapter {
-  constructor(connectionString) {
-    this.sql = neon(connectionString);
-  }
-
-  createTemplateString(sql) {
-    // Create a proper template literal for Neon
-    const templateStrings = [sql];
-    templateStrings.raw = [sql];
-    return templateStrings;
-  }
-
-  async query(sql, params = []) {
-    if (params.length === 0) {
-      // For DDL statements without parameters, use template literal
-      const templateStrings = this.createTemplateString(sql);
-      return await this.sql(templateStrings);
-    }
-    // Use neon's query method for parameterized queries
-    return await this.sql.query(sql, params);
-  }
-
-  async execute(sql, params = []) {
-    if (params.length === 0) {
-      // For DDL statements without parameters, use template literal
-      const templateStrings = this.createTemplateString(sql);
-      return await this.sql(templateStrings);
-    }
-    // Use neon's query method for parameterized queries
-    const result = await this.sql.query(sql, params);
-    return result;
-  }
-
-  close() {
-    // Neon connections are automatically managed
-  }
-}
 
 // SQLite adapter for local development
 class SQLiteAdapter {
@@ -86,7 +50,6 @@ class DatabaseConnection {
   constructor() {
     this.adapter = null;
     this.isInitialized = false;
-    this.isNeon = false;
   }
 
   async initialize() {
@@ -95,36 +58,25 @@ class DatabaseConnection {
     }
 
     try {
-      // Check for Neon connection string
-      const neonConnectionString = process.env.DATABASE_URL;
+      // Use SQLite for local development/scripts
+      console.log('🔌 Initializing SQLite for local development...');
+      const dbDir = path.join(process.cwd(), 'data');
       
-      if (neonConnectionString && neonConnectionString.includes('neon.tech')) {
-        // Use Neon for production
-        console.log('🔌 Initializing Neon PostgreSQL connection...');
-        this.adapter = new NeonAdapter(neonConnectionString);
-        this.isNeon = true;
-        console.log('✅ Neon PostgreSQL database initialized successfully');
-      } else {
-        // Use SQLite for local development
-        console.log('🔌 Initializing SQLite for local development...');
-        const dbDir = path.join(process.cwd(), 'data');
-        
-        try {
-          if (!fs.existsSync(dbDir)) {
-            fs.mkdirSync(dbDir, { recursive: true });
-          }
-        } catch (error) {
-          console.warn('Cannot create data directory, using in-memory SQLite');
+      try {
+        if (!fs.existsSync(dbDir)) {
+          fs.mkdirSync(dbDir, { recursive: true });
         }
-        
-        const dbPath = fs.existsSync(dbDir) 
-          ? path.join(dbDir, 'analytics.db')
-          : ':memory:';
-          
-        this.adapter = new SQLiteAdapter(dbPath);
-        this.isNeon = false;
-        console.log('✅ SQLite database initialized successfully');
+      } catch (error) {
+        console.warn('Cannot create data directory, using in-memory SQLite');
       }
+      
+      const dbPath = fs.existsSync(dbDir) 
+        ? path.join(dbDir, 'analytics.db')
+        : ':memory:';
+        
+      this.adapter = new SQLiteAdapter(dbPath);
+      console.log('✅ SQLite database initialized successfully');
+      console.log('ℹ️  Note: For production D1 operations, use wrangler d1 commands');
 
       this.isInitialized = true;
     } catch (error) {
@@ -138,10 +90,6 @@ class DatabaseConnection {
       throw new Error('Database not initialized. Call initialize() first.');
     }
     return this.adapter;
-  }
-
-  isUsingNeon() {
-    return this.isNeon;
   }
 
   close() {
