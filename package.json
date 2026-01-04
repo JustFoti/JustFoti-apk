@@ -41,6 +41,7 @@
     "analytics:init": "bun scripts/init-analytics.js",
     "d1:init": "npx wrangler d1 execute flyx-admin-db --file=scripts/init-d1-admin.sql",
     "d1:init:local": "npx wrangler d1 execute flyx-admin-db --local --file=scripts/init-d1-admin.sql",
+    "d1:reset-admin": "node scripts/reset-d1-admin.js",
     "migrate:neon-to-d1": "npx tsx scripts/migrate-neon-to-d1.ts",
     "decoder:test": "bun run app/lib/services/rcp/decoders/__tests__/cli.ts test",
     "decoder:analyze": "bun run app/lib/services/rcp/decoders/__tests__/cli.ts analyze",

@@ -95,6 +95,20 @@ export function getD1Database(env?: D1Env): D1Database {
     return env.DB;
   }
 
+  // Try OpenNext's getCloudflareContext (preferred method for Next.js on Cloudflare)
+  try {
+    // Dynamic import to avoid build errors when not in Cloudflare environment
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCloudflareContext } = require('@opennextjs/cloudflare');
+    const ctx = getCloudflareContext({ async: false });
+    if (ctx?.env?.DB) {
+      return ctx.env.DB as D1Database;
+    }
+  } catch (e) {
+    // getCloudflareContext not available or failed, try other methods
+    console.debug('[D1] getCloudflareContext failed:', e instanceof Error ? e.message : e);
+  }
+
   // Check for D1 in global context (set by OpenNext/Cloudflare Pages)
   const globalEnv = (globalThis as unknown as { process?: { env?: D1Env } })?.process?.env;
   if (globalEnv?.DB) {
