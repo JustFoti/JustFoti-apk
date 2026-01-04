@@ -52,6 +52,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   '.vercel.app',
+  '.pages.dev',      // Cloudflare Pages
+  '.workers.dev',    // Cloudflare Workers
 ];
 
 function isAllowedOrigin(origin: string | null, referer: string | null): boolean {

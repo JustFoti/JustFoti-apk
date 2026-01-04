@@ -378,7 +378,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3001',
   // Allow Vercel preview deployments
   '.vercel.app',
-  // Cloudflare Workers deployments
+  // Cloudflare Pages and Workers deployments
+  '.pages.dev',
   '.workers.dev',
 ];
 
