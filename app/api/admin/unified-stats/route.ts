@@ -85,6 +85,8 @@ export async function GET(request: NextRequest) {
     const adapter = getAdapter();
     const dbType = adapter.getDatabaseType();
     const isD1 = dbType === 'd1';
+    
+    console.log('[Unified Stats] Database type:', dbType, 'isD1:', isD1);
 
     const oneDayAgo = now - 24 * 60 * 60 * 1000;
     const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
@@ -165,12 +167,16 @@ export async function GET(request: NextRequest) {
     // ============================================
     let users = { total: 0, dau: 0, wau: 0, mau: 0, newToday: 0, returning: 0 };
     try {
+      console.log('[Unified Stats] Fetching user metrics...');
+      console.log('[Unified Stats] Time boundaries:', { oneDayAgo, oneWeekAgo, oneMonthAgo, now });
+      
       // Total UNIQUE users with valid timestamps
       const totalResult = await adapter.query<any>(
         `SELECT COUNT(DISTINCT user_id) as total FROM user_activity 
          WHERE first_seen >= ? AND last_seen >= ? AND last_seen <= ?`,
         [MIN_VALID_TIMESTAMP, MIN_VALID_TIMESTAMP, now]
       );
+      console.log('[Unified Stats] Total users result:', totalResult);
       users.total = parseInt(totalResult.data?.[0]?.total) || 0;
       
       // DAU - UNIQUE users active in last 24h
@@ -179,6 +185,7 @@ export async function GET(request: NextRequest) {
          WHERE last_seen >= ? AND last_seen <= ?`,
         [oneDayAgo, now]
       );
+      console.log('[Unified Stats] DAU result:', dauResult);
       users.dau = parseInt(dauResult.data?.[0]?.count) || 0;
       
       // WAU - UNIQUE users active in last week

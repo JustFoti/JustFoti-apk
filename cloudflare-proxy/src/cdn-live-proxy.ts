@@ -19,6 +19,16 @@ const REFERER = 'https://cdn-live.tv/';
 const ORIGIN = 'https://cdn-live.tv';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
+// Allowed domains for stream URLs
+const ALLOWED_DOMAINS = [
+  'cdn-live-tv.ru',
+  'cdn-live-tv.cfd',
+  'cdn-live.tv',
+  'cinephage.net',
+  'edge.cdn-live-tv.cfd',
+  'edge.cdn-live-tv.ru',
+];
+
 function corsHeaders(): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': '*',
@@ -70,8 +80,11 @@ export async function handleCDNLiveRequest(request: Request, env: Env): Promise<
       const decodedUrl = decodeURIComponent(streamUrl);
       
       // Validate URL is from expected domain
-      if (!decodedUrl.includes('cdn-live-tv.ru') && !decodedUrl.includes('cdn-live.tv') && !decodedUrl.includes('cdn-live-tv.cfd')) {
-        return jsonResponse({ error: 'Invalid URL domain' }, 400);
+      const urlHost = new URL(decodedUrl).hostname;
+      const isAllowed = ALLOWED_DOMAINS.some(domain => urlHost.includes(domain));
+      
+      if (!isAllowed) {
+        return jsonResponse({ error: 'Invalid URL domain', host: urlHost }, 400);
       }
 
       logger.info('Proxying CDN-Live stream', { url: decodedUrl.substring(0, 80) });
