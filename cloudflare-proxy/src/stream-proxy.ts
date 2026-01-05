@@ -386,7 +386,18 @@ const ALLOWED_ORIGINS = [
 function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
   const checkOrigin = (o: string): boolean => {
     return ALLOWED_ORIGINS.some(allowed => {
+      // Handle localhost
       if (allowed.includes('localhost')) return o.includes('localhost');
+      
+      // Handle domain suffix patterns (e.g., '.pages.dev', '.workers.dev')
+      if (allowed.startsWith('.')) {
+        try {
+          const originHost = new URL(o).hostname;
+          return originHost.endsWith(allowed);
+        } catch { return false; }
+      }
+      
+      // Handle full URLs
       try {
         const allowedHost = new URL(allowed).hostname;
         const originHost = new URL(o).hostname;
