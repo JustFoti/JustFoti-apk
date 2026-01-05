@@ -310,14 +310,14 @@ export const Navigation: React.FC<NavigationProps> = ({
             <div className={styles.logoIcon}>
               <svg width="36" height="36" viewBox="0 0 32 32" fill="none">
                 <defs>
-                  <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <linearGradient id="navLogoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
                     <stop offset="0%" stopColor="#00f5ff" />
                     <stop offset="50%" stopColor="#8b5cf6" />
                     <stop offset="100%" stopColor="#f471b5" />
                   </linearGradient>
                 </defs>
-                <path d="M5 9L16 3L27 9V23L16 29L5 23V9Z" stroke="url(#logoGradient)" strokeWidth="2" fill="rgba(139, 92, 246, 0.1)" />
-                <circle cx="16" cy="16" r="5.5" fill="url(#logoGradient)" />
+                <path d="M5 9L16 3L27 9V23L16 29L5 23V9Z" stroke="url(#navLogoGradient)" strokeWidth="2" fill="rgba(139, 92, 246, 0.1)" />
+                <circle cx="16" cy="16" r="5.5" fill="url(#navLogoGradient)" />
                 <path d="M13 16L15 18.5L19 13.5" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>

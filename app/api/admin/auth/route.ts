@@ -17,6 +17,8 @@ export async function POST(request: NextRequest) {
   try {
     const { username, password } = await request.json();
 
+    console.log('[Admin Auth] Login attempt for user:', username);
+
     if (!username || !password) {
       return NextResponse.json(
         { error: 'Username and password required' },
@@ -26,6 +28,13 @@ export async function POST(request: NextRequest) {
 
     // Authenticate using the updated admin-auth utilities
     const authResult = await authenticateAdmin(username, password);
+
+    console.log('[Admin Auth] Auth result:', { 
+      success: authResult.success, 
+      error: authResult.error,
+      hasUser: !!authResult.user,
+      hasToken: !!authResult.token
+    });
 
     if (!authResult.success || !authResult.token || !authResult.user) {
       return NextResponse.json(

@@ -323,19 +323,25 @@ export async function verifyPassword(password: string, storedHash: string): Prom
  * @returns Promise<boolean> - True if password matches
  */
 export async function verifyPasswordWithFallback(password: string, storedHash: string): Promise<boolean> {
+  console.log('[verifyPasswordWithFallback] Hash type:', storedHash.startsWith('$2') ? 'bcrypt' : 'webcrypto');
+  
   // Check if it's a bcrypt hash (starts with $2a$, $2b$, or $2y$)
   if (storedHash.startsWith('$2')) {
     try {
       // Dynamic import bcryptjs for legacy support
       const bcrypt = await import('bcryptjs');
-      return bcrypt.compareSync(password, storedHash);
+      console.log('[verifyPasswordWithFallback] bcryptjs imported successfully');
+      const result = bcrypt.compareSync(password, storedHash);
+      console.log('[verifyPasswordWithFallback] bcrypt compare result:', result);
+      return result;
     } catch (error) {
-      console.error('bcrypt verification failed:', error);
+      console.error('[verifyPasswordWithFallback] bcrypt verification failed:', error);
       return false;
     }
   }
   
   // Use Web Crypto verification for new hashes
+  console.log('[verifyPasswordWithFallback] Using Web Crypto verification');
   return verifyPassword(password, storedHash);
 }
 
@@ -529,8 +535,12 @@ export async function authenticateAdmin(
   env?: D1Env
 ): Promise<{ success: boolean; token?: string; user?: AdminUser; error?: string }> {
   try {
+    console.log('[authenticateAdmin] Starting authentication for:', username);
+    
     // Get database adapter
     const adapter = getAdapter({ d1Env: env });
+    
+    console.log('[authenticateAdmin] Got adapter, querying database...');
     
     // Query for admin user
     const result = await adapter.queryFirst<AdminUser>(
@@ -538,14 +548,29 @@ export async function authenticateAdmin(
       [username]
     );
     
+    console.log('[authenticateAdmin] Query result:', { 
+      hasData: !!result.data, 
+      error: result.error,
+      source: result.source 
+    });
+    
     if (result.error || !result.data) {
+      console.log('[authenticateAdmin] User not found or query error');
       return { success: false, error: 'Invalid credentials' };
     }
     
     const admin = result.data;
+    console.log('[authenticateAdmin] Found user:', { 
+      id: admin.id, 
+      username: admin.username,
+      hasPasswordHash: !!admin.password_hash,
+      hashPrefix: admin.password_hash?.substring(0, 10)
+    });
     
     // Verify password with fallback for legacy bcrypt hashes
     const isValid = await verifyPasswordWithFallback(password, admin.password_hash || '');
+    
+    console.log('[authenticateAdmin] Password verification result:', isValid);
     
     if (!isValid) {
       return { success: false, error: 'Invalid credentials' };
