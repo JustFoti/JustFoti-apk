@@ -26,7 +26,9 @@ const ORIGIN = 'https://modistreams.org';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // Valid domains for PPV streams
-const VALID_DOMAINS = ['poocloud.in', 'modistreams.org', 'pooembed.top', 'dzine.ai'];
+// poocloud.in = m3u8 playlists (needs RPI proxy due to IPv6 blocking)
+// vidsaver.io = actual video segments (can be fetched directly!)
+const VALID_DOMAINS = ['poocloud.in', 'modistreams.org', 'pooembed.top', 'dzine.ai', 'vidsaver.io'];
 
 function corsHeaders(): Record<string, string> {
   return {
@@ -62,9 +64,13 @@ async function fetchWithRetry(
   logger: ReturnType<typeof createLogger>,
   env: Env
 ): Promise<Response> {
-  // If we have RPI proxy configured, use it directly (poocloud.in blocks datacenter IPs)
-  if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
-    logger.info('Using RPI proxy for PPV stream', { url: url.substring(0, 80) });
+  const parsedUrl = new URL(url);
+  const isPoocloud = parsedUrl.hostname.endsWith('poocloud.in');
+  
+  // poocloud.in blocks CF IPs AND IPv6 - must use RPI proxy
+  // vidsaver.io and other domains can be fetched directly
+  if (isPoocloud && env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
+    logger.info('Using RPI proxy for poocloud.in (IPv6 blocked)', { url: url.substring(0, 80) });
     
     try {
       const rpiUrl = `${env.RPI_PROXY_URL}/ppv?url=${encodeURIComponent(url)}`;
@@ -80,15 +86,15 @@ async function fetchWithRetry(
       }
       
       logger.warn('RPI proxy failed', { status: rpiResponse.status });
-      // Fall through to direct fetch
+      // Fall through to direct fetch as last resort
     } catch (error) {
       logger.error('RPI proxy error', error as Error);
       // Fall through to direct fetch
     }
   }
   
-  // Try direct fetch as fallback (may work for some streams)
-  logger.info('Attempting direct fetch', { url: url.substring(0, 80) });
+  // Direct fetch - works for vidsaver.io segments and as fallback
+  logger.info('Direct fetch', { url: url.substring(0, 80), isPoocloud });
   
   const directResponse = await fetch(url, { headers });
   

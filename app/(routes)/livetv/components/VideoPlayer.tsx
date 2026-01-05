@@ -45,6 +45,8 @@ export const VideoPlayer = memo(function VideoPlayer({
     isMuted,
     isFullscreen,
     isLoading,
+    isBuffering,
+    loadingStage,
     error,
     volume,
     currentSource,
@@ -68,11 +70,11 @@ export const VideoPlayer = memo(function VideoPlayer({
     }
     
     hideTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !isLoading) {
+      if (isPlaying && !isLoading && !isBuffering) {
         setShowControls(false);
       }
     }, 3000);
-  }, [isPlaying, isLoading]);
+  }, [isPlaying, isLoading, isBuffering]);
 
   // Load stream when event or channel changes
   useEffect(() => {
@@ -115,7 +117,7 @@ export const VideoPlayer = memo(function VideoPlayer({
   }, [event?.id, channel?.id, isOpen, event, channel, loadStream, stopStream]);
 
   useEffect(() => {
-    if (isPlaying && !isLoading) {
+    if (isPlaying && !isLoading && !isBuffering) {
       resetHideTimer();
     } else {
       setShowControls(true);
@@ -123,7 +125,7 @@ export const VideoPlayer = memo(function VideoPlayer({
         clearTimeout(hideTimeoutRef.current);
       }
     }
-  }, [isPlaying, isLoading, resetHideTimer]);
+  }, [isPlaying, isLoading, isBuffering, resetHideTimer]);
 
   useEffect(() => {
     return () => {
@@ -182,6 +184,20 @@ export const VideoPlayer = memo(function VideoPlayer({
   const displaySport = event?.sport || channel?.category || '';
   const isLive = event?.isLive ?? true;
 
+  // Loading stage messages
+  const getLoadingMessage = () => {
+    switch (loadingStage) {
+      case 'fetching':
+        return 'Fetching stream info...';
+      case 'connecting':
+        return 'Connecting to stream...';
+      case 'buffering':
+        return 'Buffering...';
+      default:
+        return 'Loading stream...';
+    }
+  };
+
   return (
     <div className={styles.playerModal}>
       <div 
@@ -201,10 +217,21 @@ export const VideoPlayer = memo(function VideoPlayer({
           }}
         />
 
+        {/* Loading Overlay - shows during initial load */}
         {isLoading && (
           <div className={styles.loadingOverlay}>
-            <div className={styles.loadingSpinner} />
-            <p>Loading stream...</p>
+            <div className={styles.loadingContent}>
+              <div className={styles.loadingSpinnerLarge} />
+              <p className={styles.loadingText}>{getLoadingMessage()}</p>
+              <p className={styles.loadingSubtext}>{displayTitle}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Buffering Indicator - shows during playback buffering */}
+        {isBuffering && !isLoading && (
+          <div className={styles.bufferingOverlay}>
+            <div className={styles.bufferingSpinner} />
           </div>
         )}
 

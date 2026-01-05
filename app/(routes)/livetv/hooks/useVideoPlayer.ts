@@ -12,6 +12,8 @@ export interface PlayerState {
   isMuted: boolean;
   isFullscreen: boolean;
   isLoading: boolean;
+  isBuffering: boolean;
+  loadingStage: 'idle' | 'fetching' | 'connecting' | 'buffering';
   error: string | null;
   volume: number;
   currentTime: number;
@@ -37,6 +39,8 @@ export function useVideoPlayer() {
     isMuted: true,
     isFullscreen: false,
     isLoading: false,
+    isBuffering: false,
+    loadingStage: 'idle',
     error: null,
     volume: 1,
     currentTime: 0,
@@ -65,7 +69,7 @@ export function useVideoPlayer() {
   const loadStream = useCallback(async (source: StreamSource) => {
     if (!videoRef.current) return;
 
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    setState(prev => ({ ...prev, isLoading: true, isBuffering: false, loadingStage: 'fetching', error: null }));
     setCurrentSource(source);
 
     try {
@@ -101,6 +105,9 @@ export function useVideoPlayer() {
         }
       }
       
+      // Update to connecting stage
+      setState(prev => ({ ...prev, loadingStage: 'connecting' }));
+      
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
@@ -120,14 +127,14 @@ export function useVideoPlayer() {
       hlsRef.current = hls;
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setState(prev => ({ ...prev, isLoading: false }));
+        setState(prev => ({ ...prev, loadingStage: 'buffering' }));
         const video = videoRef.current;
         if (video) {
           video.muted = true;
           setState(prev => ({ ...prev, isMuted: true }));
           
           video.play().then(() => {
-            setState(prev => ({ ...prev, isPlaying: true }));
+            setState(prev => ({ ...prev, isPlaying: true, isLoading: false, loadingStage: 'idle' }));
             setTimeout(() => {
               if (videoRef.current) {
                 videoRef.current.muted = false;
@@ -136,7 +143,7 @@ export function useVideoPlayer() {
             }, 100);
           }).catch(err => {
             console.warn('Autoplay failed:', err);
-            setState(prev => ({ ...prev, isPlaying: false }));
+            setState(prev => ({ ...prev, isPlaying: false, isLoading: false, loadingStage: 'idle' }));
           });
         }
       });
@@ -149,13 +156,17 @@ export function useVideoPlayer() {
           if (errorMsg.includes('image') || errorMsg.includes('offline')) {
             setState(prev => ({ 
               ...prev, 
-              isLoading: false, 
+              isLoading: false,
+              isBuffering: false,
+              loadingStage: 'idle',
               error: 'This stream is not currently live. Please try again when the event starts.' 
             }));
           } else {
             setState(prev => ({ 
               ...prev, 
-              isLoading: false, 
+              isLoading: false,
+              isBuffering: false,
+              loadingStage: 'idle',
               error: `Stream error: ${data.details}` 
             }));
           }
@@ -196,7 +207,9 @@ export function useVideoPlayer() {
       console.error('Error loading stream:', error);
       setState(prev => ({ 
         ...prev, 
-        isLoading: false, 
+        isLoading: false,
+        isBuffering: false,
+        loadingStage: 'idle',
         error: error instanceof Error ? error.message : 'Failed to load stream' 
       }));
     }
@@ -264,9 +277,11 @@ export function useVideoPlayer() {
     if (!video) return;
 
     const handlePlay = () => setState(prev => ({ ...prev, isPlaying: true }));
-    const handlePlaying = () => setState(prev => ({ ...prev, isPlaying: true }));
+    const handlePlaying = () => setState(prev => ({ ...prev, isPlaying: true, isBuffering: false }));
     const handlePause = () => setState(prev => ({ ...prev, isPlaying: false }));
     const handleEnded = () => setState(prev => ({ ...prev, isPlaying: false }));
+    const handleWaiting = () => setState(prev => ({ ...prev, isBuffering: true }));
+    const handleCanPlay = () => setState(prev => ({ ...prev, isBuffering: false }));
     const handleVolumeChange = () => {
       setState(prev => ({ 
         ...prev, 
@@ -279,6 +294,8 @@ export function useVideoPlayer() {
     video.addEventListener('playing', handlePlaying);
     video.addEventListener('pause', handlePause);
     video.addEventListener('ended', handleEnded);
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('volumechange', handleVolumeChange);
 
     return () => {
@@ -286,6 +303,8 @@ export function useVideoPlayer() {
       video.removeEventListener('playing', handlePlaying);
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('ended', handleEnded);
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('volumechange', handleVolumeChange);
     };
   }, [currentSource]);

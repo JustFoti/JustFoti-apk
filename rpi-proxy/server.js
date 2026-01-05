@@ -865,10 +865,12 @@ function proxyRequest(targetUrl, res) {
  * 
  * poocloud.in blocks:
  *   1. Datacenter IPs (Cloudflare, AWS, etc.)
+ *   2. IPv6 requests (Cloudflare returns 403 for IPv6!)
  * 
  * Requires:
- *   - Referer: https://pooembed.top/
- *   - Origin: https://pooembed.top
+ *   - Referer: https://modistreams.org/
+ *   - Origin: https://modistreams.org
+ *   - IPv4 connection (family: 4)
  * 
  * This proxy fetches from a residential IP with the required headers.
  */
@@ -899,6 +901,7 @@ function proxyPPVStream(targetUrl, res) {
     method: 'GET',
     headers,
     timeout: 30000,
+    family: 4, // CRITICAL: Force IPv4 - poocloud.in blocks IPv6 via Cloudflare!
   };
 
   console.log(`[PPV] Proxying: ${targetUrl.substring(0, 80)}...`);
