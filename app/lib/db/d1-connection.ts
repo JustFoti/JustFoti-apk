@@ -42,10 +42,11 @@ export interface D1ExecResult {
 }
 
 /**
- * Environment interface for Cloudflare Workers with D1 binding
+ * Environment interface for Cloudflare Workers with D1 bindings
  */
 export interface D1Env {
-  DB: D1Database;
+  DB: D1Database;        // Main analytics database
+  ADMIN_DB?: D1Database; // Admin database (admin_users, feedback, etc.)
 }
 
 /**
@@ -125,6 +126,49 @@ export function getD1Database(env?: D1Env): D1Database {
     'D1 database not available. Ensure you are running in Cloudflare Workers/Pages environment ' +
     'with D1 binding configured in wrangler.toml'
   );
+}
+
+/**
+ * Get Admin D1 database instance from Cloudflare Workers environment
+ * Used for admin_users, feedback, and other admin-related tables
+ * 
+ * @param env - Optional environment object with D1 binding
+ * @returns D1Database instance for admin operations
+ * @throws Error if Admin D1 database is not available
+ */
+export function getAdminD1Database(env?: D1Env): D1Database {
+  // First, check if env is passed directly (preferred in Workers)
+  if (env?.ADMIN_DB) {
+    return env.ADMIN_DB;
+  }
+
+  // Try OpenNext's getCloudflareContext (preferred method for Next.js on Cloudflare)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getCloudflareContext } = require('@opennextjs/cloudflare');
+    const ctx = getCloudflareContext({ async: false });
+    if (ctx?.env?.ADMIN_DB) {
+      return ctx.env.ADMIN_DB as D1Database;
+    }
+  } catch (e) {
+    console.debug('[D1] getCloudflareContext for ADMIN_DB failed:', e instanceof Error ? e.message : e);
+  }
+
+  // Check for D1 in global context
+  const globalEnv = (globalThis as unknown as { process?: { env?: D1Env } })?.process?.env;
+  if (globalEnv?.ADMIN_DB) {
+    return globalEnv.ADMIN_DB;
+  }
+
+  // Check for cloudflare context
+  const cfContext = (globalThis as unknown as { __cf_env__?: D1Env })?.__cf_env__;
+  if (cfContext?.ADMIN_DB) {
+    return cfContext.ADMIN_DB;
+  }
+
+  // Fallback to main DB if ADMIN_DB not available (for backwards compatibility)
+  console.warn('[D1] ADMIN_DB not available, falling back to main DB');
+  return getD1Database(env);
 }
 
 /**
@@ -358,4 +402,115 @@ export async function transactionD1(
     success: true,
     error: null,
   };
+}
+
+// ============================================
+// Admin Database Functions
+// ============================================
+
+/**
+ * Execute a query on the Admin D1 database and return all results
+ * Used for admin_users, feedback, and other admin-related tables
+ * 
+ * @param sql - SQL query string with ? placeholders for parameters
+ * @param params - Array of parameter values to bind
+ * @param env - Optional environment object with D1 binding
+ * @returns QueryResult with data array or error
+ */
+export async function queryAdminD1<T = unknown>(
+  sql: string,
+  params: unknown[] = [],
+  env?: D1Env
+): Promise<QueryResult<T>> {
+  try {
+    const db = getAdminD1Database(env);
+    const stmt = db.prepare(sql);
+    const boundStmt = params.length > 0 ? stmt.bind(...params) : stmt;
+    const result = await boundStmt.all<T>();
+
+    return {
+      data: result.results,
+      error: null,
+      meta: {
+        duration: result.meta.duration,
+        changes: result.meta.changes,
+        lastRowId: result.meta.last_row_id,
+      },
+    };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown database error';
+    console.error('Admin D1 query error:', errorMessage, { sql, params });
+    return {
+      data: null,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Execute a query on the Admin D1 database and return the first result
+ * 
+ * @param sql - SQL query string with ? placeholders for parameters
+ * @param params - Array of parameter values to bind
+ * @param env - Optional environment object with D1 binding
+ * @returns SingleQueryResult with single row or null
+ */
+export async function queryAdminD1First<T = unknown>(
+  sql: string,
+  params: unknown[] = [],
+  env?: D1Env
+): Promise<SingleQueryResult<T>> {
+  try {
+    const db = getAdminD1Database(env);
+    const stmt = db.prepare(sql);
+    const boundStmt = params.length > 0 ? stmt.bind(...params) : stmt;
+    const result = await boundStmt.first<T>();
+
+    return {
+      data: result,
+      error: null,
+    };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown database error';
+    console.error('Admin D1 query error:', errorMessage, { sql, params });
+    return {
+      data: null,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Execute a write operation on the Admin D1 database
+ * 
+ * @param sql - SQL statement with ? placeholders for parameters
+ * @param params - Array of parameter values to bind
+ * @param env - Optional environment object with D1 binding
+ * @returns ExecuteResult with success status and metadata
+ */
+export async function executeAdminD1(
+  sql: string,
+  params: unknown[] = [],
+  env?: D1Env
+): Promise<ExecuteResult> {
+  try {
+    const db = getAdminD1Database(env);
+    const stmt = db.prepare(sql);
+    const boundStmt = params.length > 0 ? stmt.bind(...params) : stmt;
+    const result = await boundStmt.run();
+
+    return {
+      success: result.success,
+      error: null,
+      changes: result.meta.changes,
+      lastRowId: result.meta.last_row_id,
+    };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : 'Unknown database error';
+    console.error('Admin D1 execute error:', errorMessage, { sql, params });
+    return {
+      success: false,
+      error: errorMessage,
+    };
+  }
 }

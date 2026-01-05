@@ -9,7 +9,7 @@
 
 import { NextRequest } from 'next/server';
 import type { D1Env } from '../db/d1-connection';
-import { getAdapter } from '../db/adapter';
+import { getAdminAdapter } from '../db/adapter';
 
 // ============================================
 // Constants
@@ -537,10 +537,10 @@ export async function authenticateAdmin(
   try {
     console.log('[authenticateAdmin] Starting authentication for:', username);
     
-    // Get database adapter
-    const adapter = getAdapter({ d1Env: env });
+    // Get admin database adapter (uses ADMIN_DB binding)
+    const adapter = getAdminAdapter({ d1Env: env });
     
-    console.log('[authenticateAdmin] Got adapter, querying database...');
+    console.log('[authenticateAdmin] Got admin adapter, querying database...');
     
     // Query for admin user
     const result = await adapter.queryFirst<AdminUser>(
@@ -612,7 +612,7 @@ export async function authenticateAdmin(
  */
 export async function getAdminById(userId: string | number, env?: D1Env): Promise<AdminUser | null> {
   try {
-    const adapter = getAdapter({ d1Env: env });
+    const adapter = getAdminAdapter({ d1Env: env });
     
     const result = await adapter.queryFirst<AdminUser>(
       'SELECT * FROM admin_users WHERE id = ?',
@@ -669,7 +669,7 @@ export async function changeAdminPassword(
   env?: D1Env
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const adapter = getAdapter({ d1Env: env });
+    const adapter = getAdminAdapter({ d1Env: env });
     
     // Get current user
     const result = await adapter.queryFirst<AdminUser>(

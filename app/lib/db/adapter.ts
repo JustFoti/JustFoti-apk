@@ -14,6 +14,10 @@ import {
   executeD1,
   batchD1,
   getD1Database,
+  queryAdminD1,
+  queryAdminD1First,
+  executeAdminD1,
+  getAdminD1Database,
 } from './d1-connection';
 
 // ============================================
@@ -271,4 +275,92 @@ export function getDatetimeNow(): string {
  */
 export function getTimestampNow(): string {
   return "strftime('%s', 'now') * 1000";
+}
+
+// ============================================
+// Admin Database Adapter
+// ============================================
+
+/**
+ * Admin database adapter class for admin_users, feedback, etc.
+ * Uses the ADMIN_DB binding instead of the main DB binding
+ */
+export class AdminDatabaseAdapter {
+  private config: AdapterConfig;
+
+  constructor(config: Partial<AdapterConfig> = {}) {
+    this.config = { ...globalConfig, ...config };
+  }
+
+  /**
+   * Get the current database type being used
+   */
+  getDatabaseType(): DatabaseType {
+    return 'd1';
+  }
+
+  /**
+   * Execute a SELECT query and return all results
+   */
+  async query<T>(sql: string, params: unknown[] = []): Promise<AdapterQueryResult<T>> {
+    const result = await queryAdminD1<T>(sql, params, this.config.d1Env);
+    return {
+      data: result.data,
+      error: result.error,
+      source: 'd1',
+    };
+  }
+
+  /**
+   * Execute a SELECT query and return the first result
+   */
+  async queryFirst<T>(sql: string, params: unknown[] = []): Promise<AdapterSingleResult<T>> {
+    const result = await queryAdminD1First<T>(sql, params, this.config.d1Env);
+    return {
+      data: result.data,
+      error: result.error,
+      source: 'd1',
+    };
+  }
+
+  /**
+   * Execute a write operation (INSERT, UPDATE, DELETE)
+   */
+  async execute(sql: string, params: unknown[] = []): Promise<AdapterExecuteResult> {
+    const result = await executeAdminD1(sql, params, this.config.d1Env);
+    return {
+      success: result.success,
+      error: result.error,
+      changes: result.changes,
+      lastRowId: result.lastRowId,
+      source: 'd1',
+    };
+  }
+
+  /**
+   * Check if the database is healthy
+   */
+  async healthCheck(): Promise<{ healthy: boolean; source: DatabaseType; error?: string }> {
+    try {
+      const db = getAdminD1Database(this.config.d1Env);
+      const result = await db.prepare('SELECT 1 as health').first<{ health: number }>();
+      return {
+        healthy: result?.health === 1,
+        source: 'd1',
+      };
+    } catch (err) {
+      return {
+        healthy: false,
+        source: 'd1',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
+  }
+}
+
+/**
+ * Get an admin database adapter instance
+ */
+export function getAdminAdapter(config?: Partial<AdapterConfig>): AdminDatabaseAdapter {
+  return new AdminDatabaseAdapter(config);
 }

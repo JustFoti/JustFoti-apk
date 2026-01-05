@@ -11,7 +11,7 @@
 
 import { NextRequest } from 'next/server';
 import { verifyAdminAuth } from '@/lib/utils/admin-auth';
-import { getAdapter } from '@/app/lib/db/adapter';
+import { getAdminAdapter } from '@/app/lib/db/adapter';
 import {
   successResponse,
   unauthorizedResponse,
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0');
 
     // Get database adapter (uses D1 in Cloudflare environment)
-    const db = getAdapter();
+    const db = getAdminAdapter();
 
     // Build query with conditions
     let query = 'SELECT * FROM feedback';
@@ -166,7 +166,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Get database adapter
-    const db = getAdapter();
+    const db = getAdminAdapter();
 
     // If updating status
     if (status) {
@@ -222,7 +222,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Get database adapter
-    const db = getAdapter();
+    const db = getAdminAdapter();
 
     const result = await db.execute(
       'DELETE FROM feedback WHERE id = ?',

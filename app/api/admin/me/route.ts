@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdapter } from '@/lib/db/adapter';
+import { getAdminAdapter } from '@/lib/db/adapter';
 import { AdminAuthService } from '@/app/admin/middleware/auth-server';
 
 export async function GET(request: NextRequest) {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const now = Date.now();
     
     try {
-      const adapter = getAdapter();
+      const adapter = getAdminAdapter();
       await adapter.execute(
         'UPDATE admin_users SET last_login = ? WHERE id = ?',
         [now, user.id]

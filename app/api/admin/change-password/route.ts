@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdapter } from '@/lib/db/adapter';
+import { getAdminAdapter } from '@/lib/db/adapter';
 import { 
   verifyJWTWithFallback, 
   verifyPasswordWithFallback, 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const adapter = getAdapter();
+    const adapter = getAdminAdapter();
     
     // Query for admin user (D1/SQLite syntax)
     const adminResult = await adapter.query<Record<string, unknown>>(
