@@ -246,19 +246,19 @@ export function useLiveTVData() {
       const onlineChannels = channels.filter((c: any) => c.status === 'online');
 
       const events: LiveEvent[] = onlineChannels.map((channel: any) => ({
-        id: `cdnlive-${channel.name.toLowerCase().replace(/\s+/g, '-')}-${channel.code}`,
+        id: `cdnlive-${channel.id || channel.name.toLowerCase().replace(/\s+/g, '-')}`,
         title: channel.name,
         sport: categorizeChannel(channel.name),
         time: 'Live',
         isLive: true,
         source: 'cdnlive' as const,
-        poster: channel.image,
+        poster: channel.logo,
         viewers: channel.viewers?.toString(),
-        cdnliveEmbedId: `${channel.name}|${channel.code}`,
+        cdnliveEmbedId: `${channel.name}|${channel.country}`,
         channels: [{
           name: channel.name,
-          channelId: `${channel.name}|${channel.code}`,
-          href: channel.url,
+          channelId: `${channel.name}|${channel.country}`,
+          href: channel.stream_url,
         }],
       }));
 
