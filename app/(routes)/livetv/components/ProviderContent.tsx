@@ -228,12 +228,12 @@ export const ProviderContent = memo(function ProviderContent({
                       onClick={() => onPlayChannel(channel)}
                     >
                       <div className={styles.channelFlag}>
-                        {channel.countryInfo?.flag || '📺'}
+                        📺
                       </div>
                       <div className={styles.channelDetails}>
                         <span className={styles.channelTitle}>{channel.name}</span>
                         <span className={styles.channelSub}>
-                          {channel.countryInfo?.name || channel.category}
+                          {channel.category}
                         </span>
                       </div>
                       <div className={styles.channelPlayIcon}>

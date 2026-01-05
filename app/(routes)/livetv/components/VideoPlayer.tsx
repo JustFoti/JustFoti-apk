@@ -7,7 +7,7 @@
 
 import { memo, useEffect, useState, useRef, useCallback } from 'react';
 import { useVideoPlayer } from '../hooks/useVideoPlayer';
-import { LiveEvent, DLHDChannel } from '../hooks/useLiveTVData';
+import { LiveEvent, TVChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
 
 const SPORT_ICONS: Record<string, string> = {
@@ -28,7 +28,7 @@ function getSportIcon(sport: string): string {
 
 interface VideoPlayerProps {
   event?: LiveEvent | null;
-  channel?: DLHDChannel | null;
+  channel?: TVChannel | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -101,11 +101,13 @@ export const VideoPlayer = memo(function VideoPlayer({
         poster: event.poster,
       });
     } else if (channel) {
+      // Use the channel's source and channelId
+      const streamType = channel.source || 'dlhd';
       loadStream({
-        type: 'dlhd',
-        channelId: channel.id,
+        type: streamType,
+        channelId: channel.channelId || channel.id,
         title: channel.name,
-        poster: undefined,
+        poster: channel.logo,
       });
     } else {
       stopStream();
@@ -230,11 +232,12 @@ export const VideoPlayer = memo(function VideoPlayer({
                       poster: event.poster,
                     });
                   } else if (channel) {
+                    const streamType = channel.source || 'dlhd';
                     loadStream({
-                      type: 'dlhd',
-                      channelId: channel.id,
+                      type: streamType,
+                      channelId: channel.channelId || channel.id,
                       title: channel.name,
-                      poster: undefined,
+                      poster: channel.logo,
                     });
                   }
                 }}
