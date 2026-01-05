@@ -36,6 +36,11 @@ export async function POST(request: NextRequest) {
       hasToken: !!authResult.token
     });
 
+    // Check if D1 is not available (Vercel) - return 404
+    if (authResult.error === 'D1 database not available. Ensure you are running in Cloudflare Workers/Pages environment with D1 binding configured in wrangler.toml') {
+      return new NextResponse(null, { status: 404 });
+    }
+
     if (!authResult.success || !authResult.token || !authResult.user) {
       return NextResponse.json(
         { error: authResult.error || 'Invalid credentials' },
@@ -57,8 +62,9 @@ export async function POST(request: NextRequest) {
     response.cookies.set(ADMIN_COOKIE, authResult.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Changed from 'strict' to allow redirects
       maxAge: 24 * 60 * 60, // 24 hours
+      path: '/', // Ensure cookie is available on all paths
     });
 
     return response;

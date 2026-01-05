@@ -17,7 +17,6 @@ function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
     // Store intended destination when not authenticated
     useEffect(() => {
         if (!loading && !isAuthenticated && pathname && pathname !== '/admin') {
-            // Store the intended destination for redirect after login
             sessionStorage.setItem(REDIRECT_KEY, pathname);
         }
     }, [loading, isAuthenticated, pathname]);
@@ -28,10 +27,8 @@ function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
         sessionStorage.removeItem(REDIRECT_KEY);
         
         if (intendedDestination && intendedDestination !== '/admin') {
-            // Redirect to intended destination
             window.location.href = intendedDestination;
         } else {
-            // Default redirect to dashboard
             window.location.href = '/admin/dashboard';
         }
     };
@@ -40,7 +37,7 @@ function AdminLayoutWrapper({ children }: { children: React.ReactNode }) {
         return (
             <LoadingSpinner 
                 fullScreen 
-                message="Loading admin panel..." 
+                message="Loading..." 
                 size="lg"
             />
         );

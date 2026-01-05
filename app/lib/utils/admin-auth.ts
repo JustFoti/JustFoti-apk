@@ -599,7 +599,9 @@ export async function authenticateAdmin(
     };
   } catch (error) {
     console.error('Admin authentication error:', error);
-    return { success: false, error: 'Authentication failed' };
+    // Pass through D1 availability errors for environment detection
+    const errorMessage = error instanceof Error ? error.message : 'Authentication failed';
+    return { success: false, error: errorMessage };
   }
 }
 
