@@ -488,17 +488,17 @@ export default {
         },
         ppv: {
           path: '/ppv/',
-          description: 'PPV.to stream proxy (pooembed.top/poocloud.in)',
+          description: 'PPV.to stream proxy (modistreams.org/poocloud.in)',
           usage: '/ppv/stream?url=<encoded_url>',
           subRoutes: {
             stream: '/ppv/stream?url=<encoded_url> - Proxy m3u8/ts with proper Referer',
             health: '/ppv/health - Health check',
             test: '/ppv/test - Test upstream connectivity',
           },
-          validDomains: ['poocloud.in', 'pooembed.top'],
+          validDomains: ['poocloud.in', 'modistreams.org', 'pooembed.top'],
           requiredHeaders: {
-            Referer: 'https://pooembed.top/',
-            Origin: 'https://pooembed.top',
+            Referer: 'https://modistreams.org/',
+            Origin: 'https://modistreams.org',
           },
         },
         cdnLive: {

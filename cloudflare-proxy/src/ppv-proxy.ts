@@ -21,12 +21,12 @@ export interface Env {
   RPI_PROXY_KEY?: string;
 }
 
-const REFERER = 'https://pooembed.top/';
-const ORIGIN = 'https://pooembed.top';
+const REFERER = 'https://modistreams.org/';
+const ORIGIN = 'https://modistreams.org';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // Valid domains for PPV streams
-const VALID_DOMAINS = ['poocloud.in', 'pooembed.top', 'dzine.ai'];
+const VALID_DOMAINS = ['poocloud.in', 'modistreams.org', 'pooembed.top', 'dzine.ai'];
 
 function corsHeaders(): Record<string, string> {
   return {

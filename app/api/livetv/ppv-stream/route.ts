@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const EMBED_BASE = 'https://pooembed.top';
+const EMBED_BASE = 'https://modistreams.org';
 
 interface StreamResult {
   success: boolean;
@@ -192,8 +192,8 @@ export async function GET(request: NextRequest) {
       },
       // Headers needed for playback
       playbackHeaders: {
-        'Referer': 'https://pooembed.top/',
-        'Origin': 'https://pooembed.top',
+        'Referer': 'https://modistreams.org/',
+        'Origin': 'https://modistreams.org',
       },
     }, {
       headers: {
