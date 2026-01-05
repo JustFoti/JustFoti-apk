@@ -8,7 +8,7 @@
 
 import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
-import { getAdapter } from '@/lib/db/adapter';
+import { getAdminAdapter } from '@/lib/db/adapter';
 import { 
   AdminUser, 
   AuthResult, 
@@ -64,8 +64,8 @@ export class AdminAuthService {
         };
       }
 
-      // Get database adapter (D1 only)
-      const adapter = getAdapter();
+      // Get database adapter (Admin DB for admin_users table)
+      const adapter = getAdminAdapter();
 
       // Get user from database using SQLite-style placeholder
       const result = await adapter.query<Record<string, unknown>>(
@@ -144,7 +144,7 @@ export class AdminAuthService {
    */
   static async updateLastLogin(userId: string): Promise<void> {
     try {
-      const adapter = getAdapter();
+      const adapter = getAdminAdapter();
       await adapter.execute(
         'UPDATE admin_users SET last_login = ? WHERE id = ?',
         [Date.now(), userId]
@@ -169,7 +169,7 @@ export class AuditLogService {
     ipAddress?: string
   ): Promise<void> {
     try {
-      const adapter = getAdapter();
+      const adapter = getAdminAdapter();
 
       const logEntry = {
         id: `audit_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
@@ -217,7 +217,7 @@ export class AuditLogService {
     totalPages: number;
   }> {
     try {
-      const adapter = getAdapter();
+      const adapter = getAdminAdapter();
 
       let whereClause = 'WHERE 1=1';
       const params: unknown[] = [];
