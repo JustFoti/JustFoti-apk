@@ -293,6 +293,7 @@ export const VideoPlayer = memo(function VideoPlayer({
           </div>
         )}
 
+        {/* Controls - hide for iframe mode since iframe has its own controls */}
         <div className={`${styles.playerControls} ${!showControls ? styles.hidden : ''}`}>
           {/* Top Controls */}
           <div className={styles.topControls}>

@@ -2149,6 +2149,7 @@ function fetchWithHeaders(url, headers = {}, maxRedirects = 5) {
 
 /**
  * Extract m3u8 from VIPRow/Casthill embed
+ * Updated to handle new obfuscation layer
  */
 async function extractVIPRowM3U8(streamPageUrl) {
   console.log(`[VIPRow] Extracting from: ${streamPageUrl}`);
@@ -2164,9 +2165,9 @@ async function extractVIPRowM3U8(streamPageUrl) {
     const streamHtml = streamRes.data.toString('utf8');
     
     // Extract embed parameters
-    const zmidMatch = streamHtml.match(/const\s+zmid\s*=\s*"([^"]+)"/);
+    const zmidMatch = streamHtml.match(/const\s+zmid\s*=\s*["']([^"']+)["']/);
     const pidMatch = streamHtml.match(/const\s+pid\s*=\s*(\d+)/);
-    const edmMatch = streamHtml.match(/const\s+edm\s*=\s*"([^"]+)"/);
+    const edmMatch = streamHtml.match(/const\s+edm\s*=\s*["']([^"']+)["']/);
     const configMatch = streamHtml.match(/const siteConfig = (\{[^;]+\});/);
     
     if (!zmidMatch || !pidMatch || !edmMatch) {
@@ -2212,13 +2213,24 @@ async function extractVIPRowM3U8(streamPageUrl) {
     
     const embedHtml = embedRes.data.toString('utf8');
     
-    // Find player script
+    // Find player script - check for both old and new formats
     const scriptPattern = /<script[^>]*>([\s\S]*?)<\/script>/gi;
     let embedScript = null;
     let match;
     while ((match = scriptPattern.exec(embedHtml)) !== null) {
-      if (match[1].includes('isPlayerLoaded') && match[1].includes('scode')) {
-        embedScript = match[1];
+      const script = match[1];
+      // Old format: direct player code
+      if (script.includes('isPlayerLoaded') && script.includes('scode')) {
+        embedScript = script;
+        break;
+      }
+      // New format: obfuscated with window['key'] = 'encoded'
+      // The big obfuscated script (>100KB) contains the decoder
+      if (script.length > 100000) {
+        console.log(`[VIPRow] Found obfuscated script (${script.length} chars)`);
+        // Try to extract variables from the obfuscated script
+        // The script eventually decodes to player code with the same variables
+        embedScript = script;
         break;
       }
     }
@@ -2229,60 +2241,86 @@ async function extractVIPRowM3U8(streamPageUrl) {
     
     console.log(`[VIPRow] Found player script (${embedScript.length} chars)`);
     
-    // Extract variables
-    const deviceId = embedScript.match(/r="([a-z0-9]+)"/)?.[1];
-    const streamId = embedScript.match(/s="([a-z0-9]+)"/)?.[1];
-    const hostId = embedScript.match(/m="([a-z0-9-]+)"/)?.[1];
-    const timestamp = embedScript.match(/a=parseInt\("(\d+)"/)?.[1];
+    // Try to extract variables - check both old and new patterns
+    let deviceId, streamId, hostId, timestamp, initialScode, baseUrl, csrfAuth, manifestUrl;
+    
+    // Old format patterns
+    deviceId = embedScript.match(/r\s*=\s*["']([a-z0-9]+)["']/)?.[1];
+    streamId = embedScript.match(/s\s*=\s*["']([a-z0-9]+)["']/)?.[1];
+    hostId = embedScript.match(/m\s*=\s*["']([a-z0-9-]+)["']/)?.[1];
+    timestamp = embedScript.match(/a\s*=\s*parseInt\s*\(\s*["'](\d+)["']/)?.[1];
     
     // Extract initial scode (char code array)
-    const iMatch = embedScript.match(/i=e\(\[([0-9,]+)\]\)/);
-    let initialScode = '';
+    const iMatch = embedScript.match(/i\s*=\s*e\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)/);
     if (iMatch) {
-      const charCodes = JSON.parse('[' + iMatch[1] + ']');
+      const charCodes = JSON.parse('[' + iMatch[1].replace(/\s/g, '') + ']');
       initialScode = String.fromCharCode(...charCodes);
     }
     
     // Extract base URL (base64)
-    const cMatch = embedScript.match(/c=t\("([^"]+)"\)/);
-    let baseUrl = '';
+    const cMatch = embedScript.match(/c\s*=\s*t\s*\(\s*["']([^"']+)["']\s*\)/);
     if (cMatch) {
       baseUrl = Buffer.from(cMatch[1], 'base64').toString('utf8');
     }
     
     // Extract X-CSRF-Auth (double base64)
-    const lMatch = embedScript.match(/l=t\("([^"]+)"\)/);
-    let csrfAuth = '';
+    const lMatch = embedScript.match(/l\s*=\s*t\s*\(\s*["']([^"']+)["']\s*\)/);
     if (lMatch) {
       const decoded1 = Buffer.from(lMatch[1], 'base64').toString('utf8');
       csrfAuth = Buffer.from(decoded1, 'base64').toString('utf8');
     }
     
     // Extract manifest URL (double base64 via char codes)
-    const dMatch = embedScript.match(/d=t\(e\(\[([0-9,]+)\]\)\)/);
-    let manifestUrl = '';
+    const dMatch = embedScript.match(/d\s*=\s*t\s*\(\s*e\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)\s*\)/);
     if (dMatch) {
-      const charCodes = JSON.parse('[' + dMatch[1] + ']');
+      const charCodes = JSON.parse('[' + dMatch[1].replace(/\s/g, '') + ']');
       const dString = String.fromCharCode(...charCodes);
       const dDecoded = Buffer.from(dString, 'base64').toString('utf8');
       manifestUrl = Buffer.from(dDecoded, 'base64').toString('utf8');
+    }
+    
+    // If old patterns didn't work, try to find encoded strings in the obfuscated script
+    if (!deviceId || !streamId || !baseUrl || !manifestUrl) {
+      console.log(`[VIPRow] Old patterns failed, trying to find encoded data...`);
+      
+      // Look for base64-encoded URLs in the script
+      const b64Matches = embedScript.match(/["']([A-Za-z0-9+/=]{40,})["']/g) || [];
+      for (const b64 of b64Matches) {
+        const clean = b64.replace(/["']/g, '');
+        try {
+          const decoded = Buffer.from(clean, 'base64').toString('utf8');
+          if (decoded.includes('boanki.net') || decoded.includes('peulleieo.net')) {
+            console.log(`[VIPRow] Found encoded URL: ${decoded.substring(0, 60)}...`);
+            if (decoded.includes('boanki.net')) baseUrl = decoded;
+            if (decoded.includes('.m3u8') || decoded.includes('peulleieo.net')) manifestUrl = decoded;
+          }
+        } catch {}
+      }
+      
+      // Look for stream IDs in the script (hex strings)
+      const hexMatches = embedScript.match(/["']([a-f0-9]{16,32})["']/g) || [];
+      for (const hex of hexMatches) {
+        const clean = hex.replace(/["']/g, '');
+        if (!deviceId && clean.length >= 16) deviceId = clean;
+        else if (!streamId && clean.length >= 16) streamId = clean;
+      }
     }
     
     console.log(`[VIPRow] Extracted: deviceId=${deviceId}, streamId=${streamId}, hostId=${hostId}`);
     console.log(`[VIPRow] baseUrl=${baseUrl}, manifestUrl=${manifestUrl?.substring(0, 60)}...`);
     
     if (!deviceId || !streamId || !baseUrl || !manifestUrl) {
-      return { success: false, error: 'Failed to extract stream variables' };
+      return { success: false, error: 'Failed to extract stream variables - script may be using new obfuscation' };
     }
     
     // Step 3: Refresh token via boanki.net
-    const tokenUrl = `${baseUrl}?scode=${encodeURIComponent(initialScode)}&stream=${encodeURIComponent(streamId)}&expires=${encodeURIComponent(timestamp || '')}&u_id=${encodeURIComponent(deviceId)}&host_id=${encodeURIComponent(hostId || '')}`;
+    const tokenUrl = `${baseUrl}?scode=${encodeURIComponent(initialScode || '')}&stream=${encodeURIComponent(streamId)}&expires=${encodeURIComponent(timestamp || '')}&u_id=${encodeURIComponent(deviceId)}&host_id=${encodeURIComponent(hostId || '')}`;
     
     console.log(`[VIPRow] Refreshing token: ${tokenUrl.substring(0, 80)}...`);
     
     const tokenRes = await fetchWithHeaders(tokenUrl, {
       'Accept': 'application/json',
-      'X-CSRF-Auth': csrfAuth,
+      'X-CSRF-Auth': csrfAuth || '',
       'Origin': CASTHILL_ORIGIN,
       'Referer': CASTHILL_REFERER,
     });

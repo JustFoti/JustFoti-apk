@@ -63,11 +63,9 @@ export function useVideoPlayer() {
         const countryCode = cdnParts[1] || 'us';
         return `/api/livetv/cdnlive-stream?channel=${channelName}&code=${countryCode}`;
       case 'viprow':
-        // VIPRow uses the Cloudflare proxy directly
-        // The viprowUrl is the event path like "/nba/event-online-stream"
-        const viprowUrl = source.viprowUrl || source.channelId;
-        const linkNum = source.linkNum || 1;
-        return getVIPRowStreamUrl(viprowUrl, linkNum);
+        // VIPRow extraction is currently broken due to heavy obfuscation
+        // Casthill added a new anti-scraping layer that requires JS execution
+        throw new Error('VIPRow streams are temporarily unavailable');
       default:
         throw new Error(`Unsupported source type: ${source.type}`);
     }
