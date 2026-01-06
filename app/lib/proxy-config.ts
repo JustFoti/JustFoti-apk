@@ -346,7 +346,8 @@ export function isVIPRowProxyConfigured(): boolean {
 
 /**
  * Get VIPRow stream URL via Cloudflare Worker
- * Returns a proxied m3u8 URL that can be played directly in hls.js
+ * The CF Worker forwards extraction to RPI proxy (boanki.net blocks CF Workers)
+ * and returns a proxied m3u8 that can be played directly in hls.js
  * 
  * @param eventUrl - VIPRow event URL (e.g., /nba/event-online-stream)
  * @param link - Link number (1-10, default 1)

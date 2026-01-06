@@ -22,6 +22,7 @@ interface ViprowEvent {
   isoTime: string;
   url: string;
   isLive: boolean;
+  startsIn?: string; // Human-readable time until start (for upcoming events)
 }
 
 export async function GET() {
@@ -79,10 +80,35 @@ export async function GET() {
       
       const [, isoTime, time] = timeMatch;
       
-      // Determine if event is live (started but not ended)
-      const eventTime = new Date(isoTime);
+      // Parse the event time - VIPRow times appear to be in UTC
+      // Format: "2026-01-06T01:00" (no timezone = assume UTC)
+      let eventTime: Date;
+      if (isoTime.includes('T') && !isoTime.includes('Z') && !isoTime.includes('+')) {
+        // No timezone specified, treat as UTC
+        eventTime = new Date(isoTime + 'Z');
+      } else {
+        eventTime = new Date(isoTime);
+      }
+      
       const now = new Date();
-      const isLive = eventTime <= now && (now.getTime() - eventTime.getTime()) < 4 * 60 * 60 * 1000; // Within 4 hours
+      
+      // Event is live if:
+      // 1. It has already started (eventTime <= now)
+      // 2. It started within the last 4 hours (typical sports event duration)
+      const timeSinceStart = now.getTime() - eventTime.getTime();
+      const isLive = timeSinceStart >= 0 && timeSinceStart < 4 * 60 * 60 * 1000;
+      
+      // Calculate time until start for upcoming events
+      let startsIn: string | undefined;
+      if (timeSinceStart < 0) {
+        const minutesUntil = Math.abs(timeSinceStart) / (60 * 1000);
+        if (minutesUntil < 60) {
+          startsIn = `${Math.round(minutesUntil)}m`;
+        } else {
+          const hoursUntil = minutesUntil / 60;
+          startsIn = `${Math.round(hoursUntil)}h`;
+        }
+      }
       
       events.push({
         id: `viprow-${url.replace(/[^a-z0-9]/gi, '-')}`,
@@ -92,6 +118,7 @@ export async function GET() {
         isoTime,
         url,
         isLive,
+        startsIn,
       });
     }
 

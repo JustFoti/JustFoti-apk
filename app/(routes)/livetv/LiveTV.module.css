@@ -982,6 +982,20 @@
   gap: 0.4rem;
 }
 
+.upcomingIndicator {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  background: linear-gradient(135deg, #3498db, #2980b9);
+  color: #ffffff;
+  padding: 0.4rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .liveDot {
   width: 6px;
   height: 6px;

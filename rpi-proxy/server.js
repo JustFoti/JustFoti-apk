@@ -1331,6 +1331,94 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ============================================================================
+  // VIPRow Stream Extraction - RPI does EVERYTHING
+  // boanki.net blocks Cloudflare Workers, so we do extraction from residential IP
+  // ============================================================================
+  
+  // VIPRow stream extraction endpoint
+  // Input: url (VIPRow event path like /nba/event-online-stream) and link number
+  // Output: m3u8 manifest with URLs rewritten through CF proxy
+  if (reqUrl.pathname === '/viprow/stream') {
+    const eventUrl = reqUrl.searchParams.get('url');
+    const linkNum = reqUrl.searchParams.get('link') || '1';
+    const cfProxy = reqUrl.searchParams.get('cf_proxy'); // CF proxy base URL for rewriting
+    
+    if (!eventUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ 
+        error: 'Missing url parameter',
+        usage: '/viprow/stream?url=/nba/event-online-stream&link=1&cf_proxy=https://media-proxy.example.com'
+      }));
+    }
+
+    try {
+      await extractVIPRowStream(eventUrl, linkNum, cfProxy, res);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'VIPRow extraction failed', details: err.message }));
+    }
+    return;
+  }
+
+  // VIPRow manifest proxy - proxies manifest with URL rewriting
+  if (reqUrl.pathname === '/viprow/manifest') {
+    const manifestUrl = reqUrl.searchParams.get('url');
+    const cfProxy = reqUrl.searchParams.get('cf_proxy');
+    
+    if (!manifestUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    }
+
+    try {
+      const decoded = decodeURIComponent(manifestUrl);
+      await proxyVIPRowManifest(decoded, cfProxy, res);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Invalid URL' }));
+    }
+    return;
+  }
+
+  // VIPRow key proxy - proxies AES-128 decryption keys
+  if (reqUrl.pathname === '/viprow/key') {
+    const keyUrl = reqUrl.searchParams.get('url');
+    
+    if (!keyUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    }
+
+    try {
+      const decoded = decodeURIComponent(keyUrl);
+      await proxyVIPRowKey(decoded, res);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Invalid URL' }));
+    }
+    return;
+  }
+
+  // VIPRow segment proxy - proxies video segments
+  if (reqUrl.pathname === '/viprow/segment') {
+    const segmentUrl = reqUrl.searchParams.get('url');
+    
+    if (!segmentUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    }
+
+    try {
+      const decoded = decodeURIComponent(segmentUrl);
+      await proxyVIPRowSegment(decoded, res);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Invalid URL' }));
+    }
+    return;
+  }
+
   // AnimeKai FULL extraction endpoint - does ALL the work from residential IP
   // Input: encrypted embed response from AnimeKai /ajax/links/view
   // Output: { success: true, streamUrl: "https://...", skip: {...} }
@@ -1981,6 +2069,461 @@ async function extractAnimeKaiStream(encryptedEmbed, res) {
   }
 }
 
+// ============================================================================
+// VIPRow/Casthill Stream Extraction
+// boanki.net blocks Cloudflare Workers, so we do extraction from residential IP
+// ============================================================================
+
+const VIPROW_BASE = 'https://www.viprow.nu';
+const CASTHILL_ORIGIN = 'https://casthill.net';
+const CASTHILL_REFERER = 'https://casthill.net/';
+const VIPROW_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// Allowed domains for VIPRow proxying
+const VIPROW_ALLOWED_DOMAINS = ['peulleieo.net', 'boanki.net'];
+
+function isVIPRowAllowedUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return VIPROW_ALLOWED_DOMAINS.some(domain => parsed.hostname.endsWith(domain));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Fetch a URL with custom headers (follows redirects)
+ */
+function fetchWithHeaders(url, headers = {}, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const client = urlObj.protocol === 'https:' ? https : http;
+    
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: 'GET',
+      headers: {
+        'User-Agent': VIPROW_USER_AGENT,
+        ...headers
+      },
+      timeout: 30000,
+    };
+    
+    const req = client.request(options, (res) => {
+      // Handle redirects
+      if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+        if (maxRedirects <= 0) {
+          reject(new Error('Too many redirects'));
+          return;
+        }
+        const redirectUrl = res.headers.location.startsWith('http') 
+          ? res.headers.location 
+          : new URL(res.headers.location, url).toString();
+        console.log(`[VIPRow] Redirect -> ${redirectUrl.substring(0, 80)}...`);
+        fetchWithHeaders(redirectUrl, headers, maxRedirects - 1).then(resolve).catch(reject);
+        return;
+      }
+      
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode,
+          data: Buffer.concat(chunks),
+          headers: res.headers,
+          url: url, // Final URL after redirects
+        });
+      });
+    });
+    
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timeout'));
+    });
+    req.end();
+  });
+}
+
+/**
+ * Extract m3u8 from VIPRow/Casthill embed
+ */
+async function extractVIPRowM3U8(streamPageUrl) {
+  console.log(`[VIPRow] Extracting from: ${streamPageUrl}`);
+  
+  try {
+    // Step 1: Fetch VIPRow stream page
+    const streamRes = await fetchWithHeaders(streamPageUrl, { 'Referer': VIPROW_BASE });
+    
+    if (streamRes.status !== 200) {
+      return { success: false, error: `Failed to fetch stream page: ${streamRes.status}` };
+    }
+    
+    const streamHtml = streamRes.data.toString('utf8');
+    
+    // Extract embed parameters
+    const zmidMatch = streamHtml.match(/const\s+zmid\s*=\s*"([^"]+)"/);
+    const pidMatch = streamHtml.match(/const\s+pid\s*=\s*(\d+)/);
+    const edmMatch = streamHtml.match(/const\s+edm\s*=\s*"([^"]+)"/);
+    const configMatch = streamHtml.match(/const siteConfig = (\{[^;]+\});/);
+    
+    if (!zmidMatch || !pidMatch || !edmMatch) {
+      return { success: false, error: 'Failed to extract embed parameters' };
+    }
+    
+    const zmid = zmidMatch[1];
+    const pid = pidMatch[1];
+    const edm = edmMatch[1];
+    
+    let csrf = '', csrf_ip = '', category = '';
+    if (configMatch) {
+      try {
+        const config = JSON.parse(configMatch[1]);
+        csrf = config.csrf || '';
+        csrf_ip = config.csrf_ip || '';
+        category = config.linkAppendUri || '';
+      } catch {
+        csrf = streamHtml.match(/"csrf"\s*:\s*"([^"]+)"/)?.[1] || '';
+        csrf_ip = streamHtml.match(/"csrf_ip"\s*:\s*"([^"]+)"/)?.[1] || '';
+        category = streamHtml.match(/"linkAppendUri"\s*:\s*"([^"]+)"/)?.[1] || '';
+      }
+    }
+    
+    console.log(`[VIPRow] Embed params: zmid=${zmid}, pid=${pid}, edm=${edm}, category=${category}`);
+    
+    // Step 2: Fetch Casthill embed
+    const embedParams = new URLSearchParams({
+      pid, gacat: '', gatxt: category, v: zmid, csrf, csrf_ip,
+    });
+    const embedUrl = `https://${edm}/sd0embed/${category}?${embedParams}`;
+    
+    console.log(`[VIPRow] Fetching embed: ${embedUrl.substring(0, 80)}...`);
+    
+    const embedRes = await fetchWithHeaders(embedUrl, {
+      'Referer': streamPageUrl,
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    });
+    
+    if (embedRes.status !== 200) {
+      return { success: false, error: `Failed to fetch embed: ${embedRes.status}` };
+    }
+    
+    const embedHtml = embedRes.data.toString('utf8');
+    
+    // Find player script
+    const scriptPattern = /<script[^>]*>([\s\S]*?)<\/script>/gi;
+    let embedScript = null;
+    let match;
+    while ((match = scriptPattern.exec(embedHtml)) !== null) {
+      if (match[1].includes('isPlayerLoaded') && match[1].includes('scode')) {
+        embedScript = match[1];
+        break;
+      }
+    }
+    
+    if (!embedScript) {
+      return { success: false, error: 'Player script not found' };
+    }
+    
+    console.log(`[VIPRow] Found player script (${embedScript.length} chars)`);
+    
+    // Extract variables
+    const deviceId = embedScript.match(/r="([a-z0-9]+)"/)?.[1];
+    const streamId = embedScript.match(/s="([a-z0-9]+)"/)?.[1];
+    const hostId = embedScript.match(/m="([a-z0-9-]+)"/)?.[1];
+    const timestamp = embedScript.match(/a=parseInt\("(\d+)"/)?.[1];
+    
+    // Extract initial scode (char code array)
+    const iMatch = embedScript.match(/i=e\(\[([0-9,]+)\]\)/);
+    let initialScode = '';
+    if (iMatch) {
+      const charCodes = JSON.parse('[' + iMatch[1] + ']');
+      initialScode = String.fromCharCode(...charCodes);
+    }
+    
+    // Extract base URL (base64)
+    const cMatch = embedScript.match(/c=t\("([^"]+)"\)/);
+    let baseUrl = '';
+    if (cMatch) {
+      baseUrl = Buffer.from(cMatch[1], 'base64').toString('utf8');
+    }
+    
+    // Extract X-CSRF-Auth (double base64)
+    const lMatch = embedScript.match(/l=t\("([^"]+)"\)/);
+    let csrfAuth = '';
+    if (lMatch) {
+      const decoded1 = Buffer.from(lMatch[1], 'base64').toString('utf8');
+      csrfAuth = Buffer.from(decoded1, 'base64').toString('utf8');
+    }
+    
+    // Extract manifest URL (double base64 via char codes)
+    const dMatch = embedScript.match(/d=t\(e\(\[([0-9,]+)\]\)\)/);
+    let manifestUrl = '';
+    if (dMatch) {
+      const charCodes = JSON.parse('[' + dMatch[1] + ']');
+      const dString = String.fromCharCode(...charCodes);
+      const dDecoded = Buffer.from(dString, 'base64').toString('utf8');
+      manifestUrl = Buffer.from(dDecoded, 'base64').toString('utf8');
+    }
+    
+    console.log(`[VIPRow] Extracted: deviceId=${deviceId}, streamId=${streamId}, hostId=${hostId}`);
+    console.log(`[VIPRow] baseUrl=${baseUrl}, manifestUrl=${manifestUrl?.substring(0, 60)}...`);
+    
+    if (!deviceId || !streamId || !baseUrl || !manifestUrl) {
+      return { success: false, error: 'Failed to extract stream variables' };
+    }
+    
+    // Step 3: Refresh token via boanki.net
+    const tokenUrl = `${baseUrl}?scode=${encodeURIComponent(initialScode)}&stream=${encodeURIComponent(streamId)}&expires=${encodeURIComponent(timestamp || '')}&u_id=${encodeURIComponent(deviceId)}&host_id=${encodeURIComponent(hostId || '')}`;
+    
+    console.log(`[VIPRow] Refreshing token: ${tokenUrl.substring(0, 80)}...`);
+    
+    const tokenRes = await fetchWithHeaders(tokenUrl, {
+      'Accept': 'application/json',
+      'X-CSRF-Auth': csrfAuth,
+      'Origin': CASTHILL_ORIGIN,
+      'Referer': CASTHILL_REFERER,
+    });
+    
+    if (tokenRes.status !== 200) {
+      return { success: false, error: `Token refresh failed: ${tokenRes.status}` };
+    }
+    
+    let tokenData;
+    try {
+      tokenData = JSON.parse(tokenRes.data.toString('utf8'));
+    } catch (e) {
+      return { success: false, error: 'Invalid token response' };
+    }
+    
+    console.log(`[VIPRow] Token response: success=${tokenData.success}`);
+    
+    if (!tokenData.success) {
+      return { success: false, error: 'Token refresh unsuccessful' };
+    }
+    
+    // Step 4: Fetch manifest (follow redirects)
+    const url = new URL(manifestUrl);
+    url.searchParams.set('u_id', tokenData.device_id || deviceId);
+    
+    console.log(`[VIPRow] Fetching manifest: ${url.toString().substring(0, 80)}...`);
+    
+    const manifestRes = await fetchWithHeaders(url.toString(), {
+      'Origin': CASTHILL_ORIGIN,
+      'Referer': CASTHILL_REFERER,
+    });
+    
+    if (manifestRes.status !== 200) {
+      return { success: false, error: `Manifest fetch failed: ${manifestRes.status}` };
+    }
+    
+    const manifest = manifestRes.data.toString('utf8');
+    
+    console.log(`[VIPRow] ✅ Got manifest (${manifest.length} chars)`);
+    
+    return {
+      success: true,
+      m3u8Url: manifestRes.url || url.toString(),
+      manifest,
+      streamId,
+      deviceId: tokenData.device_id || deviceId,
+    };
+    
+  } catch (error) {
+    console.error(`[VIPRow] Error:`, error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Rewrite manifest URLs to go through proxy
+ */
+function rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase) {
+  const lines = manifest.split('\n');
+  const rewritten = [];
+  
+  for (const line of lines) {
+    let newLine = line;
+    const trimmed = line.trim();
+    
+    if (trimmed === '') {
+      rewritten.push(line);
+      continue;
+    }
+    
+    // Rewrite key URLs
+    if (trimmed.includes('URI="')) {
+      newLine = trimmed.replace(/URI="([^"]+)"/, (_, url) => {
+        const fullUrl = url.startsWith('http') ? url : new URL(url, baseUrl).toString();
+        return `URI="${proxyBase}/viprow/key?url=${encodeURIComponent(fullUrl)}"`;
+      });
+    }
+    // Skip other comments
+    else if (trimmed.startsWith('#')) {
+      rewritten.push(line);
+      continue;
+    }
+    // Rewrite segment URLs
+    else if (trimmed.includes('.ts') || trimmed.includes('?')) {
+      const fullUrl = trimmed.startsWith('http') ? trimmed : new URL(trimmed, baseUrl).toString();
+      newLine = `${proxyBase}/viprow/segment?url=${encodeURIComponent(fullUrl)}`;
+    }
+    
+    rewritten.push(newLine);
+  }
+  
+  return rewritten.join('\n');
+}
+
+/**
+ * VIPRow stream extraction endpoint handler
+ */
+async function extractVIPRowStream(eventUrl, linkNum, cfProxy, res) {
+  // Construct full stream page URL
+  const streamPageUrl = eventUrl.startsWith('http') 
+    ? eventUrl 
+    : `${VIPROW_BASE}${eventUrl}-${linkNum}`;
+  
+  console.log(`[VIPRow] Extracting stream from: ${streamPageUrl}`);
+  
+  const result = await extractVIPRowM3U8(streamPageUrl);
+  
+  if (!result.success) {
+    console.log(`[VIPRow] Extraction failed: ${result.error}`);
+    res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ error: result.error }));
+  }
+  
+  // Rewrite manifest URLs to go through CF proxy (or RPI proxy if no CF proxy)
+  const baseUrl = result.m3u8Url.substring(0, result.m3u8Url.lastIndexOf('/') + 1);
+  const proxyBase = cfProxy || ''; // If no CF proxy, use relative URLs
+  const rewrittenManifest = rewriteVIPRowManifestUrls(result.manifest, baseUrl, proxyBase);
+  
+  console.log(`[VIPRow] ✅ Returning manifest (${rewrittenManifest.length} chars)`);
+  
+  res.writeHead(200, {
+    'Content-Type': 'application/vnd.apple.mpegurl',
+    'Cache-Control': 'no-cache',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(rewrittenManifest);
+}
+
+/**
+ * VIPRow manifest proxy handler
+ */
+async function proxyVIPRowManifest(manifestUrl, cfProxy, res) {
+  if (!isVIPRowAllowedUrl(manifestUrl)) {
+    res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ error: 'URL not allowed' }));
+  }
+  
+  console.log(`[VIPRow] Proxying manifest: ${manifestUrl.substring(0, 80)}...`);
+  
+  try {
+    const response = await fetchWithHeaders(manifestUrl, {
+      'Origin': CASTHILL_ORIGIN,
+      'Referer': CASTHILL_REFERER,
+    });
+    
+    if (response.status !== 200) {
+      res.writeHead(response.status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: `Upstream error: ${response.status}` }));
+    }
+    
+    const manifest = response.data.toString('utf8');
+    const finalUrl = response.url || manifestUrl;
+    const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf('/') + 1);
+    const proxyBase = cfProxy || '';
+    const rewritten = rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase);
+    
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.apple.mpegurl',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(rewritten);
+  } catch (error) {
+    console.error(`[VIPRow] Manifest proxy error:`, error);
+    res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ error: 'Proxy failed' }));
+  }
+}
+
+/**
+ * VIPRow key proxy handler
+ */
+async function proxyVIPRowKey(keyUrl, res) {
+  if (!isVIPRowAllowedUrl(keyUrl)) {
+    res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ error: 'URL not allowed' }));
+  }
+  
+  console.log(`[VIPRow] Proxying key: ${keyUrl.substring(0, 80)}...`);
+  
+  try {
+    const response = await fetchWithHeaders(keyUrl, {
+      'Origin': CASTHILL_ORIGIN,
+      'Referer': CASTHILL_REFERER,
+    });
+    
+    if (response.status !== 200) {
+      res.writeHead(response.status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: `Upstream error: ${response.status}` }));
+    }
+    
+    res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': response.data.length,
+      'Cache-Control': 'max-age=300',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(response.data);
+  } catch (error) {
+    console.error(`[VIPRow] Key proxy error:`, error);
+    res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ error: 'Proxy failed' }));
+  }
+}
+
+/**
+ * VIPRow segment proxy handler
+ */
+async function proxyVIPRowSegment(segmentUrl, res) {
+  if (!isVIPRowAllowedUrl(segmentUrl)) {
+    res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    return res.end(JSON.stringify({ error: 'URL not allowed' }));
+  }
+  
+  console.log(`[VIPRow] Proxying segment: ${segmentUrl.substring(0, 80)}...`);
+  
+  try {
+    const response = await fetchWithHeaders(segmentUrl, {
+      'Origin': CASTHILL_ORIGIN,
+      'Referer': CASTHILL_REFERER,
+    });
+    
+    if (response.status !== 200) {
+      res.writeHead(response.status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: `Upstream error: ${response.status}` }));
+    }
+    
+    res.writeHead(200, {
+      'Content-Type': 'video/mp2t',
+      'Content-Length': response.data.length,
+      'Cache-Control': 'max-age=60',
+      'Access-Control-Allow-Origin': '*',
+    });
+    res.end(response.data);
+  } catch (error) {
+    console.error(`[VIPRow] Segment proxy error:`, error);
+    res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+    res.end(JSON.stringify({ error: 'Proxy failed' }));
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`
 ╔═══════════════════════════════════════════════════════════╗
@@ -1989,12 +2532,6 @@ server.listen(PORT, () => {
 ║  Port: ${PORT.toString().padEnd(49)}║
 ║  API Key: ${API_KEY.substring(0, 8)}${'*'.repeat(Math.max(0, API_KEY.length - 8)).padEnd(41)}║
 ╠═══════════════════════════════════════════════════════════╣
-║  DLHD Key Method (Dec 2024):                              ║
-║    1. Fetch auth token from epicplayplay.cfd player page  ║
-║    2. Call heartbeat endpoint to establish session        ║
-║    3. Fetch key with Authorization: Bearer <token>        ║
-║    4. Sessions cached for 25 min, tokens for 30 min       ║
-╠═══════════════════════════════════════════════════════════╣
 ║  Endpoints:                                               ║
 ║    GET /proxy?url=<encoded_url>  - Proxy a request        ║
 ║    GET /ppv?url=<encoded_url>    - PPV.to stream proxy    ║
@@ -2002,12 +2539,17 @@ server.listen(PORT, () => {
 ║    GET /iptv/stream?url=&mac=&token= - IPTV stream proxy  ║
 ║    GET /animekai?url=&referer= - AnimeKai/Flixer CDN      ║
 ║    GET /animekai/extract?embed=<encrypted> - Full extract ║
+║    GET /viprow/stream?url=&link=&cf_proxy= - VIPRow m3u8  ║
+║    GET /viprow/manifest?url=&cf_proxy= - VIPRow manifest  ║
+║    GET /viprow/key?url= - VIPRow AES key proxy            ║
+║    GET /viprow/segment?url= - VIPRow segment proxy        ║
 ║    GET /health                   - Health check           ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  CDN Support:                                             ║
 ║    - MegaUp (AnimeKai): No Referer header                 ║
 ║    - Flixer (p.XXXXX.workers.dev): Requires Referer       ║
 ║    - PPV.to (poocloud.in): Requires Referer pooembed.top  ║
+║    - VIPRow (boanki.net): Requires Origin casthill.net    ║
 ╠═══════════════════════════════════════════════════════════╣
 ║  Expose with:                                             ║
 ║    cloudflared tunnel --url localhost:${PORT.toString().padEnd(20)}║

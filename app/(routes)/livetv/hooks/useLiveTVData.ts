@@ -31,6 +31,7 @@ export interface LiveEvent {
   }>;
   startsAt?: number;
   endsAt?: number;
+  startsIn?: string; // Human-readable time until start
   viprowUrl?: string; // For VIPRow events
 }
 
@@ -279,6 +280,7 @@ export function useLiveTVData() {
         isLive: event.isLive,
         source: 'viprow' as const,
         channels: [], // VIPRow uses direct URLs, not channels
+        startsIn: event.startsIn,
         viprowUrl: event.url,
       }));
 

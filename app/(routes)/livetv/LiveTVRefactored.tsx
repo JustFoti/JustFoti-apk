@@ -99,6 +99,16 @@ export default function LiveTVRefactored() {
     setShowLiveOnly(false);
   };
 
+  // When switching to VIPRow, default to showing only live events
+  const handleProviderChange = (provider: typeof selectedProvider) => {
+    setSelectedProvider(provider);
+    setSelectedCategory('all');
+    // VIPRow should default to live-only since users expect live content
+    if (provider === 'viprow') {
+      setShowLiveOnly(true);
+    }
+  };
+
   // Total counts
   const totalEvents = stats.dlhd.events;
   const totalLive = stats.dlhd.live;
@@ -175,7 +185,7 @@ export default function LiveTVRefactored() {
             {/* Source Tabs */}
             <div className={styles.sourceTabs}>
               <button
-                onClick={() => setSelectedProvider('dlhd')}
+                onClick={() => handleProviderChange('dlhd')}
                 className={`${styles.sourceTab} ${selectedProvider === 'dlhd' ? styles.active : ''}`}
               >
                 <span className={styles.sourceTabIcon}>📡</span>
@@ -183,7 +193,7 @@ export default function LiveTVRefactored() {
                 <span className={styles.sourceTabCount}>{stats.dlhd.events}</span>
               </button>
               <button
-                onClick={() => setSelectedProvider('viprow')}
+                onClick={() => handleProviderChange('viprow')}
                 className={`${styles.sourceTab} ${selectedProvider === 'viprow' ? styles.active : ''}`}
               >
                 <span className={styles.sourceTabIcon}>🏟️</span>
@@ -199,7 +209,7 @@ export default function LiveTVRefactored() {
                 className={`${styles.filterPill} ${showLiveOnly ? styles.active : ''}`}
               >
                 <span className={styles.liveDot} />
-                Live Now ({stats.dlhd.live})
+                Live Now ({selectedProvider === 'viprow' ? stats.viprow.live : stats.dlhd.live})
               </button>
               
               <button
@@ -399,6 +409,12 @@ function EventCard({ event, onPlay }: EventCardProps) {
           <div className={styles.liveIndicator}>
             <span className={styles.liveDot}></span>
             LIVE
+          </div>
+        )}
+
+        {!event.isLive && event.startsIn && (
+          <div className={styles.upcomingIndicator}>
+            in {event.startsIn}
           </div>
         )}
 

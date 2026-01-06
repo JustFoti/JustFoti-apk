@@ -4,10 +4,7 @@
  * GET /api/livetv/viprow-stream?url=/nba/event-online-stream&link=1
  * 
  * Returns the Cloudflare proxy URL for VIPRow streams.
- * The actual extraction and proxying is done by the Cloudflare Worker.
- * 
- * For direct m3u8 playback, use the Cloudflare Worker directly:
- *   GET {CF_PROXY}/viprow/stream?url=/nba/event-online-stream&link=1
+ * The CF Worker forwards extraction to RPI proxy (boanki.net blocks CF Workers).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -167,16 +164,13 @@ export async function GET(request: NextRequest) {
     try {
       const cfBaseUrl = getCfProxyBaseUrl();
       
-      // The Cloudflare Worker handles extraction and proxying
-      // Return the URL that will give a playable m3u8
+      // The Cloudflare Worker forwards to RPI proxy for extraction
       const proxiedStreamUrl = `${cfBaseUrl}/viprow/stream?url=${encodeURIComponent(eventUrl)}&link=${linkNum}`;
       
       return NextResponse.json({
         success: true,
         mode: 'direct',
-        // This URL returns a playable m3u8 with all URLs rewritten through the proxy
         streamUrl: proxiedStreamUrl,
-        // Individual proxy endpoints for manual use
         proxyEndpoints: {
           stream: `${cfBaseUrl}/viprow/stream`,
           manifest: `${cfBaseUrl}/viprow/manifest`,
@@ -185,7 +179,6 @@ export async function GET(request: NextRequest) {
         },
         availableLinks: uniqueLinks,
         selectedLink: parseInt(linkNum),
-        // Fallback embed URL
         embedUrl,
       }, {
         headers: { 'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=40' },
