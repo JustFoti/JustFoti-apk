@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
-import { getTvPlaylistUrl, getCdnLiveStreamProxyUrl, getVIPRowStreamUrl } from '@/app/lib/proxy-config';
+import { getTvPlaylistUrl, getCdnLiveStreamProxyUrl } from '@/app/lib/proxy-config';
 
 export interface PlayerState {
   isPlaying: boolean;
