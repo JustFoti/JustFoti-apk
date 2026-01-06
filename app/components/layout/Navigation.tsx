@@ -191,16 +191,8 @@ export const Navigation: React.FC<NavigationProps> = ({
   };
 
   const toggleSearch = () => {
-    if (isMobile) {
-      router.push('/search');
-      return;
-    }
-    setSearchOpen(!searchOpen);
-    if (!searchOpen) {
-      setTimeout(() => {
-        document.getElementById('nav-search-input')?.focus();
-      }, 100);
-    }
+    // Always navigate to search page when clicking the search button
+    router.push('/search');
   };
 
   const isActive = (path: string) => {
