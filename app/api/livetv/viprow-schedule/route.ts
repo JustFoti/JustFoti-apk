@@ -45,16 +45,39 @@ export async function GET() {
     const html = await response.text();
     
     // Parse events from HTML
-    // Pattern: <a ... href="/sport/event-online-stream" ... title="Event Title">
-    //          <span class="... vipbox {sport}"></span>
-    //          <span content="ISO_TIME" ...>HH:MM</span> Event Title</a>
-    const eventPattern = /href="([^"]+online-stream)"[^>]*role="button"[^>]*title="([^"]+)"[^>]*>[\s\S]*?<span[^>]*class="[^"]*vipbox\s+([^"]+)"[^>]*><\/span>[\s\S]*?<span[^>]*content="([^"]+)"[^>]*>(\d{2}:\d{2})<\/span>/g;
+    // Actual structure:
+    // <a href="/nba/houston-rockets-vs-phoenix-suns-online-stream" role="button" title="Houston Rockets v Phoenix Suns">
+    //   <span class="align-bottom me-2 vipbox nba"></span>
+    //   <span content="2026-01-06T01:00" class="b9o4y6s8z6 me-2">01:00</span>
+    //   Houston Rockets v Phoenix Suns
+    // </a>
     
     const events: ViprowEvent[] = [];
-    let match;
     
-    while ((match = eventPattern.exec(html)) !== null) {
-      const [, url, title, sport, isoTime, time] = match;
+    // Match each event link - use simpler pattern that works with the actual HTML
+    // Pattern: href="URL" ... title="TITLE" ... vipbox SPORT ... content="ISO_TIME" ... >TIME</span>
+    const linkPattern = /<a[^>]*href="([^"]*online-stream)"[^>]*title="([^"]+)"[^>]*>/g;
+    let linkMatch;
+    
+    while ((linkMatch = linkPattern.exec(html)) !== null) {
+      const [, url, title] = linkMatch;
+      const startIdx = linkMatch.index;
+      
+      // Find the closing </a> tag
+      const endIdx = html.indexOf('</a>', startIdx);
+      if (endIdx === -1) continue;
+      
+      const linkContent = html.substring(startIdx, endIdx + 4);
+      
+      // Extract sport from vipbox class
+      const sportMatch = linkContent.match(/vipbox\s+([a-z0-9-]+)/i);
+      const sport = sportMatch ? sportMatch[1] : 'other';
+      
+      // Extract time from content attribute
+      const timeMatch = linkContent.match(/content="([^"]+)"[^>]*>(\d{2}:\d{2})</);
+      if (!timeMatch) continue;
+      
+      const [, isoTime, time] = timeMatch;
       
       // Determine if event is live (started but not ended)
       const eventTime = new Date(isoTime);

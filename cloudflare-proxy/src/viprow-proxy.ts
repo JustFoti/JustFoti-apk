@@ -306,6 +306,10 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
   const path = url.pathname.replace(/^\/viprow/, '');
   const logLevel = (env.LOG_LEVEL || 'info') as LogLevel;
   const logger = createLogger(request, logLevel);
+  
+  // Get the full proxy base URL for rewriting manifest URLs
+  // This ensures hls.js can load keys/segments from the correct origin
+  const proxyBaseUrl = `${url.protocol}//${url.host}/viprow`;
 
   // Handle CORS preflight
   if (request.method === 'OPTIONS') {
@@ -344,10 +348,9 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
       return jsonResponse({ error: result.error }, 500);
     }
     
-    // Rewrite manifest URLs to go through proxy
-    const proxyBase = `/viprow`;
+    // Rewrite manifest URLs to go through proxy with FULL URL
     const baseUrl = result.m3u8Url!.substring(0, result.m3u8Url!.lastIndexOf('/') + 1);
-    const rewrittenManifest = rewriteManifestUrls(result.manifest!, baseUrl, proxyBase);
+    const rewrittenManifest = rewriteManifestUrls(result.manifest!, baseUrl, proxyBaseUrl);
     
     logger.info('Stream extracted successfully', { streamId: result.streamId });
     
@@ -391,7 +394,7 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
       
       const manifest = await response.text();
       const baseUrl = decodedUrl.substring(0, decodedUrl.lastIndexOf('/') + 1);
-      const rewritten = rewriteManifestUrls(manifest, baseUrl, '/viprow');
+      const rewritten = rewriteManifestUrls(manifest, baseUrl, proxyBaseUrl);
       
       return new Response(rewritten, {
         headers: {
