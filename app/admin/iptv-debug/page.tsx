@@ -20,8 +20,7 @@ import {
   Zap,
   Server,
   Globe,
-  Search,
-  Calendar
+  Search
 } from 'lucide-react';
 import type Hls from 'hls.js';
 import type mpegts from 'mpegts.js';

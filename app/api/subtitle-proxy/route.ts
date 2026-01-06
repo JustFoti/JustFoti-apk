@@ -2,25 +2,23 @@
  * Subtitle Proxy - Downloads and serves subtitles with proper CORS headers
  * Converts SRT to VTT format if needed
  * 
- * Updated for Cloudflare Workers compatibility - uses Web APIs instead of Node.js zlib
+ * Uses Node.js runtime for zlib decompression support
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { gunzipSync } from 'zlib';
 
-// Use edge runtime for Cloudflare Workers compatibility
-export const runtime = 'edge';
+// Use Node.js runtime for zlib support
+export const runtime = 'nodejs';
 
 /**
- * Decompress gzip data using Web APIs (DecompressionStream)
+ * Decompress gzip data using Node.js zlib
  * Falls back to returning raw data if decompression fails
  */
 async function decompressGzip(buffer: ArrayBuffer): Promise<string> {
   try {
-    // Use DecompressionStream API (available in modern browsers and Cloudflare Workers)
-    const ds = new DecompressionStream('gzip');
-    const decompressedStream = new Response(buffer).body!.pipeThrough(ds);
-    const decompressedBuffer = await new Response(decompressedStream).arrayBuffer();
-    return new TextDecoder('utf-8').decode(decompressedBuffer);
+    const decompressed = gunzipSync(Buffer.from(buffer));
+    return decompressed.toString('utf-8');
   } catch (error) {
     console.warn('[SUBTITLE-PROXY] Gzip decompression failed, trying as raw text:', error);
     // If decompression fails, try to decode as raw text
