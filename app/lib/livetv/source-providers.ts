@@ -2,14 +2,14 @@
  * Live TV Source Providers
  * 
  * Unified interface for multiple live TV sources with automatic fallback.
- * Sources: DLHD (primary), cdn-live.tv, ppv.to
+ * Sources: DLHD (primary), cdn-live.tv, VIPRow (events)
  * 
  * Each provider implements the same interface for consistent handling.
  */
 
 import { getTvPlaylistUrl } from '@/app/lib/proxy-config';
 
-export type LiveTVSourceType = 'dlhd' | 'cdnlive' | 'ppv';
+export type LiveTVSourceType = 'dlhd' | 'cdnlive' | 'viprow';
 
 export interface StreamSource {
   type: LiveTVSourceType;
@@ -30,14 +30,14 @@ export interface StreamResult {
 export interface ChannelMapping {
   dlhdId?: string;
   cdnliveId?: string;
-  ppvUri?: string;
+  viprowUrl?: string;
 }
 
 // Source configuration - order determines fallback priority
 export const LIVE_TV_SOURCES: StreamSource[] = [
   { type: 'dlhd', name: 'DLHD', priority: 1, enabled: true },
   { type: 'cdnlive', name: 'CDN Live', priority: 2, enabled: true },
-  { type: 'ppv', name: 'PPV.to', priority: 3, enabled: true },
+  { type: 'viprow', name: 'VIPRow', priority: 3, enabled: true },
 ];
 
 /**
@@ -138,32 +138,55 @@ export async function getCDNLiveStream(cdnliveId: string): Promise<StreamResult>
 }
 
 /**
- * Get stream URL from ppv.to
+ * Get stream URL from VIPRow
+ * 
+ * VIPRow streams are now handled directly by the Cloudflare Worker.
+ * The /viprow/stream endpoint extracts and proxies the m3u8 with all URLs rewritten.
  */
-export async function getPPVStream(uriName: string): Promise<StreamResult> {
+export async function getVIPRowStream(viprowUrl: string, linkNum: number = 1): Promise<StreamResult> {
   try {
-    const response = await fetch(`/api/livetv/ppv-stream?uri=${encodeURIComponent(uriName)}`);
-    const data = await response.json();
+    // Check if Cloudflare proxy is configured
+    const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
     
-    if (!data.success) {
+    if (!cfProxyUrl) {
+      // Fallback to Vercel API which returns embed URL
+      const apiUrl = `/api/livetv/viprow-stream?url=${encodeURIComponent(viprowUrl)}&link=${linkNum}`;
+      const response = await fetch(apiUrl);
+      const data = await response.json();
+      
+      if (!data.success) {
+        return {
+          success: false,
+          source: 'viprow',
+          error: data.error || 'Failed to get VIPRow stream',
+        };
+      }
+      
+      // Return embed URL for iframe playback (fallback)
       return {
-        success: false,
-        source: 'ppv',
-        error: data.error || 'Failed to extract PPV stream',
+        success: true,
+        streamUrl: data.playerUrl || data.embedUrl,
+        source: 'viprow',
+        headers: data.headers,
+        isLive: true,
       };
     }
     
+    // Use Cloudflare proxy directly - returns playable m3u8
+    const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+    const streamUrl = `${baseUrl}/viprow/stream?url=${encodeURIComponent(viprowUrl)}&link=${linkNum}`;
+    
     return {
       success: true,
-      streamUrl: data.streamUrl,
-      source: 'ppv',
-      headers: data.playbackHeaders,
+      streamUrl,
+      source: 'viprow',
+      isLive: true,
     };
   } catch (error: any) {
     return {
       success: false,
-      source: 'ppv',
-      error: error.message || 'Failed to get PPV stream',
+      source: 'viprow',
+      error: error.message || 'Failed to get VIPRow stream',
     };
   }
 }
@@ -214,11 +237,11 @@ export async function getStreamWithFallback(
         }
         break;
         
-      case 'ppv':
-        if (channelMapping.ppvUri) {
-          result = await getPPVStream(channelMapping.ppvUri);
+      case 'viprow':
+        if (channelMapping.viprowUrl) {
+          result = await getVIPRowStream(channelMapping.viprowUrl);
           if (result.success) return result;
-          errors.push(`PPV: ${result.error}`);
+          errors.push(`VIPRow: ${result.error}`);
         }
         break;
     }

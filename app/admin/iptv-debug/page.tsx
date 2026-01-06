@@ -31,7 +31,7 @@ const RPI_PROXY_URL = process.env.NEXT_PUBLIC_RPI_PROXY_URL;
 const CF_PROXY_URL = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL || process.env.NEXT_PUBLIC_CF_PROXY_URL || 'https://media-proxy.vynx.workers.dev';
 
 // Tab types
-type DebugTab = 'cdn-live' | 'ppv' | 'stalker';
+type DebugTab = 'cdn-live' | 'stalker';
 
 // CDN-Live types
 interface CDNLiveChannel {
@@ -41,17 +41,6 @@ interface CDNLiveChannel {
   image: string;
   status: string;
   viewers: number;
-}
-
-// PPV types
-interface PPVStream {
-  id: string;
-  title: string;
-  uri: string;
-  category: string;
-  status: string;
-  startTime?: string;
-  thumbnail?: string;
 }
 
 // Stalker types
@@ -114,18 +103,6 @@ export default function IPTVDebugPage() {
   const [cdnSelectedChannel, setCdnSelectedChannel] = useState<CDNLiveChannel | null>(null);
   const [cdnStreamUrl, setCdnStreamUrl] = useState<string | null>(null);
   const [cdnStreamDebug, setCdnStreamDebug] = useState<any>(null);
-  
-  // PPV state
-  const [ppvStreams, setPpvStreams] = useState<PPVStream[]>([]);
-  const [ppvCategories, setPpvCategories] = useState<string[]>([]);
-  const [ppvSelectedCategory, setPpvSelectedCategory] = useState<string>('all');
-  const [ppvSearch, setPpvSearch] = useState('');
-  const [ppvLoading, setPpvLoading] = useState(false);
-  const [ppvStreamLoading, setPpvStreamLoading] = useState(false);
-  const [ppvSelectedStream, setPpvSelectedStream] = useState<PPVStream | null>(null);
-  const [ppvStreamUrl, setPpvStreamUrl] = useState<string | null>(null);
-  const [ppvStreamDebug, setPpvStreamDebug] = useState<any>(null);
-  const [ppvLiveOnly, setPpvLiveOnly] = useState(false);
   
   // Stalker state (existing)
   const [portalUrl, setPortalUrl] = useState('');
@@ -234,69 +211,10 @@ export default function IPTVDebugPage() {
   }, [activeTab, cdnChannels.length, loadCdnChannels]);
 
   // ============================================
-  // PPV.TO FUNCTIONS
-  // ============================================
-  
-  const loadPpvStreams = useCallback(async () => {
-    setPpvLoading(true);
-    try {
-      const response = await fetch('/api/livetv/ppv-streams');
-      const data = await response.json();
-      
-      if (data.streams) {
-        setPpvStreams(data.streams);
-        // Extract unique categories
-        const cats = [...new Set(data.streams.map((s: PPVStream) => s.category))].filter(Boolean) as string[];
-        setPpvCategories(cats.sort());
-      }
-    } catch (error) {
-      console.error('Failed to load PPV streams:', error);
-    } finally {
-      setPpvLoading(false);
-    }
-  }, []);
-
-  const loadPpvStream = useCallback(async (stream: PPVStream) => {
-    setPpvStreamLoading(true);
-    setPpvSelectedStream(stream);
-    setPpvStreamUrl(null);
-    setPpvStreamDebug(null);
-    setPlayerError(null);
-    
-    try {
-      const response = await fetch(`/api/livetv/ppv-stream?uri=${encodeURIComponent(stream.uri)}`);
-      const data = await response.json();
-      
-      setPpvStreamDebug(data);
-      
-      if (data.success && data.streamUrl) {
-        // Proxy the stream through Cloudflare worker (not Vercel)
-        // PPV streams require Referer: https://pooembed.top/
-        // Strip /tv suffix if present (CF_TV_PROXY_URL may include it)
-        const cfBaseUrl = CF_PROXY_URL.replace(/\/tv\/?$/, '').replace(/\/+$/, '');
-        const proxiedUrl = `${cfBaseUrl}/ppv/stream?url=${encodeURIComponent(data.streamUrl)}`;
-        setPpvStreamUrl(proxiedUrl);
-      }
-    } catch (error) {
-      console.error('Failed to get PPV stream:', error);
-      setPpvStreamDebug({ error: String(error) });
-    } finally {
-      setPpvStreamLoading(false);
-    }
-  }, []);
-
-  // Load PPV streams on tab switch
-  useEffect(() => {
-    if (activeTab === 'ppv' && ppvStreams.length === 0) {
-      loadPpvStreams();
-    }
-  }, [activeTab, ppvStreams.length, loadPpvStreams]);
-
-  // ============================================
   // PLAYER SETUP (shared across all tabs)
   // ============================================
   
-  const currentStreamUrl = activeTab === 'cdn-live' ? cdnStreamUrl : activeTab === 'ppv' ? ppvStreamUrl : streamUrl;
+  const currentStreamUrl = activeTab === 'cdn-live' ? cdnStreamUrl : streamUrl;
   
   useEffect(() => {
     if (!currentStreamUrl || !videoRef.current) return;
@@ -822,7 +740,7 @@ export default function IPTVDebugPage() {
           IPTV Stream Debugger
         </h2>
         <p style={{ margin: '8px 0 0 0', color: '#94a3b8', fontSize: '16px' }}>
-          Test and debug streams from CDN-Live.tv, PPV.to, and Stalker portals
+          Test and debug streams from CDN-Live.tv and Stalker portals
         </p>
       </div>
 
@@ -852,25 +770,6 @@ export default function IPTVDebugPage() {
         >
           <Globe size={18} />
           CDN-Live.tv ({cdnChannels.length || '...'})
-        </button>
-        <button
-          onClick={() => setActiveTab('ppv')}
-          style={{
-            padding: '12px 24px',
-            background: activeTab === 'ppv' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' : 'rgba(30, 41, 59, 0.5)',
-            border: activeTab === 'ppv' ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '8px',
-            color: '#fff',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}
-        >
-          <Calendar size={18} />
-          PPV.to ({ppvStreams.length || '...'})
         </button>
         <button
           onClick={() => setActiveTab('stalker')}
@@ -1252,390 +1151,6 @@ export default function IPTVDebugPage() {
         </div>
       )}
 
-
-      {/* ============================================ */}
-      {/* PPV.TO TAB */}
-      {/* ============================================ */}
-      {activeTab === 'ppv' && (
-        <div>
-          {/* Controls */}
-          <div style={{
-            background: 'rgba(30, 41, 59, 0.5)',
-            borderRadius: '16px',
-            padding: '24px',
-            marginBottom: '24px',
-            border: '1px solid rgba(255, 255, 255, 0.1)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Calendar size={18} color="#f59e0b" />
-                PPV.to Events & Streams
-              </h3>
-              <button
-                onClick={loadPpvStreams}
-                disabled={ppvLoading}
-                style={{
-                  padding: '8px 16px',
-                  background: ppvLoading ? 'rgba(245, 158, 11, 0.3)' : 'rgba(245, 158, 11, 0.2)',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
-                  borderRadius: '8px',
-                  color: '#f59e0b',
-                  fontSize: '13px',
-                  cursor: ppvLoading ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-              >
-                {ppvLoading ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <RotateCcw size={14} />}
-                Refresh
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-              {/* Category Filter */}
-              <select
-                value={ppvSelectedCategory}
-                onChange={(e) => setPpvSelectedCategory(e.target.value)}
-                style={{
-                  padding: '10px 14px',
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
-                  color: '#f8fafc',
-                  fontSize: '14px',
-                  minWidth: '180px',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="all">All Categories</option>
-                {ppvCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-
-              {/* Search */}
-              <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                <input
-                  type="text"
-                  placeholder="Search events..."
-                  value={ppvSearch}
-                  onChange={(e) => setPpvSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '10px 14px 10px 38px',
-                    background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '8px',
-                    color: '#f8fafc',
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-
-              {/* Live Only Toggle */}
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={ppvLiveOnly}
-                  onChange={(e) => setPpvLiveOnly(e.target.checked)}
-                  style={{ cursor: 'pointer' }}
-                />
-                <span style={{ color: '#f59e0b', fontSize: '13px' }}>Live Only</span>
-              </label>
-            </div>
-          </div>
-
-          {/* PPV Stream Grid */}
-          <div style={{
-            background: 'rgba(30, 41, 59, 0.5)',
-            borderRadius: '16px',
-            padding: '24px',
-            marginBottom: '24px',
-            border: '1px solid rgba(255, 255, 255, 0.1)'
-          }}>
-            {ppvLoading ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                <Loader2 size={32} style={{ margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
-                Loading PPV events...
-              </div>
-            ) : (
-              (() => {
-                let filtered = ppvStreams;
-                
-                if (ppvSelectedCategory !== 'all') {
-                  filtered = filtered.filter(s => s.category === ppvSelectedCategory);
-                }
-                
-                if (ppvLiveOnly) {
-                  filtered = filtered.filter(s => s.status === 'live');
-                }
-                
-                if (ppvSearch) {
-                  const searchLower = ppvSearch.toLowerCase();
-                  filtered = filtered.filter(s => s.title.toLowerCase().includes(searchLower));
-                }
-
-                return (
-                  <>
-                    <div style={{ marginBottom: '12px', color: '#64748b', fontSize: '13px' }}>
-                      {filtered.length} events {ppvSearch ? `matching "${ppvSearch}"` : ''}
-                      {ppvLiveOnly && ' (live only)'}
-                    </div>
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', 
-                      gap: '12px',
-                      maxHeight: '500px',
-                      overflowY: 'auto'
-                    }}>
-                      {filtered.map((stream) => (
-                        <div
-                          key={stream.id || stream.uri}
-                          style={{
-                            background: ppvSelectedStream?.uri === stream.uri 
-                              ? 'rgba(245, 158, 11, 0.2)' 
-                              : 'rgba(15, 23, 42, 0.6)',
-                            border: ppvSelectedStream?.uri === stream.uri 
-                              ? '1px solid #f59e0b' 
-                              : '1px solid rgba(255, 255, 255, 0.1)',
-                            borderRadius: '12px',
-                            padding: '14px 16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px'
-                          }}
-                        >
-                          {stream.thumbnail ? (
-                            <img 
-                              src={stream.thumbnail} 
-                              alt={stream.title}
-                              style={{ width: '60px', height: '40px', borderRadius: '6px', objectFit: 'cover' }}
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          ) : (
-                            <div style={{
-                              width: '60px',
-                              height: '40px',
-                              borderRadius: '6px',
-                              background: 'rgba(245, 158, 11, 0.2)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}>
-                              <Calendar size={20} color="#f59e0b" />
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ 
-                              color: '#f8fafc', 
-                              fontSize: '14px', 
-                              fontWeight: '500',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis'
-                            }}>
-                              {stream.title}
-                            </div>
-                            <div style={{ color: '#64748b', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{
-                                padding: '2px 6px',
-                                borderRadius: '4px',
-                                fontSize: '10px',
-                                fontWeight: '600',
-                                background: stream.status === 'live' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(100, 100, 100, 0.2)',
-                                color: stream.status === 'live' ? '#ef4444' : '#94a3b8'
-                              }}>
-                                {stream.status === 'live' ? '● LIVE' : stream.status?.toUpperCase() || 'UPCOMING'}
-                              </span>
-                              <span>{stream.category}</span>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => loadPpvStream(stream)}
-                            disabled={ppvStreamLoading}
-                            style={{
-                              padding: '8px 14px',
-                              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                              border: 'none',
-                              borderRadius: '6px',
-                              color: '#fff',
-                              fontSize: '12px',
-                              fontWeight: '500',
-                              cursor: ppvStreamLoading ? 'not-allowed' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              opacity: ppvStreamLoading ? 0.5 : 1
-                            }}
-                          >
-                            <Play size={14} /> Test
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                );
-              })()
-            )}
-          </div>
-
-          {/* PPV Player */}
-          {(ppvStreamLoading || ppvStreamUrl) && (
-            <div style={{
-              background: 'rgba(30, 41, 59, 0.5)',
-              borderRadius: '16px',
-              padding: '24px',
-              border: '1px solid rgba(245, 158, 11, 0.3)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
-                <h3 style={{ color: '#f8fafc', margin: 0, fontSize: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Play size={20} color="#f59e0b" />
-                  {ppvSelectedStream?.title || 'Stream'}
-                </h3>
-                <span style={{ color: '#f59e0b', fontSize: '12px', background: 'rgba(245, 158, 11, 0.2)', padding: '4px 10px', borderRadius: '6px' }}>
-                  PPV.to
-                </span>
-              </div>
-
-              {ppvStreamLoading ? (
-                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
-                  <Loader2 size={32} style={{ margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
-                  Extracting stream URL...
-                </div>
-              ) : ppvStreamUrl ? (
-                <>
-                  <div style={{
-                    background: '#000',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    marginBottom: '16px',
-                    aspectRatio: '16/9',
-                    position: 'relative'
-                  }}>
-                    <video
-                      ref={videoRef}
-                      controls
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ width: '100%', height: '100%' }}
-                    />
-                    {playerError && (
-                      <div style={{
-                        position: 'absolute',
-                        bottom: '10px',
-                        left: '10px',
-                        right: '10px',
-                        background: 'rgba(239, 68, 68, 0.9)',
-                        color: '#fff',
-                        padding: '8px 12px',
-                        borderRadius: '6px',
-                        fontSize: '12px'
-                      }}>
-                        {playerError}
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ 
-                    background: 'rgba(15, 23, 42, 0.6)', 
-                    padding: '12px 16px', 
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '12px'
-                  }}>
-                    <code style={{ 
-                      color: '#f59e0b', 
-                      fontSize: '11px',
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {ppvStreamUrl}
-                    </code>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <button
-                        onClick={() => copyToClipboard(ppvStreamUrl)}
-                        style={{
-                          background: 'rgba(245, 158, 11, 0.2)',
-                          border: 'none',
-                          color: '#f59e0b',
-                          cursor: 'pointer',
-                          padding: '8px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '12px'
-                        }}
-                      >
-                        <Copy size={14} /> Copy
-                      </button>
-                      <a
-                        href={ppvStreamUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          background: 'rgba(245, 158, 11, 0.2)',
-                          border: 'none',
-                          color: '#f59e0b',
-                          cursor: 'pointer',
-                          padding: '8px',
-                          borderRadius: '6px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '12px',
-                          textDecoration: 'none'
-                        }}
-                      >
-                        <ExternalLink size={14} /> Open
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Debug Info */}
-                  {ppvStreamDebug && (
-                    <details style={{ marginTop: '12px' }}>
-                      <summary style={{ color: '#64748b', fontSize: '12px', cursor: 'pointer' }}>Debug Info</summary>
-                      <pre style={{ 
-                        color: '#94a3b8', 
-                        fontSize: '11px', 
-                        background: 'rgba(0,0,0,0.3)',
-                        padding: '12px',
-                        borderRadius: '8px',
-                        marginTop: '8px',
-                        overflow: 'auto',
-                        maxHeight: '200px'
-                      }}>
-                        {JSON.stringify(ppvStreamDebug, null, 2)}
-                      </pre>
-                    </details>
-                  )}
-                </>
-              ) : ppvStreamDebug?.error && (
-                <div style={{
-                  background: 'rgba(239, 68, 68, 0.1)',
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  color: '#ef4444'
-                }}>
-                  <div style={{ fontWeight: '600', marginBottom: '8px' }}>Failed to extract stream</div>
-                  <div style={{ fontSize: '13px' }}>{ppvStreamDebug.error}</div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
 
       {/* ============================================ */}

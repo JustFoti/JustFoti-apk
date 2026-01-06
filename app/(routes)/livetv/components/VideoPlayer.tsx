@@ -1,6 +1,6 @@
 /**
  * Video Player Component
- * Full-featured video player with HLS support for DLHD, CDN Live, and PPV
+ * Full-featured video player with HLS support for DLHD and CDN Live
  */
 
 'use client';
@@ -85,9 +85,18 @@ export const VideoPlayer = memo(function VideoPlayer({
     
     if (event) {
       let channelId: string;
+      let streamType = event.source;
       
-      if (event.source === 'ppv' && event.ppvUriName) {
-        channelId = event.ppvUriName;
+      if (event.source === 'viprow') {
+        // VIPRow uses direct URL, not channel ID
+        loadStream({
+          type: 'viprow',
+          channelId: event.viprowUrl || event.id,
+          viprowUrl: event.viprowUrl,
+          title: event.title,
+          poster: event.poster,
+        });
+        return;
       } else if (event.source === 'dlhd' && event.channels?.length > 0) {
         channelId = event.channels[0].channelId;
       } else if (event.source === 'cdnlive' && event.channels?.length > 0) {
@@ -97,7 +106,7 @@ export const VideoPlayer = memo(function VideoPlayer({
       }
       
       loadStream({
-        type: event.source,
+        type: streamType,
         channelId,
         title: event.title,
         poster: event.poster,
@@ -244,20 +253,28 @@ export const VideoPlayer = memo(function VideoPlayer({
               <button 
                 onClick={() => {
                   if (event) {
-                    let channelId: string;
-                    if (event.source === 'ppv' && event.ppvUriName) {
-                      channelId = event.ppvUriName;
-                    } else if (event.channels?.length > 0) {
-                      channelId = event.channels[0].channelId;
+                    if (event.source === 'viprow') {
+                      loadStream({
+                        type: 'viprow',
+                        channelId: event.viprowUrl || event.id,
+                        viprowUrl: event.viprowUrl,
+                        title: event.title,
+                        poster: event.poster,
+                      });
                     } else {
-                      channelId = event.id;
+                      let channelId: string;
+                      if (event.channels?.length > 0) {
+                        channelId = event.channels[0].channelId;
+                      } else {
+                        channelId = event.id;
+                      }
+                      loadStream({
+                        type: event.source,
+                        channelId,
+                        title: event.title,
+                        poster: event.poster,
+                      });
                     }
-                    loadStream({
-                      type: event.source,
-                      channelId,
-                      title: event.title,
-                      poster: event.poster,
-                    });
                   } else if (channel) {
                     const streamType = channel.source || 'dlhd';
                     loadStream({

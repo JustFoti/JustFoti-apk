@@ -1,6 +1,6 @@
 /**
  * Provider Content Component
- * Renders content for DLHD, CDN Live, and PPV providers
+ * Renders content for DLHD and CDN Live providers
  */
 
 import { memo, useState, useEffect, useRef } from 'react';
@@ -27,7 +27,7 @@ const ITEMS_PER_PAGE = 24;
 const PROVIDER_TITLES: Record<Provider, string> = {
   dlhd: 'DaddyLive HD',
   cdnlive: 'CDN Live TV',
-  ppv: 'PPV Events',
+  viprow: 'VIPRow Sports',
 };
 
 export const ProviderContent = memo(function ProviderContent({

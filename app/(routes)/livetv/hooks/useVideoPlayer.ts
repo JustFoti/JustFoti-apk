@@ -1,11 +1,11 @@
 /**
  * Video Player Hook
- * Handles HLS streaming for DLHD, CDN Live, and PPV
+ * Handles HLS streaming for DLHD and CDN Live
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
-import { getTvPlaylistUrl, getPpvStreamProxyUrl, getCdnLiveStreamProxyUrl } from '@/app/lib/proxy-config';
+import { getTvPlaylistUrl, getCdnLiveStreamProxyUrl, getVIPRowStreamUrl } from '@/app/lib/proxy-config';
 
 export interface PlayerState {
   isPlaying: boolean;
@@ -22,10 +22,13 @@ export interface PlayerState {
 }
 
 export interface StreamSource {
-  type: 'dlhd' | 'ppv' | 'cdnlive';
+  type: 'dlhd' | 'cdnlive' | 'viprow';
   channelId: string;
   title: string;
   poster?: string;
+  // VIPRow specific
+  viprowUrl?: string;
+  linkNum?: number;
 }
 
 export function useVideoPlayer() {
@@ -54,13 +57,17 @@ export function useVideoPlayer() {
     switch (source.type) {
       case 'dlhd':
         return getTvPlaylistUrl(source.channelId);
-      case 'ppv':
-        return `/api/livetv/ppv-stream?uri=${encodeURIComponent(source.channelId)}`;
       case 'cdnlive':
         const cdnParts = source.channelId.split('|');
         const channelName = encodeURIComponent(cdnParts[0] || source.channelId);
         const countryCode = cdnParts[1] || 'us';
         return `/api/livetv/cdnlive-stream?channel=${channelName}&code=${countryCode}`;
+      case 'viprow':
+        // VIPRow uses the Cloudflare proxy directly
+        // The viprowUrl is the event path like "/nba/event-online-stream"
+        const viprowUrl = source.viprowUrl || source.channelId;
+        const linkNum = source.linkNum || 1;
+        return getVIPRowStreamUrl(viprowUrl, linkNum);
       default:
         throw new Error(`Unsupported source type: ${source.type}`);
     }
@@ -85,8 +92,8 @@ export function useVideoPlayer() {
 
       let streamUrl = getStreamUrl(source);
       
-      // For CDN Live and PPV, fetch the stream URL from API first
-      if (source.type === 'cdnlive' || source.type === 'ppv') {
+      // For CDN Live, fetch the stream URL from API first
+      if (source.type === 'cdnlive') {
         const apiResponse = await fetch(streamUrl);
         const apiData = await apiResponse.json();
         
@@ -98,12 +105,11 @@ export function useVideoPlayer() {
           throw new Error(errorMsg);
         }
         
-        if (source.type === 'ppv') {
-          streamUrl = getPpvStreamProxyUrl(apiData.streamUrl);
-        } else if (source.type === 'cdnlive') {
-          streamUrl = getCdnLiveStreamProxyUrl(apiData.streamUrl);
-        }
+        streamUrl = getCdnLiveStreamProxyUrl(apiData.streamUrl);
       }
+      
+      // VIPRow streams come directly from Cloudflare proxy as m3u8
+      // No additional API call needed - the URL is already the playable stream
       
       // Update to connecting stage
       setState(prev => ({ ...prev, loadingStage: 'connecting' }));

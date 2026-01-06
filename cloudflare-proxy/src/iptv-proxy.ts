@@ -23,9 +23,6 @@ export interface Env {
   // RPi proxy (residential IP)
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
-  // Hetzner VPS proxy (datacenter but different IP range)
-  HETZNER_PROXY_URL?: string;
-  HETZNER_PROXY_KEY?: string;
   // Oxylabs residential proxy (paid, reliable)
   OXYLABS_USERNAME?: string;
   OXYLABS_PASSWORD?: string;
@@ -519,25 +516,14 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
     let response: Response;
     let usedMethod = 'direct';
 
-    // Priority order for IPTV API calls (UPDATED - direct first!):
-    // 1. Direct from CF worker (now that free tier limits are resolved)
+    // Priority order for IPTV API calls:
+    // 1. Direct from CF worker
     // 2. RPi proxy (residential IP - backup)
-    // 3. Hetzner VPS proxy (datacenter IP - last resort)
-    // 4. Oxylabs (residential IP - paid, expensive)
+    // 3. Oxylabs (residential IP - paid, last resort)
+    // NOTE: Hetzner is reserved for PPV.to only!
 
-    const hasHetzner = env.HETZNER_PROXY_URL && env.HETZNER_PROXY_KEY;
     const hasRpi = env.RPI_PROXY_URL && env.RPI_PROXY_KEY;
     const hasOxylabs = env.OXYLABS_USERNAME && env.OXYLABS_PASSWORD;
-
-    // Helper to try Hetzner proxy
-    const tryHetzner = async (): Promise<Response> => {
-      const hetznerParams = new URLSearchParams({ url: decodedUrl, key: env.HETZNER_PROXY_KEY! });
-      if (mac) hetznerParams.set('mac', mac);
-      if (token) hetznerParams.set('token', token);
-      const hetznerUrl = `${env.HETZNER_PROXY_URL}/iptv/api?${hetznerParams.toString()}`;
-      logger.info('Trying Hetzner proxy', { url: hetznerUrl.substring(0, 80) });
-      return fetch(hetznerUrl, { signal: AbortSignal.timeout(15000) });
-    };
 
     // Helper to try RPi proxy
     const tryRpi = async (): Promise<Response> => {
@@ -593,7 +579,7 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
     } catch (directError) {
       logger.warn('Direct fetch failed', { error: String(directError) });
       
-      // Fallback chain: RPi (residential) > Hetzner (datacenter) > Oxylabs (paid)
+      // Fallback chain: RPi (residential) > Oxylabs (paid)
       if (!forceDirect && hasRpi) {
         try {
           logger.info('Falling back to RPi proxy (residential IP)');
@@ -604,48 +590,6 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
         } catch (rpiError) {
           logger.warn('RPi proxy failed', { error: String(rpiError) });
           
-          if (hasHetzner) {
-            try {
-              logger.info('Falling back to Hetzner proxy');
-              response = await tryHetzner();
-              usedMethod = 'hetzner';
-              if (!response.ok) throw new Error(`Hetzner returned ${response.status}`);
-              logger.info('Hetzner proxy succeeded');
-            } catch (hetznerError) {
-              logger.warn('Hetzner proxy failed', { error: String(hetznerError) });
-              
-              if (hasOxylabs) {
-                try {
-                  response = await fetchViaOxylabs(decodedUrl, headers, env, logger);
-                  usedMethod = 'oxylabs';
-                } catch (oxError) {
-                  // All failed - return the last error
-                  throw new Error('All proxy methods failed');
-                }
-              } else {
-                throw new Error('All proxy methods failed');
-              }
-            }
-          } else if (hasOxylabs) {
-            try {
-              response = await fetchViaOxylabs(decodedUrl, headers, env, logger);
-              usedMethod = 'oxylabs';
-            } catch (oxError) {
-              throw new Error('All proxy methods failed');
-            }
-          } else {
-            throw new Error('Direct failed and no proxies available');
-          }
-        }
-      } else if (!forceDirect && hasHetzner) {
-        try {
-          logger.info('Falling back to Hetzner proxy (no RPi configured)');
-          response = await tryHetzner();
-          usedMethod = 'hetzner';
-          if (!response.ok) throw new Error(`Hetzner returned ${response.status}`);
-        } catch (hetznerError) {
-          logger.warn('Hetzner proxy failed', { error: String(hetznerError) });
-          
           if (hasOxylabs) {
             try {
               response = await fetchViaOxylabs(decodedUrl, headers, env, logger);
@@ -654,12 +598,12 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
               throw new Error('All proxy methods failed');
             }
           } else {
-            throw new Error('Direct and Hetzner failed');
+            throw new Error('Direct and RPi failed, no Oxylabs configured');
           }
         }
       } else if (!forceDirect && hasOxylabs) {
         try {
-          logger.info('Falling back to Oxylabs (no RPi/Hetzner configured)');
+          logger.info('Falling back to Oxylabs (no RPi configured)');
           response = await fetchViaOxylabs(decodedUrl, headers, env, logger);
           usedMethod = 'oxylabs';
         } catch (oxError) {
@@ -682,7 +626,6 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
         'Content-Type': contentType,
         'X-Used-Rpi': usedMethod === 'rpi' ? 'true' : 'false',
         'X-Used-Method': usedMethod,
-        'X-Hetzner-Configured': env.HETZNER_PROXY_URL ? 'true' : 'false',
         'X-Rpi-Configured': env.RPI_PROXY_URL ? 'true' : 'false',
         ...corsHeaders(origin),
       },
@@ -979,7 +922,7 @@ async function handleStreamProxy(request: Request, url: URL, env: Env, logger: a
     } catch (directErr) {
       logger.warn('Direct stream failed, trying fallbacks', { error: String(directErr) });
       
-      // Fallback: RPi > Hetzner
+      // Fallback: RPi only (Hetzner reserved for PPV.to)
       if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
         logger.info('Falling back to RPi proxy for stream');
         const params = buildProxyParams();
@@ -992,25 +935,8 @@ async function handleStreamProxy(request: Request, url: URL, env: Env, logger: a
           if (!response.ok) throw new Error(`RPi returned ${response.status}`);
         } catch (rpiErr) {
           logger.warn('RPi stream failed', { error: String(rpiErr) });
-          
-          if (env.HETZNER_PROXY_URL && env.HETZNER_PROXY_KEY) {
-            logger.info('Falling back to Hetzner proxy for stream');
-            const hetznerParams = buildProxyParams();
-            hetznerParams.set('key', env.HETZNER_PROXY_KEY);
-            const hetznerUrl = `${env.HETZNER_PROXY_URL}/iptv/stream?${hetznerParams.toString()}`;
-            response = await fetch(hetznerUrl);
-            usedProxy = 'hetzner';
-          } else {
-            throw rpiErr;
-          }
+          throw rpiErr;
         }
-      } else if (env.HETZNER_PROXY_URL && env.HETZNER_PROXY_KEY) {
-        logger.info('Falling back to Hetzner proxy for stream (no RPi)');
-        const params = buildProxyParams();
-        params.set('key', env.HETZNER_PROXY_KEY);
-        const hetznerUrl = `${env.HETZNER_PROXY_URL}/iptv/stream?${params.toString()}`;
-        response = await fetch(hetznerUrl);
-        usedProxy = 'hetzner';
       } else {
         throw directErr;
       }

@@ -1,12 +1,12 @@
 /**
  * Provider Tabs Component
- * Navigation tabs for DLHD, CDN Live, and PPV
+ * Navigation tabs for DLHD, CDN Live, and VIPRow
  */
 
 import { memo } from 'react';
 import styles from '../LiveTV.module.css';
 
-export type Provider = 'dlhd' | 'cdnlive' | 'ppv';
+export type Provider = 'dlhd' | 'cdnlive' | 'viprow';
 
 interface ProviderTabsProps {
   selectedProvider: Provider;
@@ -14,7 +14,7 @@ interface ProviderTabsProps {
   stats: {
     dlhd: { events: number; channels: number };
     cdnlive: { channels: number };
-    ppv: { events: number };
+    viprow: { events: number; live: number };
   };
   loading?: boolean;
 }
@@ -38,10 +38,10 @@ const PROVIDERS: Array<{
     icon: '🌐' 
   },
   { 
-    id: 'ppv', 
-    label: 'PPV', 
-    description: 'Pay-Per-View Events',
-    icon: '🥊' 
+    id: 'viprow', 
+    label: 'VIPRow', 
+    description: 'Live Events',
+    icon: '🎯' 
   },
 ];
 
@@ -57,8 +57,8 @@ export const ProviderTabs = memo(function ProviderTabs({
         return stats.dlhd.events + stats.dlhd.channels;
       case 'cdnlive':
         return stats.cdnlive.channels;
-      case 'ppv':
-        return stats.ppv.events;
+      case 'viprow':
+        return stats.viprow.events;
       default:
         return 0;
     }

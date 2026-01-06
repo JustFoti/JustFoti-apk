@@ -5,6 +5,14 @@
 RPI_PROXY_URL=https://your-rpi-proxy.com
 RPI_PROXY_KEY=your-api-key
 
+# =============================================================================
+# HETZNER VPS PROXY (for PPV.to streams - poocloud.in)
+# =============================================================================
+# Deploy hetzner-proxy/server.js on your Hetzner VPS
+# Hetzner IPs are not blocked by poocloud.in (unlike Cloudflare/AWS)
+HETZNER_PROXY_URL=https://your-hetzner-proxy.com
+HETZNER_PROXY_KEY=your-hetzner-api-key
+
 # Optional: API key to protect the proxy
 API_KEY=your-secret-key
 

@@ -280,6 +280,122 @@ function proxyHLSStream(targetUrl, referer, res, redirectCount = 0) {
 }
 
 /**
+ * PPV.to Stream proxy - for poocloud.in streams
+ * Requires proper Referer header from modistreams.org
+ */
+function proxyPPVStream(targetUrl, res, redirectCount = 0) {
+  if (redirectCount > 5) {
+    console.error(`[PPV Stream] Too many redirects`);
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Too many redirects' }));
+    return;
+  }
+
+  const url = new URL(targetUrl);
+  const client = url.protocol === 'https:' ? https : http;
+  
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': '*/*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://modistreams.org/',
+    'Origin': 'https://modistreams.org',
+    'Connection': 'keep-alive',
+  };
+  
+  const options = {
+    hostname: url.hostname,
+    port: url.port || (url.protocol === 'https:' ? 443 : 80),
+    path: url.pathname + url.search,
+    method: 'GET',
+    headers,
+    timeout: 30000,
+    rejectUnauthorized: false,
+    // Force IPv4 - poocloud.in blocks IPv6
+    family: 4,
+  };
+
+  console.log(`[PPV Stream] ${targetUrl.substring(0, 100)}...`);
+
+  const proxyReq = client.request(options, (proxyRes) => {
+    const contentType = proxyRes.headers['content-type'] || 'application/octet-stream';
+    
+    console.log(`[PPV Stream] Response: ${proxyRes.statusCode} - ${contentType}`);
+    
+    // Handle redirects
+    if ([301, 302, 303, 307, 308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
+      const redirectUrl = proxyRes.headers.location.startsWith('http') 
+        ? proxyRes.headers.location 
+        : new URL(proxyRes.headers.location, targetUrl).toString();
+      console.log(`[PPV Stream] Redirect to: ${redirectUrl.substring(0, 80)}...`);
+      proxyPPVStream(redirectUrl, res, redirectCount + 1);
+      return;
+    }
+    
+    // For m3u8 playlists, return as-is (CF worker will rewrite URLs)
+    const isPlaylist = contentType.includes('mpegurl') || 
+                       targetUrl.includes('.m3u8') || 
+                       contentType.includes('text');
+    
+    if (isPlaylist && proxyRes.statusCode === 200) {
+      const chunks = [];
+      proxyRes.on('data', chunk => chunks.push(chunk));
+      proxyRes.on('end', () => {
+        const playlist = Buffer.concat(chunks).toString('utf8');
+        
+        res.writeHead(proxyRes.statusCode, {
+          'Content-Type': 'application/vnd.apple.mpegurl',
+          'Content-Length': Buffer.byteLength(playlist),
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Expose-Headers': 'Content-Length, X-Proxy-Source',
+          'Cache-Control': 'no-cache',
+          'X-Proxy-Source': 'hetzner-ppv',
+        });
+        res.end(playlist);
+      });
+      return;
+    }
+    
+    // Stream video segments directly
+    res.writeHead(proxyRes.statusCode, {
+      'Content-Type': contentType,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range, X-Proxy-Source',
+      'Cache-Control': 'no-cache',
+      'X-Proxy-Source': 'hetzner-ppv',
+    });
+    
+    proxyRes.pipe(res);
+    
+    proxyRes.on('error', (err) => {
+      console.error(`[PPV Stream Error] ${err.message}`);
+      if (!res.headersSent) res.writeHead(502);
+      res.end();
+    });
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error(`[PPV Stream Error] ${err.message}`);
+    if (!res.headersSent) {
+      res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'PPV proxy error', details: err.message }));
+    }
+  });
+
+  proxyReq.on('timeout', () => {
+    proxyReq.destroy();
+    if (!res.headersSent) {
+      res.writeHead(504, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'PPV stream timeout' }));
+    }
+  });
+
+  res.on('close', () => proxyReq.destroy());
+
+  proxyReq.end();
+}
+
+/**
  * IPTV Stream proxy - streams raw MPEG-TS data
  * Follows redirects automatically (IPTV servers often return 302)
  */
@@ -428,6 +544,32 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // PPV.to Stream proxy (poocloud.in)
+  if (reqUrl.pathname === '/ppv') {
+    const targetUrl = reqUrl.searchParams.get('url');
+    
+    if (!targetUrl) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: 'Missing url parameter' }));
+    }
+
+    // Validate domain - only allow poocloud.in and vidsaver.io
+    try {
+      const parsed = new URL(decodeURIComponent(targetUrl));
+      const validDomains = ['poocloud.in', 'vidsaver.io', 'modistreams.org'];
+      const isValid = validDomains.some(d => parsed.hostname.endsWith(d));
+      if (!isValid) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ error: 'Invalid domain for PPV proxy', validDomains }));
+      }
+      proxyPPVStream(decodeURIComponent(targetUrl), res);
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Invalid URL', details: err.message }));
+    }
+    return;
+  }
+
   // IPTV API proxy
   if (reqUrl.pathname === '/iptv/api') {
     const targetUrl = reqUrl.searchParams.get('url');
@@ -491,6 +633,7 @@ server.listen(PORT, BIND_HOST, () => {
 ╠═══════════════════════════════════════════════════════════╣
 ║  Endpoints:                                               ║
 ║    GET /health              - Health check                ║
+║    GET /ppv?url=            - PPV.to stream proxy         ║
 ║    GET /stream?url=&referer=- HLS stream proxy (MegaUp)   ║
 ║    GET /iptv/api?url=&mac=  - Stalker API proxy           ║
 ║    GET /iptv/stream?url=    - IPTV stream proxy           ║

@@ -86,21 +86,6 @@ export function getTvSegmentProxyUrl(segmentUrl: string): string {
   return `${baseUrl}${route}/segment?url=${encodeURIComponent(segmentUrl)}`;
 }
 
-// PPV stream proxy URL - uses dedicated /ppv/stream route
-// This route has proper Referer handling for pooembed.top streams
-export function getPpvStreamProxyUrl(url: string): string {
-  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
-  
-  if (!cfProxyUrl) {
-    throw new Error('PPV proxy not configured. Set NEXT_PUBLIC_CF_STREAM_PROXY_URL environment variable.');
-  }
-  
-  // Strip trailing /stream suffix if present to get base URL
-  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '').replace(/\/+$/, '');
-  // Use dedicated /ppv/stream route which has proper referer handling and URL rewriting
-  return `${baseUrl}/ppv/stream?url=${encodeURIComponent(url)}`;
-}
-
 // CDN-Live stream proxy URL - uses dedicated /cdn-live/stream route
 // This route has proper Referer handling and URL rewriting for CDN-Live streams
 export function getCdnLiveStreamProxyUrl(url: string): string {
@@ -335,4 +320,90 @@ export function getFlixerExtractUrl(
 export function isFlixerCdnUrl(url: string): boolean {
   // Flixer uses Cloudflare Workers CDN
   return url.includes('flixer') || url.includes('plsdontscrapemelove');
+}
+
+// ============================================================================
+// VIPRow Proxy Configuration
+// ============================================================================
+// VIPRow/Casthill streams require:
+//   1. Origin: https://casthill.net
+//   2. Referer: https://casthill.net/
+// 
+// The /viprow route on Cloudflare Worker handles:
+//   - Stream extraction from VIPRow event pages
+//   - Token refresh via boanki.net
+//   - Manifest URL rewriting
+//   - Key and segment proxying
+// ============================================================================
+
+/**
+ * Check if VIPRow proxy is configured
+ * Requires NEXT_PUBLIC_CF_STREAM_PROXY_URL to be set
+ */
+export function isVIPRowProxyConfigured(): boolean {
+  return !!process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+}
+
+/**
+ * Get VIPRow stream URL via Cloudflare Worker
+ * Returns a proxied m3u8 URL that can be played directly in hls.js
+ * 
+ * @param eventUrl - VIPRow event URL (e.g., /nba/event-online-stream)
+ * @param link - Link number (1-10, default 1)
+ * @returns URL to the Cloudflare /viprow/stream endpoint
+ */
+export function getVIPRowStreamUrl(eventUrl: string, link: number = 1): string {
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+  
+  if (!cfProxyUrl) {
+    throw new Error('NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set');
+  }
+  
+  // Strip /stream suffix if present
+  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+  
+  return `${baseUrl}/viprow/stream?url=${encodeURIComponent(eventUrl)}&link=${link}`;
+}
+
+/**
+ * Get VIPRow manifest proxy URL
+ * For refreshing the manifest during playback
+ */
+export function getVIPRowManifestProxyUrl(manifestUrl: string): string {
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+  
+  if (!cfProxyUrl) {
+    throw new Error('NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set');
+  }
+  
+  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+  return `${baseUrl}/viprow/manifest?url=${encodeURIComponent(manifestUrl)}`;
+}
+
+/**
+ * Get VIPRow key proxy URL
+ */
+export function getVIPRowKeyProxyUrl(keyUrl: string): string {
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+  
+  if (!cfProxyUrl) {
+    throw new Error('NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set');
+  }
+  
+  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+  return `${baseUrl}/viprow/key?url=${encodeURIComponent(keyUrl)}`;
+}
+
+/**
+ * Get VIPRow segment proxy URL
+ */
+export function getVIPRowSegmentProxyUrl(segmentUrl: string): string {
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+  
+  if (!cfProxyUrl) {
+    throw new Error('NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set');
+  }
+  
+  const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+  return `${baseUrl}/viprow/segment?url=${encodeURIComponent(segmentUrl)}`;
 }

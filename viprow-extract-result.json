@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "eventUrl": "/atp-tour/united-cup-2026-day-5-online-stream",
+  "linkNum": 1,
+  "viprowData": {
+    "zmid": "st1hd~st1sd",
+    "pid": 5,
+    "edm": "casthill.net",
+    "csrf": "NzYuMTQxLjIwNS4xNTg.MTc2NzY2OTMzNA.OGZhN2U2ZWU0YjZjZDY2MmQxZGU4MTVhNGVkOGM2NGU4YmFhZjk3YTY5MWM5ZGViYzU1OTc3NDZiNjY4MGZlNg",
+    "csrf_ip": "76.141.205.158",
+    "category": "atp-tour"
+  },
+  "casthillData": {
+    "deviceId": "k3p9k3d6i3y8h8b8q1a5l4a7f1u2s6o3",
+    "streamId": "bafogofab07i7opa9e30",
+    "hostId": "s-c4",
+    "baseUrl": "https://boanki.net",
+    "scode": "70f06cf6ad8d67e4082c6c844c7f80d2",
+    "timestamp": "1767669335",
+    "csrfAuth": "TnpreU1ueFZVM3cuTVRjMk56WTNOamd5TlEuWmpGbFptUTVZalkxTmpRM05tSmlOREJoWkdaaU1tVmlZbUV3Wm1SaU1qYzJaakZsTTJRd1l6QXdNMlExT1RZMlpUSmhaV00xWlRnME5ESTBPV0kwTmc=",
+    "poster": "https://sts.casthill.net/images/thumb/bafogofab07i7opa9e30.jpeg"
+  },
+  "streamData": {
+    "manifestHost": "s-c4.peulleieo.net",
+    "manifestPath": "/pavel/bafogofab07i7opa9e30/1767669355/94ab2a79e75317f5d83a92b85c172f231b9b0d4b3b29467b846d820619da5984/manifest.ts",
+    "streamId": "bafogofab07i7opa9e30",
+    "expiryTimestamp": "1767669355",
+    "hash": "94ab2a79e75317f5d83a92b85c172f231b9b0d4b3b29467b846d820619da5984",
+    "expiryDate": "2026-01-06T03:15:55.000Z"
+  },
+  "embedUrl": "https://casthill.net/sd0embed/atp-tour?pid=5&gacat=&gatxt=atp-tour&v=st1hd%7Est1sd&csrf=NzYuMTQxLjIwNS4xNTg.MTc2NzY2OTMzNA.OGZhN2U2ZWU0YjZjZDY2MmQxZGU4MTVhNGVkOGM2NGU4YmFhZjk3YTY5MWM5ZGViYzU1OTc3NDZiNjY4MGZlNg&csrf_ip=76.141.205.158",
+  "manifestUrl": "https://s-c4.peulleieo.net/pavel/bafogofab07i7opa9e30/1767669355/94ab2a79e75317f5d83a92b85c172f231b9b0d4b3b29467b846d820619da5984/manifest.ts",
+  "error": null
+}

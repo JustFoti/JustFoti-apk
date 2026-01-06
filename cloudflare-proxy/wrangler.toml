@@ -71,6 +71,12 @@ PROTECTION_MODE = "none"
 # wrangler secret put RPI_PROXY_URL       # Your RPi proxy URL (e.g., https://xxx.trycloudflare.com)
 # wrangler secret put RPI_PROXY_KEY       # Your RPi proxy API key
 #
+# HETZNER VPS PROXY (for PPV.to streams - poocloud.in)
+# Deploy hetzner-proxy/server.js on your Hetzner VPS
+# Hetzner IPs are not blocked by poocloud.in (unlike Cloudflare/AWS)
+# wrangler secret put HETZNER_PROXY_URL   # Your Hetzner proxy URL (e.g., https://proxy.yourdomain.com)
+# wrangler secret put HETZNER_PROXY_KEY   # Your Hetzner proxy API key
+#
 # AnimeKai uses MegaUp CDN which blocks:
 #   1. Datacenter IPs (Cloudflare, AWS, etc.)
 #   2. Requests with Origin header

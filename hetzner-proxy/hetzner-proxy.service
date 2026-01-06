@@ -10,7 +10,7 @@ ExecStart=/usr/bin/node /root/hetzner-proxy/server.js
 Restart=on-failure
 RestartSec=10
 Environment=NODE_ENV=production
-Environment=PORT=3001
+Environment=PORT=3002
 Environment=API_KEY=change-this-secret-key
 
 [Install]

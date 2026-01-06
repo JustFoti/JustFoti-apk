@@ -19,9 +19,6 @@ export interface Env {
   LOG_LEVEL?: string;
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
-  // Hetzner VPS proxy - alternative (but blocked by datacenter IP detection)
-  HETZNER_PROXY_URL?: string;
-  HETZNER_PROXY_KEY?: string;
 }
 
 // CORS headers

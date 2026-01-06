@@ -12,9 +12,6 @@ import { Logger, createLogger, type LogLevel } from './logger';
 export interface Env {
   API_KEY?: string;
   LOG_LEVEL?: string;
-  // Hetzner VPS proxy for MegaUp streams (Cloudflare IPs are blocked)
-  HETZNER_PROXY_URL?: string;
-  HETZNER_PROXY_KEY?: string;
 }
 
 export default {

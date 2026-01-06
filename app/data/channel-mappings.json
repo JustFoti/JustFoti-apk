@@ -1,6 +1,6 @@
 {
-  "version": "1.1.0",
-  "lastUpdated": "2025-12-28T00:00:00.000Z",
+  "version": "1.2.0",
+  "lastUpdated": "2026-01-05T00:00:00.000Z",
   "providers": {
     "dlhd": {
       "name": "DLHD",
@@ -22,16 +22,6 @@
       "channelIdFormat": "channelName:countryCode",
       "examples": ["espn:us", "abc:us", "bein sports:us", "sky sports:gb"],
       "note": "CDN Live now uses channel-based streaming. Format: channelName:countryCode"
-    },
-    "ppv": {
-      "name": "PPV.to",
-      "description": "Pay-per-view events and premium content",
-      "baseUrl": "/ppv",
-      "totalChannels": 100,
-      "categories": ["sports", "movies", "entertainment"],
-      "countries": ["usa", "international"],
-      "channelIdFormat": "uriName",
-      "examples": ["boxing-event-1", "ufc-fight-night", "premium-movie"]
     }
   },
   "channels": {
@@ -41,8 +31,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "51",
-        "cdnlive": "abc:us",
-        "ppv": null
+        "cdnlive": "abc:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -52,8 +41,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "325",
-        "cdnlive": "espn:us",
-        "ppv": null
+        "cdnlive": "espn:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -63,8 +51,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "326",
-        "cdnlive": "espn 2:us",
-        "ppv": null
+        "cdnlive": "espn 2:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -74,8 +61,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "100",
-        "cdnlive": "fox sports 1:us",
-        "ppv": null
+        "cdnlive": "fox sports 1:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -85,8 +71,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "200",
-        "cdnlive": "cnn:us",
-        "ppv": null
+        "cdnlive": "cnn:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -96,8 +81,7 @@
       "country": "usa",
       "providers": {
         "dlhd": null,
-        "cdnlive": "bein sports:us",
-        "ppv": null
+        "cdnlive": "bein sports:us"
       },
       "priority": ["cdnlive"]
     },
@@ -107,32 +91,9 @@
       "country": "uk",
       "providers": {
         "dlhd": "150",
-        "cdnlive": "sky sports main event:gb",
-        "ppv": null
+        "cdnlive": "sky sports main event:gb"
       },
       "priority": ["dlhd", "cdnlive"]
-    },
-    "ufc-ppv": {
-      "name": "UFC Pay-Per-View",
-      "category": "sports",
-      "country": "usa",
-      "providers": {
-        "dlhd": null,
-        "cdnlive": null,
-        "ppv": "ufc-fight-night"
-      },
-      "priority": ["ppv"]
-    },
-    "boxing-ppv": {
-      "name": "Boxing Pay-Per-View",
-      "category": "sports",
-      "country": "usa",
-      "providers": {
-        "dlhd": null,
-        "cdnlive": null,
-        "ppv": "boxing-event"
-      },
-      "priority": ["ppv"]
     },
     "premier-league": {
       "name": "Premier League",
@@ -140,8 +101,7 @@
       "country": "uk",
       "providers": {
         "dlhd": "150",
-        "cdnlive": "sky sports premier league:gb",
-        "ppv": null
+        "cdnlive": "sky sports premier league:gb"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -151,8 +111,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "175",
-        "cdnlive": "nfl redzone:us",
-        "ppv": null
+        "cdnlive": "nfl redzone:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -162,8 +121,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "176",
-        "cdnlive": "nfl network:us",
-        "ppv": null
+        "cdnlive": "nfl network:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -173,8 +131,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "180",
-        "cdnlive": "nba tv:us",
-        "ppv": null
+        "cdnlive": "nba tv:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -184,8 +141,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "185",
-        "cdnlive": "mlb network:us",
-        "ppv": null
+        "cdnlive": "mlb network:us"
       },
       "priority": ["dlhd", "cdnlive"]
     },
@@ -195,8 +151,7 @@
       "country": "usa",
       "providers": {
         "dlhd": "190",
-        "cdnlive": "nhl network:us",
-        "ppv": null
+        "cdnlive": "nhl network:us"
       },
       "priority": ["dlhd", "cdnlive"]
     }
@@ -204,40 +159,33 @@
   "categoryMappings": {
     "sports": {
       "dlhd": ["123", "124", "125", "150", "175", "200", "325"],
-      "cdnlive": ["espn:us", "fox sports 1:us", "nfl redzone:us", "sky sports:gb", "bein sports:us"],
-      "ppv": ["ufc-fight-night", "boxing-event", "nfl-playoff"]
+      "cdnlive": ["espn:us", "fox sports 1:us", "nfl redzone:us", "sky sports:gb", "bein sports:us"]
     },
     "entertainment": {
       "dlhd": ["51", "206", "283", "302", "303"],
-      "cdnlive": ["abc:us", "nbc:us", "cbs:us", "fox:us"],
-      "ppv": ["premium-movie", "special-event"]
+      "cdnlive": ["abc:us", "nbc:us", "cbs:us", "fox:us"]
     },
     "news": {
       "dlhd": ["200", "201", "202"],
-      "cdnlive": ["cnn:us", "fox news:us", "bbc news:gb"],
-      "ppv": null
+      "cdnlive": ["cnn:us", "fox news:us", "bbc news:gb"]
     },
     "movies": {
       "dlhd": ["303", "304", "305"],
-      "cdnlive": ["hbo:us", "showtime:us"],
-      "ppv": ["premium-movie", "new-release"]
+      "cdnlive": ["hbo:us", "showtime:us"]
     }
   },
   "countryMappings": {
     "usa": {
       "dlhd": ["51", "206", "283", "302", "303", "325"],
-      "cdnlive": ["espn:us", "fox sports 1:us", "cnn:us", "abc:us"],
-      "ppv": ["ufc-fight-night", "boxing-event"]
+      "cdnlive": ["espn:us", "fox sports 1:us", "cnn:us", "abc:us"]
     },
     "uk": {
       "dlhd": ["150", "151", "152"],
-      "cdnlive": ["sky sports:gb", "bbc:gb"],
-      "ppv": null
+      "cdnlive": ["sky sports:gb", "bbc:gb"]
     },
     "international": {
       "dlhd": ["206", "304"],
-      "cdnlive": ["bein sports:us"],
-      "ppv": ["international-ppv"]
+      "cdnlive": ["bein sports:us"]
     }
   }
 }

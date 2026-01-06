@@ -9,7 +9,6 @@
  * PROVIDER SPECIALIZATIONS:
  * - DLHD: General live TV channels (850+ channels)
  * - CDN-Live.tv: Live sports events and premium channels
- * - PPV.to: Pay-per-view events and premium content
  */
 
 import channelMappings from '@/app/data/channel-mappings.json';
@@ -23,7 +22,7 @@ export interface ChannelInfo {
   providers: {
     dlhd?: string | null;
     cdnlive?: string | null;
-    ppv?: string | null;
+    viprow?: string | null;
   };
   priority: LiveTVSourceType[];
   description?: string;
@@ -68,8 +67,7 @@ export class ChannelRouter {
     // First check direct channel mappings
     const channel = Object.entries(this.mappings.channels).find(([_, info]) => 
       info.providers.dlhd === channelId ||
-      info.providers.cdnlive === channelId ||
-      info.providers.ppv === channelId
+      info.providers.cdnlive === channelId
     );
 
     if (channel) {
@@ -77,6 +75,7 @@ export class ChannelRouter {
       return {
         id,
         ...info,
+        providers: { ...info.providers, viprow: null },
         priority: info.priority as LiveTVSourceType[],
       };
     }
@@ -99,6 +98,7 @@ export class ChannelRouter {
       .map(([id, info]) => ({ 
         id, 
         ...info, 
+        providers: { ...info.providers, viprow: null },
         priority: info.priority as LiveTVSourceType[] 
       }));
   }
@@ -112,6 +112,7 @@ export class ChannelRouter {
       .map(([id, info]) => ({ 
         id, 
         ...info, 
+        providers: { ...info.providers, viprow: null },
         priority: info.priority as LiveTVSourceType[] 
       }));
   }
@@ -125,6 +126,7 @@ export class ChannelRouter {
       .map(([id, info]) => ({ 
         id, 
         ...info, 
+        providers: { ...info.providers, viprow: null },
         priority: info.priority as LiveTVSourceType[] 
       }));
   }
@@ -133,11 +135,15 @@ export class ChannelRouter {
    * Get channels available on specific provider
    */
   getChannelsByProvider(provider: LiveTVSourceType): ChannelInfo[] {
+    // VIPRow doesn't use channel mappings - it uses event URLs directly
+    if (provider === 'viprow') return [];
+    
     return Object.entries(this.mappings.channels)
-      .filter(([_, info]) => info.providers[provider])
+      .filter(([_, info]) => info.providers[provider as 'dlhd' | 'cdnlive'])
       .map(([id, info]) => ({ 
         id, 
         ...info, 
+        providers: { ...info.providers, viprow: null },
         priority: info.priority as LiveTVSourceType[] 
       }));
   }
@@ -156,7 +162,9 @@ export class ChannelRouter {
     // Use the first available provider from priority list
     for (let i = 0; i < channel.priority.length; i++) {
       const provider = channel.priority[i];
-      const providerId = channel.providers[provider];
+      // VIPRow doesn't use channel mappings
+      if (provider === 'viprow') continue;
+      const providerId = channel.providers[provider as 'dlhd' | 'cdnlive'];
       
       if (providerId) {
         return {
@@ -188,7 +196,9 @@ export class ChannelRouter {
     }> = [];
 
     channel.priority.forEach((provider, index) => {
-      const providerId = channel.providers[provider];
+      // VIPRow doesn't use channel mappings
+      if (provider === 'viprow') return;
+      const providerId = channel.providers[provider as 'dlhd' | 'cdnlive'];
       if (providerId) {
         providers.push({
           provider,
@@ -217,7 +227,6 @@ export class ChannelRouter {
     return {
       dlhdId: channel.providers.dlhd || undefined,
       cdnliveId: channel.providers.cdnlive || undefined,
-      ppvUri: channel.providers.ppv || undefined,
     };
   }
 
@@ -225,10 +234,13 @@ export class ChannelRouter {
    * Get provider-specific URL for a channel
    */
   getProviderUrl(channelId: string, provider: LiveTVSourceType): string | null {
+    // VIPRow doesn't use channel mappings - it uses event URLs directly
+    if (provider === 'viprow') return null;
+    
     const channel = this.findChannelById(channelId);
     if (!channel) return null;
 
-    const providerId = channel.providers[provider];
+    const providerId = channel.providers[provider as 'dlhd' | 'cdnlive'];
     if (!providerId) return null;
 
     const providerInfo = this.getProviderInfo(provider);
@@ -239,8 +251,6 @@ export class ChannelRouter {
         return `${providerInfo.baseUrl}/?channel=${providerId}`;
       case 'cdnlive':
         return `${providerInfo.baseUrl}/stream?eventId=${encodeURIComponent(providerId)}`;
-      case 'ppv':
-        return `${providerInfo.baseUrl}/stream?uri=${encodeURIComponent(providerId)}`;
       default:
         return null;
     }
@@ -260,7 +270,7 @@ export class ChannelRouter {
     const byProvider: Record<LiveTVSourceType, number> = {
       dlhd: 0,
       cdnlive: 0,
-      ppv: 0,
+      viprow: 0,
     };
 
     const byCategory: Record<string, number> = {};
@@ -270,7 +280,7 @@ export class ChannelRouter {
       // Count by provider
       if (channel.providers.dlhd) byProvider.dlhd++;
       if (channel.providers.cdnlive) byProvider.cdnlive++;
-      if (channel.providers.ppv) byProvider.ppv++;
+      // VIPRow doesn't use channel mappings - it uses event URLs directly
 
       // Count by category
       byCategory[channel.category] = (byCategory[channel.category] || 0) + 1;
@@ -299,7 +309,7 @@ export class ChannelRouter {
       providers: {
         dlhd: channelId,
         cdnlive: null,
-        ppv: null,
+        viprow: null,
       },
       priority: ['dlhd'],
       description: 'DLHD live TV channel',

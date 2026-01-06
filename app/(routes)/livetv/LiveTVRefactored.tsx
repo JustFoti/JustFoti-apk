@@ -100,8 +100,8 @@ export default function LiveTVRefactored() {
   };
 
   // Total counts
-  const totalEvents = stats.dlhd.events + stats.ppv.events;
-  const totalLive = stats.dlhd.live + stats.ppv.live;
+  const totalEvents = stats.dlhd.events;
+  const totalLive = stats.dlhd.live;
   const totalChannels = stats.dlhd.channels + stats.cdnlive.channels;
 
   return (
@@ -183,12 +183,12 @@ export default function LiveTVRefactored() {
                 <span className={styles.sourceTabCount}>{stats.dlhd.events}</span>
               </button>
               <button
-                onClick={() => setSelectedProvider('ppv')}
-                className={`${styles.sourceTab} ${selectedProvider === 'ppv' ? styles.active : ''}`}
+                onClick={() => setSelectedProvider('viprow')}
+                className={`${styles.sourceTab} ${selectedProvider === 'viprow' ? styles.active : ''}`}
               >
-                <span className={styles.sourceTabIcon}>🥊</span>
-                <span className={styles.sourceTabLabel}>PPV</span>
-                <span className={styles.sourceTabCount}>{stats.ppv.events}</span>
+                <span className={styles.sourceTabIcon}>🏟️</span>
+                <span className={styles.sourceTabLabel}>VIPRow</span>
+                <span className={styles.sourceTabCount}>{stats.viprow.events}</span>
               </button>
             </div>
 
@@ -199,7 +199,7 @@ export default function LiveTVRefactored() {
                 className={`${styles.filterPill} ${showLiveOnly ? styles.active : ''}`}
               >
                 <span className={styles.liveDot} />
-                Live Now ({selectedProvider === 'ppv' ? stats.ppv.live : stats.dlhd.live})
+                Live Now ({stats.dlhd.live})
               </button>
               
               <button
@@ -369,7 +369,7 @@ function EventCard({ event, onPlay }: EventCardProps) {
   const getSourceBadge = () => {
     switch (event.source) {
       case 'dlhd': return { label: 'DLHD', color: 'blue' };
-      case 'ppv': return { label: 'PPV', color: 'purple' };
+      case 'cdnlive': return { label: 'CDN', color: 'green' };
       default: return { label: 'LIVE', color: 'gray' };
     }
   };

@@ -16,7 +16,10 @@ import { createLogger, type LogLevel } from './logger';
 
 export interface Env {
   LOG_LEVEL?: string;
-  // Optional: RPI proxy for residential IP fallback
+  // Hetzner VPS proxy (primary for PPV - not IP banned)
+  HETZNER_PROXY_URL?: string;
+  HETZNER_PROXY_KEY?: string;
+  // RPI proxy as fallback
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
 }
@@ -66,35 +69,79 @@ async function fetchWithRetry(
 ): Promise<Response> {
   const parsedUrl = new URL(url);
   const isPoocloud = parsedUrl.hostname.endsWith('poocloud.in');
+  const isModistreams = parsedUrl.hostname.endsWith('modistreams.org');
   
-  // poocloud.in blocks CF IPs AND IPv6 - must use RPI proxy
-  // vidsaver.io and other domains can be fetched directly
-  if (isPoocloud && env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
-    logger.info('Using RPI proxy for poocloud.in (IPv6 blocked)', { url: url.substring(0, 80) });
-    
-    try {
-      const rpiUrl = `${env.RPI_PROXY_URL}/ppv?url=${encodeURIComponent(url)}`;
-      const rpiResponse = await fetch(rpiUrl, {
-        headers: {
-          'X-API-Key': env.RPI_PROXY_KEY,
-        },
+  // poocloud.in and modistreams.org need proxy (IPv6 blocked + IP bans)
+  // vidsaver.io segments can be fetched directly
+  const needsProxy = isPoocloud || isModistreams;
+  
+  if (needsProxy) {
+    // Try Hetzner first (primary - not IP banned)
+    if (env.HETZNER_PROXY_URL && env.HETZNER_PROXY_KEY) {
+      const hetznerUrl = `${env.HETZNER_PROXY_URL}/ppv?url=${encodeURIComponent(url)}&key=${env.HETZNER_PROXY_KEY}`;
+      logger.info('Attempting Hetzner proxy', { 
+        hetznerUrl: hetznerUrl.substring(0, 100),
+        baseUrl: env.HETZNER_PROXY_URL,
       });
       
-      if (rpiResponse.ok) {
-        logger.info('RPI proxy succeeded', { status: rpiResponse.status });
-        return rpiResponse;
+      try {
+        const hetznerResponse = await fetch(hetznerUrl, {
+          signal: AbortSignal.timeout(15000),
+        });
+        
+        logger.info('Hetzner response received', { 
+          status: hetznerResponse.status,
+          ok: hetznerResponse.ok,
+        });
+        
+        if (hetznerResponse.ok) {
+          logger.info('Hetzner proxy succeeded', { status: hetznerResponse.status });
+          return hetznerResponse;
+        }
+        
+        const errorText = await hetznerResponse.text();
+        logger.warn('Hetzner proxy failed', { 
+          status: hetznerResponse.status,
+          error: errorText.substring(0, 200),
+        });
+      } catch (error) {
+        logger.error('Hetzner proxy error', { 
+          error: error instanceof Error ? error.message : String(error),
+          hetznerUrl: hetznerUrl.substring(0, 100),
+        });
       }
+    } else {
+      logger.warn('Hetzner not configured', {
+        hasUrl: !!env.HETZNER_PROXY_URL,
+        hasKey: !!env.HETZNER_PROXY_KEY,
+      });
+    }
+    
+    // Fallback to RPI proxy
+    if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
+      logger.info('Falling back to RPI proxy', { url: url.substring(0, 80) });
       
-      logger.warn('RPI proxy failed', { status: rpiResponse.status });
-      // Fall through to direct fetch as last resort
-    } catch (error) {
-      logger.error('RPI proxy error', error as Error);
-      // Fall through to direct fetch
+      try {
+        const rpiUrl = `${env.RPI_PROXY_URL}/ppv?url=${encodeURIComponent(url)}`;
+        const rpiResponse = await fetch(rpiUrl, {
+          headers: { 'X-API-Key': env.RPI_PROXY_KEY },
+          signal: AbortSignal.timeout(15000),
+        });
+        
+        if (rpiResponse.ok) {
+          logger.info('RPI proxy succeeded', { status: rpiResponse.status });
+          return rpiResponse;
+        }
+        
+        logger.warn('RPI proxy failed', { status: rpiResponse.status });
+      } catch (error) {
+        logger.error('RPI proxy error', error as Error);
+      }
     }
   }
   
-  // Direct fetch - works for vidsaver.io segments and as fallback
-  logger.info('Direct fetch', { url: url.substring(0, 80), isPoocloud });
+  // Direct fetch - works for vidsaver.io segments
+  logger.info('Direct fetch', { url: url.substring(0, 80), needsProxy });
   
   const directResponse = await fetch(url, { headers });
   
@@ -129,6 +176,7 @@ export async function handlePPVRequest(request: Request, env: Env): Promise<Resp
       timestamp: new Date().toISOString(),
       config: {
         validDomains: VALID_DOMAINS,
+        hetznerProxyConfigured: !!(env.HETZNER_PROXY_URL && env.HETZNER_PROXY_KEY),
         rpiProxyConfigured: !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY),
       },
     });
@@ -138,47 +186,35 @@ export async function handlePPVRequest(request: Request, env: Env): Promise<Resp
   if (path === '/test') {
     const testUrl = 'https://gg.poocloud.in/southpark/index.m3u8';
     
-    try {
-      const response = await fetch(testUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Accept': '*/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Referer': REFERER,
-          'Origin': ORIGIN,
-        },
-      });
+    // Debug: show what we're configured with
+    const debugInfo: any = {
+      hetznerUrl: env.HETZNER_PROXY_URL ? env.HETZNER_PROXY_URL.substring(0, 50) + '...' : 'NOT SET',
+      hetznerKeySet: !!env.HETZNER_PROXY_KEY,
+      rpiUrl: env.RPI_PROXY_URL ? env.RPI_PROXY_URL.substring(0, 50) + '...' : 'NOT SET',
+      rpiKeySet: !!env.RPI_PROXY_KEY,
+    };
+    
+    // Try Hetzner
+    if (env.HETZNER_PROXY_URL && env.HETZNER_PROXY_KEY) {
+      const hetznerTestUrl = `${env.HETZNER_PROXY_URL}/ppv?url=${encodeURIComponent(testUrl)}&key=${env.HETZNER_PROXY_KEY}`;
+      debugInfo.hetznerTestUrl = hetznerTestUrl.substring(0, 120) + '...';
       
-      const contentType = response.headers.get('content-type');
-      const contentLength = response.headers.get('content-length');
-      let preview = '';
-      
-      if (response.ok) {
-        const text = await response.text();
-        preview = text.substring(0, 200);
+      try {
+        const hetznerRes = await fetch(hetznerTestUrl, { signal: AbortSignal.timeout(10000) });
+        debugInfo.hetznerStatus = hetznerRes.status;
+        debugInfo.hetznerOk = hetznerRes.ok;
+        if (hetznerRes.ok) {
+          const text = await hetznerRes.text();
+          debugInfo.hetznerPreview = text.substring(0, 200);
+        } else {
+          debugInfo.hetznerError = await hetznerRes.text();
+        }
+      } catch (e) {
+        debugInfo.hetznerError = e instanceof Error ? e.message : String(e);
       }
-      
-      return jsonResponse({
-        testUrl,
-        status: response.status,
-        ok: response.ok,
-        contentType,
-        contentLength,
-        preview,
-        headers: {
-          sent: {
-            'User-Agent': USER_AGENT,
-            'Referer': REFERER,
-            'Origin': ORIGIN,
-          },
-        },
-      });
-    } catch (error) {
-      return jsonResponse({
-        testUrl,
-        error: String(error),
-      }, 500);
     }
+    
+    return jsonResponse(debugInfo);
   }
 
   // Stream proxy

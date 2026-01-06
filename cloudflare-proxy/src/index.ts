@@ -34,6 +34,7 @@ import { handleAnalyticsRequest } from './analytics-proxy';
 import { handleTMDBRequest } from './tmdb-proxy';
 import { handleCDNLiveRequest } from './cdn-live-proxy';
 import { handlePPVRequest } from './ppv-proxy';
+import { handleVIPRowRequest } from './viprow-proxy';
 import { createLogger, generateRequestId, type LogLevel } from './logger';
 
 export interface Env {
@@ -43,7 +44,7 @@ export interface Env {
   LOG_LEVEL?: string;
   // TMDB API key for content proxy
   TMDB_API_KEY?: string;
-  // Hetzner VPS proxy (PRIMARY for IPTV)
+  // Hetzner VPS proxy (for PPV.to streams only)
   HETZNER_PROXY_URL?: string;
   HETZNER_PROXY_KEY?: string;
   // Anti-leech settings
@@ -77,6 +78,7 @@ const metrics = {
   flixerRequests: 0,
   analyticsRequests: 0,
   tmdbRequests: 0,
+  viprowRequests: 0,
   startTime: Date.now(),
 };
 
@@ -131,6 +133,7 @@ export default {
           flixerRequests: metrics.flixerRequests,
           analyticsRequests: metrics.analyticsRequests,
           tmdbRequests: metrics.tmdbRequests,
+          viprowRequests: metrics.viprowRequests,
         },
         timestamp: new Date().toISOString(),
       }, null, 2), {
@@ -342,6 +345,21 @@ export default {
       }
     }
 
+    // Route to VIPRow/Casthill proxy (live sports streams)
+    // Extracts m3u8 from VIPRow, proxies with proper Origin/Referer headers
+    if (path.startsWith('/viprow')) {
+      metrics.viprowRequests++;
+      logger.info('Routing to VIPRow proxy', { path });
+      
+      try {
+        return await handleVIPRowRequest(request, env);
+      } catch (error) {
+        metrics.errors++;
+        logger.error('VIPRow proxy error', error as Error);
+        return errorResponse('VIPRow proxy error', 500);
+      }
+    }
+
     // Route to IPTV proxy (Stalker portals)
     // Handle both /iptv/* and /tv/iptv/* (legacy path from NEXT_PUBLIC_CF_TV_PROXY_URL)
     if (path.startsWith('/iptv') || path.startsWith('/tv/iptv')) {
@@ -509,6 +527,24 @@ export default {
             stream: '/cdn-live/stream?url=<encoded_url> - Proxy m3u8/ts',
             health: '/cdn-live/health - Health check',
           },
+        },
+        viprow: {
+          path: '/viprow/',
+          description: 'VIPRow/Casthill live sports stream proxy',
+          usage: '/viprow/stream?url=<viprow_event_url>&link=<1-10>',
+          subRoutes: {
+            stream: '/viprow/stream?url=/nba/event-online-stream&link=1 - Extract and proxy m3u8',
+            manifest: '/viprow/manifest?url=<encoded_url> - Proxy manifest with URL rewriting',
+            key: '/viprow/key?url=<encoded_url> - Proxy decryption key',
+            segment: '/viprow/segment?url=<encoded_url> - Proxy video segment',
+            health: '/viprow/health - Health check',
+          },
+          features: [
+            'Direct m3u8 extraction (no iframe)',
+            'Automatic token refresh via boanki.net',
+            'URL rewriting for browser playback',
+            'AES-128 key proxying',
+          ],
         },
         analytics: {
           path: '/analytics/',
