@@ -56,41 +56,24 @@ function getRpiConfig(): { url: string | undefined; key: string | undefined } {
       if (ctx?.env) {
         url = url || ctx.env.RPI_PROXY_URL;
         key = key || ctx.env.RPI_PROXY_KEY;
-        console.log(`[cfFetch] Got RPI config from getCloudflareContext: url=${url ? 'set' : 'unset'}, key=${key ? 'set' : 'unset'}`);
       }
     } catch (e) {
       // getCloudflareContext not available
       console.debug('[cfFetch] getCloudflareContext failed:', e instanceof Error ? e.message : e);
     }
     
-    // Try global CF env (OpenNext sometimes puts env here)
+    // Try global CF env
     const globalEnv = (globalThis as unknown as { process?: { env?: Record<string, string> } })?.process?.env;
-    if (globalEnv && (!url || !key)) {
+    if (globalEnv) {
       url = url || globalEnv.RPI_PROXY_URL;
       key = key || globalEnv.RPI_PROXY_KEY;
-      if (url || key) {
-        console.log(`[cfFetch] Got RPI config from globalThis.process.env: url=${url ? 'set' : 'unset'}, key=${key ? 'set' : 'unset'}`);
-      }
     }
     
-    // Try __cf_env__ (another OpenNext pattern)
+    // Try __cf_env__
     const cfEnv = (globalThis as unknown as { __cf_env__?: Record<string, string> })?.__cf_env__;
-    if (cfEnv && (!url || !key)) {
+    if (cfEnv) {
       url = url || cfEnv.RPI_PROXY_URL;
       key = key || cfEnv.RPI_PROXY_KEY;
-      if (url || key) {
-        console.log(`[cfFetch] Got RPI config from __cf_env__: url=${url ? 'set' : 'unset'}, key=${key ? 'set' : 'unset'}`);
-      }
-    }
-    
-    // Try cloudflare context from request (if available in globalThis)
-    const cfCtx = (globalThis as unknown as { __cloudflare_context__?: { env?: Record<string, string> } })?.__cloudflare_context__;
-    if (cfCtx?.env && (!url || !key)) {
-      url = url || cfCtx.env.RPI_PROXY_URL;
-      key = key || cfCtx.env.RPI_PROXY_KEY;
-      if (url || key) {
-        console.log(`[cfFetch] Got RPI config from __cloudflare_context__: url=${url ? 'set' : 'unset'}, key=${key ? 'set' : 'unset'}`);
-      }
     }
   }
   
