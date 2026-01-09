@@ -42,8 +42,14 @@ interface TokenPayload {
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://tv.vynx.cc',
   'https://flyx.tv',
+  'https://www.flyx.tv',
   'http://localhost:3000',
   'http://localhost:3001',
+  // Allow Vercel preview deployments
+  '.vercel.app',
+  // Cloudflare Pages and Workers deployments
+  '.pages.dev',
+  '.workers.dev',
 ];
 
 export default {
@@ -130,16 +136,38 @@ function validateOrigin(request: Request, env: Env): { allowed: boolean; reason?
     ? env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
     : DEFAULT_ALLOWED_ORIGINS;
 
+  // Helper to check if an origin matches allowed patterns
+  const checkOrigin = (o: string): boolean => {
+    return allowedOrigins.some(allowed => {
+      // Handle localhost
+      if (allowed.includes('localhost')) {
+        return o.includes('localhost');
+      }
+      
+      // Handle domain suffix patterns (e.g., '.pages.dev', '.workers.dev', '.vercel.app')
+      if (allowed.startsWith('.')) {
+        try {
+          const originHost = new URL(o).hostname;
+          return originHost.endsWith(allowed);
+        } catch {
+          return false;
+        }
+      }
+      
+      // Handle full URLs
+      try {
+        const allowedHost = new URL(allowed).hostname;
+        const originHost = new URL(o).hostname;
+        return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+      } catch {
+        return false;
+      }
+    });
+  };
+
   // Check Origin header
   if (origin) {
-    const isAllowed = allowedOrigins.some(allowed => {
-      if (allowed.includes('localhost')) {
-        return origin.includes('localhost');
-      }
-      return origin === allowed || origin.endsWith(new URL(allowed).hostname);
-    });
-    
-    if (isAllowed) {
+    if (checkOrigin(origin)) {
       return { allowed: true, origin };
     }
     return { allowed: false, reason: `Origin not allowed: ${origin}` };
@@ -149,15 +177,7 @@ function validateOrigin(request: Request, env: Env): { allowed: boolean; reason?
   if (referer) {
     try {
       const refererUrl = new URL(referer);
-      const isAllowed = allowedOrigins.some(allowed => {
-        if (allowed.includes('localhost')) {
-          return refererUrl.hostname === 'localhost';
-        }
-        const allowedHost = new URL(allowed).hostname;
-        return refererUrl.hostname === allowedHost || refererUrl.hostname.endsWith(`.${allowedHost}`);
-      });
-      
-      if (isAllowed) {
+      if (checkOrigin(refererUrl.origin)) {
         return { allowed: true, origin: refererUrl.origin };
       }
       return { allowed: false, reason: `Referer not allowed: ${referer}` };

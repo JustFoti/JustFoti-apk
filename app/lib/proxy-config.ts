@@ -177,12 +177,11 @@ export function isAnimeKaiProxyConfigured(): boolean {
  * @returns Proxied URL through Cloudflare /animekai route
  */
 export function getAnimeKaiProxyUrl(url: string): string {
-  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
-  
-  if (!cfProxyUrl) {
-    console.error('[proxy-config] NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set! AnimeKai proxy requires Cloudflare Worker.');
-    throw new Error('AnimeKai proxy not configured. Set NEXT_PUBLIC_CF_STREAM_PROXY_URL environment variable.');
-  }
+  // Try both NEXT_PUBLIC_ (available at build time) and server-side env var
+  // Fallback to hardcoded URL for production if env vars aren't set
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL || 
+                     process.env.CF_STREAM_PROXY_URL || 
+                     'https://media-proxy.vynx.workers.dev/stream';
   
   // Use /animekai route which forwards to RPI residential proxy
   // Strip /stream suffix if present (the base URL might include it)
@@ -291,11 +290,11 @@ export function getFlixerExtractUrl(
   season?: number,
   episode?: number
 ): string {
-  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
-  
-  if (!cfProxyUrl) {
-    throw new Error('NEXT_PUBLIC_CF_STREAM_PROXY_URL is not set');
-  }
+  // Try both NEXT_PUBLIC_ (available at build time) and server-side env var
+  // Fallback to hardcoded URL for production if env vars aren't set
+  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL || 
+                     process.env.CF_STREAM_PROXY_URL || 
+                     'https://media-proxy.vynx.workers.dev/stream';
   
   // Strip /stream suffix if present
   const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
@@ -310,6 +309,8 @@ export function getFlixerExtractUrl(
     params.set('season', season.toString());
     params.set('episode', episode.toString());
   }
+  
+  console.log(`[Flixer] Extract URL: ${baseUrl}/flixer/extract?${params.toString()}`);
   
   return `${baseUrl}/flixer/extract?${params.toString()}`;
 }

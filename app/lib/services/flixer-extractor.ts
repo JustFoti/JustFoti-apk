@@ -115,17 +115,22 @@ export async function extractFlixerStreams(
   const serverPromises = NATO_ORDER.map(async (server) => {
     try {
       const extractUrl = getFlixerExtractUrl(tmdbId, type, server, season, episode);
+      console.log(`[Flixer] Server ${server} URL: ${extractUrl}`);
       
       const response = await fetch(extractUrl, {
         signal: AbortSignal.timeout(20000),
       });
       
+      console.log(`[Flixer] Server ${server} response: ${response.status} ${response.ok}`);
+      
       if (!response.ok) {
-        console.log(`[Flixer] Server ${server} returned ${response.status}`);
+        const errorText = await response.text().catch(() => 'Unable to read error');
+        console.log(`[Flixer] Server ${server} error body: ${errorText.substring(0, 200)}`);
         return null;
       }
       
       const data: FlixerApiResponse = await response.json();
+      console.log(`[Flixer] Server ${server} data:`, { success: data.success, sourcesCount: data.sources?.length, error: data.error });
       
       if (data.success && data.sources && data.sources.length > 0) {
         // Add server name to each source for identification
