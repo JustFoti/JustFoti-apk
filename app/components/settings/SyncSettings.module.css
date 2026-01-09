@@ -1,7 +1,7 @@
-/* Sync Settings - Premium Design */
+/* Sync Settings - Clean Design */
 .container {
-  background: linear-gradient(145deg, rgba(20, 20, 28, 0.95), rgba(12, 12, 18, 0.98));
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
@@ -11,21 +11,19 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 1.5rem;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(99, 102, 241, 0.04));
+  padding: 1.25rem 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .iconWrapper {
-  width: 52px;
-  height: 52px;
+  width: 44px;
+  height: 44px;
   background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  border-radius: 14px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.25);
   color: white;
 }
 
@@ -40,16 +38,15 @@
 }
 
 .title {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 600;
   color: white;
-  margin: 0 0 0.25rem 0;
-  letter-spacing: -0.01em;
+  margin: 0 0 0.125rem 0;
 }
 
 .subtitle {
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.8125rem;
+  color: rgba(255, 255, 255, 0.45);
   margin: 0;
 }
 

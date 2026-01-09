@@ -81,26 +81,28 @@ export default function SettingsPageClient() {
         </p>
       </div>
 
-      {/* Tab navigation */}
-      <div className={styles.tabNav}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            className={`${styles.tab} ${activeTab === tab.id ? styles.active : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      <div className={styles.settingsLayout}>
+        {/* Tab navigation - Sidebar */}
+        <nav className={styles.tabNav}>
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`${styles.tab} ${activeTab === tab.id ? styles.active : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
 
-      {/* Tab content */}
-      <div className={styles.content}>
-        {activeTab === 'sync' && <SyncSettings />}
-        {activeTab === 'providers' && <ProviderSettings />}
-        {activeTab === 'playback' && <PlaybackSettings />}
-        {activeTab === 'subtitles' && <SubtitleSettingsPanel />}
+        {/* Tab content */}
+        <div className={styles.content}>
+          {activeTab === 'sync' && <SyncSettings />}
+          {activeTab === 'providers' && <ProviderSettings />}
+          {activeTab === 'playback' && <PlaybackSettings />}
+          {activeTab === 'subtitles' && <SubtitleSettingsPanel />}
+        </div>
       </div>
     </div>
   );

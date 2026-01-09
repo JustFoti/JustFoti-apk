@@ -185,15 +185,29 @@ export default function SearchPageClient({
 
           // Filter by Genres (if any selected)
           if (searchFilters.genres.length > 0) {
-            const selectedGenreIds = searchFilters.genres.map(slug =>
-              GENRES.find(g => g.slug === slug)?.id
-            ).filter(Boolean) as number[];
+            // Get genre IDs matching the selected slugs, considering content type
+            const selectedGenreIds = searchFilters.genres.flatMap(slug => {
+              // Find all genres matching this slug
+              const matchingGenres = GENRES.filter(g => g.slug === slug);
+              
+              // If filtering by specific content type, only use that type's genre ID
+              if (searchFilters.contentType === 'movie') {
+                const movieGenre = matchingGenres.find(g => g.type === 'movie');
+                return movieGenre ? [movieGenre.id] : [];
+              } else if (searchFilters.contentType === 'tv') {
+                const tvGenre = matchingGenres.find(g => g.type === 'tv');
+                return tvGenre ? [tvGenre.id] : [];
+              }
+              
+              // For 'all' content type, include both movie and TV genre IDs
+              return matchingGenres.map(g => g.id);
+            }).filter((id, index, arr) => arr.indexOf(id) === index); // Remove duplicates
 
             if (selectedGenreIds.length > 0) {
               const itemGenreIds = item.genre_ids || item.genres?.map((g: any) => g.id) || [];
-              // Check if item has ALL selected genres
-              const hasAllGenres = selectedGenreIds.every(id => itemGenreIds.includes(id));
-              if (!hasAllGenres) return false;
+              // Check if item has ANY of the selected genre IDs (more lenient matching)
+              const hasAnyGenre = selectedGenreIds.some(id => itemGenreIds.includes(id));
+              if (!hasAnyGenre) return false;
             }
           }
 
