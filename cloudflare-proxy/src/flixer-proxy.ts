@@ -636,7 +636,8 @@ async function makeFlixerRequest(
   // - Origin header
   // - sec-fetch-* headers
   
-  const response = await fetch(`${FLIXER_API_BASE}${path}`, {
+  // Use fetchWithRpi to route through residential proxy (Flixer blocks CF datacenter IPs)
+  const response = await fetchWithRpi(`${FLIXER_API_BASE}${path}`, {
     headers,
     signal: AbortSignal.timeout(15000),
   });
@@ -722,6 +723,9 @@ async function getSourceFromServer(
  * Main handler for Flixer proxy requests
  */
 export async function handleFlixerRequest(request: Request, env: Env): Promise<Response> {
+  // CRITICAL: Set globalEnv so fetchWithRpi can access RPI proxy credentials
+  globalEnv = env;
+  
   const url = new URL(request.url);
   const path = url.pathname;
   const logLevel = (env.LOG_LEVEL || 'info') as LogLevel;
@@ -734,11 +738,16 @@ export async function handleFlixerRequest(request: Request, env: Env): Promise<R
 
   // Health check
   if (path === '/flixer/health' || path.endsWith('/health')) {
+    const hasRpi = !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY);
     return jsonResponse({
       status: 'ok',
       wasmLoaded: !!cachedWasmLoader,
       hasApiKey: !!cachedApiKey,
       serverTimeOffset,
+      rpiProxy: {
+        configured: hasRpi,
+        url: env.RPI_PROXY_URL ? env.RPI_PROXY_URL.substring(0, 30) + '...' : 'NOT SET',
+      },
       timestamp: new Date().toISOString(),
     }, 200);
   }
