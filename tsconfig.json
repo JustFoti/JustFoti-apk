@@ -73,6 +73,9 @@
     "hetzner-proxy/**/*",
     "cf-analytics-worker/**/*",
     "cf-sync-worker/**/*",
+    "tauri-stream-extractor/**/*",
+    "source-testing/**/*",
+    "examples/**/*",
     "**/__tests__/**/*",
     "**/*.test.ts",
     "**/*.test.tsx"

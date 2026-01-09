@@ -85,6 +85,9 @@ const HEADERS = {
   'sec-ch-ua-platform': '"Windows"',
 };
 
+// Import cfFetch for Cloudflare Workers compatibility
+import { cfFetch } from '@/app/lib/utils/cf-fetch';
+
 /**
  * Convert Uint8Array to hex string
  */
@@ -204,7 +207,8 @@ export async function checkOneMoviesAvailability(
       ? `${BASE_URL}/movie/${tmdbId}`
       : `${BASE_URL}/tv/${tmdbId}/${season || 1}/${episode || 1}`;
     
-    const response = await fetch(url, {
+    // Use cfFetch to route through RPI proxy on Cloudflare Workers
+    const response = await cfFetch(url, {
       method: 'HEAD',
       headers: { 'User-Agent': HEADERS['User-Agent'] },
     });
@@ -230,7 +234,8 @@ async function fetchPageData(
   
   console.log(`[1movies] Fetching page: ${url}`);
   
-  const response = await fetch(url, {
+  // Use cfFetch to route through RPI proxy on Cloudflare Workers
+  const response = await cfFetch(url, {
     headers: { 'User-Agent': HEADERS['User-Agent'] },
   });
   
@@ -274,7 +279,8 @@ async function fetchSources(encodedData: string): Promise<SourceResponse[]> {
   
   console.log(`[1movies] Fetching sources from: ${url.substring(0, 100)}...`);
   
-  const response = await fetch(url, {
+  // Use cfFetch to route through RPI proxy on Cloudflare Workers
+  const response = await cfFetch(url, {
     method: 'GET',
     headers: HEADERS,
   });
@@ -301,7 +307,8 @@ async function fetchStreamUrl(sourceData: string): Promise<StreamResponse | null
   
   console.log(`[1movies] Fetching stream from: ${url.substring(0, 100)}...`);
   
-  const response = await fetch(url, {
+  // Use cfFetch to route through RPI proxy on Cloudflare Workers
+  const response = await cfFetch(url, {
     method: 'GET',
     headers: HEADERS,
   });
@@ -498,7 +505,8 @@ export async function getOneMoviesSubtitles(
   tmdbId: string
 ): Promise<Array<{ url: string; label: string; language: string }>> {
   try {
-    const response = await fetch(`https://sub.wyzie.ru/search?id=${tmdbId}&format=srt`, {
+    // Use cfFetch to route through RPI proxy on Cloudflare Workers
+    const response = await cfFetch(`https://sub.wyzie.ru/search?id=${tmdbId}&format=srt`, {
       headers: { 'User-Agent': HEADERS['User-Agent'] },
     });
     

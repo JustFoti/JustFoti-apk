@@ -27,9 +27,36 @@ import FLIXER_WASM from './flixer.wasm';
 
 export interface Env {
   LOG_LEVEL?: string;
+  RPI_PROXY_URL?: string;
+  RPI_PROXY_KEY?: string;
 }
 
 const FLIXER_API_BASE = 'https://plsdontscrapemelove.flixer.sh';
+
+// Global env reference for RPI proxy
+let globalEnv: Env | null = null;
+
+/**
+ * Fetch through RPI proxy if configured, otherwise direct
+ */
+async function fetchWithRpi(url: string, options: RequestInit = {}): Promise<Response> {
+  if (globalEnv?.RPI_PROXY_URL && globalEnv?.RPI_PROXY_KEY) {
+    const proxyUrl = `${globalEnv.RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+    const headers = new Headers(options.headers);
+    headers.set('X-API-Key', globalEnv.RPI_PROXY_KEY);
+    
+    console.log(`[Flixer] Routing through RPI: ${url.substring(0, 60)}...`);
+    
+    return fetch(proxyUrl, {
+      method: 'GET',
+      headers,
+      signal: options.signal,
+    });
+  }
+  
+  // Direct fetch
+  return fetch(url, options);
+}
 
 // CORS headers
 function corsHeaders(): Record<string, string> {
@@ -489,7 +516,7 @@ let serverTimeOffset = 0;
  */
 async function syncServerTime(): Promise<void> {
   const localTimeBefore = Date.now();
-  const response = await fetch(`${FLIXER_API_BASE}/api/time?t=${localTimeBefore}`);
+  const response = await fetchWithRpi(`${FLIXER_API_BASE}/api/time?t=${localTimeBefore}`);
   const localTimeAfter = Date.now();
   const data = await response.json() as { timestamp: number };
   

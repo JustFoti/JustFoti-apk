@@ -1045,12 +1045,15 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ error: 'Unauthorized' }));
   }
 
-  // Rate limiting - skip for animekai route (already protected by API key)
-  const isAnimeKaiRoute = reqUrl.pathname === '/animekai';
-  if (!isAnimeKaiRoute && !checkRateLimit(clientIp)) {
-    res.writeHead(429, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ error: 'Rate limited' }));
-  }
+  // Rate limiting DISABLED for authenticated requests
+  // API key authentication is sufficient protection
+  // CF Workers share IPs, so IP-based rate limiting doesn't work for them
+  // The API key itself provides access control
+  // 
+  // If you need rate limiting, use the API key as the identifier instead of IP:
+  // if (!checkRateLimit(apiKey)) { ... }
+  //
+  // For now, skip rate limiting entirely for authenticated requests
 
   // DLHD Heartbeat endpoint - establishes session for key fetching
   // This is needed because heartbeat endpoint blocks datacenter IPs

@@ -12,6 +12,7 @@
  */
 
 import { getFlixerExtractUrl } from '../proxy-config';
+import { cfFetch } from '../utils/cf-fetch';
 
 interface StreamSource {
   quality: string;
@@ -67,7 +68,8 @@ async function fetchSubtitles(
     if (type === 'tv' && season && episode) {
       url += `&season=${season}&episode=${episode}`;
     }
-    const response = await fetch(url, {
+    // Use cfFetch to route through RPI proxy on Cloudflare Workers
+    const response = await cfFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': FLIXER_BASE_URL },
     });
     if (!response.ok) return [];

@@ -70,6 +70,7 @@ async function vidsrcRateLimitDelay(): Promise<void> {
 /**
  * Fetch with proper headers, timeout, and rate limiting
  * Uses browser-like headers to avoid Cloudflare detection
+ * Routes through RPI proxy when running on Cloudflare Workers
  */
 async function fetchWithHeaders(url: string, referer?: string, timeoutMs: number = 15000, retryCount: number = 0): Promise<Response> {
   const MAX_RETRIES = 2;
@@ -106,10 +107,11 @@ async function fetchWithHeaders(url: string, referer?: string, timeoutMs: number
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(url, {
+    // Use cfFetch to route through RPI when on Cloudflare Workers
+    const { cfFetch } = await import('@/app/lib/utils/cf-fetch');
+    const response = await cfFetch(url, {
       headers,
       signal: controller.signal,
-      // Follow redirects
       redirect: 'follow',
     });
     clearTimeout(timeoutId);
