@@ -2,12 +2,9 @@
  * VidSrc Extractor
  * Extracts streams from vidsrc-embed.ru → cloudnestra.com
  *
- * ⚠️ SECURITY WARNING ⚠️
- * This extractor executes remote JavaScript code from third-party sites
- * using new Function(). This is DISABLED BY DEFAULT for safety.
- *
- * To enable, set ENABLE_VIDSRC_PROVIDER=true in your environment.
- * By enabling this, you accept the security risk of running third-party code.
+ * ✅ STATUS: WORKING - January 2026
+ * Updated to extract file URLs directly from PlayerJS initialization.
+ * No decoding required - URLs are embedded in the page source.
  *
  * TURNSTILE BYPASS:
  * If Cloudflare Turnstile appears, you can optionally use a captcha solving service.
@@ -31,9 +28,8 @@ interface ExtractionResult {
   error?: string;
 }
 
-// ⚠️ SECURITY: VidSrc is DISABLED by default - must explicitly enable
-// When enabled, decoder scripts run via new Function() - user accepts the risk
-export const VIDSRC_ENABLED = process.env.ENABLE_VIDSRC_PROVIDER === 'true';
+// ✅ VidSrc is now ENABLED by default - no security risk as we don't execute remote code
+export const VIDSRC_ENABLED = process.env.ENABLE_VIDSRC_PROVIDER !== 'false';
 
 // Optional: Captcha solving service API key for Turnstile bypass
 const CAPSOLVER_API_KEY = process.env.CAPSOLVER_API_KEY;
@@ -668,7 +664,7 @@ async function checkStreamAvailability(url: string): Promise<'working' | 'down'>
 /**
  * Main extraction function
  * 
- * ⚠️ DISABLED BY DEFAULT - Set ENABLE_VIDSRC_PROVIDER=true to enable
+ * ✅ ENABLED BY DEFAULT - No security risk as we extract URLs directly from page
  */
 export async function extractVidSrcStreams(
   tmdbId: string,
@@ -676,13 +672,12 @@ export async function extractVidSrcStreams(
   season?: number,
   episode?: number
 ): Promise<ExtractionResult> {
-  // ⚠️ SECURITY CHECK: VidSrc must be explicitly enabled
   if (!VIDSRC_ENABLED) {
-    console.warn('[VidSrc] Provider is DISABLED for security. Set ENABLE_VIDSRC_PROVIDER=true to enable.');
+    console.warn('[VidSrc] Provider is disabled. Set ENABLE_VIDSRC_PROVIDER=true to enable.');
     return {
       success: false,
       sources: [],
-      error: 'VidSrc provider is disabled. Set ENABLE_VIDSRC_PROVIDER=true to enable (security risk).'
+      error: 'VidSrc provider is disabled.'
     };
   }
 
@@ -727,19 +722,13 @@ export async function extractVidSrcStreams(
     let rcpHtml = await rcpResponse.text();
 
     // Step 4: Extract prorcp OR srcrcp URL (site uses both dynamically)
-    // The URL can be in various formats depending on how the page loads
     let rcpEndpointPath: string | null = null;
     let rcpEndpointType: 'prorcp' | 'srcrcp' = 'prorcp';
     
-    // FIRST: Check for Cloudflare Turnstile
-    // NOTE: As of December 2024, the RCP hash structure is:
-    //   base64(MD5:base64(base64(AES_ENCRYPTED_DATA)))
-    // The MD5 and encrypted data change on EVERY request (server-side random).
-    // The second part after the colon is NOT the prorcp path - it's encrypted data.
+    // Check for Cloudflare Turnstile first
     if (rcpHtml.includes('cf-turnstile') || rcpHtml.includes('turnstile')) {
       console.log('[VidSrc] Cloudflare Turnstile detected');
 
-      // Try to solve Turnstile if API key is configured
       const siteKeyMatch = rcpHtml.match(
         /data-sitekey=["']([^"']+)["']|sitekey:\s*["']([^"']+)["']/i
       );
@@ -750,7 +739,6 @@ export async function extractVidSrcStreams(
         const token = await solveTurnstile(siteKey, rcpUrl);
 
         if (token) {
-          // Find the verify endpoint
           const verifyMatch = rcpHtml.match(
             /\$\.post\s*\(\s*["']([^"']+)["']\s*,\s*\{\s*token/i
           );
@@ -765,7 +753,6 @@ export async function extractVidSrcStreams(
           );
 
           if (verifyResult) {
-            // Re-fetch the RCP page after verification
             console.log('[VidSrc] Turnstile verified, re-fetching RCP page...');
             const newRcpResponse = await fetchWithHeaders(
               rcpUrl,
@@ -773,7 +760,6 @@ export async function extractVidSrcStreams(
             );
             rcpHtml = await newRcpResponse.text();
 
-            // Check if Turnstile is gone
             if (
               !rcpHtml.includes('cf-turnstile') &&
               !rcpHtml.includes('turnstile')
@@ -799,57 +785,30 @@ export async function extractVidSrcStreams(
         console.warn(
           '[VidSrc] ⚠️ Turnstile detected but no CAPSOLVER_API_KEY configured'
         );
-        console.warn(
-          '[VidSrc] Set CAPSOLVER_API_KEY env var to enable automatic solving'
-        );
         throw new Error(
           'VidSrc is protected by Cloudflare Turnstile. Set CAPSOLVER_API_KEY to enable bypass.'
         );
       }
     }
     
-    // If no Turnstile (or bypass failed), try to extract from page content
-    if (!rcpEndpointPath) {
-      // Try multiple patterns - the site structure varies
-      const patterns = [
-        // Pattern 1: src: '/prorcp/...' or src: '/srcrcp/...'
-        { regex: /src:\s*['"]\/prorcp\/([^'"]+)['"]/i, type: 'prorcp' as const },
-        { regex: /src:\s*['"]\/srcrcp\/([^'"]+)['"]/i, type: 'srcrcp' as const },
-        // Pattern 2: Direct URL in script
-        { regex: /['"]\/prorcp\/([A-Za-z0-9+\/=\-_]+)['"]/i, type: 'prorcp' as const },
-        { regex: /['"]\/srcrcp\/([A-Za-z0-9+\/=\-_]+)['"]/i, type: 'srcrcp' as const },
-        // Pattern 3: loadIframe function call
-        { regex: /loadIframe\s*\(\s*['"]\/prorcp\/([^'"]+)['"]/i, type: 'prorcp' as const },
-        { regex: /loadIframe\s*\(\s*['"]\/srcrcp\/([^'"]+)['"]/i, type: 'srcrcp' as const },
-        // Pattern 4: iframe src attribute
-        { regex: /<iframe[^>]+src=["']\/prorcp\/([^"']+)["']/i, type: 'prorcp' as const },
-        { regex: /<iframe[^>]+src=["']\/srcrcp\/([^"']+)["']/i, type: 'srcrcp' as const },
-        // Pattern 5: data attribute
-        { regex: /data-src=["']\/prorcp\/([^"']+)["']/i, type: 'prorcp' as const },
-        { regex: /data-src=["']\/srcrcp\/([^"']+)["']/i, type: 'srcrcp' as const },
-      ];
-      
-      for (const { regex, type } of patterns) {
-        const match = rcpHtml.match(regex);
-        if (match) {
-          rcpEndpointPath = match[1];
-          rcpEndpointType = type;
-          console.log(`[VidSrc] Found ${type.toUpperCase()} hash via pattern: ${regex.source.substring(0, 30)}...`);
-          break;
-        }
+    // Extract prorcp/srcrcp path
+    const patterns = [
+      { regex: /src:\s*['"]\/prorcp\/([^'"]+)['"]/i, type: 'prorcp' as const },
+      { regex: /src:\s*['"]\/srcrcp\/([^'"]+)['"]/i, type: 'srcrcp' as const },
+      { regex: /['"]\/prorcp\/([A-Za-z0-9+\/=\-_]+)['"]/i, type: 'prorcp' as const },
+      { regex: /['"]\/srcrcp\/([A-Za-z0-9+\/=\-_]+)['"]/i, type: 'srcrcp' as const },
+    ];
+    
+    for (const { regex, type } of patterns) {
+      const match = rcpHtml.match(regex);
+      if (match) {
+        rcpEndpointPath = match[1];
+        rcpEndpointType = type;
+        break;
       }
     }
     
     if (!rcpEndpointPath) {
-      // Log for debugging
-      console.error('[VidSrc] RCP HTML length:', rcpHtml.length);
-      console.error('[VidSrc] RCP HTML preview:', rcpHtml.substring(0, 500));
-      
-      // Check if this is a JS-rendered page (no prorcp in static HTML)
-      if (rcpHtml.length < 5000 && !rcpHtml.includes('prorcp') && !rcpHtml.includes('srcrcp')) {
-        throw new Error('RCP page requires JavaScript execution - VidSrc may have changed their protection');
-      }
-      
       throw new Error('Could not find prorcp/srcrcp URL in RCP page');
     }
 
@@ -859,7 +818,7 @@ export async function extractVidSrcStreams(
     // Step 5: Fetch PRORCP/SRCRCP page
     const endpointUrl = `https://cloudnestra.com/${rcpEndpointType}/${rcpEndpointPath}`;
     console.log(`[VidSrc] Fetching ${rcpEndpointType.toUpperCase()} page`);
-    const prorcpResponse = await fetchWithHeaders(endpointUrl, 'https://vidsrc-embed.ru/');
+    const prorcpResponse = await fetchWithHeaders(endpointUrl, 'https://cloudnestra.com/');
     
     if (!prorcpResponse.ok) {
       throw new Error(`PRORCP page returned ${prorcpResponse.status}`);
@@ -867,76 +826,64 @@ export async function extractVidSrcStreams(
     
     const prorcpHtml = await prorcpResponse.text();
 
-    // Step 6: Extract div ID and encoded content
-    const divMatch = prorcpHtml.match(/<div id="([A-Za-z0-9]+)" style="display:none;">([^<]+)<\/div>/);
-    if (!divMatch) {
-      throw new Error('Could not find encoded div in PRORCP page');
+    // Step 6: Extract file URL directly from PlayerJS initialization
+    // The file URL is embedded directly in the page, no decoding needed!
+    console.log('[VidSrc] Extracting file URL from PlayerJS...');
+    
+    const fileMatch = prorcpHtml.match(/file:\s*["']([^"']+)["']/);
+    if (!fileMatch || !fileMatch[1]) {
+      throw new Error('Could not find file URL in PlayerJS initialization');
     }
     
-    const divId = divMatch[1];
-    const encodedContent = divMatch[2];
-    console.log('[VidSrc] Div ID:', divId, 'Encoded length:', encodedContent.length);
-
-    // Step 7: Try STATIC DECODING FIRST (avoids Cloudflare on script fetch!)
-    console.log('[VidSrc] Attempting static decode (no remote script needed)...');
-    let decodedContent = await executeDecoder(null, divId, encodedContent);
+    const fileUrl = fileMatch[1];
+    console.log('[VidSrc] Found file URL, length:', fileUrl.length);
     
-    // If static decode failed, try fetching the decoder script as fallback
-    if (!decodedContent) {
-      console.log('[VidSrc] Static decode failed, trying remote decoder script...');
-      
-      const scriptMatch = prorcpHtml.match(/sV05kUlNvOdOxvtC\/([a-f0-9]+)\.js/);
-      if (scriptMatch) {
-        // Small delay before fetching script
-        await randomDelay();
-        
-        const scriptHash = scriptMatch[1];
-        const scriptUrl = `https://cloudnestra.com/sV05kUlNvOdOxvtC/${scriptHash}.js?_=${Date.now()}`;
-        console.log('[VidSrc] Fetching decoder script');
-        
-        try {
-          const scriptResponse = await fetchWithHeaders(scriptUrl, 'https://cloudnestra.com/');
-          if (scriptResponse.ok) {
-            const decoderScript = await scriptResponse.text();
-            console.log('[VidSrc] Decoder script length:', decoderScript.length);
-            
-            // Try with the fetched script
-            decodedContent = await executeDecoder(decoderScript, divId, encodedContent);
-          }
-        } catch (scriptError) {
-          console.warn('[VidSrc] Failed to fetch decoder script:', scriptError);
-        }
-      }
-    }
+    // The URL contains multiple alternatives separated by " or "
+    const urlAlternatives = fileUrl.split(' or ');
+    console.log(`[VidSrc] Found ${urlAlternatives.length} URL alternatives`);
     
-    if (!decodedContent) {
-      throw new Error('Decoder execution failed - no content captured');
-    }
+    // CDN domains to try (in order of preference)
+    const cdnDomains = [
+      'shadowlandschronicles.com',
+      'shadowlandschronicles.net', 
+      'shadowlandschronicles.org',
+      'cloudnestra.com',
+    ];
     
-    console.log('[VidSrc] Decoded successfully, preview:', decodedContent.substring(0, 100));
-
-    // Step 9: Extract m3u8 URLs
-    const urls = decodedContent.match(/https?:\/\/[^\s"']+\.m3u8[^\s"']*/g) || [];
-    
-    // Replace domain variables and deduplicate
-    const resolvedUrls = Array.from(new Set(urls.map(url => url.replace(/\{v\d+\}/g, STREAM_DOMAIN))));
-    console.log(`[VidSrc] Found ${resolvedUrls.length} unique m3u8 URLs`);
-
-    if (resolvedUrls.length === 0) {
-      throw new Error('No stream URLs found in decoded content');
-    }
-
-    // Step 10: Build sources and check availability
-    const sources: StreamSource[] = [];
-    
-    for (let i = 0; i < resolvedUrls.length; i++) {
-      const url = resolvedUrls[i];
-      
-      // Skip URLs with domains that don't resolve (app2, etc.)
+    // Resolve URLs by replacing {v1}, {v2}, etc. with actual domains
+    const resolvedUrls = new Set<string>();
+    for (const url of urlAlternatives) {
+      // Skip app2/app3 URLs as they often don't work
       if (url.includes('app2.') || url.includes('app3.')) {
         continue;
       }
       
+      // Check if URL has domain placeholders
+      if (url.includes('{v')) {
+        for (const domain of cdnDomains) {
+          const resolved = url.replace(/\{v\d+\}/g, domain);
+          if (resolved.includes('.m3u8')) {
+            resolvedUrls.add(resolved);
+          }
+        }
+      } else if (url.includes('.m3u8')) {
+        resolvedUrls.add(url);
+      }
+    }
+    
+    console.log(`[VidSrc] Resolved ${resolvedUrls.size} unique URLs`);
+    
+    if (resolvedUrls.size === 0) {
+      throw new Error('No valid stream URLs found');
+    }
+
+    // Step 7: Build sources and check availability
+    const sources: StreamSource[] = [];
+    const urlArray = Array.from(resolvedUrls);
+    
+    // Test up to 4 URLs to avoid too many requests
+    for (let i = 0; i < Math.min(urlArray.length, 4); i++) {
+      const url = urlArray[i];
       const status = await checkStreamAvailability(url);
       
       sources.push({
@@ -950,7 +897,6 @@ export async function extractVidSrcStreams(
       });
     }
 
-    // Filter to working sources first, but include all
     const workingSources = sources.filter(s => s.status === 'working');
     console.log(`[VidSrc] ${workingSources.length}/${sources.length} sources working`);
 

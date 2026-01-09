@@ -88,6 +88,8 @@ async function fetchSubtitles(
 /**
  * Extract streams from Flixer via Cloudflare Worker
  * The CF Worker handles WASM-based encryption/decryption
+ * 
+ * Updated: Now fetches ALL servers in parallel for maximum source availability
  */
 export async function extractFlixerStreams(
   tmdbId: string,
@@ -107,11 +109,12 @@ export async function extractFlixerStreams(
 
   const sources: StreamSource[] = [];
 
-  // Try servers in NATO order until we find a working one
-  for (const server of NATO_ORDER) {
+  // Fetch ALL servers in parallel for maximum source availability
+  console.log(`[Flixer] Fetching all ${NATO_ORDER.length} servers in parallel...`);
+  
+  const serverPromises = NATO_ORDER.map(async (server) => {
     try {
       const extractUrl = getFlixerExtractUrl(tmdbId, type, server, season, episode);
-      console.log(`[Flixer] Trying server ${server}...`);
       
       const response = await fetch(extractUrl, {
         signal: AbortSignal.timeout(20000),
@@ -119,22 +122,41 @@ export async function extractFlixerStreams(
       
       if (!response.ok) {
         console.log(`[Flixer] Server ${server} returned ${response.status}`);
-        continue;
+        return null;
       }
       
       const data: FlixerApiResponse = await response.json();
       
       if (data.success && data.sources && data.sources.length > 0) {
-        sources.push(...data.sources);
-        console.log(`[Flixer] ✓ Found working source from ${server}`);
-        break; // Stop at first working source
+        // Add server name to each source for identification
+        const serverDisplayName = SERVER_NAMES[server] || server;
+        return data.sources.map(src => ({
+          ...src,
+          title: `Flixer ${serverDisplayName}`,
+          server: server,
+          status: 'working' as const,
+        }));
       } else {
-        console.log(`[Flixer] Server ${server} returned no sources:`, data.error);
+        console.log(`[Flixer] Server ${server}: ${data.error || 'No sources'}`);
+        return null;
       }
     } catch (e) {
       console.log(`[Flixer] Server ${server} failed:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  });
+
+  // Wait for all servers to respond
+  const results = await Promise.allSettled(serverPromises);
+  
+  // Collect all successful sources
+  for (const result of results) {
+    if (result.status === 'fulfilled' && result.value) {
+      sources.push(...result.value);
     }
   }
+
+  console.log(`[Flixer] Got ${sources.length} sources from ${results.filter(r => r.status === 'fulfilled' && r.value).length} servers`);
 
   if (sources.length === 0) {
     return { success: false, sources: [], error: 'No working sources available from Flixer' };

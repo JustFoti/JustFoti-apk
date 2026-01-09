@@ -1,39 +1,47 @@
 /**
  * 111movies (1movies) Stream Extractor
  * 
- * FULLY REVERSE-ENGINEERED - No Puppeteer required!
+ * STATUS: ENABLED - January 2026
  * 
- * ALGORITHM:
- * 1. Fetch page to get __NEXT_DATA__.props.pageProps.data
- * 2. Encode pageData: AES-256-CBC encrypt → hex → XOR → UTF-8 → Base64 → char substitution
- * 3. Call sources API: /{API_HASH}/{encoded}/sr
- * 4. Call stream API: /{API_HASH}/{source.data} to get m3u8 URL
+ * The 1movies API uses a complex obfuscation scheme that includes:
+ * 1. A static API hash built from obfuscated string array (rotation 104)
+ * 2. AES-256-CBC encryption of pageData with XOR post-processing
+ * 3. UTF-8 encoding of XOR'd string, then Base64url encoding
+ * 4. Character substitution cipher
+ * 5. CSRF token authentication
  * 
- * Updated for Cloudflare Workers compatibility - uses Web Crypto API instead of Node.js crypto
+ * Keys from 860-458a7ce1ee2061c2.js:
+ * - AES Key: [138,238,17,197,68,75,124,44,53,79,11,131,216,176,124,80,161,126,163,21,238,68,192,209,135,253,84,163,18,158,148,102]
+ * - AES IV: [181,63,33,220,121,92,190,223,94,49,56,160,53,233,201,230]
+ * - XOR Key: [215,136,144,55,198]
+ * - CSRF Token: WP6BXZEsOAvSP0tk4AhxIWllVsuBx0Iy
  */
 
 const BASE_URL = 'https://111movies.com';
 
-// Static API hash (from bundle)
-const API_HASH = 'fcd552c4321aeac1e62c5304913b3420be75a19d390807281a425aabbb5dc4c0';
+// Static API hash (from 860-458a7ce1ee2061c2.js - January 2026)
+// This hash includes the /ar suffix
+const API_HASH = 'h/APA91Pu8JKhvEMftnB2QqFE9aSTlLqQF4iF0DRuk7YXkLqvJaUmlRlblS_1ZK6t2VIbx68GVQ5AVkepTGy82DLIz_uAyGx3Z421GLf2TIhbySFvE1bOInrzHRKLtjkPTpliKjWPhvPIzDjFmHp4zwMvRvqLhstjw4CVCy8jn-BuTxk1SRkl8s1r/ef860363-4e1b-5482-8d76-ec6fdebe974b/e993fc0bc499fdfb502f96b85963f9f0bbc698dd/wiv/1000044292358307/1bda1d30afdf5f775dcddb0a888bf9898b90ad4d3e1089396585236913b00773/ar';
 
-// Encryption keys (from 860-58807119fccb267b.js)
-const AES_KEY = new Uint8Array([3,75,207,198,39,85,65,255,64,89,191,251,35,214,209,210,62,164,155,85,247,158,167,48,172,84,13,18,19,166,19,57]);
-const AES_IV = new Uint8Array([162,231,173,134,84,100,241,33,5,233,223,132,245,189,171,237]);
-const XOR_KEY = new Uint8Array([170,162,126,126,60,255,136,130,133]);
+// CSRF Token for API requests
+const CSRF_TOKEN = 'WP6BXZEsOAvSP0tk4AhxIWllVsuBx0Iy';
 
-// Alphabet substitution
-const STANDARD_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
-const SHUFFLED_ALPHABET = "TuzHOxl7b0RW9o_1FPV3eGfmL4Z5pD8cahBQr2U-6yvEYwngXCdJjANtqKIMiSks";
+// Encryption keys (from 860-458a7ce1ee2061c2.js)
+const AES_KEY = new Uint8Array([138,238,17,197,68,75,124,44,53,79,11,131,216,176,124,80,161,126,163,21,238,68,192,209,135,253,84,163,18,158,148,102]);
+const AES_IV = new Uint8Array([181,63,33,220,121,92,190,223,94,49,56,160,53,233,201,230]);
+const XOR_KEY = new Uint8Array([215,136,144,55,198]);
 
-// Build character map
-const CHAR_MAP = new Map<string, string>();
-for (let i = 0; i < STANDARD_ALPHABET.length; i++) {
-  CHAR_MAP.set(STANDARD_ALPHABET[i], SHUFFLED_ALPHABET[i]);
+// Character substitution (u -> d mapping from chunk)
+const U_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+const D_CHARS = "c86mtuVv2EUlDgX-1YSpoiTq9WJadfzNe_Rs53kMrKHQZnxL0wGCFBhb7AP4yIOj";
+
+const ENCODE_MAP = new Map<string, string>();
+for (let i = 0; i < U_CHARS.length; i++) {
+  ENCODE_MAP.set(U_CHARS[i], D_CHARS[i]);
 }
 
-// Enable by default now that we have working extraction
-export const ONEMOVIES_ENABLED = process.env.DISABLE_ONEMOVIES_PROVIDER !== 'true';
+// ENABLED - pageData encoding working!
+export const ONEMOVIES_ENABLED = true;
 
 export interface OneMoviesSource {
   quality: string;
@@ -70,8 +78,8 @@ const HEADERS = {
   'Accept': '*/*',
   'Accept-Language': 'en-US,en;q=0.9',
   'Referer': 'https://111movies.com/',
-  'X-Requested-With': 'XMLHttpRequest',
-  'Content-Type': 'application/octet-stream',
+  'Content-Type': 'text/javascript',
+  'x-csrf-token': CSRF_TOKEN,
   'sec-ch-ua': '"Chromium";v="120", "Not A(Brand";v="24"',
   'sec-ch-ua-mobile': '?0',
   'sec-ch-ua-platform': '"Windows"',
@@ -92,22 +100,12 @@ function stringToBytes(str: string): Uint8Array {
 }
 
 /**
- * Convert Uint8Array to base64url string
- */
-function bytesToBase64Url(bytes: Uint8Array): string {
-  // Convert to regular base64 first
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  const base64 = btoa(binary);
-  // Convert to base64url
-  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-/**
- * Encode page data for API request using Web Crypto API
- * Flow: AES-256-CBC encrypt → hex → XOR → UTF-8 → Base64 → char substitution
+ * Encode page data for API request
+ * Flow: AES-256-CBC encrypt → hex → XOR char codes → UTF-8 encode → Base64url → char substitution
+ * 
+ * CRITICAL: The XOR'd string must be treated as UTF-8 when converting to base64.
+ * This is because the browser does: Buffer.from(xoredString, 'utf8').toString('base64')
+ * which interprets the XOR'd characters as UTF-8 code points, expanding multi-byte sequences.
  */
 async function encodePageData(pageData: string): Promise<string> {
   // Import the AES key
@@ -130,7 +128,8 @@ async function encodePageData(pageData: string): Promise<string> {
   // Convert to hex string
   const hexString = toHex(new Uint8Array(encrypted));
   
-  // XOR each character
+  // XOR each character CODE with the key
+  // This produces a string where each character is the XOR of the hex digit's char code and the key byte
   let xored = '';
   for (let i = 0; i < hexString.length; i++) {
     const charCode = hexString.charCodeAt(i);
@@ -138,14 +137,38 @@ async function encodePageData(pageData: string): Promise<string> {
     xored += String.fromCharCode(charCode ^ xorByte);
   }
   
-  // UTF-8 encode and Base64url
-  const utf8Bytes = stringToBytes(xored);
-  const base64 = bytesToBase64Url(utf8Bytes);
+  // CRITICAL: Encode the XOR'd string as UTF-8, then convert to base64
+  // This is what the browser does: Buffer.from(xored, 'utf8').toString('base64')
+  // The TextEncoder will expand characters > 127 into multi-byte UTF-8 sequences
+  const utf8Bytes = new TextEncoder().encode(xored);
+  
+  // Convert to base64url
+  let base64 = '';
+  const bytes = utf8Bytes;
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 3) {
+    const b1 = bytes[i];
+    const b2 = i + 1 < len ? bytes[i + 1] : 0;
+    const b3 = i + 2 < len ? bytes[i + 2] : 0;
+    
+    const c1 = b1 >> 2;
+    const c2 = ((b1 & 3) << 4) | (b2 >> 4);
+    const c3 = ((b2 & 15) << 2) | (b3 >> 6);
+    const c4 = b3 & 63;
+    
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    base64 += chars[c1] + chars[c2];
+    if (i + 1 < len) base64 += chars[c3];
+    if (i + 2 < len) base64 += chars[c4];
+  }
+  
+  // Convert to base64url (replace + with -, / with _, remove padding)
+  base64 = base64.replace(/\+/g, '-').replace(/\//g, '_');
   
   // Character substitution
   let result = '';
   for (const char of base64) {
-    result += CHAR_MAP.get(char) || char;
+    result += ENCODE_MAP.get(char) || char;
   }
   
   return result;
@@ -246,9 +269,10 @@ async function fetchPageData(
  * Fetch available sources from 111movies
  */
 async function fetchSources(encodedData: string): Promise<SourceResponse[]> {
+  // URL format: /{API_HASH}/{encoded}/sr
   const url = `${BASE_URL}/${API_HASH}/${encodedData}/sr`;
   
-  console.log(`[1movies] Fetching sources...`);
+  console.log(`[1movies] Fetching sources from: ${url.substring(0, 100)}...`);
   
   const response = await fetch(url, {
     method: 'GET',
@@ -257,11 +281,13 @@ async function fetchSources(encodedData: string): Promise<SourceResponse[]> {
   
   if (!response.ok) {
     console.log(`[1movies] Sources fetch failed: ${response.status}`);
+    const text = await response.text();
+    console.log(`[1movies] Response: ${text.substring(0, 200)}`);
     return [];
   }
   
   const sources = await response.json() as SourceResponse[];
-  console.log(`[1movies] Got ${sources.length} sources`);
+  console.log(`[1movies] Got ${sources.length} sources:`, sources.map(s => s.name).join(', '));
   
   return sources;
 }
@@ -270,7 +296,10 @@ async function fetchSources(encodedData: string): Promise<SourceResponse[]> {
  * Fetch stream URL for a specific source
  */
 async function fetchStreamUrl(sourceData: string): Promise<StreamResponse | null> {
+  // URL format: /{API_HASH}/{source.data}
   const url = `${BASE_URL}/${API_HASH}/${sourceData}`;
+  
+  console.log(`[1movies] Fetching stream from: ${url.substring(0, 100)}...`);
   
   const response = await fetch(url, {
     method: 'GET',
