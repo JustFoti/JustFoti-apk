@@ -527,10 +527,12 @@ async function handleApiProxy(url: URL, env: Env, logger: any, origin: string | 
 
     // Helper to try RPi proxy
     const tryRpi = async (): Promise<Response> => {
+      // Strip trailing slash to avoid double-slash in URL path
+      const rpiBaseUrl = env.RPI_PROXY_URL!.replace(/\/+$/, '');
       const rpiParams = new URLSearchParams({ url: decodedUrl, key: env.RPI_PROXY_KEY! });
       if (mac) rpiParams.set('mac', mac);
       if (token) rpiParams.set('token', token);
-      const rpiUrl = `${env.RPI_PROXY_URL}/iptv/api?${rpiParams.toString()}`;
+      const rpiUrl = `${rpiBaseUrl}/iptv/api?${rpiParams.toString()}`;
       logger.info('Trying RPi proxy', { url: rpiUrl.substring(0, 80) });
       return fetch(rpiUrl, { signal: AbortSignal.timeout(15000) });
     };
@@ -925,9 +927,11 @@ async function handleStreamProxy(request: Request, url: URL, env: Env, logger: a
       // Fallback: RPi only (Hetzner reserved for PPV.to)
       if (env.RPI_PROXY_URL && env.RPI_PROXY_KEY) {
         logger.info('Falling back to RPi proxy for stream');
+        // Strip trailing slash to avoid double-slash in URL path
+        const rpiBaseUrl = env.RPI_PROXY_URL.replace(/\/+$/, '');
         const params = buildProxyParams();
         params.set('key', env.RPI_PROXY_KEY);
-        const rpiUrl = `${env.RPI_PROXY_URL}/iptv/stream?${params.toString()}`;
+        const rpiUrl = `${rpiBaseUrl}/iptv/stream?${params.toString()}`;
         
         try {
           response = await fetch(rpiUrl);

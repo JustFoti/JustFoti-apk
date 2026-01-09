@@ -394,6 +394,8 @@ async function fetchKeyViaRpi(
     if (!rpiBaseUrl.startsWith('http://') && !rpiBaseUrl.startsWith('https://')) {
       rpiBaseUrl = `https://${rpiBaseUrl}`;
     }
+    // Strip trailing slash to avoid double-slash in URL path
+    rpiBaseUrl = rpiBaseUrl.replace(/\/+$/, '');
 
     // Use the /proxy endpoint - RPI handles DLHD key auth internally
     // The RPI proxy detects key URLs and fetches auth tokens automatically

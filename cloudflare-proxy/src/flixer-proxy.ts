@@ -41,7 +41,9 @@ let globalEnv: Env | null = null;
  */
 async function fetchWithRpi(url: string, options: RequestInit = {}): Promise<Response> {
   if (globalEnv?.RPI_PROXY_URL && globalEnv?.RPI_PROXY_KEY) {
-    const proxyUrl = `${globalEnv.RPI_PROXY_URL}/proxy?url=${encodeURIComponent(url)}`;
+    // Strip trailing slash to avoid double-slash in URL path
+    const rpiBaseUrl = globalEnv.RPI_PROXY_URL.replace(/\/+$/, '');
+    const proxyUrl = `${rpiBaseUrl}/proxy?url=${encodeURIComponent(url)}`;
     const headers = new Headers(options.headers);
     headers.set('X-API-Key', globalEnv.RPI_PROXY_KEY);
     

@@ -449,6 +449,8 @@ async function fetchViaRpiProxy(
     if (!rpiBaseUrl.startsWith('http://') && !rpiBaseUrl.startsWith('https://')) {
       rpiBaseUrl = `https://${rpiBaseUrl}`;
     }
+    // Strip trailing slash to avoid double-slash in URL path
+    rpiBaseUrl = rpiBaseUrl.replace(/\/+$/, '');
 
     const rpiParams = new URLSearchParams({
       url: decodedUrl,

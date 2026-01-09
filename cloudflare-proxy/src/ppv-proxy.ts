@@ -122,7 +122,9 @@ async function fetchWithRetry(
       logger.info('Falling back to RPI proxy', { url: url.substring(0, 80) });
       
       try {
-        const rpiUrl = `${env.RPI_PROXY_URL}/ppv?url=${encodeURIComponent(url)}`;
+        // Strip trailing slash to avoid double-slash in URL path
+        const rpiBaseUrl = env.RPI_PROXY_URL.replace(/\/+$/, '');
+        const rpiUrl = `${rpiBaseUrl}/ppv?url=${encodeURIComponent(url)}`;
         const rpiResponse = await fetch(rpiUrl, {
           headers: { 'X-API-Key': env.RPI_PROXY_KEY },
           signal: AbortSignal.timeout(15000),

@@ -44,7 +44,13 @@ database_id = "b7875a59-3876-4223-9c3d-7644c16f44a5"
 # Required secrets (set as Secret/Encrypted):
 #   TMDB_API_KEY = your TMDB bearer token
 #   JWT_SECRET = your JWT secret
+#   RPI_PROXY_URL = your RPI proxy URL (e.g., https://rpi-proxy.vynx.cc)
 #   RPI_PROXY_KEY = your RPI proxy key
+#
+# IMPORTANT: RPI_PROXY_URL and RPI_PROXY_KEY are REQUIRED for VidSrc, Flixer,
+# and 1movies extractors to work on Cloudflare Workers. These providers block
+# datacenter IPs, so requests must be routed through the residential RPI proxy.
+# Set these with: wrangler secret put RPI_PROXY_URL && wrangler secret put RPI_PROXY_KEY
 # =============================================================================
 
 # Observability
