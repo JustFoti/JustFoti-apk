@@ -474,9 +474,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     const currentKey = `${tmdbId}-${mediaType}-${season}-${episode}-${providerName}`;
 
     // Prevent duplicate fetches in StrictMode if not forcing
-    if (!force && lastFetchedKey.current === currentKey) {
+    // But allow fetches for different providers even if lastFetchedKey matches a previous provider
+    if (!force && lastFetchedKey.current === currentKey && sourcesCache[providerName] !== undefined) {
       console.log('[VideoPlayer] Skipping duplicate fetch (already fetched)');
-      return null;
+      return sourcesCache[providerName] || null;
     }
 
     lastFetchedKey.current = currentKey;
@@ -484,9 +485,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     // Set loading state for this specific provider
     setLoadingProviders(prev => ({ ...prev, [providerName]: true }));
 
+    // Always clear error when fetching a new provider (user clicked a different tab)
+    setError(null);
+    
     if (providerName === provider) {
       setIsLoading(true);
-      setError(null);
     }
 
     try {

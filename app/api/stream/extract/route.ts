@@ -453,6 +453,11 @@ export async function GET(request: NextRequest) {
           return { sources: vidsrcResult.sources, provider: 'vidsrc' };
         }
         
+        // Check if it's a Turnstile block - return specific error
+        if (vidsrcResult.error?.includes('Turnstile')) {
+          throw new Error('VidSrc is currently protected by Cloudflare. Try Flixer or 1movies instead.');
+        }
+        
         throw new Error(vidsrcResult.error || 'VidSrc returned no sources');
       }
       
@@ -701,6 +706,11 @@ export async function GET(request: NextRequest) {
         requiresSegmentProxy: true,
         cached: false,
         executionTime
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+        }
       });
     } catch (error) {
       // Remove from pending requests on error
@@ -726,7 +736,13 @@ export async function GET(request: NextRequest) {
         executionTime,
         isTemporary: true
       },
-      { status: 503 }
+      { 
+        status: 503,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      }
     );
   }
 }

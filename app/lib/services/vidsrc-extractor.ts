@@ -409,9 +409,12 @@ export async function extractVidSrcStreams(
         console.warn(
           '[VidSrc] ⚠️ Turnstile detected but no CAPSOLVER_API_KEY configured'
         );
-        throw new Error(
-          'VidSrc is protected by Cloudflare Turnstile. Set CAPSOLVER_API_KEY to enable bypass.'
-        );
+        // Return empty result instead of throwing - allows fallback to other providers
+        return {
+          success: false,
+          sources: [],
+          error: 'VidSrc is protected by Cloudflare Turnstile. Configure CAPSOLVER_API_KEY or use alternative providers.'
+        };
       }
     }
     
