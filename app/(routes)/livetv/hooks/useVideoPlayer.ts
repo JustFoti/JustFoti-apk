@@ -63,9 +63,16 @@ export function useVideoPlayer() {
         const countryCode = cdnParts[1] || 'us';
         return `/api/livetv/cdnlive-stream?channel=${channelName}&code=${countryCode}`;
       case 'viprow':
-        // VIPRow extraction is currently broken due to heavy obfuscation
-        // Casthill added a new anti-scraping layer that requires JS execution
-        throw new Error('VIPRow streams are temporarily unavailable');
+        // VIPRow streams are extracted via CF Worker -> RPI Proxy
+        // Returns a playable m3u8 with all URLs rewritten through proxy
+        const cfProxyUrl = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+        if (!cfProxyUrl) {
+          throw new Error('VIPRow proxy not configured');
+        }
+        const baseUrl = cfProxyUrl.replace(/\/stream\/?$/, '');
+        const viprowUrl = source.viprowUrl || source.channelId;
+        const linkNum = source.linkNum || 1;
+        return `${baseUrl}/viprow/stream?url=${encodeURIComponent(viprowUrl)}&link=${linkNum}`;
       default:
         throw new Error(`Unsupported source type: ${source.type}`);
     }

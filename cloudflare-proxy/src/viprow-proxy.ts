@@ -60,10 +60,14 @@ function isAllowedUrl(url: string): boolean {
 
 /**
  * Rewrite manifest URLs to go through proxy
+ * Handles both master playlists (variant streams) and media playlists (segments)
  */
 function rewriteManifestUrls(manifest: string, baseUrl: string, proxyBase: string): string {
   const lines = manifest.split('\n');
   const rewritten: string[] = [];
+  
+  // Detect if this is a master playlist (contains #EXT-X-STREAM-INF)
+  const isMasterPlaylist = manifest.includes('#EXT-X-STREAM-INF');
   
   for (const line of lines) {
     let newLine = line;
@@ -75,22 +79,32 @@ function rewriteManifestUrls(manifest: string, baseUrl: string, proxyBase: strin
       continue;
     }
     
-    // Rewrite key URLs
+    // Rewrite key URLs (in media playlists)
     if (trimmed.includes('URI="')) {
       newLine = trimmed.replace(/URI="([^"]+)"/, (_, url) => {
         const fullUrl = url.startsWith('http') ? url : new URL(url, baseUrl).toString();
         return `URI="${proxyBase}/key?url=${encodeURIComponent(fullUrl)}"`;
       });
     }
-    // Skip other comments
+    // Skip other comments/tags
     else if (trimmed.startsWith('#')) {
       rewritten.push(line);
       continue;
     }
-    // Rewrite segment URLs
-    else if (trimmed.includes('.ts') || trimmed.includes('?')) {
+    // Rewrite URLs (variant streams in master, segments in media)
+    else if (trimmed.length > 0) {
       const fullUrl = trimmed.startsWith('http') ? trimmed : new URL(trimmed, baseUrl).toString();
-      newLine = `${proxyBase}/segment?url=${encodeURIComponent(fullUrl)}`;
+      
+      if (isMasterPlaylist) {
+        // Variant stream URL - route through manifest proxy
+        newLine = `${proxyBase}/manifest?url=${encodeURIComponent(fullUrl)}`;
+      } else if (trimmed.includes('.ts') || trimmed.includes('?') || !trimmed.includes('.')) {
+        // Segment URL - route through segment proxy
+        newLine = `${proxyBase}/segment?url=${encodeURIComponent(fullUrl)}`;
+      } else {
+        // Unknown URL type - assume it's a manifest
+        newLine = `${proxyBase}/manifest?url=${encodeURIComponent(fullUrl)}`;
+      }
     }
     
     rewritten.push(newLine);

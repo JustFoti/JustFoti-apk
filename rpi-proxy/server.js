@@ -31,8 +31,8 @@ const { URL } = require('url');
 // Token is fetched from the player page - NO CACHING to avoid stale token issues
 // ============================================================================
 
-// Import v2 auth module for new HMAC-signed requests
-const dlhdAuthV2 = require('./dlhd-auth-v2');
+// Import v3 auth module for PoW-based key authentication (Jan 2026)
+const dlhdAuthV3 = require('./dlhd-auth-v3');
 
 // ============================================================================
 // DLHD Heartbeat Session Management  
@@ -335,25 +335,25 @@ async function fetchKeyWithAuth(keyUrl, res) {
     return;
   }
   
-  console.log(`[Key] Fetching key for channel ${channel} from ${serverInfo.server}.${serverInfo.domain} (using v2 auth)`);
+  console.log(`[Key] Fetching key for channel ${channel} from ${serverInfo.server}.${serverInfo.domain} (using v3 PoW auth)`);
   
-  // Use v2 auth with HMAC-signed requests
-  const result = await dlhdAuthV2.fetchDLHDKeyV2(keyUrl);
+  // Use v3 auth with Proof-of-Work nonce (Jan 2026 update)
+  const result = await dlhdAuthV3.fetchDLHDKeyV3(keyUrl);
   
   if (result.success) {
-    console.log(`[Key] ✅ Valid key via v2 auth: ${result.data.toString('hex')}`);
+    console.log(`[Key] ✅ Valid key via v3 PoW auth: ${result.data.toString('hex')}`);
     res.writeHead(200, {
       'Content-Type': 'application/octet-stream',
       'Content-Length': result.data.length,
       'Access-Control-Allow-Origin': '*',
-      'X-Fetched-By': 'v2-hmac-auth',
+      'X-Fetched-By': 'v3-pow-auth',
     });
     res.end(result.data);
     return;
   }
   
-  // V2 auth failed - return error
-  console.log(`[Key] ❌ V2 auth failed: ${result.error}`);
+  // V3 auth failed - return error
+  console.log(`[Key] ❌ V3 auth failed: ${result.error}`);
   
   // Map error codes to HTTP status
   let status = 502;
@@ -2152,7 +2152,17 @@ function fetchWithHeaders(url, headers = {}, maxRedirects = 5) {
 
 /**
  * Extract m3u8 from VIPRow/Casthill embed
- * Updated to handle new obfuscation layer
+ * Updated Jan 2026 to handle new player script format
+ * 
+ * New format variables:
+ *   - playerId: device ID (e.g., "b4k7t7u7o1s7x2o9n9k3x7l5n1b3m7a6")
+ *   - strUnqId: stream unique ID (e.g., "yeyafa6i1eputaza6u3o_pecuvoxi9a2ici6abogi_...")
+ *   - sCode: initial scode via decodeSr([charCodes])
+ *   - secTokenUrl: base64 encoded "https://boanki.net"
+ *   - csrftoken: double base64 encoded CSRF token
+ *   - videoSource: double base64 encoded manifest URL (via char codes)
+ *   - edgeHostId: host ID (e.g., "s-b1")
+ *   - expireTs: expiry timestamp
  */
 async function extractVIPRowM3U8(streamPageUrl) {
   console.log(`[VIPRow] Extracting from: ${streamPageUrl}`);
@@ -2216,104 +2226,124 @@ async function extractVIPRowM3U8(streamPageUrl) {
     
     const embedHtml = embedRes.data.toString('utf8');
     
-    // Find player script - check for both old and new formats
+    // Find player script - look for the one with Clappr and isPlayerLoaded
     const scriptPattern = /<script[^>]*>([\s\S]*?)<\/script>/gi;
-    let embedScript = null;
+    let playerScript = null;
     let match;
     while ((match = scriptPattern.exec(embedHtml)) !== null) {
       const script = match[1];
-      // Old format: direct player code
-      if (script.includes('isPlayerLoaded') && script.includes('scode')) {
-        embedScript = script;
-        break;
-      }
-      // New format: obfuscated with window['key'] = 'encoded'
-      // The big obfuscated script (>100KB) contains the decoder
-      if (script.length > 100000) {
-        console.log(`[VIPRow] Found obfuscated script (${script.length} chars)`);
-        // Try to extract variables from the obfuscated script
-        // The script eventually decodes to player code with the same variables
-        embedScript = script;
+      // New format: contains Clappr player and isPlayerLoaded
+      if (script.includes('Clappr') && script.includes('isPlayerLoaded') && script.length > 5000) {
+        playerScript = script;
         break;
       }
     }
     
-    if (!embedScript) {
+    if (!playerScript) {
       return { success: false, error: 'Player script not found' };
     }
     
-    console.log(`[VIPRow] Found player script (${embedScript.length} chars)`);
+    console.log(`[VIPRow] Found player script (${playerScript.length} chars)`);
     
-    // Try to extract variables - check both old and new patterns
+    // Extract variables using new format patterns (Jan 2026)
     let deviceId, streamId, hostId, timestamp, initialScode, baseUrl, csrfAuth, manifestUrl;
     
-    // Old format patterns
-    deviceId = embedScript.match(/r\s*=\s*["']([a-z0-9]+)["']/)?.[1];
-    streamId = embedScript.match(/s\s*=\s*["']([a-z0-9]+)["']/)?.[1];
-    hostId = embedScript.match(/m\s*=\s*["']([a-z0-9-]+)["']/)?.[1];
-    timestamp = embedScript.match(/a\s*=\s*parseInt\s*\(\s*["'](\d+)["']/)?.[1];
+    // New format: const playerId="..."
+    const playerIdMatch = playerScript.match(/const\s+playerId\s*=\s*["']([a-z0-9]+)["']/);
+    if (playerIdMatch) deviceId = playerIdMatch[1];
     
-    // Extract initial scode (char code array)
-    const iMatch = embedScript.match(/i\s*=\s*e\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)/);
-    if (iMatch) {
-      const charCodes = JSON.parse('[' + iMatch[1].replace(/\s/g, '') + ']');
+    // New format: const strUnqId="..."
+    const strUnqIdMatch = playerScript.match(/const\s+strUnqId\s*=\s*["']([^"']+)["']/);
+    if (strUnqIdMatch) streamId = strUnqIdMatch[1];
+    
+    // New format: const edgeHostId="..."
+    const edgeHostIdMatch = playerScript.match(/const\s+edgeHostId\s*=\s*["']([^"']+)["']/);
+    if (edgeHostIdMatch) hostId = edgeHostIdMatch[1];
+    
+    // New format: const expireTs=parseInt("...",10)
+    const expireTsMatch = playerScript.match(/const\s+expireTs\s*=\s*parseInt\s*\(\s*["'](\d+)["']/);
+    if (expireTsMatch) timestamp = expireTsMatch[1];
+    
+    // New format: const sCode=decodeSr([charCodes])
+    const sCodeMatch = playerScript.match(/const\s+sCode\s*=\s*decodeSr\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)/);
+    if (sCodeMatch) {
+      const charCodes = JSON.parse('[' + sCodeMatch[1].replace(/\s/g, '') + ']');
       initialScode = String.fromCharCode(...charCodes);
     }
     
-    // Extract base URL (base64)
-    const cMatch = embedScript.match(/c\s*=\s*t\s*\(\s*["']([^"']+)["']\s*\)/);
-    if (cMatch) {
-      baseUrl = Buffer.from(cMatch[1], 'base64').toString('utf8');
+    // New format: const secTokenUrl=bota("base64")
+    const secTokenUrlMatch = playerScript.match(/const\s+secTokenUrl\s*=\s*bota\s*\(\s*["']([^"']+)["']\s*\)/);
+    if (secTokenUrlMatch) {
+      baseUrl = Buffer.from(secTokenUrlMatch[1], 'base64').toString('utf8');
     }
     
-    // Extract X-CSRF-Auth (double base64)
-    const lMatch = embedScript.match(/l\s*=\s*t\s*\(\s*["']([^"']+)["']\s*\)/);
-    if (lMatch) {
-      const decoded1 = Buffer.from(lMatch[1], 'base64').toString('utf8');
+    // New format: const csrftoken="double_base64"
+    const csrftokenMatch = playerScript.match(/const\s+csrftoken\s*=\s*["']([^"']+)["']/);
+    if (csrftokenMatch) {
+      const decoded1 = Buffer.from(csrftokenMatch[1], 'base64').toString('utf8');
       csrfAuth = Buffer.from(decoded1, 'base64').toString('utf8');
     }
     
-    // Extract manifest URL (double base64 via char codes)
-    const dMatch = embedScript.match(/d\s*=\s*t\s*\(\s*e\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)\s*\)/);
-    if (dMatch) {
-      const charCodes = JSON.parse('[' + dMatch[1].replace(/\s/g, '') + ']');
-      const dString = String.fromCharCode(...charCodes);
-      const dDecoded = Buffer.from(dString, 'base64').toString('utf8');
-      manifestUrl = Buffer.from(dDecoded, 'base64').toString('utf8');
+    // New format: const videoSource=bota(decodeSr([charCodes]))
+    const videoSourceMatch = playerScript.match(/const\s+videoSource\s*=\s*bota\s*\(\s*decodeSr\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)\s*\)/);
+    if (videoSourceMatch) {
+      const charCodes = JSON.parse('[' + videoSourceMatch[1].replace(/\s/g, '') + ']');
+      const charString = String.fromCharCode(...charCodes);
+      const decoded1 = Buffer.from(charString, 'base64').toString('utf8');
+      manifestUrl = Buffer.from(decoded1, 'base64').toString('utf8');
     }
     
-    // If old patterns didn't work, try to find encoded strings in the obfuscated script
+    // Fallback: try old format patterns if new ones didn't work
     if (!deviceId || !streamId || !baseUrl || !manifestUrl) {
-      console.log(`[VIPRow] Old patterns failed, trying to find encoded data...`);
+      console.log(`[VIPRow] New patterns incomplete, trying old format...`);
       
-      // Look for base64-encoded URLs in the script
-      const b64Matches = embedScript.match(/["']([A-Za-z0-9+/=]{40,})["']/g) || [];
-      for (const b64 of b64Matches) {
-        const clean = b64.replace(/["']/g, '');
-        try {
-          const decoded = Buffer.from(clean, 'base64').toString('utf8');
-          if (decoded.includes('boanki.net') || decoded.includes('peulleieo.net')) {
-            console.log(`[VIPRow] Found encoded URL: ${decoded.substring(0, 60)}...`);
-            if (decoded.includes('boanki.net')) baseUrl = decoded;
-            if (decoded.includes('.m3u8') || decoded.includes('peulleieo.net')) manifestUrl = decoded;
-          }
-        } catch {}
+      // Old format patterns
+      if (!deviceId) deviceId = playerScript.match(/r\s*=\s*["']([a-z0-9]+)["']/)?.[1];
+      if (!streamId) streamId = playerScript.match(/s\s*=\s*["']([a-z0-9]+)["']/)?.[1];
+      if (!hostId) hostId = playerScript.match(/m\s*=\s*["']([a-z0-9-]+)["']/)?.[1];
+      if (!timestamp) timestamp = playerScript.match(/a\s*=\s*parseInt\s*\(\s*["'](\d+)["']/)?.[1];
+      
+      // Old format: i = e([charCodes])
+      if (!initialScode) {
+        const iMatch = playerScript.match(/i\s*=\s*e\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)/);
+        if (iMatch) {
+          const charCodes = JSON.parse('[' + iMatch[1].replace(/\s/g, '') + ']');
+          initialScode = String.fromCharCode(...charCodes);
+        }
       }
       
-      // Look for stream IDs in the script (hex strings)
-      const hexMatches = embedScript.match(/["']([a-f0-9]{16,32})["']/g) || [];
-      for (const hex of hexMatches) {
-        const clean = hex.replace(/["']/g, '');
-        if (!deviceId && clean.length >= 16) deviceId = clean;
-        else if (!streamId && clean.length >= 16) streamId = clean;
+      // Old format: c = t("base64")
+      if (!baseUrl) {
+        const cMatch = playerScript.match(/c\s*=\s*t\s*\(\s*["']([^"']+)["']\s*\)/);
+        if (cMatch) baseUrl = Buffer.from(cMatch[1], 'base64').toString('utf8');
+      }
+      
+      // Old format: l = t("double_base64")
+      if (!csrfAuth) {
+        const lMatch = playerScript.match(/l\s*=\s*t\s*\(\s*["']([^"']+)["']\s*\)/);
+        if (lMatch) {
+          const decoded1 = Buffer.from(lMatch[1], 'base64').toString('utf8');
+          csrfAuth = Buffer.from(decoded1, 'base64').toString('utf8');
+        }
+      }
+      
+      // Old format: d = t(e([charCodes]))
+      if (!manifestUrl) {
+        const dMatch = playerScript.match(/d\s*=\s*t\s*\(\s*e\s*\(\s*\[\s*([0-9,\s]+)\s*\]\s*\)\s*\)/);
+        if (dMatch) {
+          const charCodes = JSON.parse('[' + dMatch[1].replace(/\s/g, '') + ']');
+          const dString = String.fromCharCode(...charCodes);
+          const dDecoded = Buffer.from(dString, 'base64').toString('utf8');
+          manifestUrl = Buffer.from(dDecoded, 'base64').toString('utf8');
+        }
       }
     }
     
-    console.log(`[VIPRow] Extracted: deviceId=${deviceId}, streamId=${streamId}, hostId=${hostId}`);
+    console.log(`[VIPRow] Extracted: deviceId=${deviceId}, streamId=${streamId?.substring(0, 30)}..., hostId=${hostId}`);
     console.log(`[VIPRow] baseUrl=${baseUrl}, manifestUrl=${manifestUrl?.substring(0, 60)}...`);
     
     if (!deviceId || !streamId || !baseUrl || !manifestUrl) {
-      return { success: false, error: 'Failed to extract stream variables - script may be using new obfuscation' };
+      return { success: false, error: 'Failed to extract stream variables' };
     }
     
     // Step 3: Refresh token via boanki.net
@@ -2380,10 +2410,14 @@ async function extractVIPRowM3U8(streamPageUrl) {
 
 /**
  * Rewrite manifest URLs to go through proxy
+ * Handles both master playlists (variant streams) and media playlists (segments)
  */
 function rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase) {
   const lines = manifest.split('\n');
   const rewritten = [];
+  
+  // Detect if this is a master playlist (contains #EXT-X-STREAM-INF)
+  const isMasterPlaylist = manifest.includes('#EXT-X-STREAM-INF');
   
   for (const line of lines) {
     let newLine = line;
@@ -2394,22 +2428,32 @@ function rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase) {
       continue;
     }
     
-    // Rewrite key URLs
+    // Rewrite key URLs (in media playlists)
     if (trimmed.includes('URI="')) {
       newLine = trimmed.replace(/URI="([^"]+)"/, (_, url) => {
         const fullUrl = url.startsWith('http') ? url : new URL(url, baseUrl).toString();
         return `URI="${proxyBase}/viprow/key?url=${encodeURIComponent(fullUrl)}"`;
       });
     }
-    // Skip other comments
+    // Skip other comments/tags
     else if (trimmed.startsWith('#')) {
       rewritten.push(line);
       continue;
     }
-    // Rewrite segment URLs
-    else if (trimmed.includes('.ts') || trimmed.includes('?')) {
+    // Rewrite URLs (variant streams in master, segments in media)
+    else if (trimmed.length > 0) {
       const fullUrl = trimmed.startsWith('http') ? trimmed : new URL(trimmed, baseUrl).toString();
-      newLine = `${proxyBase}/viprow/segment?url=${encodeURIComponent(fullUrl)}`;
+      
+      if (isMasterPlaylist) {
+        // Variant stream URL - route through manifest proxy
+        newLine = `${proxyBase}/viprow/manifest?url=${encodeURIComponent(fullUrl)}&cf_proxy=${encodeURIComponent(proxyBase)}`;
+      } else if (trimmed.includes('.ts') || trimmed.includes('?') || !trimmed.includes('.')) {
+        // Segment URL - route through segment proxy
+        newLine = `${proxyBase}/viprow/segment?url=${encodeURIComponent(fullUrl)}`;
+      } else {
+        // Unknown URL type - assume it's a manifest
+        newLine = `${proxyBase}/viprow/manifest?url=${encodeURIComponent(fullUrl)}&cf_proxy=${encodeURIComponent(proxyBase)}`;
+      }
     }
     
     rewritten.push(newLine);
