@@ -179,6 +179,12 @@ const TMDB_TO_MAL_SEASON_MAPPING: Record<number, { seasons: Array<{ malId: numbe
       { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
       { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' } // Season 3 - ongoing, episode count TBD
     ]
+  },
+  203624: { // Solo Leveling TMDB ID
+    seasons: [
+      { malId: 52299, episodes: 12, title: 'Solo Leveling' },
+      { malId: 58567, episodes: 13, title: 'Solo Leveling Season 2: Arise from the Shadow' }
+    ]
   }
 };
 
@@ -469,20 +475,27 @@ export async function getMALDataForTMDBAnimeWithSeasonMapping(
     const mainAnime = allAnime[0];
 
     // Convert to MALSeason format
-    const seasons: MALSeason[] = allAnime.map((anime, index) => ({
-      malId: anime.mal_id,
-      title: anime.title,
-      titleEnglish: anime.title_english,
-      episodes: anime.episodes,
-      score: anime.score,
-      members: anime.members,
-      type: anime.type,
-      status: anime.status,
-      aired: anime.aired.string,
-      synopsis: anime.synopsis,
-      imageUrl: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
-      seasonOrder: index + 1,
-    }));
+    // IMPORTANT: Use episode count from our mapping if MAL returns null (for ongoing series)
+    const seasons: MALSeason[] = allAnime.map((anime, index) => {
+      // Get the episode count from our mapping as fallback for ongoing series
+      const mappingEpisodes = seasonMapping.seasons[index]?.episodes || 0;
+      const episodeCount = anime.episodes || mappingEpisodes;
+      
+      return {
+        malId: anime.mal_id,
+        title: anime.title,
+        titleEnglish: anime.title_english,
+        episodes: episodeCount,
+        score: anime.score,
+        members: anime.members,
+        type: anime.type,
+        status: anime.status,
+        aired: anime.aired.string,
+        synopsis: anime.synopsis,
+        imageUrl: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+        seasonOrder: index + 1,
+      };
+    });
 
     // Calculate total episodes
     const totalEpisodes = seasons.reduce((sum, s) => sum + (s.episodes || 0), 0);
