@@ -20,8 +20,6 @@ export interface Env {
   RPI_PROXY_KEY?: string;
 }
 
-const CASTHILL_ORIGIN = 'https://casthill.net';
-const CASTHILL_REFERER = 'https://casthill.net/';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // Allowed domains for proxying
@@ -56,61 +54,6 @@ function isAllowedUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Rewrite manifest URLs to go through proxy
- * Handles both master playlists (variant streams) and media playlists (segments)
- */
-function rewriteManifestUrls(manifest: string, baseUrl: string, proxyBase: string): string {
-  const lines = manifest.split('\n');
-  const rewritten: string[] = [];
-  
-  // Detect if this is a master playlist (contains #EXT-X-STREAM-INF)
-  const isMasterPlaylist = manifest.includes('#EXT-X-STREAM-INF');
-  
-  for (const line of lines) {
-    let newLine = line;
-    const trimmed = line.trim();
-    
-    // Skip empty lines
-    if (trimmed === '') {
-      rewritten.push(line);
-      continue;
-    }
-    
-    // Rewrite key URLs (in media playlists)
-    if (trimmed.includes('URI="')) {
-      newLine = trimmed.replace(/URI="([^"]+)"/, (_, url) => {
-        const fullUrl = url.startsWith('http') ? url : new URL(url, baseUrl).toString();
-        return `URI="${proxyBase}/key?url=${encodeURIComponent(fullUrl)}"`;
-      });
-    }
-    // Skip other comments/tags
-    else if (trimmed.startsWith('#')) {
-      rewritten.push(line);
-      continue;
-    }
-    // Rewrite URLs (variant streams in master, segments in media)
-    else if (trimmed.length > 0) {
-      const fullUrl = trimmed.startsWith('http') ? trimmed : new URL(trimmed, baseUrl).toString();
-      
-      if (isMasterPlaylist) {
-        // Variant stream URL - route through manifest proxy
-        newLine = `${proxyBase}/manifest?url=${encodeURIComponent(fullUrl)}`;
-      } else if (trimmed.includes('.ts') || trimmed.includes('?') || !trimmed.includes('.')) {
-        // Segment URL - route through segment proxy
-        newLine = `${proxyBase}/segment?url=${encodeURIComponent(fullUrl)}`;
-      } else {
-        // Unknown URL type - assume it's a manifest
-        newLine = `${proxyBase}/manifest?url=${encodeURIComponent(fullUrl)}`;
-      }
-    }
-    
-    rewritten.push(newLine);
-  }
-  
-  return rewritten.join('\n');
 }
 
 export async function handleVIPRowRequest(request: Request, env: Env): Promise<Response> {
@@ -188,7 +131,7 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
     }
   }
 
-  // Manifest proxy - for refreshing manifest
+  // Manifest proxy - forwards to RPI (peulleieo.net blocks CF IPs)
   if (path === '/manifest') {
     const manifestUrl = url.searchParams.get('url');
     
@@ -202,28 +145,29 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
       return jsonResponse({ error: 'URL not allowed' }, 403);
     }
     
-    logger.info('Proxying manifest', { url: decodedUrl.substring(0, 80) });
+    if (!rpiProxyUrl) {
+      return jsonResponse({ error: 'RPI_PROXY_URL not configured' }, 500);
+    }
+    
+    logger.info('Forwarding manifest to RPI', { url: decodedUrl.substring(0, 80) });
     
     try {
-      const response = await fetch(decodedUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Origin': CASTHILL_ORIGIN,
-          'Referer': CASTHILL_REFERER,
-        },
-        redirect: 'follow',
+      // Forward to RPI proxy - CDN blocks Cloudflare IPs
+      const rpiUrl = `${rpiProxyUrl}/viprow/manifest?url=${encodeURIComponent(decodedUrl)}&cf_proxy=${encodeURIComponent(proxyBaseUrl)}&key=${rpiProxyKey || ''}`;
+      
+      const response = await fetch(rpiUrl, {
+        headers: { 'User-Agent': USER_AGENT },
       });
       
       if (!response.ok) {
-        return jsonResponse({ error: `Upstream error: ${response.status}` }, response.status);
+        const errorText = await response.text();
+        logger.error('RPI manifest proxy failed', { status: response.status });
+        return jsonResponse({ error: `RPI error: ${response.status}`, details: errorText.substring(0, 200) }, response.status);
       }
       
       const manifest = await response.text();
-      const finalUrl = response.url || decodedUrl;
-      const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf('/') + 1);
-      const rewritten = rewriteManifestUrls(manifest, baseUrl, proxyBaseUrl);
       
-      return new Response(rewritten, {
+      return new Response(manifest, {
         headers: {
           'Content-Type': 'application/vnd.apple.mpegurl',
           'Cache-Control': 'no-cache',
@@ -236,7 +180,7 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
     }
   }
 
-  // Key proxy
+  // Key proxy - forwards to RPI (boanki.net blocks CF IPs)
   if (path === '/key') {
     const keyUrl = url.searchParams.get('url');
     
@@ -250,20 +194,21 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
       return jsonResponse({ error: 'URL not allowed' }, 403);
     }
     
-    logger.info('Proxying key', { url: decodedUrl.substring(0, 80) });
+    if (!rpiProxyUrl) {
+      return jsonResponse({ error: 'RPI_PROXY_URL not configured' }, 500);
+    }
+    
+    logger.info('Forwarding key to RPI', { url: decodedUrl.substring(0, 80) });
     
     try {
-      const response = await fetch(decodedUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Origin': CASTHILL_ORIGIN,
-          'Referer': CASTHILL_REFERER,
-        },
-        redirect: 'follow',
+      const rpiUrl = `${rpiProxyUrl}/viprow/key?url=${encodeURIComponent(decodedUrl)}&key=${rpiProxyKey || ''}`;
+      
+      const response = await fetch(rpiUrl, {
+        headers: { 'User-Agent': USER_AGENT },
       });
       
       if (!response.ok) {
-        return jsonResponse({ error: `Upstream error: ${response.status}` }, response.status);
+        return jsonResponse({ error: `RPI error: ${response.status}` }, response.status);
       }
       
       const buffer = await response.arrayBuffer();
@@ -281,7 +226,7 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
     }
   }
 
-  // Segment proxy
+  // Segment proxy - forwards to RPI (peulleieo.net blocks CF IPs)
   if (path === '/segment') {
     const segmentUrl = url.searchParams.get('url');
     
@@ -295,20 +240,21 @@ export async function handleVIPRowRequest(request: Request, env: Env): Promise<R
       return jsonResponse({ error: 'URL not allowed' }, 403);
     }
     
-    logger.debug('Proxying segment', { url: decodedUrl.substring(0, 80) });
+    if (!rpiProxyUrl) {
+      return jsonResponse({ error: 'RPI_PROXY_URL not configured' }, 500);
+    }
+    
+    logger.debug('Forwarding segment to RPI', { url: decodedUrl.substring(0, 80) });
     
     try {
-      const response = await fetch(decodedUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Origin': CASTHILL_ORIGIN,
-          'Referer': CASTHILL_REFERER,
-        },
-        redirect: 'follow',
+      const rpiUrl = `${rpiProxyUrl}/viprow/segment?url=${encodeURIComponent(decodedUrl)}&key=${rpiProxyKey || ''}`;
+      
+      const response = await fetch(rpiUrl, {
+        headers: { 'User-Agent': USER_AGENT },
       });
       
       if (!response.ok) {
-        return jsonResponse({ error: `Upstream error: ${response.status}` }, response.status);
+        return jsonResponse({ error: `RPI error: ${response.status}` }, response.status);
       }
       
       const buffer = await response.arrayBuffer();

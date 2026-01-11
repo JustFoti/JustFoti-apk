@@ -169,6 +169,17 @@ const TITLE_MAPPINGS: Record<string, string> = {
   'one punch man': 'One Punch Man',
 };
 
+// Special cases where TMDB has one series but MAL has separate entries per season
+// These need manual mapping since MAL doesn't link them as sequels
+const TMDB_TO_MAL_SEASON_MAPPING: Record<number, { seasons: Array<{ malId: number; episodes: number; title: string }> }> = {
+  95479: { // Jujutsu Kaisen TMDB ID
+    seasons: [
+      { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
+      { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' }
+    ]
+  }
+};
+
 /**
  * Find the best MAL match for a TMDB anime
  */
@@ -418,6 +429,76 @@ export async function getMALSeriesSeasons(malId: number): Promise<MALAnimeDetail
 }
 
 /**
+ * Get MAL data for TMDB anime with special season mapping
+ * Handles cases like Jujutsu Kaisen where TMDB has one series but MAL has separate entries
+ */
+export async function getMALDataForTMDBAnimeWithSeasonMapping(
+  tmdbId: number,
+  tmdbTitle: string
+): Promise<MALAnimeDetails | null> {
+  // Check if this TMDB ID has special season mapping
+  const seasonMapping = TMDB_TO_MAL_SEASON_MAPPING[tmdbId];
+  if (!seasonMapping) {
+    // Fall back to normal MAL search
+    return getMALDataForTMDBAnime(tmdbTitle);
+  }
+
+  console.log(`[MAL] Using special season mapping for TMDB ID ${tmdbId}: ${seasonMapping.seasons.length} MAL entries`);
+
+  try {
+    // Fetch details for all MAL entries SEQUENTIALLY to respect rate limits
+    const allAnime: MALAnime[] = [];
+    for (const season of seasonMapping.seasons) {
+      const anime = await getMALAnimeById(season.malId);
+      if (anime) {
+        allAnime.push(anime);
+        console.log(`[MAL] Fetched: ${anime.title} (${anime.episodes} eps, MAL ID: ${anime.mal_id})`);
+      } else {
+        console.log(`[MAL] Failed to fetch MAL ID: ${season.malId}`);
+      }
+    }
+
+    if (allAnime.length === 0) {
+      console.log('[MAL] No anime data fetched from season mapping');
+      return null;
+    }
+
+    // Use the first entry as the main entry
+    const mainAnime = allAnime[0];
+
+    // Convert to MALSeason format
+    const seasons: MALSeason[] = allAnime.map((anime, index) => ({
+      malId: anime.mal_id,
+      title: anime.title,
+      titleEnglish: anime.title_english,
+      episodes: anime.episodes,
+      score: anime.score,
+      members: anime.members,
+      type: anime.type,
+      status: anime.status,
+      aired: anime.aired.string,
+      synopsis: anime.synopsis,
+      imageUrl: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+      seasonOrder: index + 1,
+    }));
+
+    // Calculate total episodes
+    const totalEpisodes = seasons.reduce((sum, s) => sum + (s.episodes || 0), 0);
+
+    console.log(`[MAL] Season mapping result: ${seasons.length} seasons, ${totalEpisodes} total episodes`);
+
+    return {
+      mainEntry: mainAnime,
+      allSeasons: seasons,
+      totalEpisodes,
+    };
+  } catch (error) {
+    console.error('[MAL] Error in season mapping:', error);
+    return null;
+  }
+}
+
+/**
  * Search and get full series info for a TMDB anime
  */
 export async function getMALDataForTMDBAnime(
@@ -440,4 +521,5 @@ export const malService = {
   findMatch: findMALMatch,
   getSeriesSeasons: getMALSeriesSeasons,
   getDataForTMDB: getMALDataForTMDBAnime,
+  getDataForTMDBWithSeasonMapping: getMALDataForTMDBAnimeWithSeasonMapping,
 };

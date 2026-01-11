@@ -13,42 +13,7 @@ import { SeasonSelector } from './SeasonSelector';
 import { EpisodeList } from './EpisodeList';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import { shouldReduceAnimations } from '@/lib/utils/performance';
-import type { Episode } from '@/types/media';
 
-/**
- * Helper function to get TMDB episodes for a specific MAL part
- * Splits TMDB episodes based on MAL episode counts
- */
-function getEpisodesForMALPart(
-  mapping: { malParts: any[]; tmdbEpisodes: Episode[] },
-  partIndex: number
-): Episode[] {
-  if (!mapping || partIndex < 0 || partIndex >= mapping.malParts.length) {
-    return [];
-  }
-  
-  // Calculate start index by summing episodes of previous parts
-  let startIndex = 0;
-  for (let i = 0; i < partIndex; i++) {
-    startIndex += mapping.malParts[i].episodes || 0;
-  }
-  
-  // Get episode count for this part
-  const partEpisodeCount = mapping.malParts[partIndex].episodes || 0;
-  const endIndex = startIndex + partEpisodeCount;
-  
-  // Slice TMDB episodes for this part
-  // Adjust episode numbers to be 1-based within the part
-  const partEpisodes = mapping.tmdbEpisodes.slice(startIndex, endIndex).map((ep, idx) => ({
-    ...ep,
-    // Keep original episode number for playback, but could show part-relative number in UI
-    _partEpisodeNumber: idx + 1,
-  }));
-  
-  console.log(`[getEpisodesForMALPart] Part ${partIndex + 1}: episodes ${startIndex + 1}-${endIndex} (${partEpisodes.length} eps)`);
-  
-  return partEpisodes;
-}
 import styles from './DetailsPage.module.css';
 
 // Related Content Section with horizontal scroll and navigation buttons
@@ -370,14 +335,22 @@ export default function DetailsPageClient({
         malBreakdown: malData.allSeasons.map(s => ({ title: s.title, eps: s.episodes }))
       });
       
-      // Only apply MAL splitting if episode counts roughly match
-      // (within 5 episodes tolerance for ongoing series)
+      // Apply MAL splitting if episode counts match or TMDB has more episodes
+      // For cases like Jujutsu Kaisen where TMDB has all episodes in one season
       if (Math.abs(totalMALEpisodes - tmdbEpisodeCount) <= 5 || tmdbEpisodeCount >= totalMALEpisodes) {
         setAnimeSeasonMapping({
           tmdbSeason: selectedSeason,
           malParts: malData.allSeasons,
           tmdbEpisodes: seasonData.episodes
         });
+        
+        // For single TMDB season with multiple MAL parts, auto-select the appropriate MAL part
+        // based on the current episode range
+        if (tmdbEpisodeCount >= totalMALEpisodes) {
+          // This is likely a case like Jujutsu Kaisen where TMDB has all episodes in one season
+          // Keep the current MAL part selection or default to 0
+          console.log('[DetailsPage] Single TMDB season with multiple MAL parts detected');
+        }
       } else {
         console.log('[DetailsPage] Episode count mismatch, not applying MAL split');
         setAnimeSeasonMapping(null);
@@ -537,22 +510,24 @@ export default function DetailsPageClient({
     const title = encodeURIComponent(content.title || content.name || 'Unknown');
     
     // If we have MAL mapping, include MAL info for the current part
-    // IMPORTANT: Convert TMDB episode number to MAL part-relative episode number
-    // e.g., TMDB S2E17 → MAL Part 2 Episode 4 (17 - 13 = 4, since Part 1 has 13 episodes)
     if (animeSeasonMapping && animeSeasonMapping.malParts.length > 1) {
-      const malPart = animeSeasonMapping.malParts[selectedMALPartIndex];
-      
-      // Calculate the episode number relative to the MAL part
-      // Sum up episodes from previous parts to get the offset
+      // Determine which MAL part this episode belongs to
+      let currentPartIndex = 0;
       let episodeOffset = 0;
-      for (let i = 0; i < selectedMALPartIndex; i++) {
-        episodeOffset += animeSeasonMapping.malParts[i].episodes || 0;
+      
+      for (let i = 0; i < animeSeasonMapping.malParts.length; i++) {
+        const partEpisodeCount = animeSeasonMapping.malParts[i].episodes || 0;
+        if (episodeNumber <= episodeOffset + partEpisodeCount) {
+          currentPartIndex = i;
+          break;
+        }
+        episodeOffset += partEpisodeCount;
       }
       
-      // Convert TMDB episode number to MAL part-relative episode number
+      const malPart = animeSeasonMapping.malParts[currentPartIndex];
       const malEpisodeNumber = episodeNumber - episodeOffset;
       
-      console.log(`[handleEpisodeSelect] TMDB episode ${episodeNumber} → MAL Part ${selectedMALPartIndex + 1} Episode ${malEpisodeNumber}`);
+      console.log(`[handleEpisodeSelect] TMDB episode ${episodeNumber} → MAL Part ${currentPartIndex + 1} Episode ${malEpisodeNumber}`);
       console.log(`[handleEpisodeSelect] MAL ID: ${malPart.malId}, Title: ${malPart.titleEnglish || malPart.title}`);
       
       router.push(
@@ -815,39 +790,61 @@ export default function DetailsPageClient({
               </div>
             )}
             
-            {/* For anime with MAL split: show MAL part selector + TMDB episodes for that part */}
+            {/* For anime with MAL split: show all episodes with MAL part indicators */}
             {!loadingEpisodes && !loadingMAL && animeSeasonMapping && animeSeasonMapping.malParts.length > 1 && (
               <>
-                {/* MAL Part Selector */}
+                {/* MAL Parts Info */}
                 <div className={styles.malPartSelector}>
                   <div className={styles.malPartHeader}>
                     <span className={styles.malBadgeSmall}>MAL</span>
-                    <span className={styles.malPartNote}>This season has {animeSeasonMapping.malParts.length} parts on MyAnimeList</span>
+                    <span className={styles.malPartNote}>
+                      This series has {animeSeasonMapping.malParts.length} parts on MyAnimeList
+                    </span>
                   </div>
-                  <div className={styles.malPartButtons}>
+                  <div className={styles.malPartInfo}>
                     {animeSeasonMapping.malParts.map((part, index) => {
-                      const isSelected = index === selectedMALPartIndex;
+                      const startEpisode = animeSeasonMapping.malParts.slice(0, index).reduce((sum, p) => sum + (p.episodes || 0), 0) + 1;
+                      const endEpisode = startEpisode + (part.episodes || 0) - 1;
                       return (
-                        <button
-                          key={part.malId}
-                          className={`${styles.malPartButton} ${isSelected ? styles.malPartButtonSelected : ''}`}
-                          onClick={() => setSelectedMALPartIndex(index)}
-                        >
+                        <div key={part.malId} className={styles.malPartInfoItem}>
                           <span className={styles.malPartName}>
-                            Part {index + 1}: {part.titleEnglish || part.title}
+                            {part.titleEnglish || part.title}
                           </span>
-                          <span className={styles.malPartMeta}>
-                            {part.episodes} eps • ⭐ {part.score?.toFixed(2) || 'N/A'}
+                          <span className={styles.malPartRange}>
+                            Episodes {startEpisode}-{endEpisode} • ⭐ {part.score?.toFixed(2) || 'N/A'}
                           </span>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
                 
-                {/* Show TMDB episodes for the selected MAL part */}
+                {/* Show all TMDB episodes with MAL part indicators */}
                 <EpisodeList
-                  episodes={getEpisodesForMALPart(animeSeasonMapping, selectedMALPartIndex)}
+                  episodes={seasonData?.episodes.map((episode) => {
+                    // Determine which MAL part this episode belongs to
+                    let partIndex = 0;
+                    let episodeOffset = 0;
+                    
+                    for (let i = 0; i < animeSeasonMapping.malParts.length; i++) {
+                      const partEpisodeCount = animeSeasonMapping.malParts[i].episodes || 0;
+                      if (episode.episodeNumber <= episodeOffset + partEpisodeCount) {
+                        partIndex = i;
+                        break;
+                      }
+                      episodeOffset += partEpisodeCount;
+                    }
+                    
+                    const malPart = animeSeasonMapping.malParts[partIndex];
+                    const malEpisodeNumber = episode.episodeNumber - episodeOffset;
+                    
+                    return {
+                      ...episode,
+                      _malPartIndex: partIndex,
+                      _malPartTitle: malPart.titleEnglish || malPart.title,
+                      _malEpisodeNumber: malEpisodeNumber,
+                    };
+                  }) || []}
                   onEpisodeSelect={handleEpisodeSelect}
                   episodeProgress={episodeProgress}
                 />

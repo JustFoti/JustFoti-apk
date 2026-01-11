@@ -2419,6 +2419,9 @@ function rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase) {
   // Detect if this is a master playlist (contains #EXT-X-STREAM-INF)
   const isMasterPlaylist = manifest.includes('#EXT-X-STREAM-INF');
   
+  // Strip trailing /viprow from proxyBase if present (CF proxy passes it with /viprow suffix)
+  const cleanProxyBase = proxyBase.replace(/\/viprow\/?$/, '');
+  
   for (const line of lines) {
     let newLine = line;
     const trimmed = line.trim();
@@ -2432,7 +2435,7 @@ function rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase) {
     if (trimmed.includes('URI="')) {
       newLine = trimmed.replace(/URI="([^"]+)"/, (_, url) => {
         const fullUrl = url.startsWith('http') ? url : new URL(url, baseUrl).toString();
-        return `URI="${proxyBase}/viprow/key?url=${encodeURIComponent(fullUrl)}"`;
+        return `URI="${cleanProxyBase}/viprow/key?url=${encodeURIComponent(fullUrl)}"`;
       });
     }
     // Skip other comments/tags
@@ -2446,13 +2449,13 @@ function rewriteVIPRowManifestUrls(manifest, baseUrl, proxyBase) {
       
       if (isMasterPlaylist) {
         // Variant stream URL - route through manifest proxy
-        newLine = `${proxyBase}/viprow/manifest?url=${encodeURIComponent(fullUrl)}&cf_proxy=${encodeURIComponent(proxyBase)}`;
+        newLine = `${cleanProxyBase}/viprow/manifest?url=${encodeURIComponent(fullUrl)}`;
       } else if (trimmed.includes('.ts') || trimmed.includes('?') || !trimmed.includes('.')) {
         // Segment URL - route through segment proxy
-        newLine = `${proxyBase}/viprow/segment?url=${encodeURIComponent(fullUrl)}`;
+        newLine = `${cleanProxyBase}/viprow/segment?url=${encodeURIComponent(fullUrl)}`;
       } else {
         // Unknown URL type - assume it's a manifest
-        newLine = `${proxyBase}/viprow/manifest?url=${encodeURIComponent(fullUrl)}&cf_proxy=${encodeURIComponent(proxyBase)}`;
+        newLine = `${cleanProxyBase}/viprow/manifest?url=${encodeURIComponent(fullUrl)}`;
       }
     }
     

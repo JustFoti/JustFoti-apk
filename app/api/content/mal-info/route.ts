@@ -65,8 +65,8 @@ export async function GET(request: NextRequest) {
 
     console.log(`[mal-info] Fetching MAL data for: "${title}" (${tmdbId})`);
     
-    // Get MAL data
-    const malData = await malService.getDataForTMDB(title, undefined, type);
+    // Get MAL data - use special season mapping if available
+    const malData = await malService.getDataForTMDBWithSeasonMapping(parseInt(tmdbId), title);
 
     console.log(`[mal-info] MAL result:`, {
       found: !!malData,

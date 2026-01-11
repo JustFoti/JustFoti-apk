@@ -111,6 +111,12 @@ export const EpisodeList: React.FC<EpisodeListProps> = ({
                 <span className={styles.episodeNumber}>
                   {episode.episodeNumber}
                 </span>
+                {/* MAL Part indicator */}
+                {(episode as any)._malPartTitle && (
+                  <span className={styles.malPartIndicator}>
+                    {(episode as any)._malPartTitle} #{(episode as any)._malEpisodeNumber}
+                  </span>
+                )}
                 <h3 className={styles.episodeTitle}>{episode.title}</h3>
               </div>
               
