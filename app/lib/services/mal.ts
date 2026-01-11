@@ -171,11 +171,13 @@ const TITLE_MAPPINGS: Record<string, string> = {
 
 // Special cases where TMDB has one series but MAL has separate entries per season
 // These need manual mapping since MAL doesn't link them as sequels
+// NOTE: For ongoing seasons, set episodes to a high number (e.g., 24) as placeholder
 const TMDB_TO_MAL_SEASON_MAPPING: Record<number, { seasons: Array<{ malId: number; episodes: number; title: string }> }> = {
   95479: { // Jujutsu Kaisen TMDB ID
     seasons: [
       { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
-      { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' }
+      { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
+      { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' } // Season 3 - ongoing, episode count TBD
     ]
   }
 };
