@@ -1354,6 +1354,10 @@ async function extractAnimeKaiStreamsLocal(
           // Just the base title + season number
           `${baseTitle} Season ${seasonNum}`,
           `${baseTitle} S${seasonNum}`,
+          // Handle "X: The Culling Game" -> "X Season 3", "X 3rd Season"
+          `${baseTitle} ${seasonNum}${seasonNum === 2 ? 'nd' : seasonNum === 3 ? 'rd' : 'th'} Season`,
+          // Try Roman numerals
+          `${baseTitle} ${toRomanNumeral(seasonNum)}`,
         ];
         
         // Remove duplicates and empty strings

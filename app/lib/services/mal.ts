@@ -182,10 +182,11 @@ const TITLE_MAPPINGS: Record<string, string> = {
 const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number; episodes: number; title: string }>> = {
   // Jujutsu Kaisen (TMDB ID: 95479)
   // TMDB S1 = MAL 40748 (24 eps), S2 = MAL 51009 (23 eps), S3 = MAL 57658 (24 eps)
+  // NOTE: AnimeKai lists S3 as "Jujutsu Kaisen 3rd Season" not "The Culling Game"
   95479: {
     1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    3: { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' },
+    3: { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
   },
   // Solo Leveling (TMDB ID: 203624)
   // TMDB S1 = MAL 52299 (12 eps), S2 = MAL 58567 (13 eps)
@@ -231,7 +232,7 @@ const TMDB_TO_MAL_ALL_SEASONS: Record<number, Array<{ malId: number; episodes: n
   95479: [ // Jujutsu Kaisen
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' },
+    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
   ],
   203624: [ // Solo Leveling
     { malId: 52299, episodes: 12, title: 'Solo Leveling' },
