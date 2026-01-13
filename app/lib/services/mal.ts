@@ -179,10 +179,16 @@ const TITLE_MAPPINGS: Record<string, string> = {
 // For example, JJK Season 2 on TMDB is a completely different MAL entry (51009)
 // than JJK Season 1 (40748). Without this mapping, searching for "Jujutsu Kaisen"
 // episode 24 would return S1E24, not S2E1.
+//
+// SPECIAL CASE: Some anime on TMDB use ABSOLUTE episode numbering (single season)
+// e.g., JJK on TMDB is Season 1 with 59 episodes, not 3 seasons
+// For these, we use tmdbSeason=1 and calculate the MAL entry based on episode number
 const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number; episodes: number; title: string }>> = {
   // Jujutsu Kaisen (TMDB ID: 95479)
-  // TMDB S1 = MAL 40748 (24 eps), S2 = MAL 51009 (23 eps), S3 = MAL 57658 (24 eps)
-  // NOTE: AnimeKai lists S3 as "Jujutsu Kaisen 3rd Season" not "The Culling Game"
+  // TMDB has this as SINGLE SEASON with 59 episodes (absolute numbering)
+  // MAL has: S1=40748 (24 eps), S2=51009 (23 eps), S3=57658 (24 eps)
+  // We map TMDB season 1 to the first MAL entry, but the extractor will
+  // calculate the correct MAL entry based on absolute episode number
   95479: {
     1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
@@ -223,6 +229,18 @@ const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number;
     1: { malId: 50265, episodes: 25, title: 'Spy x Family' },
     2: { malId: 53887, episodes: 12, title: 'Spy x Family Season 2' },
   },
+};
+
+// Anime that use ABSOLUTE episode numbering on TMDB (single season with all episodes)
+// For these, we need to calculate which MAL entry an episode belongs to
+const TMDB_ABSOLUTE_EPISODE_ANIME: Record<number, Array<{ malId: number; episodes: number; title: string }>> = {
+  // JJK: TMDB shows as 1 season with 59 episodes
+  // Episodes 1-24 = MAL 40748, 25-47 = MAL 51009, 48-71 = MAL 57658
+  95479: [
+    { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
+    { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
+    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
+  ],
 };
 
 // Special cases where TMDB ID maps to multiple MAL entries (all seasons)
@@ -660,6 +678,64 @@ export async function getMALDataForTMDBAnime(
   return getMALSeriesSeasons(match.mal_id);
 }
 
+/**
+ * For anime with absolute episode numbering on TMDB, calculate which MAL entry
+ * an episode belongs to and return the relative episode number within that entry.
+ * 
+ * Example: JJK episode 48 on TMDB → MAL entry 57658 (3rd Season), episode 1
+ * 
+ * @param tmdbId - TMDB ID of the anime
+ * @param absoluteEpisode - Absolute episode number from TMDB
+ * @returns { malId, malTitle, relativeEpisode } or null if not a special case
+ */
+export function getMALEntryForAbsoluteEpisode(
+  tmdbId: number,
+  absoluteEpisode: number
+): { malId: number; malTitle: string; relativeEpisode: number } | null {
+  const entries = TMDB_ABSOLUTE_EPISODE_ANIME[tmdbId];
+  if (!entries || entries.length === 0) {
+    return null;
+  }
+  
+  let episodeOffset = 0;
+  for (const entry of entries) {
+    if (absoluteEpisode <= episodeOffset + entry.episodes) {
+      const relativeEpisode = absoluteEpisode - episodeOffset;
+      console.log(`[MAL] Absolute episode ${absoluteEpisode} → ${entry.title} episode ${relativeEpisode}`);
+      return {
+        malId: entry.malId,
+        malTitle: entry.title,
+        relativeEpisode,
+      };
+    }
+    episodeOffset += entry.episodes;
+  }
+  
+  // Episode is beyond known entries - use the last entry
+  const lastEntry = entries[entries.length - 1];
+  const relativeEpisode = absoluteEpisode - episodeOffset + lastEntry.episodes;
+  console.log(`[MAL] Absolute episode ${absoluteEpisode} beyond known entries, using ${lastEntry.title} episode ${relativeEpisode}`);
+  return {
+    malId: lastEntry.malId,
+    malTitle: lastEntry.title,
+    relativeEpisode,
+  };
+}
+
+/**
+ * Check if a TMDB anime uses absolute episode numbering
+ */
+export function usesAbsoluteEpisodeNumbering(tmdbId: number): boolean {
+  return tmdbId in TMDB_ABSOLUTE_EPISODE_ANIME;
+}
+
+/**
+ * Get all MAL entries for an anime that uses absolute episode numbering
+ */
+export function getAbsoluteEpisodeEntries(tmdbId: number): Array<{ malId: number; episodes: number; title: string }> | null {
+  return TMDB_ABSOLUTE_EPISODE_ANIME[tmdbId] || null;
+}
+
 export const malService = {
   search: searchMALAnime,
   getById: getMALAnimeById,
@@ -668,4 +744,7 @@ export const malService = {
   getSeriesSeasons: getMALSeriesSeasons,
   getDataForTMDB: getMALDataForTMDBAnime,
   getDataForTMDBWithSeasonMapping: getMALDataForTMDBAnimeWithSeasonMapping,
+  getMALEntryForAbsoluteEpisode,
+  usesAbsoluteEpisodeNumbering,
+  getAbsoluteEpisodeEntries,
 };

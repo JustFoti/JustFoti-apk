@@ -16,6 +16,45 @@ import { shouldReduceAnimations } from '@/lib/utils/performance';
 
 import styles from './DetailsPage.module.css';
 
+// Anime that use ABSOLUTE episode numbering on TMDB (single season with all episodes)
+// For these, we need to calculate which MAL entry an episode belongs to
+const TMDB_ABSOLUTE_EPISODE_ANIME: Record<number, Array<{ malId: number; episodes: number; title: string }>> = {
+  // JJK: TMDB shows as 1 season with 59 episodes
+  // Episodes 1-24 = MAL 40748, 25-47 = MAL 51009, 48-71 = MAL 57658
+  95479: [
+    { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
+    { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
+    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
+  ],
+};
+
+function getMALEntryForAbsoluteEpisode(
+  tmdbId: number,
+  absoluteEpisode: number
+): { malId: number; malTitle: string; relativeEpisode: number } | null {
+  const entries = TMDB_ABSOLUTE_EPISODE_ANIME[tmdbId];
+  if (!entries || entries.length === 0) return null;
+  
+  let episodeOffset = 0;
+  for (const entry of entries) {
+    if (absoluteEpisode <= episodeOffset + entry.episodes) {
+      const relativeEpisode = absoluteEpisode - episodeOffset;
+      console.log(`[DetailsPage] Absolute ep ${absoluteEpisode} → ${entry.title} ep ${relativeEpisode}`);
+      return { malId: entry.malId, malTitle: entry.title, relativeEpisode };
+    }
+    episodeOffset += entry.episodes;
+  }
+  
+  // Episode beyond known entries - use last entry
+  const lastEntry = entries[entries.length - 1];
+  const relativeEpisode = absoluteEpisode - episodeOffset + lastEntry.episodes;
+  return { malId: lastEntry.malId, malTitle: lastEntry.title, relativeEpisode };
+}
+
+function usesAbsoluteEpisodeNumbering(tmdbId: number): boolean {
+  return tmdbId in TMDB_ABSOLUTE_EPISODE_ANIME;
+}
+
 // Related Content Section with horizontal scroll and navigation buttons
 function RelatedContentSection({
   items,
@@ -463,9 +502,20 @@ export default function DetailsPageClient({
     if (!content) return;
     
     const title = encodeURIComponent(content.title || content.name || 'Unknown');
+    const tmdbId = parseInt(String(content.id));
     
     if (content.mediaType === 'movie') {
       router.push(`/watch/${content.id}?type=movie&title=${title}`);
+    } else if (isAnime && usesAbsoluteEpisodeNumbering(tmdbId)) {
+      // For anime with absolute episode numbering, start with episode 1 of first MAL entry
+      const malEntry = getMALEntryForAbsoluteEpisode(tmdbId, 1);
+      if (malEntry) {
+        console.log(`[handleWatchNow] Starting absolute episode anime with MAL: ${malEntry.malId} (${malEntry.malTitle})`);
+        router.push(
+          `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=1&title=${title}&malId=${malEntry.malId}&malTitle=${encodeURIComponent(malEntry.malTitle)}`
+        );
+        return;
+      }
     } else if (animeSeasonMapping && animeSeasonMapping.malParts.length >= 1) {
       // For anime with MAL data, include MAL info for accurate episode mapping
       const malPart = animeSeasonMapping.malParts[0]; // Single MAL entry per TMDB season
@@ -489,6 +539,20 @@ export default function DetailsPageClient({
   const handleEpisodeSelect = (episodeNumber: number) => {
     if (!content) return;
     const title = encodeURIComponent(content.title || content.name || 'Unknown');
+    const tmdbId = parseInt(String(content.id));
+    
+    // Check if this anime uses absolute episode numbering on TMDB
+    // e.g., JJK on TMDB is 1 season with 59 episodes, but MAL has 3 separate entries
+    if (isAnime && usesAbsoluteEpisodeNumbering(tmdbId)) {
+      const malEntry = getMALEntryForAbsoluteEpisode(tmdbId, episodeNumber);
+      if (malEntry) {
+        console.log(`[handleEpisodeSelect] Absolute episode ${episodeNumber} → MAL ${malEntry.malId} (${malEntry.malTitle}) episode ${malEntry.relativeEpisode}`);
+        router.push(
+          `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${malEntry.relativeEpisode}&title=${title}&malId=${malEntry.malId}&malTitle=${encodeURIComponent(malEntry.malTitle)}`
+        );
+        return;
+      }
+    }
     
     // If we have MAL mapping, include MAL info for accurate episode lookup
     // With 1:1 TMDB season to MAL entry mapping, episode number is direct (no offset)
