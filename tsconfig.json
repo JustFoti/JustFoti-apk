@@ -73,6 +73,7 @@
     "hetzner-proxy/**/*",
     "cf-analytics-worker/**/*",
     "cf-sync-worker/**/*",
+    "flyx-secure/**/*",
     "tauri-stream-extractor/**/*",
     "source-testing/**/*",
     "examples/**/*",

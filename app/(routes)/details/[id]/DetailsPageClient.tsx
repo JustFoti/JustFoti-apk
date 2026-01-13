@@ -184,10 +184,9 @@ export default function DetailsPageClient({
     setReduceMotion(shouldReduceAnimations());
   }, []);
   
-  // MAL-specific state for anime - used to split TMDB seasons into MAL parts
+  // MAL-specific state for anime
   const [isAnime, setIsAnime] = useState<boolean>(false);
   const [malData, setMalData] = useState<MALAnimeDetails | null>(null);
-  const [selectedMALPartIndex, setSelectedMALPartIndex] = useState<number>(0);
   const [loadingMAL, setLoadingMAL] = useState<boolean>(false);
   
   // For anime: maps TMDB season to MAL parts (e.g., TMDB S2 -> MAL Part 1, 2, 3)
@@ -261,9 +260,9 @@ export default function DetailsPageClient({
           }
         }
         
-        // Fetch MAL data with the appropriate title
+        // Fetch MAL data with the appropriate title and season
         const malResponse = await fetch(
-          `/api/content/mal-info?tmdbId=${content.id}&type=${content.mediaType}&title=${encodeURIComponent(searchTitle)}`
+          `/api/content/mal-info?tmdbId=${content.id}&type=${content.mediaType}&season=${selectedSeason}&title=${encodeURIComponent(searchTitle)}`
         );
         const malResult = await malResponse.json();
         
@@ -282,18 +281,16 @@ export default function DetailsPageClient({
           debug: malResult.debug
         });
         
-        if (malResult.success && malResult.data && malResult.data.allSeasons.length > 1) {
-          // Only use MAL splitting if there are multiple MAL entries for this anime
-          console.log('[DetailsPage] MAL data loaded with multiple parts:', malResult.data.allSeasons.length);
+        if (malResult.success && malResult.data) {
+          // MAL data found - store it for episode mapping
+          console.log('[DetailsPage] MAL data loaded:', {
+            title: malResult.data.mainEntry?.title,
+            malId: malResult.data.mainEntry?.mal_id,
+            episodes: malResult.data.totalEpisodes
+          });
           setMalData(malResult.data);
         } else {
-          console.log('[DetailsPage] Single MAL entry or no match, using standard TMDB display');
-          console.log('[DetailsPage] Reason:', {
-            success: malResult.success,
-            hasData: !!malResult.data,
-            seasonsCount: malResult.data?.allSeasons?.length || 0
-          });
-          // Still mark as anime for UI purposes, but don't use MAL splitting
+          console.log('[DetailsPage] No MAL match found, using standard TMDB display');
           setMalData(null);
         }
       } else {
@@ -320,41 +317,26 @@ export default function DetailsPageClient({
     }
   }, [selectedSeason, content]);
   
-  // When we have both TMDB episodes and MAL data, create the mapping
+  // When we have MAL data, store it for episode navigation
+  // With the new 1:1 TMDB season to MAL entry mapping, no splitting is needed
   useEffect(() => {
-    if (isAnime && malData && seasonData && malData.allSeasons.length > 1) {
-      // Create mapping of TMDB episodes to MAL parts
-      // MAL parts are ordered chronologically, so we split TMDB episodes accordingly
-      const totalMALEpisodes = malData.allSeasons.reduce((sum, s) => sum + (s.episodes || 0), 0);
-      const tmdbEpisodeCount = seasonData.episodes.length;
+    if (isAnime && malData && seasonData) {
+      const malEntry = malData.allSeasons[0]; // Single MAL entry for this TMDB season
       
-      console.log('[DetailsPage] Creating MAL mapping:', {
-        tmdbEpisodes: tmdbEpisodeCount,
-        malParts: malData.allSeasons.length,
-        totalMALEpisodes,
-        malBreakdown: malData.allSeasons.map(s => ({ title: s.title, eps: s.episodes }))
+      console.log('[DetailsPage] MAL mapping for season:', {
+        tmdbSeason: selectedSeason,
+        tmdbEpisodes: seasonData.episodes.length,
+        malId: malEntry?.malId,
+        malTitle: malEntry?.title,
+        malEpisodes: malEntry?.episodes
       });
       
-      // Apply MAL splitting if episode counts match or TMDB has more episodes
-      // For cases like Jujutsu Kaisen where TMDB has all episodes in one season
-      if (Math.abs(totalMALEpisodes - tmdbEpisodeCount) <= 5 || tmdbEpisodeCount >= totalMALEpisodes) {
-        setAnimeSeasonMapping({
-          tmdbSeason: selectedSeason,
-          malParts: malData.allSeasons,
-          tmdbEpisodes: seasonData.episodes
-        });
-        
-        // For single TMDB season with multiple MAL parts, auto-select the appropriate MAL part
-        // based on the current episode range
-        if (tmdbEpisodeCount >= totalMALEpisodes) {
-          // This is likely a case like Jujutsu Kaisen where TMDB has all episodes in one season
-          // Keep the current MAL part selection or default to 0
-          console.log('[DetailsPage] Single TMDB season with multiple MAL parts detected');
-        }
-      } else {
-        console.log('[DetailsPage] Episode count mismatch, not applying MAL split');
-        setAnimeSeasonMapping(null);
-      }
+      // Store the mapping - single MAL entry, no splitting needed
+      setAnimeSeasonMapping({
+        tmdbSeason: selectedSeason,
+        malParts: malData.allSeasons,
+        tmdbEpisodes: seasonData.episodes
+      });
     } else {
       setAnimeSeasonMapping(null);
     }
@@ -484,18 +466,17 @@ export default function DetailsPageClient({
     
     if (content.mediaType === 'movie') {
       router.push(`/watch/${content.id}?type=movie&title=${title}`);
-    } else if (animeSeasonMapping && animeSeasonMapping.malParts.length > 1) {
-      // For anime with MAL split, start at episode 1 of the selected MAL part
-      const malPart = animeSeasonMapping.malParts[selectedMALPartIndex];
+    } else if (animeSeasonMapping && animeSeasonMapping.malParts.length >= 1) {
+      // For anime with MAL data, include MAL info for accurate episode mapping
+      const malPart = animeSeasonMapping.malParts[0]; // Single MAL entry per TMDB season
       
-      console.log(`[handleWatchNow] Starting MAL Part ${selectedMALPartIndex + 1} Episode 1`);
-      console.log(`[handleWatchNow] MAL ID: ${malPart.malId}, Title: ${malPart.titleEnglish || malPart.title}`);
+      console.log(`[handleWatchNow] Starting with MAL info: ${malPart.malId} (${malPart.title})`);
       
       router.push(
         `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=1&title=${title}&malId=${malPart.malId}&malTitle=${encodeURIComponent(malPart.titleEnglish || malPart.title)}`
       );
     } else {
-      // For TV shows, watch first episode of selected season
+      // For TV shows without MAL data, watch first episode of selected season
       const episode = seasonData?.episodes[0];
       if (episode) {
         router.push(
@@ -509,29 +490,15 @@ export default function DetailsPageClient({
     if (!content) return;
     const title = encodeURIComponent(content.title || content.name || 'Unknown');
     
-    // If we have MAL mapping, include MAL info for the current part
-    if (animeSeasonMapping && animeSeasonMapping.malParts.length > 1) {
-      // Determine which MAL part this episode belongs to
-      let currentPartIndex = 0;
-      let episodeOffset = 0;
+    // If we have MAL mapping, include MAL info for accurate episode lookup
+    // With 1:1 TMDB season to MAL entry mapping, episode number is direct (no offset)
+    if (animeSeasonMapping && animeSeasonMapping.malParts.length >= 1) {
+      const malPart = animeSeasonMapping.malParts[0]; // Single MAL entry per TMDB season
       
-      for (let i = 0; i < animeSeasonMapping.malParts.length; i++) {
-        const partEpisodeCount = animeSeasonMapping.malParts[i].episodes || 0;
-        if (episodeNumber <= episodeOffset + partEpisodeCount) {
-          currentPartIndex = i;
-          break;
-        }
-        episodeOffset += partEpisodeCount;
-      }
-      
-      const malPart = animeSeasonMapping.malParts[currentPartIndex];
-      const malEpisodeNumber = episodeNumber - episodeOffset;
-      
-      console.log(`[handleEpisodeSelect] TMDB episode ${episodeNumber} → MAL Part ${currentPartIndex + 1} Episode ${malEpisodeNumber}`);
-      console.log(`[handleEpisodeSelect] MAL ID: ${malPart.malId}, Title: ${malPart.titleEnglish || malPart.title}`);
+      console.log(`[handleEpisodeSelect] Episode ${episodeNumber} with MAL ID: ${malPart.malId}, Title: ${malPart.titleEnglish || malPart.title}`);
       
       router.push(
-        `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${malEpisodeNumber}&title=${title}&malId=${malPart.malId}&malTitle=${encodeURIComponent(malPart.titleEnglish || malPart.title)}`
+        `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${episodeNumber}&title=${title}&malId=${malPart.malId}&malTitle=${encodeURIComponent(malPart.titleEnglish || malPart.title)}`
       );
     } else {
       router.push(
@@ -778,7 +745,6 @@ export default function DetailsPageClient({
               selectedSeason={selectedSeason}
               onSeasonChange={(s) => {
                 setSelectedSeason(s);
-                setSelectedMALPartIndex(0); // Reset MAL part when changing TMDB season
               }}
             />
             
@@ -790,68 +756,32 @@ export default function DetailsPageClient({
               </div>
             )}
             
-            {/* For anime with MAL split: show all episodes with MAL part indicators */}
-            {!loadingEpisodes && !loadingMAL && animeSeasonMapping && animeSeasonMapping.malParts.length > 1 && (
+            {/* For anime with MAL data: show MAL info badge */}
+            {!loadingEpisodes && !loadingMAL && animeSeasonMapping && animeSeasonMapping.malParts.length >= 1 && (
               <>
-                {/* MAL Parts Info */}
+                {/* MAL Info Badge */}
                 <div className={styles.malPartSelector}>
                   <div className={styles.malPartHeader}>
                     <span className={styles.malBadgeSmall}>MAL</span>
                     <span className={styles.malPartNote}>
-                      This series has {animeSeasonMapping.malParts.length} parts on MyAnimeList
+                      {animeSeasonMapping.malParts[0].titleEnglish || animeSeasonMapping.malParts[0].title}
                     </span>
-                  </div>
-                  <div className={styles.malPartInfo}>
-                    {animeSeasonMapping.malParts.map((part, index) => {
-                      const startEpisode = animeSeasonMapping.malParts.slice(0, index).reduce((sum, p) => sum + (p.episodes || 0), 0) + 1;
-                      const endEpisode = startEpisode + (part.episodes || 0) - 1;
-                      return (
-                        <div key={part.malId} className={styles.malPartInfoItem}>
-                          <span className={styles.malPartName}>
-                            {part.titleEnglish || part.title}
-                          </span>
-                          <span className={styles.malPartRange}>
-                            Episodes {startEpisode}-{endEpisode} • ⭐ {part.score?.toFixed(2) || 'N/A'}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    <span className={styles.malPartRange}>
+                      {animeSeasonMapping.malParts[0].episodes} episodes • ⭐ {animeSeasonMapping.malParts[0].score?.toFixed(2) || 'N/A'}
+                    </span>
                   </div>
                 </div>
                 
-                {/* Show all TMDB episodes with MAL part indicators */}
+                {/* Show TMDB episodes */}
                 <EpisodeList
-                  episodes={seasonData?.episodes.map((episode) => {
-                    // Determine which MAL part this episode belongs to
-                    let partIndex = 0;
-                    let episodeOffset = 0;
-                    
-                    for (let i = 0; i < animeSeasonMapping.malParts.length; i++) {
-                      const partEpisodeCount = animeSeasonMapping.malParts[i].episodes || 0;
-                      if (episode.episodeNumber <= episodeOffset + partEpisodeCount) {
-                        partIndex = i;
-                        break;
-                      }
-                      episodeOffset += partEpisodeCount;
-                    }
-                    
-                    const malPart = animeSeasonMapping.malParts[partIndex];
-                    const malEpisodeNumber = episode.episodeNumber - episodeOffset;
-                    
-                    return {
-                      ...episode,
-                      _malPartIndex: partIndex,
-                      _malPartTitle: malPart.titleEnglish || malPart.title,
-                      _malEpisodeNumber: malEpisodeNumber,
-                    };
-                  }) || []}
+                  episodes={seasonData?.episodes || []}
                   onEpisodeSelect={handleEpisodeSelect}
                   episodeProgress={episodeProgress}
                 />
               </>
             )}
             
-            {/* Standard TMDB display (non-anime or anime without MAL split) */}
+            {/* Standard TMDB display (non-anime or anime without MAL data) */}
             {!loadingEpisodes && !loadingMAL && !animeSeasonMapping && seasonData && (
               <EpisodeList
                 episodes={seasonData.episodes}

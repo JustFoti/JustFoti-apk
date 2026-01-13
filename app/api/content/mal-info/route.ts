@@ -7,6 +7,7 @@
  * - tmdbId: TMDB ID of the content
  * - type: 'movie' | 'tv'
  * - title: Title to search for (optional, will fetch from TMDB if not provided)
+ * - season: TMDB season number (optional, defaults to 1)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -20,6 +21,8 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const tmdbId = searchParams.get('tmdbId');
   const type = searchParams.get('type') as 'movie' | 'tv';
+  const seasonParam = searchParams.get('season');
+  const season = seasonParam ? parseInt(seasonParam) : 1;
   let title = searchParams.get('title');
 
   if (!tmdbId || !type) {
@@ -50,9 +53,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Check cache AFTER we have the title - include title in cache key since different seasons have different MAL entries
-    // e.g., "Bleach" vs "Bleach: Thousand-Year Blood War" are different MAL entries
-    const cacheKey = `${tmdbId}-${type}-${title}`;
+    // Check cache - include season in cache key for season-specific MAL entries
+    const cacheKey = `${tmdbId}-${type}-${season}-${title}`;
     const cached = malCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       console.log(`[mal-info] Cache hit for ${cacheKey}, seasons: ${cached.data?.allSeasons?.length || 0}`);
@@ -63,10 +65,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`[mal-info] Fetching MAL data for: "${title}" (${tmdbId})`);
+    console.log(`[mal-info] Fetching MAL data for: "${title}" (TMDB ${tmdbId} S${season})`);
     
     // Get MAL data - use special season mapping if available
-    const malData = await malService.getDataForTMDBWithSeasonMapping(parseInt(tmdbId), title);
+    const malData = await malService.getDataForTMDBWithSeasonMapping(parseInt(tmdbId), title, season);
 
     console.log(`[mal-info] MAL result:`, {
       found: !!malData,
@@ -99,6 +101,7 @@ export async function GET(request: NextRequest) {
       cached: false,
       debug: {
         searchedTitle: title,
+        season,
         mainEntry: malData.mainEntry?.title,
         seasonsCount: malData.allSeasons?.length,
         totalEpisodes: malData.totalEpisodes

@@ -169,22 +169,18 @@ const TITLE_MAPPINGS: Record<string, string> = {
   'one punch man': 'One Punch Man',
 };
 
-// Special cases where TMDB has one series but MAL has separate entries per season
-// These need manual mapping since MAL doesn't link them as sequels
-// NOTE: For ongoing seasons, set episodes to a high number (e.g., 24) as placeholder
-const TMDB_TO_MAL_SEASON_MAPPING: Record<number, { seasons: Array<{ malId: number; episodes: number; title: string }> }> = {
+// Special cases where TMDB seasons map to specific MAL entries
+// Key: TMDB ID, Value: Map of TMDB season number to MAL entry
+// This handles anime where each TMDB season corresponds to a different MAL entry
+const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number; episodes: number; title: string }>> = {
   95479: { // Jujutsu Kaisen TMDB ID
-    seasons: [
-      { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
-      { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-      { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' } // Season 3 - ongoing, episode count TBD
-    ]
+    1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
+    2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
+    3: { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' } // Season 3 - ongoing
   },
   203624: { // Solo Leveling TMDB ID
-    seasons: [
-      { malId: 52299, episodes: 12, title: 'Solo Leveling' },
-      { malId: 58567, episodes: 13, title: 'Solo Leveling Season 2: Arise from the Shadow' }
-    ]
+    1: { malId: 52299, episodes: 12, title: 'Solo Leveling' },
+    2: { malId: 58567, episodes: 13, title: 'Solo Leveling Season 2: Arise from the Shadow' }
   }
 };
 
@@ -438,11 +434,16 @@ export async function getMALSeriesSeasons(malId: number): Promise<MALAnimeDetail
 
 /**
  * Get MAL data for TMDB anime with special season mapping
- * Handles cases like Jujutsu Kaisen where TMDB has one series but MAL has separate entries
+ * Handles cases like Jujutsu Kaisen where each TMDB season maps to a specific MAL entry
+ * 
+ * @param tmdbId - TMDB ID of the anime
+ * @param tmdbTitle - Title for fallback search
+ * @param tmdbSeason - TMDB season number (optional, defaults to 1)
  */
 export async function getMALDataForTMDBAnimeWithSeasonMapping(
   tmdbId: number,
-  tmdbTitle: string
+  tmdbTitle: string,
+  tmdbSeason: number = 1
 ): Promise<MALAnimeDetails | null> {
   // Check if this TMDB ID has special season mapping
   const seasonMapping = TMDB_TO_MAL_SEASON_MAPPING[tmdbId];
@@ -451,61 +452,49 @@ export async function getMALDataForTMDBAnimeWithSeasonMapping(
     return getMALDataForTMDBAnime(tmdbTitle);
   }
 
-  console.log(`[MAL] Using special season mapping for TMDB ID ${tmdbId}: ${seasonMapping.seasons.length} MAL entries`);
+  // Get the MAL entry for this specific TMDB season
+  const malEntry = seasonMapping[tmdbSeason];
+  if (!malEntry) {
+    console.log(`[MAL] No mapping for TMDB ID ${tmdbId} season ${tmdbSeason}, falling back to search`);
+    return getMALDataForTMDBAnime(tmdbTitle);
+  }
+
+  console.log(`[MAL] Using season mapping for TMDB ID ${tmdbId} S${tmdbSeason}: MAL ID ${malEntry.malId} (${malEntry.title})`);
 
   try {
-    // Fetch details for all MAL entries SEQUENTIALLY to respect rate limits
-    const allAnime: MALAnime[] = [];
-    for (const season of seasonMapping.seasons) {
-      const anime = await getMALAnimeById(season.malId);
-      if (anime) {
-        allAnime.push(anime);
-        console.log(`[MAL] Fetched: ${anime.title} (${anime.episodes} eps, MAL ID: ${anime.mal_id})`);
-      } else {
-        console.log(`[MAL] Failed to fetch MAL ID: ${season.malId}`);
-      }
-    }
-
-    if (allAnime.length === 0) {
-      console.log('[MAL] No anime data fetched from season mapping');
+    const anime = await getMALAnimeById(malEntry.malId);
+    if (!anime) {
+      console.log(`[MAL] Failed to fetch MAL ID: ${malEntry.malId}`);
       return null;
     }
 
-    // Use the first entry as the main entry
-    const mainAnime = allAnime[0];
+    console.log(`[MAL] Fetched: ${anime.title} (${anime.episodes} eps, MAL ID: ${anime.mal_id})`);
 
-    // Convert to MALSeason format
-    // IMPORTANT: Use episode count from our mapping if MAL returns null (for ongoing series)
-    const seasons: MALSeason[] = allAnime.map((anime, index) => {
-      // Get the episode count from our mapping as fallback for ongoing series
-      const mappingEpisodes = seasonMapping.seasons[index]?.episodes || 0;
-      const episodeCount = anime.episodes || mappingEpisodes;
-      
-      return {
-        malId: anime.mal_id,
-        title: anime.title,
-        titleEnglish: anime.title_english,
-        episodes: episodeCount,
-        score: anime.score,
-        members: anime.members,
-        type: anime.type,
-        status: anime.status,
-        aired: anime.aired.string,
-        synopsis: anime.synopsis,
-        imageUrl: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
-        seasonOrder: index + 1,
-      };
-    });
+    // Use episode count from our mapping if MAL returns null (for ongoing series)
+    const episodeCount = anime.episodes || malEntry.episodes;
 
-    // Calculate total episodes
-    const totalEpisodes = seasons.reduce((sum, s) => sum + (s.episodes || 0), 0);
+    // Return as a single-season result (no splitting needed)
+    const season: MALSeason = {
+      malId: anime.mal_id,
+      title: anime.title,
+      titleEnglish: anime.title_english,
+      episodes: episodeCount,
+      score: anime.score,
+      members: anime.members,
+      type: anime.type,
+      status: anime.status,
+      aired: anime.aired.string,
+      synopsis: anime.synopsis,
+      imageUrl: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+      seasonOrder: 1,
+    };
 
-    console.log(`[MAL] Season mapping result: ${seasons.length} seasons, ${totalEpisodes} total episodes`);
+    console.log(`[MAL] Season mapping result: 1 season, ${episodeCount} episodes`);
 
     return {
-      mainEntry: mainAnime,
-      allSeasons: seasons,
-      totalEpisodes,
+      mainEntry: anime,
+      allSeasons: [season], // Single season - no splitting needed
+      totalEpisodes: episodeCount,
     };
   } catch (error) {
     console.error('[MAL] Error in season mapping:', error);
