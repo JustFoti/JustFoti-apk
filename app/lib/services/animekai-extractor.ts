@@ -541,6 +541,25 @@ function scoreMatch(resultTitle: string, query: string): number {
   // Result contains query as a whole word sequence
   if (normalizedResult.includes(normalizedQuery)) return 70;
   
+  // IMPORTANT: If query contains season indicator, prefer results with matching season
+  const seasonMatch = query.match(/season\s*(\d+)|(\d+)(?:nd|rd|th)\s*season|part\s*(\d+)/i);
+  if (seasonMatch) {
+    const querySeason = seasonMatch[1] || seasonMatch[2] || seasonMatch[3];
+    const resultSeasonMatch = resultTitle.match(/season\s*(\d+)|(\d+)(?:nd|rd|th)\s*season|part\s*(\d+)/i);
+    
+    if (resultSeasonMatch) {
+      const resultSeason = resultSeasonMatch[1] || resultSeasonMatch[2] || resultSeasonMatch[3];
+      if (querySeason === resultSeason) {
+        return 95; // Strong match - same season number
+      } else {
+        return 20; // Wrong season - heavily penalize
+      }
+    } else {
+      // Query has season but result doesn't - this is likely the base anime, not the season
+      return 30;
+    }
+  }
+  
   // Penalize results with extra words like "Movie", "Execution", "OVA", etc.
   const penaltyWords = ['movie', 'execution', 'ova', 'special', 'recap', 'summary'];
   let score = 50;
@@ -563,7 +582,7 @@ function scoreMatch(resultTitle: string, query: string): number {
 async function searchAnimeKai(query: string, malId?: number | null): Promise<{ content_id: string; title: string; episodes?: ParsedEpisodes } | null> {
   try {
     // Search AnimeKai directly
-    console.log(`[AnimeKai] Searching directly for: "${query}"`);
+    console.log(`[AnimeKai] Searching directly for: "${query}"${malId ? ` (MAL ID: ${malId})` : ''}`);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -1325,16 +1344,27 @@ async function extractAnimeKaiStreamsLocal(
           malTitle.replace(/:/g, ''), // Remove colons
           malTitle.replace(/-/g, ' '), // Replace hyphens with spaces
           malTitle.split(':').pop()?.trim() || malTitle, // Just the subtitle
+          // Handle "X 2nd Season" -> "X Season 2"
+          malTitle.replace(/(\w+)\s+2nd\s+Season/i, '$1 Season 2'),
+          malTitle.replace(/(\w+)\s+3rd\s+Season/i, '$1 Season 3'),
+          // Handle "X Season 2: Subtitle" -> "X Season 2"
+          malTitle.replace(/:\s*[^:]+$/, '').trim(),
+          // Handle "Solo Leveling Season 2: Arise from the Shadow" -> "Solo Leveling Season 2"
+          malTitle.replace(/Season\s+(\d+):\s*.+$/i, 'Season $1'),
+          // Just the base title + season number
+          `${baseTitle} Season ${seasonNum}`,
+          `${baseTitle} S${seasonNum}`,
         ];
         
-        for (const variant of malTitleVariants) {
-          if (variant !== malTitle) {
-            console.log(`[AnimeKai] Trying MAL title variant: "${variant}"`);
-            animeResult = await searchAnimeKai(variant, null);
-            if (animeResult) {
-              console.log(`[AnimeKai] ✓ Found with MAL title variant: "${animeResult.title}"`);
-              break;
-            }
+        // Remove duplicates and empty strings
+        const uniqueVariants = [...new Set(malTitleVariants.filter(v => v && v !== malTitle))];
+        
+        for (const variant of uniqueVariants) {
+          console.log(`[AnimeKai] Trying MAL title variant: "${variant}"`);
+          animeResult = await searchAnimeKai(variant, null);
+          if (animeResult) {
+            console.log(`[AnimeKai] ✓ Found with MAL title variant: "${animeResult.title}"`);
+            break;
           }
         }
       } else {

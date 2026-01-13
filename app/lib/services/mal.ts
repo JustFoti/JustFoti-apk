@@ -169,20 +169,161 @@ const TITLE_MAPPINGS: Record<string, string> = {
   'one punch man': 'One Punch Man',
 };
 
-// Special cases where TMDB seasons map to specific MAL entries
-// Key: TMDB ID, Value: Map of TMDB season number to MAL entry
-// This handles anime where each TMDB season corresponds to a different MAL entry
+// TMDB Season to MAL Entry mapping
+// Key: TMDB ID, Value: { tmdbSeason: { malId, episodes, title } }
+// This maps each TMDB season to its corresponding MAL entry
+// 
+// WHY THIS EXISTS:
+// TMDB and MAL have different season structures. TMDB groups content by "seasons"
+// while MAL treats each season as a separate anime entry with its own ID.
+// For example, JJK Season 2 on TMDB is a completely different MAL entry (51009)
+// than JJK Season 1 (40748). Without this mapping, searching for "Jujutsu Kaisen"
+// episode 24 would return S1E24, not S2E1.
 const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number; episodes: number; title: string }>> = {
-  95479: { // Jujutsu Kaisen TMDB ID
+  // Jujutsu Kaisen (TMDB ID: 95479)
+  // TMDB S1 = MAL 40748 (24 eps), S2 = MAL 51009 (23 eps), S3 = MAL 57658 (24 eps)
+  95479: {
     1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    3: { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' } // Season 3 - ongoing
+    3: { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' },
   },
-  203624: { // Solo Leveling TMDB ID
+  // Solo Leveling (TMDB ID: 203624)
+  // TMDB S1 = MAL 52299 (12 eps), S2 = MAL 58567 (13 eps)
+  203624: {
     1: { malId: 52299, episodes: 12, title: 'Solo Leveling' },
-    2: { malId: 58567, episodes: 13, title: 'Solo Leveling Season 2: Arise from the Shadow' }
-  }
+    2: { malId: 58567, episodes: 13, title: 'Solo Leveling Season 2: Arise from the Shadow' },
+  },
+  // Demon Slayer (TMDB ID: 85937)
+  85937: {
+    1: { malId: 38000, episodes: 26, title: 'Kimetsu no Yaiba' },
+    2: { malId: 47778, episodes: 18, title: 'Kimetsu no Yaiba: Yuukaku-hen' },
+    3: { malId: 51019, episodes: 11, title: 'Kimetsu no Yaiba: Katanakaji no Sato-hen' },
+    4: { malId: 55701, episodes: 11, title: 'Kimetsu no Yaiba: Hashira Geiko-hen' },
+  },
+  // My Hero Academia (TMDB ID: 65930)
+  65930: {
+    1: { malId: 31964, episodes: 13, title: 'Boku no Hero Academia' },
+    2: { malId: 33486, episodes: 25, title: 'Boku no Hero Academia 2nd Season' },
+    3: { malId: 36456, episodes: 25, title: 'Boku no Hero Academia 3rd Season' },
+    4: { malId: 38408, episodes: 25, title: 'Boku no Hero Academia 4th Season' },
+    5: { malId: 41587, episodes: 25, title: 'Boku no Hero Academia 5th Season' },
+    6: { malId: 49918, episodes: 25, title: 'Boku no Hero Academia 6th Season' },
+    7: { malId: 54789, episodes: 21, title: 'Boku no Hero Academia 7th Season' },
+  },
+  // Attack on Titan (TMDB ID: 1429)
+  1429: {
+    1: { malId: 16498, episodes: 25, title: 'Shingeki no Kyojin' },
+    2: { malId: 25777, episodes: 12, title: 'Shingeki no Kyojin Season 2' },
+    3: { malId: 35760, episodes: 22, title: 'Shingeki no Kyojin Season 3' },
+    4: { malId: 40028, episodes: 28, title: 'Shingeki no Kyojin: The Final Season' },
+  },
+  // Spy x Family (TMDB ID: 135157)
+  135157: {
+    1: { malId: 50265, episodes: 25, title: 'Spy x Family' },
+    2: { malId: 53887, episodes: 12, title: 'Spy x Family Season 2' },
+  },
 };
+
+// Special cases where TMDB ID maps to multiple MAL entries (all seasons)
+// Key: TMDB ID, Value: Array of all MAL entries for this anime
+// This is used for displaying total episode count across all seasons
+const TMDB_TO_MAL_ALL_SEASONS: Record<number, Array<{ malId: number; episodes: number; title: string }>> = {
+  95479: [ // Jujutsu Kaisen
+    { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
+    { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
+    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen: The Culling Game' },
+  ],
+  203624: [ // Solo Leveling
+    { malId: 52299, episodes: 12, title: 'Solo Leveling' },
+    { malId: 58567, episodes: 13, title: 'Solo Leveling Season 2: Arise from the Shadow' },
+  ],
+  85937: [ // Demon Slayer
+    { malId: 38000, episodes: 26, title: 'Kimetsu no Yaiba' },
+    { malId: 47778, episodes: 18, title: 'Kimetsu no Yaiba: Yuukaku-hen' },
+    { malId: 51019, episodes: 11, title: 'Kimetsu no Yaiba: Katanakaji no Sato-hen' },
+    { malId: 55701, episodes: 11, title: 'Kimetsu no Yaiba: Hashira Geiko-hen' },
+  ],
+  65930: [ // My Hero Academia
+    { malId: 31964, episodes: 13, title: 'Boku no Hero Academia' },
+    { malId: 33486, episodes: 25, title: 'Boku no Hero Academia 2nd Season' },
+    { malId: 36456, episodes: 25, title: 'Boku no Hero Academia 3rd Season' },
+    { malId: 38408, episodes: 25, title: 'Boku no Hero Academia 4th Season' },
+    { malId: 41587, episodes: 25, title: 'Boku no Hero Academia 5th Season' },
+    { malId: 49918, episodes: 25, title: 'Boku no Hero Academia 6th Season' },
+    { malId: 54789, episodes: 21, title: 'Boku no Hero Academia 7th Season' },
+  ],
+  1429: [ // Attack on Titan
+    { malId: 16498, episodes: 25, title: 'Shingeki no Kyojin' },
+    { malId: 25777, episodes: 12, title: 'Shingeki no Kyojin Season 2' },
+    { malId: 35760, episodes: 22, title: 'Shingeki no Kyojin Season 3' },
+    { malId: 40028, episodes: 28, title: 'Shingeki no Kyojin: The Final Season' },
+  ],
+  135157: [ // Spy x Family
+    { malId: 50265, episodes: 25, title: 'Spy x Family' },
+    { malId: 53887, episodes: 12, title: 'Spy x Family Season 2' },
+  ],
+};
+
+/**
+ * Get all MAL seasons for a TMDB anime
+ * Returns all MAL entries that correspond to this anime series
+ */
+export async function getAllMALSeasonsForTMDB(
+  tmdbId: number,
+  tmdbTitle: string
+): Promise<MALAnimeDetails | null> {
+  // Check if this TMDB ID has a complete season mapping
+  const allSeasons = TMDB_TO_MAL_ALL_SEASONS[tmdbId];
+  
+  if (allSeasons && allSeasons.length > 0) {
+    console.log(`[MAL] Using complete season mapping for TMDB ID ${tmdbId}: ${allSeasons.length} MAL entries`);
+    
+    try {
+      // Fetch details for all MAL entries
+      const fetchedSeasons: MALSeason[] = [];
+      
+      for (let i = 0; i < allSeasons.length; i++) {
+        const entry = allSeasons[i];
+        const anime = await getMALAnimeById(entry.malId);
+        
+        if (anime) {
+          fetchedSeasons.push({
+            malId: anime.mal_id,
+            title: anime.title,
+            titleEnglish: anime.title_english,
+            episodes: anime.episodes || entry.episodes,
+            score: anime.score,
+            members: anime.members,
+            type: anime.type,
+            status: anime.status,
+            aired: anime.aired.string,
+            synopsis: anime.synopsis,
+            imageUrl: anime.images.jpg.large_image_url || anime.images.jpg.image_url,
+            seasonOrder: i + 1,
+          });
+          console.log(`[MAL] Fetched: ${anime.title} (${anime.episodes || entry.episodes} eps)`);
+        }
+      }
+      
+      if (fetchedSeasons.length === 0) {
+        return null;
+      }
+      
+      const totalEpisodes = fetchedSeasons.reduce((sum, s) => sum + (s.episodes || 0), 0);
+      
+      return {
+        mainEntry: await getMALAnimeById(allSeasons[0].malId) as MALAnime,
+        allSeasons: fetchedSeasons,
+        totalEpisodes,
+      };
+    } catch (error) {
+      console.error('[MAL] Error fetching all seasons:', error);
+    }
+  }
+  
+  // Fall back to normal MAL search
+  return getMALDataForTMDBAnime(tmdbTitle);
+}
 
 /**
  * Find the best MAL match for a TMDB anime
