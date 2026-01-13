@@ -9,9 +9,9 @@ compatibility_date = "2025-12-07"
 # Enable Workers Logs (viewable in Cloudflare Dashboard > Workers > Logs)
 # Logs are automatically captured from console.log/error/warn
 
-# Observability settings
+# Observability - DISABLED to reduce costs ($0.60/million events was costing ~$400/month!)
 [observability]
-enabled = true
+enabled = false
 
 # Tail workers for real-time log streaming
 # Run: npx wrangler tail media-proxy
@@ -120,7 +120,7 @@ name = "media-proxy"
 # routes = [{ pattern = "proxy.yourdomain.com/*", zone_name = "yourdomain.com" }]
 
 [env.production.observability]
-enabled = true
+enabled = false
 
 # Development environment  
 [env.development]
@@ -133,7 +133,7 @@ SIGNING_SECRET = "dev-signing-secret-change-in-prod"
 WATERMARK_SECRET = "dev-watermark-secret-change-in-prod"
 
 [env.development.observability]
-enabled = true
+enabled = false
 
 # Local KV for development (persisted to .wrangler/state)
 # For local dev, wrangler creates these automatically

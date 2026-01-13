@@ -106,12 +106,19 @@ const pendingBotDetections = new Map<string, BotDetection>(); // Keyed by userId
 
 // Timing
 let lastFlushTime = 0;
-const FLUSH_INTERVAL = 60000; // 60 seconds - matches client sync interval for efficiency
+const FLUSH_INTERVAL = 120000; // 2 minutes - reduced frequency to lower D1 write costs
 const USER_TIMEOUT = 180000; // 3 minutes inactive = gone (allows for 2 missed syncs)
+
+// Track which users have changed since last flush (dirty tracking)
+const dirtyUsers = new Set<string>();
 
 // Stats cache for historical data
 let historicalStatsCache: { data: any; timestamp: number } | null = null;
-const HISTORICAL_CACHE_TTL = 300000; // 5 minutes - reduced from 30s to prevent excessive D1 reads
+const HISTORICAL_CACHE_TTL = 1800000; // 30 minutes - increased to reduce D1 reads
+
+// Cache for real-time D1 queries (unified-stats endpoint)
+let realtimeD1Cache: { data: any; timestamp: number } | null = null;
+const REALTIME_D1_CACHE_TTL = 30000; // 30 seconds - real-time queries are expensive
 
 // Peak tracking
 let currentDate = new Date().toISOString().split('T')[0];
@@ -189,13 +196,20 @@ async function flushToD1(db: D1Database, force = false): Promise<void> {
   if (!force && now - lastFlushTime < FLUSH_INTERVAL) return;
   lastFlushTime = now;
   
-  const userCount = liveUsers.size;
-  console.log(`[Flush] Starting flush with ${userCount} users in memory`);
+  // Only flush users that have changed (dirty tracking)
+  const usersToFlush = force 
+    ? Array.from(liveUsers.values())
+    : Array.from(liveUsers.values()).filter(u => dirtyUsers.has(u.userId));
+  
+  console.log(`[Flush] Starting flush: ${usersToFlush.length} dirty users (${liveUsers.size} total in memory)`);
+  
+  // Clear dirty set after getting users to flush
+  dirtyUsers.clear();
   
   const batch: D1PreparedStatement[] = [];
   
-  // 1. Upsert all live users to live_activity
-  for (const user of liveUsers.values()) {
+  // 1. Upsert only DIRTY live users to live_activity (not all users!)
+  for (const user of usersToFlush) {
     batch.push(db.prepare(`
       INSERT INTO live_activity (id, user_id, session_id, activity_type, content_id, content_title, content_type, season_number, episode_number, country, city, started_at, last_heartbeat, is_active, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
@@ -236,8 +250,8 @@ async function flushToD1(db: D1Database, force = false): Promise<void> {
   }
   pendingWatchSessions.clear();
   
-  // 4. Update user_activity for all live users
-  for (const user of liveUsers.values()) {
+  // 4. Update user_activity only for DIRTY users (not all!)
+  for (const user of usersToFlush) {
     batch.push(db.prepare(`
       INSERT INTO user_activity (id, user_id, session_id, first_seen, last_seen, country, city, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -322,6 +336,9 @@ async function handlePresence(request: Request, env: Env, headers: HeadersInit):
     lastHeartbeat: now,
     firstSeen: existing?.firstSeen || now,
   });
+  
+  // Mark user as dirty (needs D1 update on next flush)
+  dirtyUsers.add(data.userId);
   
   // If user is leaving, remove them
   if (data.isLeaving) {
@@ -855,39 +872,54 @@ async function handleGetUnifiedStats(env: Env, headers: HeadersInit): Promise<Re
   const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
   
-  // ALWAYS query D1 for real-time stats (workers are distributed, memory is partial)
+  // Check real-time D1 cache first (reduces D1 reads significantly)
   let realtimeFromD1 = { total: 0, watching: 0, browsing: 0, livetv: 0 };
   let realtimeUsers: any[] = [];
-  try {
-    // Get live users from D1 (users with heartbeat in last 5 minutes)
-    const liveResult = await env.DB.prepare(`
-      SELECT activity_type, COUNT(DISTINCT user_id) as count
-      FROM live_activity 
-      WHERE is_active = 1 AND last_heartbeat >= ?
-      GROUP BY activity_type
-    `).bind(fiveMinutesAgo).all();
-    
-    for (const row of (liveResult.results || [])) {
-      const count = parseInt(String(row.count)) || 0;
-      realtimeFromD1.total += count;
-      if (row.activity_type === 'watching') realtimeFromD1.watching = count;
-      else if (row.activity_type === 'browsing') realtimeFromD1.browsing = count;
-      else if (row.activity_type === 'livetv') realtimeFromD1.livetv = count;
+  
+  if (realtimeD1Cache && now - realtimeD1Cache.timestamp < REALTIME_D1_CACHE_TTL) {
+    // Use cached real-time data
+    realtimeFromD1 = realtimeD1Cache.data.stats;
+    realtimeUsers = realtimeD1Cache.data.users;
+    console.log('[UnifiedStats] Using cached D1 realtime:', realtimeFromD1.total, 'users');
+  } else {
+    // Query D1 for real-time stats (workers are distributed, memory is partial)
+    try {
+      // Get live users from D1 (users with heartbeat in last 5 minutes)
+      const liveResult = await env.DB.prepare(`
+        SELECT activity_type, COUNT(DISTINCT user_id) as count
+        FROM live_activity 
+        WHERE is_active = 1 AND last_heartbeat >= ?
+        GROUP BY activity_type
+      `).bind(fiveMinutesAgo).all();
+      
+      for (const row of (liveResult.results || [])) {
+        const count = parseInt(String(row.count)) || 0;
+        realtimeFromD1.total += count;
+        if (row.activity_type === 'watching') realtimeFromD1.watching = count;
+        else if (row.activity_type === 'browsing') realtimeFromD1.browsing = count;
+        else if (row.activity_type === 'livetv') realtimeFromD1.livetv = count;
+      }
+      
+      // Get user details for geographic breakdown
+      const usersResult = await env.DB.prepare(`
+        SELECT user_id, activity_type, content_id, content_title, content_type, country, city, last_heartbeat
+        FROM live_activity 
+        WHERE is_active = 1 AND last_heartbeat >= ?
+        ORDER BY last_heartbeat DESC
+        LIMIT 500
+      `).bind(fiveMinutesAgo).all();
+      realtimeUsers = usersResult.results || [];
+      
+      // Cache the real-time D1 results
+      realtimeD1Cache = {
+        timestamp: now,
+        data: { stats: realtimeFromD1, users: realtimeUsers }
+      };
+      
+      console.log('[UnifiedStats] Fresh D1 realtime:', realtimeFromD1.total, 'users, memory:', memoryStats.total);
+    } catch (e) {
+      console.error('[UnifiedStats] D1 realtime query error:', e);
     }
-    
-    // Get user details for geographic breakdown
-    const usersResult = await env.DB.prepare(`
-      SELECT user_id, activity_type, content_id, content_title, content_type, country, city, last_heartbeat
-      FROM live_activity 
-      WHERE is_active = 1 AND last_heartbeat >= ?
-      ORDER BY last_heartbeat DESC
-      LIMIT 500
-    `).bind(fiveMinutesAgo).all();
-    realtimeUsers = usersResult.results || [];
-    
-    console.log('[UnifiedStats] D1 realtime:', realtimeFromD1.total, 'users, memory:', memoryStats.total);
-  } catch (e) {
-    console.error('[UnifiedStats] D1 realtime query error:', e);
   }
   
   // Use D1 data (authoritative) - memory is only partial due to worker distribution
@@ -1300,10 +1332,20 @@ export default {
         status: 'ok',
         architecture: 'durable-object',
         memoryUsers: stats.total,
+        dirtyUsers: dirtyUsers.size,
         pendingPageViews: pendingPageViews.length,
         pendingWatchSessions: pendingWatchSessions.size,
         pendingBotDetections: pendingBotDetections.size,
         lastFlush: lastFlushTime,
+        flushIntervalMs: FLUSH_INTERVAL,
+        historicalCacheTTLMs: HISTORICAL_CACHE_TTL,
+        realtimeCacheTTLMs: REALTIME_D1_CACHE_TTL,
+        costOptimizations: {
+          dirtyTracking: true,
+          flushInterval: '2 minutes',
+          historicalCache: '30 minutes',
+          realtimeCache: '30 seconds',
+        },
         timestamp: Date.now(),
       }, { headers });
     }

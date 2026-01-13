@@ -53,9 +53,10 @@ database_id = "b7875a59-3876-4223-9c3d-7644c16f44a5"
 # Set these with: wrangler secret put RPI_PROXY_URL && wrangler secret put RPI_PROXY_KEY
 # =============================================================================
 
-# Observability
+# Observability - DISABLED to reduce costs ($0.60/million events was costing ~$400/month!)
+# Only enable temporarily for debugging specific issues
 [observability]
-enabled = true
+enabled = false
 
 # Cron trigger for daily metrics aggregation (midnight UTC)
 [triggers]

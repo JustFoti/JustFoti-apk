@@ -7,8 +7,9 @@ compatibility_date = "2025-12-07"
 # Free tier: 100,000 requests/day - plenty for sync operations
 # Sync is low-frequency (on app load + manual sync button)
 
+# Observability - DISABLED to reduce costs ($0.60/million events was costing ~$400/month!)
 [observability]
-enabled = true
+enabled = false
 
 [vars]
 LOG_LEVEL = "info"
@@ -38,7 +39,7 @@ name = "flyx-sync"
 LOG_LEVEL = "warn"
 
 [env.production.observability]
-enabled = true
+enabled = false
 
 # Development environment
 [env.development]
@@ -48,4 +49,4 @@ name = "flyx-sync-dev"
 LOG_LEVEL = "debug"
 
 [env.development.observability]
-enabled = true
+enabled = false

@@ -53,11 +53,14 @@ export class AnalyticsDO {
   
   // Cache for historical stats (prevents excessive D1 reads)
   private historicalStatsCache: { data: any; timestamp: number } | null = null;
-  private readonly STATS_CACHE_TTL = 300000; // 5 minutes
+  private readonly STATS_CACHE_TTL = 1800000; // 30 minutes - increased to reduce D1 costs
   
   // Constants
   private readonly USER_TIMEOUT = 5 * 60 * 1000; // 5 minutes
-  private readonly FLUSH_INTERVAL = 60 * 1000; // 60 seconds
+  private readonly FLUSH_INTERVAL = 120 * 1000; // 2 minutes - reduced frequency to lower D1 costs
+  
+  // Track dirty users (only flush users that changed)
+  private dirtyUsers: Set<string> = new Set();
   
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -220,13 +223,21 @@ export class AnalyticsDO {
     if (now - this.lastFlush < this.FLUSH_INTERVAL) return;
     this.lastFlush = now;
     
-    const users = Array.from(this.liveUsers.values());
-    if (users.length === 0) return;
+    // Only flush users that have changed (dirty tracking)
+    const usersToFlush = Array.from(this.liveUsers.values())
+      .filter(u => this.dirtyUsers.has(u.userId));
+    
+    console.log(`[AnalyticsDO] Flushing ${usersToFlush.length} dirty users (${this.liveUsers.size} total)`);
+    
+    // Clear dirty set
+    this.dirtyUsers.clear();
+    
+    if (usersToFlush.length === 0) return;
     
     try {
       const batch: D1PreparedStatement[] = [];
       
-      for (const user of users) {
+      for (const user of usersToFlush) {
         batch.push(this.env.DB.prepare(`
           INSERT INTO live_activity (id, user_id, session_id, activity_type, content_id, content_title, content_type, country, city, started_at, last_heartbeat, is_active, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
@@ -254,8 +265,8 @@ export class AnalyticsDO {
         ));
       }
       
-      // Also update user_activity for DAU/WAU/MAU
-      for (const user of users) {
+      // Also update user_activity for DAU/WAU/MAU (only dirty users)
+      for (const user of usersToFlush) {
         batch.push(this.env.DB.prepare(`
           INSERT INTO user_activity (id, user_id, session_id, first_seen, last_seen, country, city, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -276,7 +287,7 @@ export class AnalyticsDO {
       }
       
       await this.env.DB.batch(batch);
-      console.log(`[AnalyticsDO] Flushed ${users.length} users to D1`);
+      console.log(`[AnalyticsDO] Flushed ${usersToFlush.length} users to D1 (${batch.length} statements)`);
     } catch (e) {
       console.error('[AnalyticsDO] Flush error:', e);
     }
@@ -350,6 +361,9 @@ export class AnalyticsDO {
       lastHeartbeat: now,
       firstSeen: existing?.firstSeen || now,
     });
+    
+    // Mark user as dirty (needs D1 update on next flush)
+    this.dirtyUsers.add(userId);
     
     // Update peak if needed
     this.updatePeak();
