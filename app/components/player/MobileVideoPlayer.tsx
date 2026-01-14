@@ -602,6 +602,10 @@ export default function MobileVideoPlayer({
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setIsLoading(false);
+        // Restore playback speed if not default
+        if (playbackSpeed !== 1 && video) {
+          video.playbackRate = playbackSpeed;
+        }
         // Check for resume after duration is available
         const checkAndPlay = () => {
           if (video.duration > 0) {
@@ -636,6 +640,10 @@ export default function MobileVideoPlayer({
     video.src = streamUrl;
     video.addEventListener('loadedmetadata', () => {
       setIsLoading(false);
+      // Restore playback speed if not default
+      if (playbackSpeed !== 1) {
+        video.playbackRate = playbackSpeed;
+      }
       attemptAutoplay();
     });
   // Note: isIOS and supportsHLS are locked refs, so they won't cause re-runs
