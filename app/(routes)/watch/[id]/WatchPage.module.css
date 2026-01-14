@@ -26,34 +26,6 @@
   object-fit: contain;
 }
 
-.backButtonOverlay {
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  z-index: 10;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  border: none;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.playerWrapper:hover .backButtonOverlay {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.backButtonOverlay:hover {
-  background: rgba(0, 0, 0, 0.9);
-  transform: translateX(-4px);
-}
-
 .loading,
 .error {
   text-align: center;
@@ -128,13 +100,6 @@
 
 /* Mobile responsive */
 @media (max-width: 768px) {
-  .backButtonOverlay {
-    top: 10px;
-    left: 10px;
-    padding: 8px 16px;
-    font-size: 14px;
-  }
-
   .errorActions {
     flex-direction: column;
   }

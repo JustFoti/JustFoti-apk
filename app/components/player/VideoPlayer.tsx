@@ -2892,7 +2892,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     if (isPlaying && focusedRow < 0 && focusedControlIndex < 0) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
-      }, 3000);
+      }, 4000); // Hide after 4 seconds of no movement
     }
   }, [isPlaying, focusedRow, focusedControlIndex]);
 
@@ -2939,6 +2939,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       onClick={handleContainerClick}
       data-tv-skip-navigation="true"
     >
+      {/* Back button - controlled by showControls */}
+      {onBack && (showControls || !isPlaying) && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onBack(); }} 
+          className={styles.backButton}
+          data-player-back="true"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          <span>Back</span>
+        </button>
+      )}
+
       {(isLoading || isBuffering) && (
         <div className={styles.loading}>
           <div className={styles.spinner} />
