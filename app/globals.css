@@ -71,6 +71,10 @@
 html {
   scroll-behavior: smooth;
   overflow-x: hidden;
+  /* Prevent iOS Safari from auto-zooming text on orientation change */
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -86,6 +90,8 @@ body {
   min-height: 100vh;
   overflow-x: hidden;
   position: relative;
+  /* Prevent unwanted zoom on double-tap */
+  touch-action: manipulation;
 }
 
 /* Animated Background Particles */
