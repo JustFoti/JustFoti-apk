@@ -87,6 +87,22 @@ export async function handleCDNLiveRequest(request: Request, env: Env): Promise<
         return jsonResponse({ error: 'Invalid URL domain', host: urlHost }, 400);
       }
 
+      // HONEYPOT PROTECTION: Block flyx.m3u8 files
+      const urlPath = new URL(decodedUrl).pathname.toLowerCase();
+      if (urlPath.includes('flyx.m3u8')) {
+        logger.warn('Honeypot URL blocked', { url: decodedUrl.substring(0, 80) });
+        return jsonResponse({ error: 'Invalid m3u8 file' }, 400);
+      }
+
+      // Validate m3u8 URL pattern
+      if (decodedUrl.includes('.m3u8')) {
+        const validPattern = /\/api\/v1\/channels\/[a-z]{2}-[\w-]+\/(index|playlist)\.m3u8/i;
+        if (!validPattern.test(urlPath)) {
+          logger.warn('Invalid m3u8 URL pattern', { url: decodedUrl.substring(0, 80) });
+          return jsonResponse({ error: 'Invalid m3u8 URL pattern' }, 400);
+        }
+      }
+
       logger.info('Proxying CDN-Live stream', { url: decodedUrl.substring(0, 80) });
 
       const response = await fetch(decodedUrl, {
