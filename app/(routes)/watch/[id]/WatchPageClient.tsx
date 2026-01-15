@@ -809,10 +809,6 @@ function WatchContent() {
   return (
     <div className={styles.container} data-tv-skip-navigation="true">
       <div className={styles.playerWrapper}>
-        <button onClick={handleBack} className={styles.backButtonOverlay} data-player-back="true">
-          ← Back
-        </button>
-
         <DesktopVideoPlayer
           key={`${contentId}-${seasonId}-${episodeId}`}
           tmdbId={contentId}

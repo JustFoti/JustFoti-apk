@@ -142,6 +142,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasNavigatedToNextRef = useRef<boolean>(false); // Prevent repeated auto-next triggers on iOS
   
+  // Playback speed state
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [showSpeedIndicator, setShowSpeedIndicator] = useState(false);
+  const speedIndicatorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const speedOptions = [0.5, 0.75, 1, 1.25, 1.5, 2];
+  
   // Refs to access current values in event handlers (avoid stale closures)
   const nextEpisodeRef = useRef(nextEpisode);
   const playerPrefsRef = useRef(playerPrefs);
@@ -1028,6 +1034,12 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             pendingSeekTimeRef.current = null;
           }
           
+          // Restore playback speed if not default
+          if (playbackSpeed !== 1) {
+            console.log('[VideoPlayer] Restoring playback speed:', playbackSpeed);
+            video.playbackRate = playbackSpeed;
+          }
+          
           // Restore subtitles if they were active
           if (currentSubtitleDataRef.current) {
             console.log('[VideoPlayer] Restoring subtitle:', currentSubtitleDataRef.current.language);
@@ -1246,6 +1258,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
             video.currentTime = pendingSeekTimeRef.current;
             pendingSeekTimeRef.current = null;
           }
+          // Restore playback speed if not default
+          if (playbackSpeed !== 1) {
+            video.playbackRate = playbackSpeed;
+          }
           // Restore subtitles
           if (currentSubtitleDataRef.current) {
             setTimeout(() => loadSubtitle(currentSubtitleDataRef.current, subtitleOffset), 100);
@@ -1266,6 +1282,10 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           console.log('[VideoPlayer] Restoring position (native):', pendingSeekTimeRef.current);
           video.currentTime = pendingSeekTimeRef.current;
           pendingSeekTimeRef.current = null;
+        }
+        // Restore playback speed if not default
+        if (playbackSpeed !== 1) {
+          video.playbackRate = playbackSpeed;
         }
         // Restore subtitles
         if (currentSubtitleDataRef.current) {
@@ -2068,12 +2088,36 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           e.stopPropagation();
           if (currentSubtitle) adjustSubtitleOffset(-0.5);
           break;
+        case ',':
+        case '<':
+          // Decrease playback speed
+          e.preventDefault();
+          e.stopPropagation();
+          {
+            const currentIndex = speedOptions.indexOf(playbackSpeed);
+            if (currentIndex > 0) {
+              changeSpeed(speedOptions[currentIndex - 1]);
+            }
+          }
+          break;
+        case '.':
+        case '>':
+          // Increase playback speed
+          e.preventDefault();
+          e.stopPropagation();
+          {
+            const currentIndex = speedOptions.indexOf(playbackSpeed);
+            if (currentIndex < speedOptions.length - 1) {
+              changeSpeed(speedOptions[currentIndex + 1]);
+            }
+          }
+          break;
       }
     };
     // Use capture phase to intercept before TVNavigationProvider
     window.addEventListener('keydown', handleKeyPress, true);
     return () => window.removeEventListener('keydown', handleKeyPress, true);
-  }, [currentTime, volume, showResumePrompt, showControls, focusedRow, focusedControlIndex, showSubtitles, showSettings, showServerMenu]);
+  }, [currentTime, volume, showResumePrompt, showControls, focusedRow, focusedControlIndex, showSubtitles, showSettings, showServerMenu, playbackSpeed]);
 
   // Alt + Scroll wheel for subtitle sync adjustment (using Alt instead of Ctrl to avoid browser zoom)
   useEffect(() => {
@@ -2212,6 +2256,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     }
     volumeIndicatorTimeoutRef.current = setTimeout(() => {
       setShowVolumeIndicator(false);
+    }, 1000);
+  };
+
+  // Change playback speed
+  const changeSpeed = (speed: number) => {
+    if (!videoRef.current) return;
+    videoRef.current.playbackRate = speed;
+    setPlaybackSpeed(speed);
+    // Show speed indicator briefly
+    setShowSpeedIndicator(true);
+    if (speedIndicatorTimeoutRef.current) {
+      clearTimeout(speedIndicatorTimeoutRef.current);
+    }
+    speedIndicatorTimeoutRef.current = setTimeout(() => {
+      setShowSpeedIndicator(false);
     }, 1000);
   };
 
@@ -2833,7 +2892,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     if (isPlaying && focusedRow < 0 && focusedControlIndex < 0) {
       controlsTimeoutRef.current = setTimeout(() => {
         setShowControls(false);
-      }, 3000);
+      }, 4000); // Hide after 4 seconds of no movement
     }
   }, [isPlaying, focusedRow, focusedControlIndex]);
 
@@ -2880,6 +2939,20 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       onClick={handleContainerClick}
       data-tv-skip-navigation="true"
     >
+      {/* Back button - controlled by showControls */}
+      {onBack && (showControls || !isPlaying) && (
+        <button 
+          onClick={(e) => { e.stopPropagation(); onBack(); }} 
+          className={styles.backButton}
+          data-player-back="true"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+          <span>Back</span>
+        </button>
+      )}
+
       {(isLoading || isBuffering) && (
         <div className={styles.loading}>
           <div className={styles.spinner} />
@@ -2968,6 +3041,35 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
           <span style={{ fontSize: '1.25rem' }}>📝</span>
           <span>
             Subtitle Sync: {subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}s
+          </span>
+        </div>
+      )}
+
+      {/* Playback speed indicator */}
+      {showSpeedIndicator && (
+        <div 
+          style={{
+            position: 'absolute',
+            top: '15%',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            color: 'white',
+            padding: '12px 24px',
+            borderRadius: '8px',
+            fontSize: '1rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            zIndex: 100,
+            animation: 'fadeIn 0.2s ease',
+            backdropFilter: 'blur(4px)',
+          }}
+        >
+          <span style={{ fontSize: '1.25rem' }}>⏩</span>
+          <span>
+            Speed: {playbackSpeed}x {playbackSpeed === 1 && '(Normal)'}
           </span>
         </div>
       )}
@@ -3832,6 +3934,24 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                           {currentResolution || 'Auto'}
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  {/* Playback Speed */}
+                  <div className={styles.settingsSection} style={{ borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '0.5rem', paddingTop: '0.75rem' }}>
+                    <div className={styles.settingsLabel}>
+                      Playback Speed <span style={{ opacity: 0.7, fontSize: '0.85em' }}>({playbackSpeed}x)</span>
+                    </div>
+                    <div className={styles.sourcesList}>
+                      {speedOptions.map((speed) => (
+                        <button
+                          key={speed}
+                          className={`${styles.settingsOption} ${playbackSpeed === speed ? styles.active : ''}`}
+                          onClick={() => changeSpeed(speed)}
+                        >
+                          {speed}x {speed === 1 && <span style={{ opacity: 0.6, marginLeft: '0.5rem' }}>(Normal)</span>}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
