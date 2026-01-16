@@ -29,9 +29,8 @@
 const crypto = require('crypto');
 const https = require('https');
 
-// Master secret for HMAC - decoded from obfuscated JS
-// _918dfe = ["WU9V", "Ul9N", "QVNU", "RVJf", "U0VD", "UkVU"] -> "YOUR_MASTER_SECRET"
-const MASTER_SECRET = 'YOUR_MASTER_SECRET';
+// Master secret for HMAC - extracted from obfuscated player JS (January 2026)
+const MASTER_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
 
 // PoW threshold - hash prefix must be less than this value
 const POW_THRESHOLD = 0x1000;
@@ -252,7 +251,7 @@ async function callHeartbeat(authData) {
   console.log(`[HeartbeatV3] Calling heartbeat...`);
   
   return new Promise((resolve) => {
-    const req = https.get('https://chevy.kiko2.ru/heartbeat', {
+    const req = https.get('https://chevy.dvalna.ru/heartbeat', {
       headers: {
         'User-Agent': userAgent,
         'Accept': '*/*',

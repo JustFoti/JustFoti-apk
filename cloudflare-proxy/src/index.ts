@@ -388,9 +388,19 @@ export default {
       
       try {
         const newUrl = new URL(request.url);
+        const originalSearch = newUrl.search; // Preserve query string
         newUrl.pathname = path.replace(/^\/tv/, '') || '/';
+        // Ensure query string is preserved
+        if (!newUrl.search && originalSearch) {
+          newUrl.search = originalSearch;
+        }
         const newRequest = new Request(newUrl.toString(), request);
-        logger.debug('TV proxy request', { newUrl: newUrl.toString() });
+        logger.debug('TV proxy request', { 
+          originalPath: path,
+          newPathname: newUrl.pathname,
+          search: newUrl.search,
+          fullUrl: newUrl.toString() 
+        });
         return await tvProxy.fetch(newRequest, env);
       } catch (error) {
         metrics.errors++;

@@ -1097,97 +1097,43 @@ const server = http.createServer(async (req, res) => {
   }
 
   // DLHD Key endpoint - fetches encryption key from residential IP
-  // The key server (chevy.kiko2.ru) blocks Cloudflare IPs
+  // The key server (chevy.dvalna.ru) blocks Cloudflare IPs
   // CF Worker calls this when direct key fetch fails
+  // Updated January 2026: Uses v3 auth module for full PoW authentication
   if (reqUrl.pathname === '/dlhd-key') {
     const targetUrl = reqUrl.searchParams.get('url');
-    const authToken = reqUrl.searchParams.get('auth_token');
-    const channelKey = reqUrl.searchParams.get('channel_key');
-    const clientToken = reqUrl.searchParams.get('client_token');
     
     if (!targetUrl) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       return res.end(JSON.stringify({ 
         error: 'Missing url parameter',
-        usage: '/dlhd-key?url=<key_url>&auth_token=<token>&channel_key=<key>&client_token=<token>'
+        usage: '/dlhd-key?url=<key_url>'
       }));
     }
     
-    console.log(`[DLHD-Key] Fetching key from residential IP: ${targetUrl.substring(0, 80)}...`);
+    console.log(`[DLHD-Key] Fetching key via v3 auth: ${targetUrl.substring(0, 80)}...`);
     
-    const url = new URL(targetUrl);
-    const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+    // Use v3 auth module which handles full flow (JWT fetch, PoW, key fetch)
+    const result = await dlhdAuthV3.fetchDLHDKeyV3(targetUrl);
     
-    // Build headers - use provided auth or fetch fresh
-    const headers = {
-      'User-Agent': userAgent,
-      'Accept': '*/*',
-      'Origin': 'https://epicplayplay.cfd',
-      'Referer': 'https://epicplayplay.cfd/',
-    };
-    
-    if (authToken) {
-      headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
-    }
-    if (channelKey) {
-      headers['X-Channel-Key'] = channelKey;
-    }
-    if (clientToken) {
-      headers['X-Client-Token'] = clientToken;
-    }
-    
-    console.log(`[DLHD-Key] Headers:`, JSON.stringify(headers, null, 2));
-    
-    const keyReq = https.request({
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      method: 'GET',
-      headers,
-      timeout: 10000,
-    }, (keyRes) => {
-      const chunks = [];
-      keyRes.on('data', chunk => chunks.push(chunk));
-      keyRes.on('end', () => {
-        const data = Buffer.concat(chunks);
-        const text = data.toString('utf8');
-        
-        console.log(`[DLHD-Key] Response: ${keyRes.statusCode}, ${data.length} bytes`);
-        
-        // Check for valid 16-byte key
-        if (data.length === 16 && !text.startsWith('{') && !text.startsWith('[')) {
-          console.log(`[DLHD-Key] ✅ Valid key: ${data.toString('hex')}`);
-          res.writeHead(200, {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': data.length,
-            'Access-Control-Allow-Origin': '*',
-            'X-Fetched-By': 'rpi-residential',
-          });
-          res.end(data);
-        } else {
-          console.log(`[DLHD-Key] Response: ${text.substring(0, 100)}`);
-          res.writeHead(keyRes.statusCode, {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': data.length,
-            'Access-Control-Allow-Origin': '*',
-          });
-          res.end(data);
-        }
+    if (result.success && result.data) {
+      console.log(`[DLHD-Key] ✅ Valid key via v3 auth: ${result.data.toString('hex')}`);
+      res.writeHead(200, {
+        'Content-Type': 'application/octet-stream',
+        'Content-Length': result.data.length,
+        'Access-Control-Allow-Origin': '*',
+        'X-Fetched-By': 'rpi-v3-auth',
       });
-    });
-    
-    keyReq.on('error', (err) => {
-      console.error(`[DLHD-Key] Error: ${err.message}`);
+      res.end(result.data);
+    } else {
+      console.log(`[DLHD-Key] ❌ v3 auth failed: ${result.error}`);
       res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify({ error: 'Key fetch failed', details: err.message }));
-    });
-    
-    keyReq.on('timeout', () => {
-      keyReq.destroy();
-      res.writeHead(504, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      res.end(JSON.stringify({ error: 'Key fetch timeout' }));
-    });
-    
-    keyReq.end();
+      res.end(JSON.stringify({ 
+        error: result.error || 'Key fetch failed',
+        code: result.code,
+        response: result.response?.substring(0, 200),
+      }));
+    }
     return;
   }
 

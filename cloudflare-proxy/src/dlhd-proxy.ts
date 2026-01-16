@@ -23,6 +23,8 @@ import { createLogger, type LogLevel } from './logger';
 
 export interface Env {
   LOG_LEVEL?: string;
+  RPI_PROXY_URL?: string;
+  RPI_PROXY_KEY?: string;
 }
 
 // =============================================================================
@@ -320,6 +322,9 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
   }
 }
 
+/** Fallback server keys to try if lookup fails */
+const FALLBACK_SERVER_KEYS = ['zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
+
 /**
  * Fetch server key from lookup endpoint
  */
@@ -336,16 +341,27 @@ async function fetchServerKey(channelKey: string, logger: any): Promise<string |
     });
 
     if (!response.ok) {
-      logger.warn('Server lookup failed', { status: response.status });
-      return null;
+      logger.warn('Server lookup failed, using fallback', { status: response.status });
+      return FALLBACK_SERVER_KEYS[0]; // Return first fallback
     }
 
-    const data = await response.json() as { server_key?: string };
-    logger.info('Server lookup success', { channelKey, serverKey: data.server_key });
-    return data.server_key || null;
+    const text = await response.text();
+    
+    // Check if response is JSON
+    if (text.startsWith('{')) {
+      const data = JSON.parse(text) as { server_key?: string };
+      if (data.server_key) {
+        logger.info('Server lookup success', { channelKey, serverKey: data.server_key });
+        return data.server_key;
+      }
+    }
+    
+    // Fallback if no server_key in response
+    logger.warn('No server_key in response, using fallback', { response: text.substring(0, 100) });
+    return FALLBACK_SERVER_KEYS[0];
   } catch (error) {
-    logger.error('Server lookup error', { error: (error as Error).message });
-    return null;
+    logger.error('Server lookup error, using fallback', { error: (error as Error).message });
+    return FALLBACK_SERVER_KEYS[0]; // Return fallback instead of null
   }
 }
 
@@ -437,14 +453,16 @@ function jsonResponse(data: object, status: number, origin?: string | null): Res
 /**
  * Handle health check
  */
-function handleHealthCheck(origin: string | null): Response {
+function handleHealthCheck(origin: string | null, env?: Env): Response {
   return jsonResponse({
     status: 'healthy',
     provider: 'dlhd',
-    version: '2.0.0',
+    version: '2.0.1',
     domain: CDN_DOMAIN,
     security: 'pow-auth',
     description: 'DLHD proxy with PoW authentication (January 2026)',
+    rpiConfigured: !!(env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY),
+    rpiUrlPreview: env?.RPI_PROXY_URL ? env.RPI_PROXY_URL.substring(0, 50) + '...' : 'not set',
     timestamp: new Date().toISOString(),
   }, 200, origin);
 }
@@ -476,37 +494,104 @@ async function handlePlaylistRequest(
   channel: string,
   proxyOrigin: string,
   logger: any,
-  origin: string | null
+  origin: string | null,
+  env?: Env
 ): Promise<Response> {
-  // Step 1: Get auth data
+  // Step 1: Get auth data (player page doesn't block CF IPs)
   const session = await fetchAuthData(channel, logger);
   if (!session) {
     return jsonResponse({ error: 'Failed to fetch auth data' }, 502, origin);
   }
 
-  // Step 2: Get server key
+  // Step 2: Get server key (server lookup doesn't block CF IPs)
   const serverKey = await fetchServerKey(session.channelKey, logger);
   if (!serverKey) {
     return jsonResponse({ error: 'Failed to fetch server key' }, 502, origin);
   }
 
-  // Step 3: Fetch M3U8
+  // Step 3: Fetch M3U8 - Try direct first, fall back to RPI if blocked
   const m3u8Url = constructM3U8Url(serverKey, session.channelKey);
   logger.info('Fetching M3U8', { m3u8Url });
   
   try {
-    const response = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Origin': `https://${PLAYER_DOMAIN}`,
-        'Referer': `https://${PLAYER_DOMAIN}/`,
-      },
-    });
-
-    const content = await response.text();
+    let content: string;
+    let fetchedVia = 'direct';
+    
+    // Try direct fetch first (dvalna.ru may not block CF IPs anymore)
+    try {
+      const directResponse = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Origin': `https://${PLAYER_DOMAIN}`,
+          'Referer': `https://${PLAYER_DOMAIN}/`,
+        },
+      });
+      
+      if (directResponse.ok) {
+        content = await directResponse.text();
+        if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
+          logger.info('Direct M3U8 fetch succeeded');
+          fetchedVia = 'direct';
+        } else {
+          throw new Error('Invalid M3U8 response from direct fetch');
+        }
+      } else {
+        throw new Error(`Direct fetch failed: ${directResponse.status}`);
+      }
+    } catch (directError) {
+      logger.warn('Direct M3U8 fetch failed, trying RPI proxy', { error: (directError as Error).message });
+      
+      // Fall back to RPI proxy if configured
+      if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
+        // Normalize RPI URL - same pattern as working animekai-proxy
+        let rpiBase = env.RPI_PROXY_URL;
+        if (!rpiBase.startsWith('http://') && !rpiBase.startsWith('https://')) {
+          rpiBase = `https://${rpiBase}`;
+        }
+        rpiBase = rpiBase.replace(/\/+$/, '');
+        
+        // Use /animekai endpoint for generic URL proxying
+        const rpiUrl = `${rpiBase}/animekai?key=${env.RPI_PROXY_KEY}&url=${encodeURIComponent(m3u8Url)}`;
+        logger.info('Calling RPI /animekai for M3U8', { m3u8Url, rpiUrl: rpiUrl.substring(0, 150) });
+        
+        const rpiResponse = await fetch(rpiUrl, {
+          signal: AbortSignal.timeout(30000),
+        });
+        
+        content = await rpiResponse.text();
+        logger.info('RPI response', { 
+          status: rpiResponse.status,
+          contentLength: content.length,
+          isM3U8: content.includes('#EXTM3U'),
+          preview: content.substring(0, 100),
+        });
+        
+        // Check if we got valid M3U8
+        if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
+          fetchedVia = 'rpi-proxy';
+        } else {
+          // RPI proxy worked but upstream returned error
+          return jsonResponse({ 
+            error: 'M3U8 fetch failed - upstream error', 
+            directError: (directError as Error).message,
+            rpiStatus: rpiResponse.status,
+            rpiResponse: content.substring(0, 300),
+            m3u8Url,
+            hint: 'dvalna.ru may be down or blocking requests',
+          }, 502, origin);
+        }
+      } else {
+        // No RPI proxy configured, return the direct error
+        return jsonResponse({ 
+          error: 'M3U8 fetch failed (direct)', 
+          details: (directError as Error).message,
+          hint: 'Configure RPI_PROXY_URL and RPI_PROXY_KEY if dvalna.ru blocks CF IPs',
+        }, 502, origin);
+      }
+    }
 
     if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
-      return jsonResponse({ error: 'Invalid M3U8 response' }, 502, origin);
+      return jsonResponse({ error: 'Invalid M3U8 response', preview: content.substring(0, 100) }, 502, origin);
     }
 
     // Rewrite M3U8 to proxy keys and segments
@@ -519,6 +604,7 @@ async function handlePlaylistRequest(
         'Cache-Control': 'no-store, no-cache, must-revalidate',
         'X-DLHD-Channel': channel,
         'X-DLHD-Server': serverKey,
+        'X-Fetched-Via': fetchedVia,
         ...corsHeaders(origin),
       },
     });
@@ -530,8 +616,9 @@ async function handlePlaylistRequest(
 
 /**
  * Handle key proxy request with PoW authentication
+ * Key server blocks CF IPs - must use RPI proxy
  */
-async function handleKeyProxy(url: URL, logger: any, origin: string | null): Promise<Response> {
+async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?: Env): Promise<Response> {
   const keyUrlParam = url.searchParams.get('url');
   const jwt = url.searchParams.get('jwt');
   
@@ -557,37 +644,86 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null): Pro
 
   const resource = keyMatch[1];
   const keyNumber = keyMatch[2];
-  const timestamp = Math.floor(Date.now() / 1000);
-
-  // Compute PoW nonce
-  const nonce = await computePoWNonce(resource, keyNumber, timestamp);
-  logger.info('Key fetch with PoW', { resource, keyNumber, timestamp, nonce });
+  
+  logger.info('Key fetch request', { resource, keyNumber });
 
   try {
-    const response = await fetch(keyUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Origin': `https://${PLAYER_DOMAIN}`,
-        'Referer': `https://${PLAYER_DOMAIN}/`,
-        'Authorization': `Bearer ${jwt}`,
-        'X-Key-Timestamp': timestamp.toString(),
-        'X-Key-Nonce': nonce.toString(),
-      },
-    });
+    let data: ArrayBuffer;
+    let fetchedVia = 'direct';
+    
+    // Compute PoW for direct fetch
+    const timestamp = Math.floor(Date.now() / 1000);
+    const nonce = await computePoWNonce(resource, keyNumber, timestamp);
+    
+    // Try direct fetch first (dvalna.ru may not block CF IPs anymore)
+    try {
+      logger.info('Trying direct key fetch with PoW', { timestamp, nonce });
+      
+      const directResponse = await fetch(keyUrl, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Origin': `https://${PLAYER_DOMAIN}`,
+          'Referer': `https://${PLAYER_DOMAIN}/`,
+          'Authorization': `Bearer ${jwt}`,
+          'X-Key-Timestamp': timestamp.toString(),
+          'X-Key-Nonce': nonce.toString(),
+        },
+      });
+      
+      data = await directResponse.arrayBuffer();
+      const text = new TextDecoder().decode(data);
+      
+      // Valid key is exactly 16 bytes (AES-128)
+      if (data.byteLength === 16 && !text.startsWith('{') && !text.startsWith('[')) {
+        logger.info('Direct key fetch succeeded');
+        fetchedVia = 'direct';
+      } else {
+        throw new Error(`Invalid key response: ${data.byteLength} bytes, preview: ${text.substring(0, 50)}`);
+      }
+    } catch (directError) {
+      logger.warn('Direct key fetch failed, trying RPI proxy', { error: (directError as Error).message });
+      
+      // Fall back to RPI proxy if configured
+      if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
+        const rpiKeyUrl = `${env.RPI_PROXY_URL}/dlhd-key?url=${encodeURIComponent(keyUrl)}&key=${env.RPI_PROXY_KEY}`;
+        const rpiRes = await fetch(rpiKeyUrl);
+        
+        if (!rpiRes.ok) {
+          const errText = await rpiRes.text();
+          logger.warn('RPI key fetch also failed', { status: rpiRes.status, error: errText });
+          return jsonResponse({ 
+            error: 'Key fetch failed (both direct and RPI)', 
+            directError: (directError as Error).message,
+            rpiStatus: rpiRes.status,
+            rpiError: errText.substring(0, 200)
+          }, 502, origin);
+        }
+        
+        data = await rpiRes.arrayBuffer();
+        fetchedVia = 'rpi-proxy';
+      } else {
+        // No RPI proxy configured, return the direct error
+        return jsonResponse({ 
+          error: 'Key fetch failed (direct)', 
+          details: (directError as Error).message,
+          hint: 'Configure RPI_PROXY_URL and RPI_PROXY_KEY if dvalna.ru blocks CF IPs',
+        }, 502, origin);
+      }
+    }
 
-    const data = await response.arrayBuffer();
     const text = new TextDecoder().decode(data);
 
     // Valid key is exactly 16 bytes (AES-128)
     if (data.byteLength === 16 && !text.startsWith('{') && !text.startsWith('[')) {
-      logger.info('Key fetched successfully');
+      logger.info('Key fetched successfully', { viaRpi: fetchedVia === 'rpi-proxy' });
       
       return new Response(data, {
         status: 200,
         headers: {
           'Content-Type': 'application/octet-stream',
           'Content-Length': '16',
-          'Cache-Control': 'private, max-age=30',
+          'Cache-Control': 'no-store, no-cache, must-revalidate',
+          'X-Fetched-Via': fetchedVia,
           ...corsHeaders(origin),
         },
       });
@@ -608,7 +744,23 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null): Pro
 /**
  * Handle segment proxy request
  */
-async function handleSegmentProxy(url: URL, logger: any, origin: string | null): Promise<Response> {
+
+// Known DLHD CDN domains that block Cloudflare IPs
+const DLHD_DOMAINS = ['dvalna.ru', 'kiko2.ru', 'giokko.ru'];
+
+/**
+ * Check if a URL is from a DLHD CDN domain that blocks CF IPs
+ */
+function isDLHDDomain(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    return DLHD_DOMAINS.some(domain => url.hostname.endsWith(domain));
+  } catch {
+    return false;
+  }
+}
+
+async function handleSegmentProxy(url: URL, logger: any, origin: string | null, env?: Env): Promise<Response> {
   const segmentUrl = url.searchParams.get('url');
   
   if (!segmentUrl) {
@@ -616,17 +768,68 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null):
   }
 
   const decodedUrl = decodeURIComponent(segmentUrl);
+  const isDlhd = isDLHDDomain(decodedUrl);
+  logger.info('Segment proxy request', { url: decodedUrl.substring(0, 80), isDlhd });
 
   try {
-    const response = await fetch(decodedUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Origin': `https://${PLAYER_DOMAIN}`,
-        'Referer': `https://${PLAYER_DOMAIN}/`,
-      },
-    });
+    let data: ArrayBuffer;
+    let fetchedVia = 'direct';
+    
+    // Always try direct fetch first for segments - they may not be blocked
+    // Only fall back to RPI if direct fails
+    try {
+      const directRes = await fetch(decodedUrl, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Origin': `https://${PLAYER_DOMAIN}`,
+          'Referer': `https://${PLAYER_DOMAIN}/`,
+        },
+      });
 
-    const data = await response.arrayBuffer();
+      if (!directRes.ok) {
+        throw new Error(`HTTP ${directRes.status}`);
+      }
+
+      data = await directRes.arrayBuffer();
+      
+      // Check if response is an error (JSON) - small responses are suspicious
+      if (data.byteLength < 1000) {
+        const text = new TextDecoder().decode(data);
+        if (text.startsWith('{') || text.includes('"error"') || text.includes('"msg"')) {
+          throw new Error(`Server error: ${text}`);
+        }
+      }
+      
+      logger.info('Direct segment fetch succeeded', { size: data.byteLength });
+    } catch (directError) {
+      // Only use RPI for DLHD domains when direct fails
+      if (isDlhd && env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
+        logger.warn('Direct segment fetch failed, trying RPI', { error: (directError as Error).message });
+        
+        const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}`;
+        const rpiRes = await fetch(rpiUrl);
+        
+        if (!rpiRes.ok) {
+          const errText = await rpiRes.text();
+          logger.warn('RPI segment fetch failed', { status: rpiRes.status, error: errText.substring(0, 100) });
+          return jsonResponse({ 
+            error: 'Segment fetch failed (both direct and RPI)', 
+            directError: (directError as Error).message,
+            rpiStatus: rpiRes.status,
+          }, 502, origin);
+        }
+        
+        data = await rpiRes.arrayBuffer();
+        fetchedVia = 'rpi-proxy';
+        logger.info('RPI segment fetch succeeded', { size: data.byteLength });
+      } else {
+        // Non-DLHD domain or RPI not configured - return direct error
+        return jsonResponse({ 
+          error: 'Segment fetch failed', 
+          details: (directError as Error).message,
+        }, 502, origin);
+      }
+    }
 
     return new Response(data, {
       status: 200,
@@ -634,12 +837,13 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null):
         'Content-Type': 'video/mp2t',
         'Cache-Control': 'public, max-age=300',
         'Content-Length': data.byteLength.toString(),
+        'X-Fetched-Via': fetchedVia,
         ...corsHeaders(origin),
       },
     });
   } catch (error) {
     logger.error('Segment fetch failed', { error: (error as Error).message });
-    return jsonResponse({ error: 'Segment fetch failed' }, 502, origin);
+    return jsonResponse({ error: 'Segment fetch failed', details: (error as Error).message }, 502, origin);
   }
 }
 
@@ -668,7 +872,7 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
 
   try {
     if (path === '/health') {
-      return handleHealthCheck(origin);
+      return handleHealthCheck(origin, env);
     }
 
     if (path === '/auth') {
@@ -680,11 +884,11 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
     }
 
     if (path === '/key') {
-      return handleKeyProxy(url, logger, origin);
+      return handleKeyProxy(url, logger, origin, env);
     }
 
     if (path === '/segment') {
-      return handleSegmentProxy(url, logger, origin);
+      return handleSegmentProxy(url, logger, origin, env);
     }
 
     // Main playlist request
@@ -696,7 +900,7 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
       }, 400, origin);
     }
 
-    return handlePlaylistRequest(channel, url.origin, logger, origin);
+    return handlePlaylistRequest(channel, url.origin, logger, origin, env);
   } catch (error) {
     logger.error('DLHD Proxy error', error as Error);
     return jsonResponse({
