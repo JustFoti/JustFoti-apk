@@ -1,23 +1,21 @@
 /**
- * DLHD Proxy - Cloudflare-Only Authentication
+ * DLHD Proxy - January 2026 Update
  *
  * Proxies daddyhd.com live streams through Cloudflare Workers.
- * NO RPI PROXY NEEDED - handles all auth directly!
+ * Domain changed from kiko2.ru to dvalna.ru.
+ * Key requests now require Proof-of-Work nonce computation.
  *
- * Authentication Flow (Dec 2024):
- *   1. Fetch player page → Get AUTH_TOKEN, CHANNEL_KEY, AUTH_COUNTRY, AUTH_TS
- *   2. Call heartbeat endpoint → Establish session
- *   3. Fetch key with session → Use Authorization + X-Channel-Key + X-Client-Token
- *
- * Key Discovery:
- *   The heartbeat and key endpoints work from CF Workers when proper headers are sent.
- *   The session is NOT IP-bound - it's token-bound via the Authorization header.
+ * Authentication Flow (January 2026):
+ *   1. Fetch player page → Extract JWT token (eyJ...)
+ *   2. Server lookup → Get server key (zeko, wind, etc.)
+ *   3. Fetch M3U8 → Get playlist with key URLs
+ *   4. Fetch key with PoW → Compute nonce, send with JWT
  *
  * Routes:
  *   GET /?channel=<id>           - Get proxied M3U8 playlist
- *   GET /key?url=<encoded_url>   - Proxy encryption key (handles auth)
- *   GET /segment?url=<encoded_url> - Proxy video segment
- *   GET /schedule                - Fetch live events schedule
+ *   GET /key?url=<url>&jwt=<jwt> - Proxy encryption key (with PoW)
+ *   GET /segment?url=<url>       - Proxy video segment
+ *   GET /auth?channel=<id>       - Get fresh JWT token
  *   GET /health                  - Health check
  */
 
@@ -25,515 +23,634 @@ import { createLogger, type LogLevel } from './logger';
 
 export interface Env {
   LOG_LEVEL?: string;
-  // RPI proxy for key fetches (key server blocks CF IPs)
-  RPI_PROXY_URL?: string;
-  RPI_PROXY_KEY?: string;
 }
 
-// Player domain for referer
+// =============================================================================
+// CONSTANTS
+// =============================================================================
+
 const PLAYER_DOMAIN = 'epicplayplay.cfd';
 const PARENT_DOMAIN = 'daddyhd.com';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
 
-// URL path variants on daddyhd.com that embed the player
-// Format: https://daddyhd.com/{path}/stream-{channel}.php
-const DADDYHD_PATH_VARIANTS = ['stream', 'cast', 'watch', 'plus', 'casting', 'player'];
+/** New domain (January 2026) - was kiko2.ru */
+const CDN_DOMAIN = 'dvalna.ru';
 
-// Standard user agent
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+/** HMAC secret for PoW computation (extracted from obfuscated player JS) */
+const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
 
-// ALL known server keys - try them all before giving up
-const ALL_SERVER_KEYS = ['zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
+/** PoW threshold - hash prefix must be less than this */
+const POW_THRESHOLD = 0x1000;
 
-// Both CDN domains to try
-const CDN_DOMAINS = ['kiko2.ru', 'giokko.ru'];
+/** Maximum PoW iterations */
+const POW_MAX_ITERATIONS = 100000;
 
-// In-memory cache for server keys (30 min TTL)
-const serverKeyCache = new Map<
-  string,
-  { serverKey: string; fetchedAt: number }
->();
-const SERVER_KEY_CACHE_TTL_MS = 30 * 60 * 1000;
+/** Session cache TTL (4 hours - JWT valid for 5) */
+const SESSION_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
-// Token pool per channel - rotate between multiple tokens to handle more concurrent users
-// DLHD limits ~4 concurrent channels per token, so we maintain a pool
-const TOKEN_POOL_SIZE = 5; // 5 tokens × 4 channels = ~20 concurrent streams per channel
-const SESSION_CACHE_TTL_MS = 4 * 60 * 1000; // 4 min TTL (shorter to refresh more often)
-
+// Session cache
 interface SessionData {
-  token: string;
+  jwt: string;
   channelKey: string;
   country: string;
-  timestamp: string;
+  iat: number;
+  exp: number;
   fetchedAt: number;
-  useCount: number; // Track usage to rotate
 }
+const sessionCache = new Map<string, SessionData>();
 
-// Map of channel -> array of session tokens
-const sessionPool = new Map<string, SessionData[]>();
-
-// Round-robin index per channel
-const sessionIndex = new Map<string, number>();
+// =============================================================================
+// CRYPTO HELPERS
+// =============================================================================
 
 /**
- * Get a session from the pool, rotating between available tokens
+ * Convert ArrayBuffer to hex string
  */
-function getSessionFromPool(channel: string): SessionData | null {
-  const pool = sessionPool.get(channel);
-  if (!pool || pool.length === 0) return null;
+function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
-  // Filter out expired sessions
-  const now = Date.now();
-  const validSessions = pool.filter(
-    (s) => now - s.fetchedAt < SESSION_CACHE_TTL_MS
+/**
+ * Compute HMAC-SHA256
+ */
+async function hmacSha256(key: string, data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const msgData = encoder.encode(data);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
+  
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, msgData);
+  return bufferToHex(signature);
+}
 
-  if (validSessions.length === 0) {
-    sessionPool.delete(channel);
+/**
+ * Compute MD5 hash (pure JS implementation for CF Workers)
+ */
+function md5(input: string): string {
+  const md5cycle = (x: number[], k: number[]) => {
+    let a = x[0], b = x[1], c = x[2], d = x[3];
+    
+    const ff = (a: number, b: number, c: number, d: number, x: number, s: number, t: number) => {
+      const n = a + ((b & c) | (~b & d)) + x + t;
+      return ((n << s) | (n >>> (32 - s))) + b;
+    };
+    const gg = (a: number, b: number, c: number, d: number, x: number, s: number, t: number) => {
+      const n = a + ((b & d) | (c & ~d)) + x + t;
+      return ((n << s) | (n >>> (32 - s))) + b;
+    };
+    const hh = (a: number, b: number, c: number, d: number, x: number, s: number, t: number) => {
+      const n = a + (b ^ c ^ d) + x + t;
+      return ((n << s) | (n >>> (32 - s))) + b;
+    };
+    const ii = (a: number, b: number, c: number, d: number, x: number, s: number, t: number) => {
+      const n = a + (c ^ (b | ~d)) + x + t;
+      return ((n << s) | (n >>> (32 - s))) + b;
+    };
+    
+    a = ff(a, b, c, d, k[0], 7, -680876936);
+    d = ff(d, a, b, c, k[1], 12, -389564586);
+    c = ff(c, d, a, b, k[2], 17, 606105819);
+    b = ff(b, c, d, a, k[3], 22, -1044525330);
+    a = ff(a, b, c, d, k[4], 7, -176418897);
+    d = ff(d, a, b, c, k[5], 12, 1200080426);
+    c = ff(c, d, a, b, k[6], 17, -1473231341);
+    b = ff(b, c, d, a, k[7], 22, -45705983);
+    a = ff(a, b, c, d, k[8], 7, 1770035416);
+    d = ff(d, a, b, c, k[9], 12, -1958414417);
+    c = ff(c, d, a, b, k[10], 17, -42063);
+    b = ff(b, c, d, a, k[11], 22, -1990404162);
+    a = ff(a, b, c, d, k[12], 7, 1804603682);
+    d = ff(d, a, b, c, k[13], 12, -40341101);
+    c = ff(c, d, a, b, k[14], 17, -1502002290);
+    b = ff(b, c, d, a, k[15], 22, 1236535329);
+    
+    a = gg(a, b, c, d, k[1], 5, -165796510);
+    d = gg(d, a, b, c, k[6], 9, -1069501632);
+    c = gg(c, d, a, b, k[11], 14, 643717713);
+    b = gg(b, c, d, a, k[0], 20, -373897302);
+    a = gg(a, b, c, d, k[5], 5, -701558691);
+    d = gg(d, a, b, c, k[10], 9, 38016083);
+    c = gg(c, d, a, b, k[15], 14, -660478335);
+    b = gg(b, c, d, a, k[4], 20, -405537848);
+    a = gg(a, b, c, d, k[9], 5, 568446438);
+    d = gg(d, a, b, c, k[14], 9, -1019803690);
+    c = gg(c, d, a, b, k[3], 14, -187363961);
+    b = gg(b, c, d, a, k[8], 20, 1163531501);
+    a = gg(a, b, c, d, k[13], 5, -1444681467);
+    d = gg(d, a, b, c, k[2], 9, -51403784);
+    c = gg(c, d, a, b, k[7], 14, 1735328473);
+    b = gg(b, c, d, a, k[12], 20, -1926607734);
+    
+    a = hh(a, b, c, d, k[5], 4, -378558);
+    d = hh(d, a, b, c, k[8], 11, -2022574463);
+    c = hh(c, d, a, b, k[11], 16, 1839030562);
+    b = hh(b, c, d, a, k[14], 23, -35309556);
+    a = hh(a, b, c, d, k[1], 4, -1530992060);
+    d = hh(d, a, b, c, k[4], 11, 1272893353);
+    c = hh(c, d, a, b, k[7], 16, -155497632);
+    b = hh(b, c, d, a, k[10], 23, -1094730640);
+    a = hh(a, b, c, d, k[13], 4, 681279174);
+    d = hh(d, a, b, c, k[0], 11, -358537222);
+    c = hh(c, d, a, b, k[3], 16, -722521979);
+    b = hh(b, c, d, a, k[6], 23, 76029189);
+    a = hh(a, b, c, d, k[9], 4, -640364487);
+    d = hh(d, a, b, c, k[12], 11, -421815835);
+    c = hh(c, d, a, b, k[15], 16, 530742520);
+    b = hh(b, c, d, a, k[2], 23, -995338651);
+    
+    a = ii(a, b, c, d, k[0], 6, -198630844);
+    d = ii(d, a, b, c, k[7], 10, 1126891415);
+    c = ii(c, d, a, b, k[14], 15, -1416354905);
+    b = ii(b, c, d, a, k[5], 21, -57434055);
+    a = ii(a, b, c, d, k[12], 6, 1700485571);
+    d = ii(d, a, b, c, k[3], 10, -1894986606);
+    c = ii(c, d, a, b, k[10], 15, -1051523);
+    b = ii(b, c, d, a, k[1], 21, -2054922799);
+    a = ii(a, b, c, d, k[8], 6, 1873313359);
+    d = ii(d, a, b, c, k[15], 10, -30611744);
+    c = ii(c, d, a, b, k[6], 15, -1560198380);
+    b = ii(b, c, d, a, k[13], 21, 1309151649);
+    a = ii(a, b, c, d, k[4], 6, -145523070);
+    d = ii(d, a, b, c, k[11], 10, -1120210379);
+    c = ii(c, d, a, b, k[2], 15, 718787259);
+    b = ii(b, c, d, a, k[9], 21, -343485551);
+    
+    x[0] = (a + x[0]) >>> 0;
+    x[1] = (b + x[1]) >>> 0;
+    x[2] = (c + x[2]) >>> 0;
+    x[3] = (d + x[3]) >>> 0;
+  };
+  
+  const md5blk = (s: string) => {
+    const md5blks: number[] = [];
+    for (let i = 0; i < 64; i += 4) {
+      md5blks[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) +
+        (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24);
+    }
+    return md5blks;
+  };
+  
+  let n = input.length;
+  const state = [1732584193, -271733879, -1732584194, 271733878];
+  let i: number;
+  
+  for (i = 64; i <= n; i += 64) {
+    md5cycle(state, md5blk(input.substring(i - 64, i)));
+  }
+  
+  input = input.substring(i - 64);
+  const tail = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (i = 0; i < input.length; i++) {
+    tail[i >> 2] |= input.charCodeAt(i) << ((i % 4) << 3);
+  }
+  tail[i >> 2] |= 0x80 << ((i % 4) << 3);
+  if (i > 55) {
+    md5cycle(state, tail);
+    for (i = 0; i < 16; i++) tail[i] = 0;
+  }
+  tail[14] = n * 8;
+  md5cycle(state, tail);
+  
+  const hex = (x: number) => {
+    const hc = '0123456789abcdef';
+    let s = '';
+    for (let j = 0; j < 4; j++) {
+      s += hc.charAt((x >> (j * 8 + 4)) & 0xF) + hc.charAt((x >> (j * 8)) & 0xF);
+    }
+    return s;
+  };
+  
+  return state.map(hex).join('');
+}
+
+/**
+ * Compute Proof-of-Work nonce for key request
+ */
+async function computePoWNonce(resource: string, keyNumber: string, timestamp: number): Promise<number> {
+  const hmac = await hmacSha256(HMAC_SECRET, resource);
+  
+  for (let i = 0; i < POW_MAX_ITERATIONS; i++) {
+    const data = `${hmac}${resource}${keyNumber}${timestamp}${i}`;
+    const hash = md5(data);
+    const prefix = parseInt(hash.substring(0, 4), 16);
+    
+    if (prefix < POW_THRESHOLD) {
+      return i;
+    }
+  }
+  
+  return POW_MAX_ITERATIONS - 1;
+}
+
+// =============================================================================
+// AUTH HELPERS
+// =============================================================================
+
+/**
+ * Fetch JWT token from player page
+ */
+async function fetchAuthData(channel: string, logger: any): Promise<SessionData | null> {
+  // Check cache first
+  const cached = sessionCache.get(channel);
+  if (cached && Date.now() - cached.fetchedAt < SESSION_CACHE_TTL_MS) {
+    logger.debug('Session cache hit', { channel });
+    return cached;
+  }
+
+  logger.info('Fetching fresh JWT', { channel });
+
+  try {
+    const url = `https://${PLAYER_DOMAIN}/premiumtv/daddyhd.php?id=${channel}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Referer': `https://${PARENT_DOMAIN}/`,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    const html = await response.text();
+    
+    // Find JWT token
+    const jwtMatch = html.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+    if (!jwtMatch) {
+      logger.warn('No JWT found in page', { channel });
+      return null;
+    }
+
+    const jwt = jwtMatch[0];
+    
+    // Decode payload
+    let channelKey = `premium${channel}`;
+    let country = 'US';
+    let iat = Math.floor(Date.now() / 1000);
+    let exp = iat + 18000;
+    
+    try {
+      const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(payloadB64));
+      channelKey = payload.sub || channelKey;
+      country = payload.country || country;
+      iat = payload.iat || iat;
+      exp = payload.exp || exp;
+    } catch {}
+
+    const session: SessionData = {
+      jwt,
+      channelKey,
+      country,
+      iat,
+      exp,
+      fetchedAt: Date.now(),
+    };
+
+    sessionCache.set(channel, session);
+    logger.info('JWT fetched and cached', { channel, channelKey, exp });
+    
+    return session;
+  } catch (error) {
+    logger.error('Auth fetch failed', { channel, error: (error as Error).message });
     return null;
   }
-
-  // Update pool with only valid sessions
-  sessionPool.set(channel, validSessions);
-
-  // Round-robin selection
-  let idx = sessionIndex.get(channel) || 0;
-  idx = idx % validSessions.length;
-  sessionIndex.set(channel, idx + 1);
-
-  const session = validSessions[idx];
-  session.useCount++;
-
-  return session;
 }
 
 /**
- * Add a new session to the pool
+ * Fetch server key from lookup endpoint
  */
-function addSessionToPool(channel: string, session: SessionData): void {
-  let pool = sessionPool.get(channel);
-  if (!pool) {
-    pool = [];
-    sessionPool.set(channel, pool);
-  }
+async function fetchServerKey(channelKey: string, logger: any): Promise<string | null> {
+  try {
+    const url = `https://chevy.${CDN_DOMAIN}/server_lookup?channel_id=${channelKey}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Origin': `https://${PLAYER_DOMAIN}`,
+        'Referer': `https://${PLAYER_DOMAIN}/`,
+      },
+    });
 
-  // Remove expired sessions
-  const now = Date.now();
-  pool = pool.filter((s) => now - s.fetchedAt < SESSION_CACHE_TTL_MS);
-
-  // Check if we already have this token
-  const existingIdx = pool.findIndex((s) => s.token === session.token);
-  if (existingIdx >= 0) {
-    pool[existingIdx] = session; // Update existing
-  } else if (pool.length < TOKEN_POOL_SIZE) {
-    pool.push(session); // Add new
-  } else {
-    // Replace oldest/most used
-    pool.sort((a, b) => b.useCount - a.useCount || a.fetchedAt - b.fetchedAt);
-    pool[pool.length - 1] = session;
-  }
-
-  sessionPool.set(channel, pool);
-}
-
-/**
- * Generate CLIENT_TOKEN for heartbeat/key authentication
- * Format: base64(channelKey|country|timestamp|userAgent|fingerprint)
- */
-function generateClientToken(
-  channelKey: string,
-  country: string,
-  timestamp: string,
-  userAgent: string
-): string {
-  const screen = '1920x1080';
-  const tz = 'America/New_York';
-  const lang = 'en-US';
-  const fingerprint = `${userAgent}|${screen}|${tz}|${lang}`;
-  const signData = `${channelKey}|${country}|${timestamp}|${userAgent}|${fingerprint}`;
-  return btoa(signData);
-}
-
-declare function btoa(str: string): string;
-
-/**
- * Get auth session for a channel
- * Uses token pool with rotation for better scalability
- */
-async function getSession(
-  channel: string,
-  logger: any,
-  forceNew: boolean = false
-): Promise<{
-  token: string;
-  channelKey: string;
-  country: string;
-  timestamp: string;
-} | null> {
-  // Try to get from pool first (unless forcing new)
-  if (!forceNew) {
-    const pooled = getSessionFromPool(channel);
-    if (pooled) {
-      logger.debug('Session from pool', { channel, useCount: pooled.useCount });
-      return pooled;
+    if (!response.ok) {
+      logger.warn('Server lookup failed', { status: response.status });
+      return null;
     }
+
+    const data = await response.json() as { server_key?: string };
+    logger.info('Server lookup success', { channelKey, serverKey: data.server_key });
+    return data.server_key || null;
+  } catch (error) {
+    logger.error('Server lookup error', { error: (error as Error).message });
+    return null;
+  }
+}
+
+/**
+ * Construct M3U8 URL for a channel
+ */
+function constructM3U8Url(serverKey: string, channelKey: string): string {
+  if (serverKey === 'top1/cdn') {
+    return `https://top1.${CDN_DOMAIN}/top1/cdn/${channelKey}/mono.css`;
+  }
+  return `https://${serverKey}new.${CDN_DOMAIN}/${serverKey}/${channelKey}/mono.css`;
+}
+
+/**
+ * Rewrite M3U8 to proxy keys and segments through our worker
+ */
+function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string, jwt: string): string {
+  let modified = content;
+
+  // Rewrite key URLs to proxy through us with JWT
+  modified = modified.replace(/URI="([^"]+)"/g, (_, originalKeyUrl) => {
+    let absoluteKeyUrl = originalKeyUrl;
+
+    if (!absoluteKeyUrl.startsWith('http')) {
+      try {
+        const base = new URL(m3u8BaseUrl);
+        absoluteKeyUrl = new URL(
+          absoluteKeyUrl,
+          base.origin + base.pathname.replace(/\/[^/]*$/, '/')
+        ).toString();
+      } catch {
+        const baseWithoutFile = m3u8BaseUrl.replace(/\/[^/]*$/, '/');
+        absoluteKeyUrl = baseWithoutFile + absoluteKeyUrl;
+      }
+    }
+
+    const params = new URLSearchParams({ url: absoluteKeyUrl, jwt });
+    return `URI="${proxyOrigin}/dlhd/key?${params.toString()}"`;
+  });
+
+  // Remove ENDLIST for live streams
+  modified = modified.replace(/\n?#EXT-X-ENDLIST\s*$/m, '');
+
+  // Proxy segment URLs
+  const lines = modified.split('\n');
+  const processedLines = lines.map((line) => {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    if (trimmed.includes('/dlhd/segment?')) return line;
+
+    const isAbsoluteUrl = trimmed.startsWith('http://') || trimmed.startsWith('https://');
+    const isDlhdSegment = trimmed.includes(`.${CDN_DOMAIN}/`);
+
+    if (isAbsoluteUrl && isDlhdSegment && !trimmed.includes('mono.css')) {
+      return `${proxyOrigin}/dlhd/segment?url=${encodeURIComponent(trimmed)}`;
+    }
+
+    return line;
+  });
+
+  return processedLines.join('\n');
+}
+
+// =============================================================================
+// RESPONSE HELPERS
+// =============================================================================
+
+function corsHeaders(origin?: string | null): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Range, Content-Type',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+  };
+}
+
+function jsonResponse(data: object, status: number, origin?: string | null): Response {
+  return new Response(JSON.stringify(data, null, 2), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+  });
+}
+
+// =============================================================================
+// REQUEST HANDLERS
+// =============================================================================
+
+/**
+ * Handle health check
+ */
+function handleHealthCheck(origin: string | null): Response {
+  return jsonResponse({
+    status: 'healthy',
+    provider: 'dlhd',
+    version: '2.0.0',
+    domain: CDN_DOMAIN,
+    security: 'pow-auth',
+    description: 'DLHD proxy with PoW authentication (January 2026)',
+    timestamp: new Date().toISOString(),
+  }, 200, origin);
+}
+
+/**
+ * Handle auth request - returns fresh JWT for a channel
+ */
+async function handleAuthRequest(channel: string, logger: any, origin: string | null): Promise<Response> {
+  const session = await fetchAuthData(channel, logger);
+  
+  if (!session) {
+    return jsonResponse({ error: 'Failed to fetch auth data' }, 502, origin);
   }
 
-  logger.info('Fetching fresh session', { channel });
+  return jsonResponse({
+    jwt: session.jwt,
+    channelKey: session.channelKey,
+    country: session.country,
+    iat: session.iat,
+    exp: session.exp,
+    expiresIn: session.exp - Math.floor(Date.now() / 1000),
+  }, 200, origin);
+}
 
-  // Try different referer paths
-  const refererPaths = DADDYHD_PATH_VARIANTS.map(
-    (path) => `https://${PARENT_DOMAIN}/${path}/stream-${channel}.php`
-  );
-  refererPaths.unshift(`https://${PARENT_DOMAIN}/watch.php?id=${channel}`);
+/**
+ * Handle playlist request
+ */
+async function handlePlaylistRequest(
+  channel: string,
+  proxyOrigin: string,
+  logger: any,
+  origin: string | null
+): Promise<Response> {
+  // Step 1: Get auth data
+  const session = await fetchAuthData(channel, logger);
+  if (!session) {
+    return jsonResponse({ error: 'Failed to fetch auth data' }, 502, origin);
+  }
 
-  for (const referer of refererPaths) {
-    try {
-      const playerUrl = `https://${PLAYER_DOMAIN}/premiumtv/daddyhd.php?id=${channel}`;
-      const response = await fetch(playerUrl, {
+  // Step 2: Get server key
+  const serverKey = await fetchServerKey(session.channelKey, logger);
+  if (!serverKey) {
+    return jsonResponse({ error: 'Failed to fetch server key' }, 502, origin);
+  }
+
+  // Step 3: Fetch M3U8
+  const m3u8Url = constructM3U8Url(serverKey, session.channelKey);
+  logger.info('Fetching M3U8', { m3u8Url });
+  
+  try {
+    const response = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Origin': `https://${PLAYER_DOMAIN}`,
+        'Referer': `https://${PLAYER_DOMAIN}/`,
+      },
+    });
+
+    const content = await response.text();
+
+    if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
+      return jsonResponse({ error: 'Invalid M3U8 response' }, 502, origin);
+    }
+
+    // Rewrite M3U8 to proxy keys and segments
+    const proxiedM3U8 = rewriteM3U8(content, proxyOrigin, m3u8Url, session.jwt);
+
+    return new Response(proxiedM3U8, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.apple.mpegurl',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'X-DLHD-Channel': channel,
+        'X-DLHD-Server': serverKey,
+        ...corsHeaders(origin),
+      },
+    });
+  } catch (error) {
+    logger.error('M3U8 fetch failed', { error: (error as Error).message });
+    return jsonResponse({ error: 'M3U8 fetch failed', details: (error as Error).message }, 502, origin);
+  }
+}
+
+/**
+ * Handle key proxy request with PoW authentication
+ */
+async function handleKeyProxy(url: URL, logger: any, origin: string | null): Promise<Response> {
+  const keyUrlParam = url.searchParams.get('url');
+  const jwt = url.searchParams.get('jwt');
+  
+  if (!keyUrlParam) {
+    return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
+  }
+  if (!jwt) {
+    return jsonResponse({ error: 'Missing jwt parameter' }, 400, origin);
+  }
+
+  let keyUrl: string;
+  try {
+    keyUrl = decodeURIComponent(keyUrlParam);
+  } catch {
+    keyUrl = keyUrlParam;
+  }
+
+  // Extract resource and key number from URL
+  const keyMatch = keyUrl.match(/\/key\/([^/]+)\/(\d+)/);
+  if (!keyMatch) {
+    return jsonResponse({ error: 'Invalid key URL format' }, 400, origin);
+  }
+
+  const resource = keyMatch[1];
+  const keyNumber = keyMatch[2];
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  // Compute PoW nonce
+  const nonce = await computePoWNonce(resource, keyNumber, timestamp);
+  logger.info('Key fetch with PoW', { resource, keyNumber, timestamp, nonce });
+
+  try {
+    const response = await fetch(keyUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Origin': `https://${PLAYER_DOMAIN}`,
+        'Referer': `https://${PLAYER_DOMAIN}/`,
+        'Authorization': `Bearer ${jwt}`,
+        'X-Key-Timestamp': timestamp.toString(),
+        'X-Key-Nonce': nonce.toString(),
+      },
+    });
+
+    const data = await response.arrayBuffer();
+    const text = new TextDecoder().decode(data);
+
+    // Valid key is exactly 16 bytes (AES-128)
+    if (data.byteLength === 16 && !text.startsWith('{') && !text.startsWith('[')) {
+      logger.info('Key fetched successfully');
+      
+      return new Response(data, {
+        status: 200,
         headers: {
-          'User-Agent': USER_AGENT,
-          Referer: referer,
-          Accept: 'text/html,application/xhtml+xml',
-          'Accept-Language': 'en-US,en;q=0.9',
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': '16',
+          'Cache-Control': 'private, max-age=30',
+          ...corsHeaders(origin),
         },
       });
-
-      if (!response.ok) {
-        logger.debug('Player page fetch failed', { status: response.status, referer });
-        continue;
-      }
-
-      const html = await response.text();
-
-      // Extract auth variables (xx.html redirect is client-side, we ignore it)
-      const tokenMatch = html.match(/AUTH_TOKEN\s*=\s*["']([^"']+)["']/);
-      const channelKeyMatch = html.match(/CHANNEL_KEY\s*=\s*["']([^"']+)["']/);
-      const countryMatch = html.match(/AUTH_COUNTRY\s*=\s*["']([^"']+)["']/);
-      const tsMatch = html.match(/AUTH_TS\s*=\s*["']([^"']+)["']/);
-
-      if (!tokenMatch) {
-        logger.debug('No AUTH_TOKEN found', { referer });
-        continue;
-      }
-
-      const session: SessionData = {
-        token: tokenMatch[1],
-        channelKey: channelKeyMatch?.[1] || `premium${channel}`,
-        country: countryMatch?.[1] || 'US',
-        timestamp: tsMatch?.[1] || String(Math.floor(Date.now() / 1000)),
-        fetchedAt: Date.now(),
-        useCount: 0,
-      };
-
-      // Add to pool
-      addSessionToPool(channel, session);
-
-      const poolSize = sessionPool.get(channel)?.length || 0;
-      logger.info('Session fetched and pooled', {
-        channel,
-        channelKey: session.channelKey,
-        poolSize,
-        referer,
-      });
-
-      return session;
-    } catch (error) {
-      logger.debug('Session fetch error', { referer, error: (error as Error).message });
-      continue;
     }
-  }
 
-  logger.warn('All referer paths failed', { channel });
-  return null;
+    logger.warn('Invalid key response', { length: data.byteLength, preview: text.substring(0, 50) });
+    return jsonResponse({
+      error: 'Invalid key response',
+      length: data.byteLength,
+      preview: text.substring(0, 100),
+    }, 502, origin);
+  } catch (error) {
+    logger.error('Key fetch failed', { error: (error as Error).message });
+    return jsonResponse({ error: 'Key fetch failed', details: (error as Error).message }, 502, origin);
+  }
 }
 
 /**
- * Call heartbeat to establish/extend session
+ * Handle segment proxy request
  */
-async function callHeartbeat(
-  session: { token: string; channelKey: string; country: string; timestamp: string },
-  logger: any
-): Promise<boolean> {
-  const clientToken = generateClientToken(
-    session.channelKey,
-    session.country,
-    session.timestamp,
-    USER_AGENT
-  );
+async function handleSegmentProxy(url: URL, logger: any, origin: string | null): Promise<Response> {
+  const segmentUrl = url.searchParams.get('url');
+  
+  if (!segmentUrl) {
+    return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
+  }
 
-  // Always use chevy for heartbeat - it's the only server with working heartbeat
-  const heartbeatUrl = 'https://chevy.kiko2.ru/heartbeat';
+  const decodedUrl = decodeURIComponent(segmentUrl);
 
   try {
-    const response = await fetch(heartbeatUrl, {
+    const response = await fetch(decodedUrl, {
       headers: {
         'User-Agent': USER_AGENT,
-        Accept: '*/*',
-        Origin: `https://${PLAYER_DOMAIN}`,
-        Referer: `https://${PLAYER_DOMAIN}/`,
-        Authorization: `Bearer ${session.token}`,
-        'X-Channel-Key': session.channelKey,
-        'X-Client-Token': clientToken,
+        'Origin': `https://${PLAYER_DOMAIN}`,
+        'Referer': `https://${PLAYER_DOMAIN}/`,
       },
     });
 
-    const text = await response.text();
-    logger.info('Heartbeat response', {
-      status: response.status,
-      body: text.substring(0, 100),
-    });
-
-    // Success responses: "Session created", "Session extended"
-    return (
-      response.ok &&
-      (text.includes('Session created') ||
-        text.includes('Session extended') ||
-        text.includes('"status":"ok"'))
-    );
-  } catch (error) {
-    logger.warn('Heartbeat failed', { error: (error as Error).message });
-    return false;
-  }
-}
-
-/**
- * Fetch encryption key - tries direct first, falls back to RPI proxy
- * The key server (chevy.kiko2.ru) blocks Cloudflare IPs, so RPI is needed
- */
-async function fetchKeyDirect(
-  keyUrl: string,
-  session: { token: string; channelKey: string; country: string; timestamp: string },
-  logger: any,
-  env?: Env
-): Promise<{ data: ArrayBuffer; success: boolean; error?: string }> {
-  const clientToken = generateClientToken(
-    session.channelKey,
-    session.country,
-    session.timestamp,
-    USER_AGENT
-  );
-
-  const authHeaders = {
-    'User-Agent': USER_AGENT,
-    Accept: '*/*',
-    Origin: `https://${PLAYER_DOMAIN}`,
-    Referer: `https://${PLAYER_DOMAIN}/`,
-    Authorization: `Bearer ${session.token}`,
-    'X-Channel-Key': session.channelKey,
-    'X-Client-Token': clientToken,
-  };
-
-  // Try direct fetch first (works from residential IPs, not CF)
-  try {
-    const response = await fetch(keyUrl, { headers: authHeaders });
     const data = await response.arrayBuffer();
-    const text = new TextDecoder().decode(data);
 
-    // Check for errors
-    if (text.includes('"E2"') || text.includes('Session must be created')) {
-      return { data, success: false, error: 'E2: Session not established' };
-    }
-    if (text.includes('"E3"') || text.includes('Token expired')) {
-      return { data, success: false, error: 'E3: Token expired' };
-    }
-
-    // Valid key is exactly 16 bytes and not JSON
-    if (data.byteLength === 16 && !text.startsWith('{') && !text.startsWith('[')) {
-      return { data, success: true };
-    }
-
-    // If we got HTML or weird response, key server is blocking CF IPs
-    if (text.includes('fetchpoolctx') || text.includes('<!doctype') || data.byteLength > 100) {
-      logger.info('Key server blocking CF IP, trying RPI proxy');
-      
-      // Fall back to RPI proxy if configured
-      if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-        return await fetchKeyViaRpi(keyUrl, authHeaders, env, logger);
-      }
-      
-      return {
-        data,
-        success: false,
-        error: 'Key server blocking CF IP, RPI proxy not configured',
-      };
-    }
-
-    return {
-      data,
-      success: false,
-      error: `Invalid key: ${data.byteLength} bytes, content: ${text.substring(0, 50)}`,
-    };
-  } catch (error) {
-    // On network error, try RPI proxy
-    if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-      logger.info('Direct fetch failed, trying RPI proxy', { error: (error as Error).message });
-      return await fetchKeyViaRpi(keyUrl, authHeaders, env, logger);
-    }
-    
-    return {
-      data: new ArrayBuffer(0),
-      success: false,
-      error: (error as Error).message,
-    };
-  }
-}
-
-/**
- * Fetch key via RPI residential proxy
- * Uses the /proxy endpoint which handles DLHD key auth internally
- */
-async function fetchKeyViaRpi(
-  keyUrl: string,
-  headers: Record<string, string>,
-  env: Env,
-  logger: any
-): Promise<{ data: ArrayBuffer; success: boolean; error?: string }> {
-  try {
-    let rpiBaseUrl = env.RPI_PROXY_URL!;
-    if (!rpiBaseUrl.startsWith('http://') && !rpiBaseUrl.startsWith('https://')) {
-      rpiBaseUrl = `https://${rpiBaseUrl}`;
-    }
-    // Strip trailing slash to avoid double-slash in URL path
-    rpiBaseUrl = rpiBaseUrl.replace(/\/+$/, '');
-
-    // Use the /proxy endpoint - RPI handles DLHD key auth internally
-    // The RPI proxy detects key URLs and fetches auth tokens automatically
-    const rpiParams = new URLSearchParams({
-      url: keyUrl,
-      key: env.RPI_PROXY_KEY!,
-    });
-
-    const rpiUrl = `${rpiBaseUrl}/proxy?${rpiParams.toString()}`;
-    logger.debug('Fetching key via RPI /proxy', { rpiUrl: rpiUrl.substring(0, 80) });
-
-    const response = await fetch(rpiUrl, {
-      signal: AbortSignal.timeout(15000),
-    });
-
-    const data = await response.arrayBuffer();
-    const text = new TextDecoder().decode(data);
-
-    logger.info('RPI proxy response', { 
-      status: response.status, 
-      size: data.byteLength,
-      preview: text.substring(0, 100)
-    });
-
-    // Check HTTP status first - RPI returns 502 on errors
-    if (!response.ok) {
-      // Try to parse error message from JSON response
-      try {
-        const errorJson = JSON.parse(text);
-        return { 
-          data, 
-          success: false, 
-          error: `RPI error ${response.status}: ${errorJson.error || errorJson.message || text.substring(0, 100)}` 
-        };
-      } catch {
-        return { data, success: false, error: `RPI error ${response.status}: ${text.substring(0, 100)}` };
-      }
-    }
-
-    // Check for auth errors in response body
-    if (text.includes('"E2"') || text.includes('"E3"')) {
-      return { data, success: false, error: `Auth error via RPI: ${text}` };
-    }
-
-    // Valid key is exactly 16 bytes
-    if (data.byteLength === 16 && !text.startsWith('{') && !text.startsWith('[')) {
-      logger.info('Key fetched via RPI successfully');
-      return { data, success: true };
-    }
-
-    return {
-      data,
-      success: false,
-      error: `Invalid key via RPI: ${data.byteLength} bytes, content: ${text.substring(0, 50)}`,
-    };
-  } catch (error) {
-    return {
-      data: new ArrayBuffer(0),
-      success: false,
-      error: `RPI proxy error: ${(error as Error).message}`,
-    };
-  }
-}
-
-/**
- * Extract channel from key URL
- */
-function extractChannelFromKeyUrl(keyUrl: string): string | null {
-  const match = keyUrl.match(/premium(\d+)/);
-  return match ? match[1] : null;
-}
-
-/**
- * Get server key from lookup endpoint
- */
-async function getServerKey(
-  channelKey: string,
-  logger: any
-): Promise<string> {
-  const cached = serverKeyCache.get(channelKey);
-  if (cached && Date.now() - cached.fetchedAt < SERVER_KEY_CACHE_TTL_MS) {
-    return cached.serverKey;
-  }
-
-  const lookupUrl = `https://chevy.giokko.ru/server_lookup?channel_id=${channelKey}`;
-
-  try {
-    const response = await fetch(lookupUrl, {
+    return new Response(data, {
+      status: 200,
       headers: {
-        'User-Agent': USER_AGENT,
-        Referer: `https://${PLAYER_DOMAIN}/`,
+        'Content-Type': 'video/mp2t',
+        'Cache-Control': 'public, max-age=300',
+        'Content-Length': data.byteLength.toString(),
+        ...corsHeaders(origin),
       },
     });
-
-    if (response.ok) {
-      const text = await response.text();
-      if (!text.startsWith('<')) {
-        const data = JSON.parse(text) as { server_key?: string };
-        if (data.server_key) {
-          serverKeyCache.set(channelKey, {
-            serverKey: data.server_key,
-            fetchedAt: Date.now(),
-          });
-          logger.info('Server lookup success', {
-            channelKey,
-            serverKey: data.server_key,
-          });
-          return data.server_key;
-        }
-      }
-    }
-  } catch (err) {
-    logger.warn('Server lookup failed', { error: (err as Error).message });
+  } catch (error) {
+    logger.error('Segment fetch failed', { error: (error as Error).message });
+    return jsonResponse({ error: 'Segment fetch failed' }, 502, origin);
   }
-
-  // Fallback to zeko
-  return 'zeko';
 }
 
-function constructM3U8Url(
-  serverKey: string,
-  channelKey: string,
-  domain: string
-): string {
-  if (serverKey === 'top1/cdn') {
-    return `https://top1.${domain}/top1/cdn/${channelKey}/mono.css`;
-  }
-  return `https://${serverKey}new.${domain}/${serverKey}/${channelKey}/mono.css`;
-}
+// =============================================================================
+// MAIN HANDLER
+// =============================================================================
 
-// ============================================================================
-// REQUEST HANDLERS
-// ============================================================================
-
-export async function handleDLHDRequest(
-  request: Request,
-  env: Env
-): Promise<Response> {
+/**
+ * Handle DLHD provider requests
+ */
+export async function handleDLHDRequest(request: Request, env: Env): Promise<Response> {
   const logLevel = (env.LOG_LEVEL || 'info') as LogLevel;
   const logger = createLogger(request, logLevel);
 
@@ -551,442 +668,40 @@ export async function handleDLHDRequest(
 
   try {
     if (path === '/health') {
-      // Calculate pool stats
-      let totalTokens = 0;
-      let totalChannels = 0;
-      const channelStats: Record<string, number> = {};
+      return handleHealthCheck(origin);
+    }
 
-      for (const [ch, pool] of sessionPool.entries()) {
-        const validCount = pool.filter(
-          (s) => Date.now() - s.fetchedAt < SESSION_CACHE_TTL_MS
-        ).length;
-        if (validCount > 0) {
-          totalChannels++;
-          totalTokens += validCount;
-          channelStats[ch] = validCount;
-        }
+    if (path === '/auth') {
+      const channel = url.searchParams.get('channel');
+      if (!channel) {
+        return jsonResponse({ error: 'Missing channel parameter' }, 400, origin);
       }
-
-      const hasRpi = !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY);
-
-      return jsonResponse(
-        {
-          status: 'healthy',
-          method: hasRpi ? 'cloudflare-with-rpi-fallback' : 'cloudflare-direct',
-          description: 'DLHD proxy with token pool rotation',
-          rpiProxy: {
-            configured: hasRpi,
-            note: hasRpi
-              ? 'RPI proxy available for key fetches (key server blocks CF IPs)'
-              : 'RPI proxy NOT configured - key fetches may fail from CF',
-          },
-          tokenPool: {
-            maxTokensPerChannel: TOKEN_POOL_SIZE,
-            activeChannels: totalChannels,
-            totalActiveTokens: totalTokens,
-            estimatedCapacity: `~${totalTokens * 4} concurrent streams`,
-            channels: channelStats,
-          },
-          timestamp: new Date().toISOString(),
-        },
-        200,
-        origin
-      );
+      return handleAuthRequest(channel, logger, origin);
     }
 
     if (path === '/key') {
-      return handleKeyProxy(url, logger, origin, env);
+      return handleKeyProxy(url, logger, origin);
     }
 
     if (path === '/segment') {
       return handleSegmentProxy(url, logger, origin);
     }
 
-    if (path === '/schedule') {
-      return handleScheduleRequest(url, logger, origin);
-    }
-
     // Main playlist request
     const channel = url.searchParams.get('channel');
     if (!channel) {
-      return jsonResponse(
-        {
-          error: 'Missing channel parameter',
-          usage: 'GET /dlhd?channel=51',
-        },
-        400,
-        origin
-      );
+      return jsonResponse({
+        error: 'Missing channel parameter',
+        usage: 'GET /dlhd?channel=51',
+      }, 400, origin);
     }
 
     return handlePlaylistRequest(channel, url.origin, logger, origin);
   } catch (error) {
     logger.error('DLHD Proxy error', error as Error);
-    return jsonResponse(
-      {
-        error: 'Proxy error',
-        message: error instanceof Error ? error.message : String(error),
-      },
-      500,
-      origin
-    );
+    return jsonResponse({
+      error: 'Proxy error',
+      message: error instanceof Error ? error.message : String(error),
+    }, 500, origin);
   }
 }
-
-async function handlePlaylistRequest(
-  channel: string,
-  proxyOrigin: string,
-  logger: any,
-  origin: string | null
-): Promise<Response> {
-  const channelKey = `premium${channel}`;
-
-  // Get server key
-  const initialServerKey = await getServerKey(channelKey, logger);
-  const serverKeysToTry = [
-    initialServerKey,
-    ...ALL_SERVER_KEYS.filter((k) => k !== initialServerKey),
-  ];
-
-  logger.info('Trying servers', { servers: serverKeysToTry });
-
-  const triedCombinations: string[] = [];
-  let lastError = '';
-
-  for (const serverKey of serverKeysToTry) {
-    for (const domain of CDN_DOMAINS) {
-      const combo = `${serverKey}@${domain}`;
-      triedCombinations.push(combo);
-
-      try {
-        const m3u8Url = constructM3U8Url(serverKey, channelKey, domain);
-        logger.info('Trying M3U8', { serverKey, domain, url: m3u8Url });
-
-        const response = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
-          headers: {
-            'User-Agent': USER_AGENT,
-            Referer: `https://${PLAYER_DOMAIN}/`,
-          },
-        });
-
-        const content = await response.text();
-
-        if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
-          // Cache this server
-          serverKeyCache.set(channelKey, {
-            serverKey,
-            fetchedAt: Date.now(),
-          });
-
-          logger.info('Found working server', { serverKey, domain });
-
-          // Rewrite M3U8 to proxy keys and segments
-          const proxiedM3U8 = rewriteM3U8(content, proxyOrigin, m3u8Url);
-
-          return new Response(proxiedM3U8, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/vnd.apple.mpegurl',
-              ...corsHeaders(origin),
-              'Cache-Control': 'no-store, no-cache, must-revalidate',
-              'X-DLHD-Channel': channel,
-              'X-DLHD-Server': serverKey,
-              'X-DLHD-Domain': domain,
-            },
-          });
-        }
-
-        lastError = `Invalid M3U8 from ${combo}`;
-      } catch (err) {
-        lastError = `Error from ${combo}: ${(err as Error).message}`;
-      }
-    }
-  }
-
-  return jsonResponse(
-    {
-      error: 'Failed to fetch M3U8',
-      details: lastError,
-      triedCombinations,
-    },
-    502,
-    origin
-  );
-}
-
-async function handleKeyProxy(
-  url: URL,
-  logger: any,
-  origin: string | null,
-  env: Env
-): Promise<Response> {
-  const keyUrlParam = url.searchParams.get('url');
-  if (!keyUrlParam) {
-    return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
-  }
-
-  let keyUrl = keyUrlParam;
-  try {
-    keyUrl = decodeURIComponent(keyUrl);
-  } catch {}
-
-  logger.info('Key proxy request', { keyUrl: keyUrl.substring(0, 80) });
-
-  const channel = extractChannelFromKeyUrl(keyUrl);
-  if (!channel) {
-    return jsonResponse({ error: 'Could not extract channel from key URL' }, 400, origin);
-  }
-
-  // DLHD key server blocks Cloudflare IPs, so we MUST use RPI proxy
-  // The RPI proxy handles auth token fetching, heartbeat, and key fetching internally
-  if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-    logger.info('Using RPI proxy for key fetch (CF IPs blocked by DLHD)');
-    
-    const result = await fetchKeyViaRpi(keyUrl, {}, env, logger);
-    
-    if (result.success) {
-      logger.info('Key fetched via RPI successfully', { size: result.data.byteLength });
-      return new Response(result.data, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/octet-stream',
-          'Content-Length': '16',
-          ...corsHeaders(origin),
-          'Cache-Control': 'private, max-age=30',
-          'X-Fetched-By': 'rpi-proxy',
-        },
-      });
-    }
-    
-    // RPI proxy failed - return error
-    return jsonResponse(
-      {
-        error: 'Key fetch failed via RPI proxy',
-        details: result.error,
-        hint: 'Check RPI proxy logs for details',
-      },
-      502,
-      origin
-    );
-  }
-
-  // No RPI proxy configured - try direct fetch (will likely fail from CF IPs)
-  logger.warn('RPI proxy not configured, attempting direct fetch (may fail)');
-  
-  // Get session from pool
-  const session = await getSession(channel, logger);
-  if (!session) {
-    return jsonResponse({ error: 'Failed to get auth session' }, 502, origin);
-  }
-
-  // Call heartbeat (will likely fail from CF IPs)
-  await callHeartbeat(session, logger);
-
-  // Fetch key directly (will likely fail without valid session)
-  const result = await fetchKeyDirect(keyUrl, session, logger, env);
-
-  if (result.success) {
-    logger.info('Key fetched successfully', { size: result.data.byteLength });
-    return new Response(result.data, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': '16',
-        ...corsHeaders(origin),
-        'Cache-Control': 'private, max-age=30',
-        'X-Fetched-By': 'cloudflare-direct',
-      },
-    });
-  }
-
-  return jsonResponse(
-    {
-      error: 'Key fetch failed',
-      details: result.error,
-      hint: 'Configure RPI_PROXY_URL and RPI_PROXY_KEY for reliable DLHD streaming',
-    },
-    502,
-    origin
-  );
-}
-
-async function handleSegmentProxy(
-  url: URL,
-  logger: any,
-  origin: string | null
-): Promise<Response> {
-  const segmentUrl = url.searchParams.get('url');
-  if (!segmentUrl) {
-    return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
-  }
-
-  const decodedUrl = decodeURIComponent(segmentUrl);
-
-  try {
-    const response = await fetch(decodedUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Referer: `https://${PLAYER_DOMAIN}/`,
-      },
-    });
-
-    const data = await response.arrayBuffer();
-
-    return new Response(data, {
-      status: 200,
-      headers: {
-        'Content-Type': 'video/mp2t',
-        ...corsHeaders(origin),
-        'Cache-Control': 'public, max-age=300',
-        'Content-Length': data.byteLength.toString(),
-      },
-    });
-  } catch (error) {
-    logger.error('Segment fetch failed', error as Error);
-    return jsonResponse({ error: 'Segment fetch failed' }, 502, origin);
-  }
-}
-
-async function handleScheduleRequest(
-  url: URL,
-  logger: any,
-  origin: string | null
-): Promise<Response> {
-  const source = url.searchParams.get('source');
-
-  try {
-    const dlhdUrl = source
-      ? `https://${PARENT_DOMAIN}/schedule-api.php?source=${source}`
-      : `https://${PARENT_DOMAIN}/`;
-
-    const response = await fetch(dlhdUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        Accept: 'text/html,application/json',
-        Referer: `https://${PARENT_DOMAIN}/`,
-      },
-    });
-
-    const content = await response.text();
-
-    // If JSON response, extract HTML
-    if (source) {
-      try {
-        const json = JSON.parse(content);
-        if (json.success && json.html) {
-          return new Response(json.html, {
-            status: 200,
-            headers: {
-              'Content-Type': 'text/html; charset=utf-8',
-              ...corsHeaders(origin),
-              'Cache-Control': 'public, max-age=60',
-            },
-          });
-        }
-      } catch {}
-    }
-
-    return new Response(content, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        ...corsHeaders(origin),
-        'Cache-Control': 'public, max-age=60',
-      },
-    });
-  } catch (error) {
-    logger.error('Schedule fetch failed', error as Error);
-    return jsonResponse({ error: 'Schedule fetch failed' }, 502, origin);
-  }
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-/**
- * Rewrite M3U8 to proxy keys and segments through our worker
- */
-function rewriteM3U8(
-  content: string,
-  proxyOrigin: string,
-  m3u8BaseUrl: string
-): string {
-  let modified = content;
-
-  // Rewrite ALL key URLs to use chevy.kiko2.ru and proxy through us
-  modified = modified.replace(/URI="([^"]+)"/g, (_, originalKeyUrl) => {
-    let absoluteKeyUrl = originalKeyUrl;
-
-    // Resolve relative URLs
-    if (!absoluteKeyUrl.startsWith('http')) {
-      try {
-        const base = new URL(m3u8BaseUrl);
-        absoluteKeyUrl = new URL(
-          absoluteKeyUrl,
-          base.origin + base.pathname.replace(/\/[^/]*$/, '/')
-        ).toString();
-      } catch {
-        const baseWithoutFile = m3u8BaseUrl.replace(/\/[^/]*$/, '/');
-        absoluteKeyUrl = baseWithoutFile + absoluteKeyUrl;
-      }
-    }
-
-    // Rewrite to use chevy.kiko2.ru (only server with working heartbeat)
-    const keyPathMatch = absoluteKeyUrl.match(/\/key\/premium\d+\/\d+/);
-    if (keyPathMatch) {
-      absoluteKeyUrl = `https://chevy.kiko2.ru${keyPathMatch[0]}`;
-    }
-
-    return `URI="${proxyOrigin}/dlhd/key?url=${encodeURIComponent(absoluteKeyUrl)}"`;
-  });
-
-  // Remove ENDLIST for live streams
-  modified = modified.replace(/\n?#EXT-X-ENDLIST\s*$/m, '');
-
-  // Proxy segment URLs
-  const lines = modified.split('\n');
-  const processedLines = lines.map((line) => {
-    const trimmed = line.trim();
-
-    if (!trimmed || trimmed.startsWith('#')) return line;
-    if (trimmed.includes('/dlhd/segment?')) return line;
-
-    const isAbsoluteUrl =
-      trimmed.startsWith('http://') || trimmed.startsWith('https://');
-    const isDlhdSegment =
-      trimmed.includes('.giokko.ru/') || trimmed.includes('.kiko2.ru/');
-
-    if (isAbsoluteUrl && isDlhdSegment && !trimmed.includes('mono.css')) {
-      return `${proxyOrigin}/dlhd/segment?url=${encodeURIComponent(trimmed)}`;
-    }
-
-    return line;
-  });
-
-  return processedLines.join('\n');
-}
-
-function corsHeaders(origin?: string | null): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Range, Content-Type',
-    'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
-  };
-}
-
-function jsonResponse(
-  data: object,
-  status: number,
-  origin?: string | null
-): Response {
-  return new Response(JSON.stringify(data, null, 2), {
-    status,
-    headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
-  });
-}
-
-export default {
-  fetch: handleDLHDRequest,
-};

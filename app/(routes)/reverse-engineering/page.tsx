@@ -410,59 +410,70 @@ export default function ReverseEngineeringPage() {
               
               <h3>Overview</h3>
               <p>
-                DLHD (daddyhd.com) provides live TV streams using HLS with AES-128 encryption. The key 
-                server initially appeared to block datacenter IPs, but reverse engineering their 
-                obfuscated JavaScript player revealed the real protection: Bearer token authentication.
+                DLHD (daddyhd.com) provides live TV streams using HLS with AES-128 encryption. 
+                As of January 2026, they switched to dvalna.ru domain with Proof-of-Work (PoW) 
+                authentication for key requests. The good news: the new domain doesn&apos;t block 
+                Cloudflare IPs, so no residential proxy is needed.
               </p>
 
-              <h3>The Algorithm</h3>
+              <h3>The Algorithm (January 2026)</h3>
               <div className={styles.flowContainer}>
                 <FlowStep num={1} title="Get Server Key" description="Call server_lookup?channel_id=premium{channel} to get CDN server" />
-                <FlowStep num={2} title="Fetch Auth Token" description="Get AUTH_TOKEN and CHANNEL_KEY from player page" />
-                <FlowStep num={3} title="Establish Heartbeat Session" description="Call heartbeat endpoint with auth headers. Returns session expiry (~5 hours)" />
-                <FlowStep num={4} title="Fetch M3U8 Playlist" description="Build URL: https://{server}new.kiko2.ru/{server}/premium{channel}/mono.css" />
-                <FlowStep num={5} title="Fetch Key with Session" description="Request key with Authorization: Bearer {token} + X-Channel-Key headers" />
+                <FlowStep num={2} title="Fetch M3U8 Playlist" description="Build URL: https://{server}new.dvalna.ru/{server}/premium{channel}/mono.css" />
+                <FlowStep num={3} title="Compute PoW Nonce" description="HMAC-SHA256 + MD5 hash with threshold check (prefix < 0x1000)" />
+                <FlowStep num={4} title="Generate JWT" description="Create JWT with resource, keyNumber, timestamp, nonce" />
+                <FlowStep num={5} title="Fetch Key with PoW" description="Request key with Authorization: Bearer {jwt} + X-Key-Timestamp + X-Key-Nonce headers" />
               </div>
 
-              <h3>Token Extraction</h3>
+              <h3>PoW Nonce Computation</h3>
               <CodeBlock 
-                title="Token Extraction"
-                id="dlhd-token"
+                title="Proof-of-Work Algorithm"
+                id="dlhd-pow"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
-                code={`// Fetch the player page
-const playerUrl = \`https://epicplayplay.cfd/premiumtv/daddyhd.php?id=\${channel}\`;
-const html = await fetch(playerUrl, {
-  headers: {
-    'User-Agent': 'Mozilla/5.0 ...',
-    'Referer': 'https://daddyhd.com/',
-  }
-}).then(r => r.text());
+                code={`const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+const POW_THRESHOLD = 0x1000;
 
-// Extract the auth token
-const match = html.match(/AUTH_TOKEN\\s*=\\s*["']([^"']+)["']/);
-const authToken = match[1];`}
+function computePoWNonce(resource, keyNumber, timestamp) {
+  const hmac = HMAC_SHA256(resource, HMAC_SECRET);
+  
+  for (let nonce = 0; nonce < 100000; nonce++) {
+    const data = hmac + resource + keyNumber + timestamp + nonce;
+    const hash = MD5(data);
+    const prefix = parseInt(hash.substring(0, 4), 16);
+    
+    if (prefix < POW_THRESHOLD) return nonce;
+  }
+  return null; // Failed to find valid nonce
+}`}
               />
 
-              <h3>Heartbeat Session (New in Dec 2025)</h3>
+              <h3>Key Request with PoW (January 2026)</h3>
               <CodeBlock 
-                title="Heartbeat Request"
-                id="dlhd-heartbeat"
+                title="Key Fetch with PoW Auth"
+                id="dlhd-key-pow"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
-                code={`// Establish session before fetching keys
-const heartbeatUrl = 'https://chevy.kiko2.ru/heartbeat';
-const response = await fetch(heartbeatUrl, {
-  method: 'GET',
+                code={`// Compute PoW nonce
+const timestamp = Math.floor(Date.now() / 1000);
+const nonce = computePoWNonce(channelKey, keyNumber, timestamp);
+
+// Generate JWT
+const jwt = generateJWT({ resource: channelKey, keyNumber, timestamp, nonce });
+
+// Fetch key with PoW headers
+const keyUrl = \`https://chevy.dvalna.ru/key/\${channelKey}/\${keyNumber}\`;
+const response = await fetch(keyUrl, {
   headers: {
-    'Authorization': \`Bearer \${authToken}\`,
-    'X-Channel-Key': channelKey,
+    'Authorization': \`Bearer \${jwt}\`,
+    'X-Key-Timestamp': timestamp.toString(),
+    'X-Key-Nonce': nonce.toString(),
     'Origin': 'https://epicplayplay.cfd',
     'Referer': 'https://epicplayplay.cfd/',
   }
 });
 
-// Response: {"expiry":1765944911,"message":"Session created","status":"ok"}`}
+// Response: 16-byte AES key`}
               />
 
               <h3>Error Codes</h3>
@@ -470,8 +481,8 @@ const response = await fetch(heartbeatUrl, {
                 <div className={styles.errorCode}>
                   <span className={styles.errorBadge}>E2</span>
                   <div>
-                    <code>&quot;Session must be created via heartbeat first&quot;</code>
-                    <p>Call heartbeat endpoint before fetching keys</p>
+                    <code>&quot;Invalid PoW nonce&quot;</code>
+                    <p>Nonce computation failed or hash prefix &gt;= 0x1000</p>
                   </div>
                 </div>
                 <div className={styles.errorCode}>

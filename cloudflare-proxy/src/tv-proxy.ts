@@ -8,7 +8,7 @@
  *
  * Routes:
  *   GET /?channel=<id>           - Get proxied M3U8 playlist (DLHD channels only)
- *   GET /key?url=<encoded_url>   - Proxy encryption key (with auth via RPI)
+ *   GET /key?url=<encoded_url>   - Proxy encryption key (with PoW auth)
  *   GET /segment?url=<encoded_url> - Proxy video segment
  *   GET /health                  - Health check
  * 
@@ -18,10 +18,11 @@
  * - PPV.to channels use /ppv/* routes
  * - NO IPTV/Stalker providers are used here
  * 
- * KEY FETCHING:
- * - DLHD key server (chevy.kiko2.ru) blocks Cloudflare IPs
- * - Key fetches are routed through RPI residential proxy
- * - RPI proxy handles auth token fetching and heartbeat internally
+ * KEY FETCHING (January 2026 Update):
+ * - Domain changed from kiko2.ru to dvalna.ru
+ * - Key requests now require Proof-of-Work (PoW) authentication
+ * - PoW: HMAC-SHA256 + MD5 nonce computation with threshold check
+ * - New dvalna.ru domain does NOT block Cloudflare IPs (no RPI needed)
  */
 
 import { createLogger, type LogLevel } from './logger';
@@ -50,10 +51,115 @@ const PARENT_DOMAIN = 'daddyhd.com';
 const DADDYHD_PATH_VARIANTS = ['stream', 'cast', 'watch', 'plus', 'casting', 'player'];
 
 const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 const ALL_SERVER_KEYS = ['zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
-const CDN_DOMAINS = ['kiko2.ru', 'giokko.ru'];
+
+/** New domain (January 2026) - was kiko2.ru/giokko.ru */
+const CDN_DOMAIN = 'dvalna.ru';
+
+/** PoW authentication constants (January 2026) */
+const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+const POW_THRESHOLD = 0x1000;
+const MAX_NONCE_ITERATIONS = 100000;
+
+/**
+ * Compute HMAC-SHA256 using Web Crypto API
+ */
+async function hmacSha256(message: string, secret: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+  
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  
+  const signature = await crypto.subtle.sign('HMAC', key, messageData);
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Compute MD5 hash (for PoW verification)
+ */
+async function md5Hash(message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(message);
+  const hashBuffer = await crypto.subtle.digest('MD5', data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Compute Proof-of-Work nonce for key authentication
+ * 
+ * Algorithm:
+ * 1. Compute HMAC-SHA256 of resource with secret
+ * 2. For each nonce 0..MAX_ITERATIONS:
+ *    - Concatenate: hmac + resource + keyNumber + timestamp + nonce
+ *    - Compute MD5 hash
+ *    - If first 4 hex chars < 0x1000, nonce is valid
+ */
+async function computePoWNonce(
+  resource: string,
+  keyNumber: string,
+  timestamp: number
+): Promise<number | null> {
+  const hmac = await hmacSha256(resource, HMAC_SECRET);
+  
+  for (let nonce = 0; nonce < MAX_NONCE_ITERATIONS; nonce++) {
+    const data = `${hmac}${resource}${keyNumber}${timestamp}${nonce}`;
+    const hash = await md5Hash(data);
+    const prefix = parseInt(hash.substring(0, 4), 16);
+    
+    if (prefix < POW_THRESHOLD) {
+      return nonce;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Generate JWT for key authentication
+ */
+async function generateKeyJWT(
+  resource: string,
+  keyNumber: string,
+  timestamp: number,
+  nonce: number
+): Promise<string> {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = {
+    resource,
+    keyNumber,
+    timestamp,
+    nonce,
+    exp: timestamp + 300, // 5 minute expiry
+  };
+  
+  const base64Header = btoa(JSON.stringify(header))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const base64Payload = btoa(JSON.stringify(payload))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  
+  const signatureInput = `${base64Header}.${base64Payload}`;
+  const signature = await hmacSha256(signatureInput, HMAC_SECRET);
+  
+  // Convert hex signature to base64url
+  const sigBytes = new Uint8Array(signature.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+  const base64Sig = btoa(String.fromCharCode(...sigBytes))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  
+  return `${base64Header}.${base64Payload}.${base64Sig}`;
+}
 
 // Caches
 const serverKeyCache = new Map<string, { serverKey: string; fetchedAt: number }>();
@@ -268,7 +374,7 @@ async function callHeartbeat(
   );
 
   try {
-    const response = await fetch('https://chevy.kiko2.ru/heartbeat', {
+    const response = await fetch(`https://chevy.${CDN_DOMAIN}/heartbeat`, {
       headers: {
         'User-Agent': USER_AGENT,
         Accept: '*/*',
@@ -439,7 +545,7 @@ async function getServerKey(channelKey: string, logger: any): Promise<string> {
 
   try {
     const response = await fetch(
-      `https://chevy.giokko.ru/server_lookup?channel_id=${channelKey}`,
+      `https://chevy.${CDN_DOMAIN}/server_lookup?channel_id=${channelKey}`,
       {
         headers: {
           'User-Agent': USER_AGENT,
@@ -503,17 +609,12 @@ export default {
 
     try {
       if (path === '/health') {
-        const hasRpi = !!(env.RPI_PROXY_URL && env.RPI_PROXY_KEY);
         return jsonResponse({
           status: 'healthy',
-          method: hasRpi ? 'cloudflare-with-rpi-fallback' : 'cloudflare-direct',
-          description: 'DLHD TV proxy',
-          rpiProxy: {
-            configured: hasRpi,
-            note: hasRpi
-              ? 'RPI proxy available for key fetches (key server blocks CF IPs)'
-              : 'RPI proxy NOT configured - key fetches may fail from CF',
-          },
+          method: 'cloudflare-pow',
+          description: 'DLHD TV proxy with PoW authentication',
+          domain: CDN_DOMAIN,
+          note: 'January 2026 update: dvalna.ru domain with PoW auth, no RPI proxy needed',
           timestamp: new Date().toISOString(),
         }, 200, requestOrigin);
       }
@@ -597,73 +698,71 @@ async function handlePlaylistRequest(
   let lastError = '';
 
   for (const serverKey of serverKeysToTry) {
-    for (const domain of CDN_DOMAINS) {
-      const combo = `${serverKey}@${domain}`;
-      triedCombinations.push(combo);
+    const combo = `${serverKey}@${CDN_DOMAIN}`;
+    triedCombinations.push(combo);
 
-      try {
-        const m3u8Url = constructM3U8Url(serverKey, channelKey, domain);
-        logger.info('Trying M3U8', { serverKey, domain });
+    try {
+      const m3u8Url = constructM3U8Url(serverKey, channelKey, CDN_DOMAIN);
+      logger.info('Trying M3U8', { serverKey, domain: CDN_DOMAIN });
 
-        // Retry logic with exponential backoff
-        let retryCount = 0;
-        const maxRetries = 2;
-        
-        while (retryCount <= maxRetries) {
-          try {
-            const response = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
+      // Retry logic with exponential backoff
+      let retryCount = 0;
+      const maxRetries = 2;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          const response = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
+            headers: {
+              'User-Agent': USER_AGENT,
+              Referer: `https://${PLAYER_DOMAIN}/`,
+            },
+            signal: AbortSignal.timeout(10000), // 10s timeout
+          });
+
+          const content = await response.text();
+
+          if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
+            serverKeyCache.set(channelKey, { serverKey, fetchedAt: Date.now() });
+            logger.info('Found working server', { serverKey, domain: CDN_DOMAIN, retryCount });
+
+            const proxiedM3U8 = rewriteM3U8(content, proxyOrigin, m3u8Url);
+
+            return new Response(proxiedM3U8, {
+              status: 200,
               headers: {
-                'User-Agent': USER_AGENT,
-                Referer: `https://${PLAYER_DOMAIN}/`,
+                'Content-Type': 'application/vnd.apple.mpegurl',
+                ...corsHeaders(origin),
+                'Cache-Control': 'no-store, no-cache, must-revalidate',
+                'X-DLHD-Channel': channel,
+                'X-DLHD-Server': serverKey,
+                'X-Retry-Count': retryCount.toString(),
               },
-              signal: AbortSignal.timeout(10000), // 10s timeout
             });
+          }
 
-            const content = await response.text();
-
-            if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
-              serverKeyCache.set(channelKey, { serverKey, fetchedAt: Date.now() });
-              logger.info('Found working server', { serverKey, domain, retryCount });
-
-              const proxiedM3U8 = rewriteM3U8(content, proxyOrigin, m3u8Url);
-
-              return new Response(proxiedM3U8, {
-                status: 200,
-                headers: {
-                  'Content-Type': 'application/vnd.apple.mpegurl',
-                  ...corsHeaders(origin),
-                  'Cache-Control': 'no-store, no-cache, must-revalidate',
-                  'X-DLHD-Channel': channel,
-                  'X-DLHD-Server': serverKey,
-                  'X-Retry-Count': retryCount.toString(),
-                },
-              });
-            }
-
-            // If response is not valid M3U8, break retry loop
-            lastError = `Invalid M3U8 from ${combo} (${content.substring(0, 100)})`;
-            break;
-          } catch (fetchErr) {
-            retryCount++;
-            const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000); // Max 5s delay
-            
-            if (retryCount <= maxRetries) {
-              logger.warn('M3U8 fetch failed, retrying', { 
-                serverKey, 
-                domain, 
-                retryCount, 
-                delay,
-                error: (fetchErr as Error).message 
-              });
-              await new Promise(resolve => setTimeout(resolve, delay));
-            } else {
-              lastError = `Error from ${combo} after ${maxRetries} retries: ${(fetchErr as Error).message}`;
-            }
+          // If response is not valid M3U8, break retry loop
+          lastError = `Invalid M3U8 from ${combo} (${content.substring(0, 100)})`;
+          break;
+        } catch (fetchErr) {
+          retryCount++;
+          const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 5000); // Max 5s delay
+          
+          if (retryCount <= maxRetries) {
+            logger.warn('M3U8 fetch failed, retrying', { 
+              serverKey, 
+              domain: CDN_DOMAIN, 
+              retryCount, 
+              delay,
+              error: (fetchErr as Error).message 
+            });
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            lastError = `Error from ${combo} after ${maxRetries} retries: ${(fetchErr as Error).message}`;
           }
         }
-      } catch (err) {
-        lastError = `Error from ${combo}: ${(err as Error).message}`;
       }
+    } catch (err) {
+      lastError = `Error from ${combo}: ${(err as Error).message}`;
     }
   }
 
@@ -671,7 +770,7 @@ async function handlePlaylistRequest(
     error: 'Failed to fetch M3U8', 
     details: lastError,
     triedCombinations: triedCombinations.length,
-    suggestion: 'Check if RPI proxy is configured for residential IP fallback'
+    note: 'New dvalna.ru domain - no RPI proxy needed'
   }, 502, origin);
 }
 
@@ -698,102 +797,84 @@ async function handleKeyProxy(
     return jsonResponse({ error: 'Could not extract channel' }, 400, origin);
   }
 
-  // DLHD key server blocks Cloudflare IPs, so we MUST use RPI proxy
-  if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-    logger.info('Using RPI proxy for key fetch (CF IPs blocked by DLHD)');
-    
-    const result = await fetchKeyViaRpi(keyUrl, env, logger);
-    
-    if (result.success) {
-      logger.info('Key fetched via RPI successfully', { size: result.data.byteLength });
-      return new Response(result.data, {
+  // Extract key number from URL (e.g., /key/premium51/5886102 -> 5886102)
+  const keyNumberMatch = keyUrl.match(/\/key\/premium\d+\/(\d+)/);
+  const keyNumber = keyNumberMatch ? keyNumberMatch[1] : '1';
+  const channelKey = `premium${channel}`;
+
+  // January 2026: New PoW authentication - no RPI proxy needed
+  // dvalna.ru doesn't block Cloudflare IPs
+  logger.info('Computing PoW for key fetch', { channel, keyNumber });
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const nonce = await computePoWNonce(channelKey, keyNumber, timestamp);
+
+  if (nonce === null) {
+    return jsonResponse({
+      error: 'Failed to compute PoW nonce',
+      details: 'Could not find valid nonce within iteration limit',
+    }, 500, origin);
+  }
+
+  const jwt = await generateKeyJWT(channelKey, keyNumber, timestamp, nonce);
+
+  // Construct key URL with new domain
+  const newKeyUrl = `https://chevy.${CDN_DOMAIN}/key/${channelKey}/${keyNumber}`;
+
+  try {
+    const response = await fetch(newKeyUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        Accept: '*/*',
+        Origin: `https://${PLAYER_DOMAIN}`,
+        Referer: `https://${PLAYER_DOMAIN}/`,
+        'Authorization': `Bearer ${jwt}`,
+        'X-Key-Timestamp': timestamp.toString(),
+        'X-Key-Nonce': nonce.toString(),
+      },
+    });
+
+    const data = await response.arrayBuffer();
+    const text = new TextDecoder().decode(data);
+
+    // Check for auth errors
+    if (text.includes('"error"') || text.includes('unauthorized') || text.includes('invalid')) {
+      logger.warn('Key auth failed', { status: response.status, response: text.substring(0, 100) });
+      return jsonResponse({
+        error: 'Key authentication failed',
+        details: text.substring(0, 200),
+        hint: 'PoW nonce may be invalid or expired',
+      }, 502, origin);
+    }
+
+    // Valid key is exactly 16 bytes
+    if (data.byteLength === 16 && !text.startsWith('{') && !text.startsWith('[')) {
+      logger.info('Key fetched successfully with PoW', { size: data.byteLength });
+      return new Response(data, {
         status: 200,
         headers: {
           'Content-Type': 'application/octet-stream',
           'Content-Length': '16',
           ...corsHeaders(origin),
           'Cache-Control': 'private, max-age=30',
-          'X-Fetched-By': 'rpi-proxy',
+          'X-Fetched-By': 'cloudflare-pow',
         },
       });
     }
-    
-    // RPI proxy failed - return error
-    return jsonResponse(
-      {
-        error: 'Key fetch failed via RPI proxy',
-        details: result.error,
-        hint: 'Check RPI proxy logs for details',
-      },
-      502,
-      origin
-    );
-  }
 
-  // No RPI proxy configured - try direct fetch (will likely fail from CF IPs)
-  logger.warn('RPI proxy not configured, attempting direct fetch (may fail)');
+    return jsonResponse({
+      error: 'Invalid key response',
+      details: `Got ${data.byteLength} bytes instead of 16`,
+      preview: text.substring(0, 100),
+    }, 502, origin);
 
-  // Get session from pool
-  const session = await getSession(channel, logger);
-  if (!session) {
-    return jsonResponse({ error: 'Failed to get auth session' }, 502, origin);
-  }
-
-  // Call heartbeat (may fail due to rate limit, but key fetch often still works)
-  await callHeartbeat(session, logger);
-
-  // Fetch key directly
-  const result = await fetchKeyDirect(keyUrl, session, logger);
-
-  if (result.success) {
-    logger.info('Key fetched successfully', { size: result.data.byteLength });
-    return new Response(result.data, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Length': '16',
-        ...corsHeaders(origin),
-        'Cache-Control': 'private, max-age=30',
-        'X-Fetched-By': 'cloudflare-direct',
-      },
-    });
-  }
-
-  // If E2/E3 error, get a fresh token and retry
-  if (result.error?.includes('E2') || result.error?.includes('E3')) {
-    logger.info('Auth error, fetching fresh session', { error: result.error });
-
-    const freshSession = await getSession(channel, logger, true); // Force new
-    if (freshSession) {
-      await callHeartbeat(freshSession, logger);
-      const retryResult = await fetchKeyDirect(keyUrl, freshSession, logger);
-
-      if (retryResult.success) {
-        return new Response(retryResult.data, {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'Content-Length': '16',
-            ...corsHeaders(origin),
-            'Cache-Control': 'private, max-age=30',
-            'X-Fetched-By': 'cloudflare-direct-retry',
-          },
-        });
-      }
-    }
-  }
-
-  return jsonResponse(
-    {
+  } catch (error) {
+    logger.error('Key fetch error', { error: (error as Error).message });
+    return jsonResponse({
       error: 'Key fetch failed',
-      details: result.error,
-      hint: 'Configure RPI_PROXY_URL and RPI_PROXY_KEY for reliable DLHD streaming',
-      channel,
-      sessionAge: session ? `${Math.floor((Date.now() - (session as any).fetchedAt) / 1000)}s` : 'unknown',
-    },
-    502,
-    origin
-  );
+      details: (error as Error).message,
+    }, 502, origin);
+  }
 }
 
 async function handleSegmentProxy(
@@ -835,7 +916,7 @@ async function handleSegmentProxy(
 function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string): string {
   let modified = content;
 
-  // Rewrite key URLs to proxy through us, always using chevy.kiko2.ru
+  // Rewrite key URLs to proxy through us, using new dvalna.ru domain
   modified = modified.replace(/URI="([^"]+)"/g, (_, originalKeyUrl) => {
     let absoluteKeyUrl = originalKeyUrl;
 
@@ -851,10 +932,10 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
       }
     }
 
-    // Rewrite to chevy.kiko2.ru
+    // Rewrite to chevy.dvalna.ru
     const keyPathMatch = absoluteKeyUrl.match(/\/key\/premium\d+\/\d+/);
     if (keyPathMatch) {
-      absoluteKeyUrl = `https://chevy.kiko2.ru${keyPathMatch[0]}`;
+      absoluteKeyUrl = `https://chevy.${CDN_DOMAIN}${keyPathMatch[0]}`;
     }
 
     return `URI="${proxyOrigin}/tv/key?url=${encodeURIComponent(absoluteKeyUrl)}"`;
@@ -871,7 +952,7 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
     if (trimmed.includes('/tv/segment?')) return line;
 
     const isAbsoluteUrl = trimmed.startsWith('http://') || trimmed.startsWith('https://');
-    const isDlhdSegment = trimmed.includes('.giokko.ru/') || trimmed.includes('.kiko2.ru/');
+    const isDlhdSegment = trimmed.includes('.dvalna.ru/');
 
     if (isAbsoluteUrl && isDlhdSegment && !trimmed.includes('mono.css')) {
       return `${proxyOrigin}/tv/segment?url=${encodeURIComponent(trimmed)}`;

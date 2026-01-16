@@ -1,120 +1,137 @@
-# DLHD Proxy - Cloudflare-Only Authentication
+# DLHD Proxy - Proof-of-Work Authentication (January 2026)
 
-This proxy routes daddyhd.com live streams through Cloudflare Workers with proper authentication.
+This proxy routes daddyhd.com live streams through Cloudflare Workers with PoW authentication.
 
-**NO RPI PROXY NEEDED!** The authentication works directly from Cloudflare Workers.
+**NO RPI PROXY NEEDED!** The new dvalna.ru domain doesn't block Cloudflare IPs.
 
-## Architecture (Dec 2024)
+## Architecture (January 2026)
 
 ```
-Browser → Cloudflare Worker → DLHD CDN (with auth headers)
+Browser → Cloudflare Worker → DLHD CDN (dvalna.ru with PoW auth)
 ```
+
+## What Changed (January 2026)
+
+| Before (Dec 2025) | After (Jan 2026) |
+|-------------------|------------------|
+| Domain: kiko2.ru, giokko.ru | Domain: dvalna.ru |
+| Auth: Bearer token + heartbeat | Auth: Proof-of-Work (PoW) |
+| Key server blocked CF IPs | Key server allows CF IPs |
+| Required RPI proxy fallback | No proxy needed |
 
 ## How It Works
 
 ### Authentication Flow
 
-DLHD uses a 3-step authentication process, all handled by the CF Worker:
+DLHD now uses Proof-of-Work authentication for key requests:
 
 ```
-1. Fetch Player Page → Get AUTH_TOKEN, CHANNEL_KEY, AUTH_COUNTRY, AUTH_TS
-2. Call Heartbeat → Establish Session  
-3. Fetch Key → Use Authorization + X-Channel-Key + X-Client-Token
+1. Fetch M3U8 Playlist → Get key URLs
+2. Compute PoW Nonce → HMAC-SHA256 + MD5 with threshold check
+3. Generate JWT → Include resource, keyNumber, timestamp, nonce
+4. Fetch Key → Use Authorization + X-Key-Timestamp + X-Key-Nonce
 ```
 
-### Step 1: Get Auth Token
+### Step 1: Get M3U8 Playlist
 
-Fetch the player page to extract the embedded auth token:
+Fetch the playlist directly (no auth needed):
 
 ```
-GET https://epicplayplay.cfd/premiumtv/daddyhd.php?id=<channel>
+GET https://{server}new.dvalna.ru/{server}/premium{channel}/mono.css
 Headers:
-  Referer: https://daddyhd.com/
+  Referer: https://epicplayplay.cfd/
 
-Response contains:
-  AUTH_TOKEN = "abc123..."
-  CHANNEL_KEY = "premium51"
-  AUTH_COUNTRY = "US"
-  AUTH_TS = "1766182626"
+Response: HLS playlist with encrypted segments
 ```
 
-### Step 2: Establish Heartbeat Session
+### Step 2: Compute PoW Nonce
 
-Call the heartbeat endpoint to create a session:
-
-```
-GET https://chevy.kiko2.ru/heartbeat
-Headers:
-  Authorization: Bearer <AUTH_TOKEN>
-  X-Channel-Key: premium<channel>
-  X-Client-Token: base64(channelKey|country|timestamp|userAgent|fingerprint)
-
-Response:
-  {"message":"Session created","status":"ok"}
-```
-
-### Step 3: Fetch Encryption Key
-
-With an active session, fetch the AES-128 encryption key:
-
-```
-GET https://chevy.kiko2.ru/key/premium51/<key_id>
-Headers:
-  Authorization: Bearer <AUTH_TOKEN>
-  X-Channel-Key: premium<channel>
-  X-Client-Token: <same as heartbeat>
-
-Response: 16-byte binary key
-```
-
-## X-Client-Token Format
-
-The client token is a base64-encoded fingerprint:
+The PoW algorithm finds a nonce where MD5 hash prefix < 0x1000:
 
 ```javascript
-function generateClientToken(channelKey, country, timestamp, userAgent) {
-  const screen = '1920x1080';
-  const tz = 'America/New_York';
-  const lang = 'en-US';
-  const fingerprint = `${userAgent}|${screen}|${tz}|${lang}`;
-  const signData = `${channelKey}|${country}|${timestamp}|${userAgent}|${fingerprint}`;
-  return btoa(signData);
+const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+const POW_THRESHOLD = 0x1000;
+
+function computePoWNonce(resource, keyNumber, timestamp) {
+  const hmac = HMAC_SHA256(resource, HMAC_SECRET);
+  
+  for (let nonce = 0; nonce < 100000; nonce++) {
+    const data = hmac + resource + keyNumber + timestamp + nonce;
+    const hash = MD5(data);
+    const prefix = parseInt(hash.substring(0, 4), 16);
+    
+    if (prefix < POW_THRESHOLD) return nonce;
+  }
+  return null;
 }
 ```
 
-## Error Codes
+### Step 3: Generate JWT
 
-| Error | Meaning | Solution |
-|-------|---------|----------|
-| `E2` | "Session must be created via heartbeat first" | Call heartbeat endpoint |
-| `E3` | Token expired or invalid | Refresh auth token from player page |
+Create a JWT with the PoW proof:
+
+```javascript
+function generateKeyJWT(resource, keyNumber, timestamp, nonce) {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const payload = {
+    resource,      // e.g., "premium51"
+    keyNumber,     // e.g., "5886102"
+    timestamp,     // Unix timestamp
+    nonce,         // Computed PoW nonce
+    exp: timestamp + 300  // 5 minute expiry
+  };
+  
+  return sign(header, payload, HMAC_SECRET);
+}
+```
+
+### Step 4: Fetch Encryption Key
+
+Request the key with PoW headers:
+
+```
+GET https://chevy.dvalna.ru/key/premium{channel}/{key_id}
+Headers:
+  Authorization: Bearer <JWT>
+  X-Key-Timestamp: <timestamp>
+  X-Key-Nonce: <nonce>
+  Referer: https://epicplayplay.cfd/
+
+Response: 16-byte AES-128 key
+```
 
 ## What Requires What?
 
-| Component | Auth Token | Heartbeat | Notes |
-|-----------|------------|-----------|-------|
-| Server Lookup | ❌ | ❌ | Public endpoint |
-| M3U8 Playlist | ❌ | ❌ | Public CDN |
-| **Encryption Key** | ✅ | ✅ | Requires full auth |
-| Video Segments | ❌ | ❌ | Public CDN |
+| Component | PoW Auth | Notes |
+|-----------|----------|-------|
+| Server Lookup | ❌ | Public endpoint |
+| M3U8 Playlist | ❌ | Public CDN |
+| **Encryption Key** | ✅ | Requires PoW JWT |
+| Video Segments | ❌ | Public CDN |
 
 ## Routes
 
 | Route | Description |
 |-------|-------------|
-| `GET /dlhd?channel=<id>` | Get proxied M3U8 playlist |
-| `GET /dlhd/key?url=<encoded_url>` | Proxy encryption key (handles auth) |
-| `GET /dlhd/segment?url=<encoded_url>` | Proxy video segment |
-| `GET /dlhd/schedule` | Fetch live events schedule |
-| `GET /dlhd/health` | Health check |
+| `GET /tv?channel=<id>` | Get proxied M3U8 playlist |
+| `GET /tv/key?url=<encoded_url>` | Proxy encryption key (handles PoW) |
+| `GET /tv/segment?url=<encoded_url>` | Proxy video segment |
+| `GET /tv/health` | Health check |
 
-## Session Management
+## Key Servers
 
-The Cloudflare Worker automatically:
-- Caches auth tokens per channel (5 min TTL)
-- Calls heartbeat before each key fetch
-- Retries with fresh session on E2 errors
-- Caches server keys (30 min TTL)
+All servers now use dvalna.ru domain:
+
+| Server Key | M3U8 URL Pattern |
+|------------|------------------|
+| zeko | `https://zekonew.dvalna.ru/zeko/premium{ch}/mono.css` |
+| chevy | `https://chevynew.dvalna.ru/chevy/premium{ch}/mono.css` |
+| wind | `https://windnew.dvalna.ru/wind/premium{ch}/mono.css` |
+| nfs | `https://nfsnew.dvalna.ru/nfs/premium{ch}/mono.css` |
+| ddy6 | `https://ddy6new.dvalna.ru/ddy6/premium{ch}/mono.css` |
+| top1/cdn | `https://top1.dvalna.ru/top1/cdn/premium{ch}/mono.css` |
+
+Key requests always go to: `https://chevy.dvalna.ru/key/premium{ch}/{key_id}`
 
 ## Setup
 
@@ -125,43 +142,27 @@ cd cloudflare-proxy
 npx wrangler deploy
 ```
 
-No secrets needed! The proxy handles all authentication internally.
+No secrets needed! The proxy handles PoW computation internally.
 
 ## Usage
 
 ```bash
 # Get a channel stream
-curl "https://your-worker.workers.dev/dlhd?channel=51"
+curl "https://your-worker.workers.dev/tv?channel=51"
 
 # Check health
-curl "https://your-worker.workers.dev/dlhd/health"
-
-# Test key fetching
-curl "https://your-worker.workers.dev/dlhd/key?url=https://chevy.kiko2.ru/key/premium51/5885916"
+curl "https://your-worker.workers.dev/tv/health"
 ```
-
-## Key Servers
-
-All key requests go to `chevy.kiko2.ru` - it's the only server with a working heartbeat endpoint.
-
-| Server Key | M3U8 URL Pattern |
-|------------|------------------|
-| zeko | `https://zekonew.kiko2.ru/zeko/premium{ch}/mono.css` |
-| chevy | `https://chevynew.kiko2.ru/chevy/premium{ch}/mono.css` |
-| wind | `https://windnew.kiko2.ru/wind/premium{ch}/mono.css` |
-| nfs | `https://nfsnew.kiko2.ru/nfs/premium{ch}/mono.css` |
-| ddy6 | `https://ddy6new.kiko2.ru/ddy6/premium{ch}/mono.css` |
-| top1/cdn | `https://top1.kiko2.ru/top1/cdn/premium{ch}/mono.css` |
 
 ## Troubleshooting
 
-### "Session must be created via heartbeat first" (E2)
-- The heartbeat call failed
-- Worker will automatically retry with fresh session
+### "Invalid PoW nonce"
+- Nonce computation failed
+- Check that HMAC_SECRET is correct
 
-### "Token expired" (E3)
-- Auth token expired
-- Worker will automatically refresh from player page
+### "Token expired"
+- JWT expired (5 minute window)
+- Worker will automatically recompute
 
 ### Stream keeps reconnecting
 - Normal for live streams
