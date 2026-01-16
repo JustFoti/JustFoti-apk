@@ -121,18 +121,26 @@ export function useVideoPlayer() {
       
       const hls = new Hls({
         enableWorker: true,
-        lowLatencyMode: true,
+        // Disable low latency mode - prioritize smooth playback over low latency
+        // This is important because DLHD segments go through RPI proxy which adds latency
+        lowLatencyMode: false,
         backBufferLength: 90,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        maxBufferSize: 60 * 1000 * 1000,
-        maxBufferHole: 0.5,
-        highBufferWatchdogPeriod: 2,
-        nudgeOffset: 0.1,
-        nudgeMaxRetry: 3,
-        maxFragLookUpTolerance: 0.25,
-        liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 10,
+        // Increase buffer sizes to handle slow segment fetches
+        maxBufferLength: 60,        // Buffer up to 60 seconds ahead (was 30)
+        maxMaxBufferLength: 120,    // Allow up to 120 seconds buffer (was 60)
+        maxBufferSize: 120 * 1000 * 1000, // 120MB buffer (was 60MB)
+        maxBufferHole: 1.0,         // Allow larger gaps (was 0.5)
+        highBufferWatchdogPeriod: 3, // Check buffer less frequently (was 2)
+        nudgeOffset: 0.2,           // Larger nudge offset (was 0.1)
+        nudgeMaxRetry: 5,           // More retries (was 3)
+        maxFragLookUpTolerance: 0.5, // More tolerance (was 0.25)
+        // Live stream settings - allow more latency for stability
+        liveSyncDurationCount: 5,   // Sync to 5 segments behind live (was 3)
+        liveMaxLatencyDurationCount: 15, // Allow up to 15 segments latency (was 10)
+        // Fragment loading settings
+        fragLoadingTimeOut: 30000,  // 30 second timeout for fragments
+        fragLoadingMaxRetry: 6,     // Retry fragment loading 6 times
+        fragLoadingRetryDelay: 1000, // 1 second between retries
       });
 
       hlsRef.current = hls;
@@ -163,24 +171,41 @@ export function useVideoPlayer() {
         console.error('HLS Error:', data);
         
         if (data.fatal) {
-          const errorMsg = data.details || 'Stream error';
-          if (errorMsg.includes('image') || errorMsg.includes('offline')) {
-            setState(prev => ({ 
-              ...prev, 
-              isLoading: false,
-              isBuffering: false,
-              loadingStage: 'idle',
-              error: 'This stream is not currently live. Please try again when the event starts.' 
-            }));
+          let errorMessage = 'Stream error';
+          
+          // Handle specific error types
+          if (data.type === 'networkError') {
+            if (data.details === 'manifestLoadError' || data.details === 'manifestParsingError') {
+              errorMessage = 'Channel unavailable. This channel may not exist or is temporarily offline.';
+            } else if (data.details === 'fragLoadError') {
+              errorMessage = 'Failed to load video segments. Please try again.';
+            } else if (data.details === 'keyLoadError') {
+              errorMessage = 'Failed to load decryption key. Please try again.';
+            } else {
+              errorMessage = 'Network error. Please check your connection and try again.';
+            }
+          } else if (data.type === 'mediaError') {
+            if (data.details?.includes('decrypt')) {
+              errorMessage = 'Decryption failed. The stream may have changed. Please refresh.';
+            } else {
+              errorMessage = 'Media playback error. Please try again.';
+            }
           } else {
-            setState(prev => ({ 
-              ...prev, 
-              isLoading: false,
-              isBuffering: false,
-              loadingStage: 'idle',
-              error: `Stream error: ${data.details}` 
-            }));
+            const details = data.details || '';
+            if (details.includes('image') || details.includes('offline')) {
+              errorMessage = 'This stream is not currently live. Please try again when the event starts.';
+            } else {
+              errorMessage = `Stream error: ${details}`;
+            }
           }
+          
+          setState(prev => ({ 
+            ...prev, 
+            isLoading: false,
+            isBuffering: false,
+            loadingStage: 'idle',
+            error: errorMessage 
+          }));
         }
       });
 
