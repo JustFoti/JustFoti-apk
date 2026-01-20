@@ -43,7 +43,7 @@
         "./app/services/*"
       ],
       "@/data/*": [
-        "./data/*"
+        "./app/data/*"
       ]
     },
     "plugins": [

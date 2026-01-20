@@ -3,30 +3,23 @@
 import { useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import type { MediaItem } from '@/types/media';
+import type { MALAnime } from '@/lib/services/mal';
 import { Navigation } from '@/components/layout/Navigation';
 import { Footer } from '@/components/layout/Footer';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 
-interface CategoryData {
-  items: MediaItem[];
-  total: number;
-}
-
 interface AnimePageClientProps {
-  popular: CategoryData;
-  topRated: CategoryData;
-  airing: CategoryData;
-  action: CategoryData;
-  fantasy: CategoryData;
-  romance: CategoryData;
-  movies: CategoryData;
+  popular: MALAnime[];
+  topRated: MALAnime[];
+  action: MALAnime[];
+  fantasy: MALAnime[];
+  romance: MALAnime[];
 }
 
 export default function AnimePageClient({
-  popular, topRated, airing, action, fantasy, romance, movies,
+  popular, topRated, action, fantasy, romance,
 }: AnimePageClientProps) {
   const router = useRouter();
   const { trackEvent } = useAnalytics();
@@ -39,20 +32,13 @@ export default function AnimePageClient({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleContentClick = useCallback((item: MediaItem, source: string) => {
-    trackEvent('content_clicked', { content_id: item.id, source });
-    router.push(`/details/${item.id}?type=${item.mediaType || 'tv'}`);
+  const handleContentClick = useCallback((anime: MALAnime, source: string) => {
+    trackEvent('content_clicked', { content_id: anime.mal_id, source });
+    router.push(`/anime/${anime.mal_id}`);
   }, [router, trackEvent]);
 
   const handleSearch = useCallback((query: string) => {
     if (query.trim()) router.push(`/search?q=${encodeURIComponent(query)}`);
-  }, [router]);
-
-  const handleSeeAll = useCallback((filter: string, genre?: string) => {
-    const params = new URLSearchParams({ type: filter === 'movies' ? 'anime-movies' : 'anime' });
-    if (filter && filter !== 'movies') params.set('filter', filter);
-    if (genre) params.set('genre', genre);
-    router.push(`/browse?${params.toString()}`);
   }, [router]);
 
   return (
@@ -67,27 +53,6 @@ export default function AnimePageClient({
             <div className="absolute top-0 left-1/4 w-64 md:w-[600px] h-64 md:h-[600px] bg-pink-500/10 rounded-full blur-[180px] animate-pulse" />
             <div className="absolute top-20 right-1/3 w-48 md:w-96 h-48 md:h-96 bg-fuchsia-600/10 rounded-full blur-[140px] animate-pulse" style={{ animationDelay: '0.5s' }} />
             <div className="absolute bottom-0 right-1/4 w-40 md:w-80 h-40 md:h-80 bg-violet-500/10 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }} />
-            
-            <div className="absolute top-20 left-10 opacity-10 hidden md:block">
-              <svg width="120" height="120" viewBox="0 0 100 100" className="text-pink-400">
-                <polygon points="50,5 61,40 98,40 68,62 79,97 50,75 21,97 32,62 2,40 39,40" fill="currentColor"/>
-              </svg>
-            </div>
-            <div className="absolute bottom-20 right-10 opacity-10 hidden md:block">
-              <svg width="80" height="80" viewBox="0 0 100 100" className="text-fuchsia-400">
-                <polygon points="50,5 61,40 98,40 68,62 79,97 50,75 21,97 32,62 2,40 39,40" fill="currentColor"/>
-              </svg>
-            </div>
-            
-            {[...Array(6)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute w-1 h-1 bg-pink-400/40 rounded-full hidden md:block"
-                style={{ left: `${15 + i * 15}%`, top: `${20 + (i % 3) * 20}%` }}
-                animate={{ y: [-10, 10, -10], opacity: [0.3, 0.7, 0.3] }}
-                transition={{ duration: 3 + i * 0.5, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            ))}
           </div>
 
           <div className="container mx-auto px-4 md:px-6 relative z-10">
@@ -112,7 +77,7 @@ export default function AnimePageClient({
                 </span>
               </h1>
               <p className="text-base md:text-lg lg:text-xl text-gray-400 max-w-2xl mx-auto px-4">
-                From shonen epics to slice-of-life gems — Japanese animation at its finest
+                Powered by MyAnimeList — Japanese animation at its finest
               </p>
 
               <motion.div
@@ -121,18 +86,11 @@ export default function AnimePageClient({
                 transition={{ delay: 0.4 }}
                 className="flex items-center justify-center gap-3 md:gap-6 mt-6 md:mt-8 flex-wrap px-4"
               >
-                <div className="flex items-center gap-1.5 md:gap-2 px-3 md:px-4 py-1.5 md:py-2 bg-pink-500/10 border border-pink-500/20 rounded-full">
-                  <span className="relative flex h-1.5 w-1.5 md:h-2 md:w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 md:h-2 md:w-2 bg-pink-500"></span>
-                  </span>
-                  <span className="text-xs md:text-sm text-pink-400 font-medium">{(airing?.total ?? 0).toLocaleString()} Currently Airing</span>
-                </div>
-                <div className="px-3 md:px-4 py-1.5 md:py-2 bg-fuchsia-500/10 border border-fuchsia-500/20 rounded-full">
-                  <span className="text-xs md:text-sm text-fuchsia-400 font-medium">🎬 {(movies?.total ?? 0).toLocaleString()} Movies</span>
+                <div className="px-3 md:px-4 py-1.5 md:py-2 bg-pink-500/10 border border-pink-500/20 rounded-full">
+                  <span className="text-xs md:text-sm text-pink-400 font-medium">🔥 {popular.length} Popular</span>
                 </div>
                 <div className="px-3 md:px-4 py-1.5 md:py-2 bg-purple-500/10 border border-purple-500/20 rounded-full">
-                  <span className="text-xs md:text-sm text-purple-400 font-medium">⭐ {(topRated?.total ?? 0).toLocaleString()} Top Rated</span>
+                  <span className="text-xs md:text-sm text-purple-400 font-medium">⭐ {topRated.length} Top Rated</span>
                 </div>
               </motion.div>
 
@@ -142,13 +100,11 @@ export default function AnimePageClient({
 
         {/* Content Sections */}
         <main className="pb-20 space-y-2">
-          <ContentRow title="📺 Currently Airing" data={airing} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('airing')} accentColor="pink" isAiring />
-          <ContentRow title="🔥 Popular Anime" data={popular} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('popular')} accentColor="fuchsia" />
-          <ContentRow title="⭐ Top Rated" data={topRated} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('top_rated')} accentColor="purple" />
-          <ContentRow title="⚔️ Action & Adventure" data={action} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('', 'action')} accentColor="red" />
-          <ContentRow title="✨ Fantasy & Sci-Fi" data={fantasy} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('', 'fantasy')} accentColor="violet" />
-          <ContentRow title="💕 Romance" data={romance} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('', 'romance')} accentColor="rose" />
-          <ContentRow title="🎬 Anime Movies" data={movies} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('movies')} accentColor="amber" isMovie />
+          <ContentRow title="🔥 Popular Anime" data={popular} onItemClick={handleContentClick} accentColor="fuchsia" />
+          <ContentRow title="⭐ Top Rated" data={topRated} onItemClick={handleContentClick} accentColor="purple" />
+          <ContentRow title="⚔️ Action & Adventure" data={action} onItemClick={handleContentClick} accentColor="red" />
+          <ContentRow title="✨ Fantasy & Sci-Fi" data={fantasy} onItemClick={handleContentClick} accentColor="violet" />
+          <ContentRow title="💕 Romance" data={romance} onItemClick={handleContentClick} accentColor="rose" />
         </main>
 
         <Footer />
@@ -164,25 +120,18 @@ const accentColors: Record<string, { bg: string; text: string; glow: string; bor
   red: { bg: 'bg-red-500', text: 'text-red-400', glow: 'shadow-red-500/50', border: 'border-red-500/30' },
   violet: { bg: 'bg-violet-500', text: 'text-violet-400', glow: 'shadow-violet-500/50', border: 'border-violet-500/30' },
   rose: { bg: 'bg-rose-500', text: 'text-rose-400', glow: 'shadow-rose-500/50', border: 'border-rose-500/30' },
-  amber: { bg: 'bg-amber-500', text: 'text-amber-400', glow: 'shadow-amber-500/50', border: 'border-amber-500/30' },
 };
 
 function ContentRow({ 
   title, 
   data, 
   onItemClick,
-  onSeeAll,
   accentColor = 'pink',
-  isAiring = false,
-  isMovie = false
 }: { 
   title: string; 
-  data: CategoryData; 
-  onItemClick: (item: MediaItem, source: string) => void;
-  onSeeAll: () => void;
+  data: MALAnime[]; 
+  onItemClick: (anime: MALAnime, source: string) => void;
   accentColor?: string;
-  isAiring?: boolean;
-  isMovie?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const colors = accentColors[accentColor] || accentColors.pink;
@@ -197,52 +146,26 @@ function ContentRow({
     }
   };
 
-  if (!data?.items?.length) return null;
+  if (!data?.length) return null;
 
   return (
     <section className="py-4 md:py-6 px-3 md:px-6">
       <div className="container mx-auto">
         <div className="flex items-center justify-between mb-3 md:mb-5">
-          <button
-            onClick={onSeeAll}
-            className="text-base sm:text-lg md:text-2xl font-bold text-white flex items-center gap-2 md:gap-3 hover:opacity-80 active:opacity-60 transition-opacity group min-h-[44px]"
-            data-tv-focusable="true"
-            data-tv-group={`anime-header-${title.toLowerCase().replace(/[^a-z]/g, '')}`}
-          >
+          <div className="text-base sm:text-lg md:text-2xl font-bold text-white flex items-center gap-2 md:gap-3 min-h-[44px]">
             {title}
-            {isAiring && (
-              <span className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 bg-pink-500/20 border border-pink-500/30 rounded-full text-xs font-medium text-pink-400">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-pink-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-pink-400"></span>
-                </span>
-                AIRING
-              </span>
-            )}
-            {isMovie && (
-              <span className="hidden sm:inline px-2 py-0.5 bg-amber-500/20 border border-amber-500/30 rounded-full text-xs font-medium text-amber-400">
-                FILMS
-              </span>
-            )}
-            <span className={`text-xs sm:text-sm font-normal ${colors.text}`}>({(data?.total ?? data?.items?.length ?? 0).toLocaleString()})</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className={`${colors.text} opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block`}>
-              <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-            </svg>
-          </button>
+            <span className={`text-xs sm:text-sm font-normal ${colors.text}`}>({data.length})</span>
+          </div>
           <div className="hidden sm:flex gap-2">
             <button
               onClick={() => scroll('left')}
-              className="w-8 h-8 md:w-9 md:h-9 bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-base md:text-lg font-bold"
-              data-tv-skip="true"
-              tabIndex={-1}
+              className="w-8 h-8 md:w-9 md:h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105"
             >
               ‹
             </button>
             <button
               onClick={() => scroll('right')}
-              className="w-8 h-8 md:w-9 md:h-9 bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105 text-base md:text-lg font-bold"
-              data-tv-skip="true"
-              tabIndex={-1}
+              className="w-8 h-8 md:w-9 md:h-9 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-white transition-all hover:scale-105"
             >
               ›
             </button>
@@ -252,77 +175,51 @@ function ContentRow({
         <div
           ref={scrollRef}
           className="flex gap-3 sm:gap-3 md:gap-4 overflow-x-auto scrollbar-hide pb-4 -mx-2 px-2"
-          style={{ 
-            scrollbarWidth: 'none', 
-            msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch'
-          }}
-          data-tv-scroll-container="true"
-          data-tv-group={`anime-${title.toLowerCase().replace(/[^a-z]/g, '')}`}
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
-          {data.items.map((item, index) => (
+          {data.map((anime, index) => (
             <motion.div
-              key={item.id}
+              key={anime.mal_id}
               initial={{ opacity: 0, scale: 0.9 }}
               whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true, margin: '-50px' }}
+              viewport={{ once: true }}
               transition={{ delay: Math.min(index * 0.03, 0.3) }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => onItemClick(item, title)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onItemClick(item, title); } }}
+              onClick={() => onItemClick(anime, title)}
               className="flex-shrink-0 w-[120px] sm:w-32 md:w-36 lg:w-44 cursor-pointer group"
-              data-tv-focusable="true"
-              tabIndex={0}
-              role="button"
-              aria-label={item.title || item.name || ''}
             >
               <motion.div
                 whileHover={{ scale: 1.05, y: -8 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                className={`relative rounded-lg md:rounded-xl overflow-hidden bg-gray-900 shadow-lg group-hover:shadow-xl transition-shadow ${isAiring ? `border ${colors.border}` : ''}`}
+                className="relative rounded-lg md:rounded-xl overflow-hidden bg-gray-900 shadow-lg"
               >
                 <img
-                  src={item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '/placeholder-poster.jpg'}
-                  alt={item.title || item.name || ''}
+                  src={anime.images.jpg.large_image_url || anime.images.jpg.image_url}
+                  alt={anime.title}
                   className="w-full aspect-[2/3] object-cover"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 sm:group-active:opacity-100 transition-opacity duration-300" />
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 sm:group-active:opacity-100 transition-all duration-300">
-                  <motion.div 
-                    whileHover={{ scale: 1.1 }}
-                    className={`w-10 h-10 md:w-12 md:h-12 ${colors.bg} rounded-full flex items-center justify-center shadow-lg`}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white" className="md:w-5 md:h-5">
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                  <div className={`w-10 h-10 md:w-12 md:h-12 ${colors.bg} rounded-full flex items-center justify-center shadow-lg`}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
                       <path d="M8 5v14l11-7z" />
                     </svg>
-                  </motion.div>
+                  </div>
                 </div>
-                {(item.vote_average ?? 0) > 0 && (
-                  <div className="absolute top-1.5 right-1.5 md:top-2 md:right-2 px-1 md:px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] md:text-xs font-semibold text-pink-400 flex items-center gap-0.5 md:gap-1">
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" className="md:w-2.5 md:h-2.5">
+                {anime.score && (
+                  <div className="absolute top-1.5 right-1.5 md:top-2 md:right-2 px-1 md:px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] md:text-xs font-semibold text-pink-400 flex items-center gap-0.5">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
                     </svg>
-                    {(item.vote_average ?? 0).toFixed(1)}
-                  </div>
-                )}
-                {isAiring && (
-                  <div className="absolute top-1.5 left-1.5 md:top-2 md:left-2 px-1 md:px-1.5 py-0.5 bg-pink-500/90 rounded text-[8px] md:text-[10px] font-bold text-white uppercase">
-                    New EP
-                  </div>
-                )}
-                {isMovie && (
-                  <div className="absolute top-1.5 left-1.5 md:top-2 md:left-2 px-1 md:px-1.5 py-0.5 bg-amber-500/90 rounded text-[8px] md:text-[10px] font-bold text-white uppercase">
-                    Film
+                    {anime.score.toFixed(1)}
                   </div>
                 )}
               </motion.div>
               <div className="mt-2 md:mt-2.5 px-0.5 md:px-1">
                 <h3 className="text-white font-medium text-xs sm:text-sm line-clamp-1 group-hover:text-pink-300 transition-colors">
-                  {item.title || item.name}
+                  {anime.title_english || anime.title}
                 </h3>
                 <p className="text-gray-500 text-[10px] sm:text-xs mt-0.5">
-                  {(item.first_air_date || item.release_date) ? new Date(item.first_air_date || item.release_date || '').getFullYear() : ''}
+                  {anime.year || ''} • {anime.episodes || '?'} eps
                 </p>
               </div>
             </motion.div>
