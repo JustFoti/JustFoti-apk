@@ -25,6 +25,75 @@ export interface Env {
   LOG_LEVEL?: string;
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
+  SIGNING_SECRET?: string;
+  RATE_LIMIT_KV?: KVNamespace;
+  ALLOWED_ORIGINS?: string;
+}
+
+// =============================================================================
+// SECURITY HELPERS
+// =============================================================================
+
+/**
+ * Allowed origins for DLHD access
+ */
+const ALLOWED_ORIGINS = [
+  'https://tv.vynx.cc',
+  'https://flyx.tv',
+  'https://www.flyx.tv',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  '.vercel.app',
+  '.pages.dev',
+  '.workers.dev',
+];
+
+/**
+ * Check if origin is allowed
+ */
+function isAllowedOrigin(origin: string): boolean {
+  return ALLOWED_ORIGINS.some(allowed => {
+    if (allowed.includes('localhost')) {
+      return origin.includes('localhost');
+    }
+    if (allowed.startsWith('.')) {
+      try {
+        const originHost = new URL(origin).hostname;
+        return originHost.endsWith(allowed);
+      } catch {
+        return false;
+      }
+    }
+    try {
+      const allowedHost = new URL(allowed).hostname;
+      const originHost = new URL(origin).hostname;
+      return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * Generate signature for request validation
+ */
+async function generateSignature(sessionId: string, resource: string, timestamp: number, secret: string): Promise<string> {
+  const data = `${sessionId}:${resource}:${timestamp}`;
+  const encoder = new TextEncoder();
+  
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(data));
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .substring(0, 32);
 }
 
 // =============================================================================
@@ -405,9 +474,43 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string, 
   // Remove ENDLIST for live streams
   modified = modified.replace(/\n?#EXT-X-ENDLIST\s*$/m, '');
 
-  // Proxy segment URLs
+  // Fix: DLHD now splits long segment URLs across multiple lines
+  // Join lines that are continuations of URLs (don't start with # or http)
   const lines = modified.split('\n');
-  const processedLines = lines.map((line) => {
+  const joinedLines: string[] = [];
+  let currentLine = '';
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    // If line starts with # or is empty, flush current and add this line
+    if (!trimmed || trimmed.startsWith('#')) {
+      if (currentLine) {
+        joinedLines.push(currentLine);
+        currentLine = '';
+      }
+      joinedLines.push(line);
+    }
+    // If line starts with http, it's a new URL
+    else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      if (currentLine) {
+        joinedLines.push(currentLine);
+      }
+      currentLine = trimmed;
+    }
+    // Otherwise it's a continuation of the previous URL
+    else {
+      currentLine += trimmed;
+    }
+  }
+  
+  // Don't forget the last line
+  if (currentLine) {
+    joinedLines.push(currentLine);
+  }
+
+  // Now proxy segment URLs
+  const processedLines = joinedLines.map((line) => {
     const trimmed = line.trim();
 
     if (!trimmed || trimmed.startsWith('#')) return line;
@@ -489,14 +592,51 @@ async function handleAuthRequest(channel: string, logger: any, origin: string | 
 
 /**
  * Handle playlist request
+ * REQUIRES: Signed token with session validation
  */
 async function handlePlaylistRequest(
   channel: string,
   proxyOrigin: string,
   logger: any,
   origin: string | null,
-  env?: Env
+  env?: Env,
+  request?: Request
 ): Promise<Response> {
+  // SECURITY: Validate origin first
+  if (!origin || !isAllowedOrigin(origin)) {
+    logger.warn('Unauthorized origin', { origin });
+    return jsonResponse({ error: 'Forbidden - invalid origin' }, 403, origin);
+  }
+
+  // SECURITY: Require authentication token
+  const token = request?.headers.get('x-dlhd-token');
+  const sessionId = request?.headers.get('x-session-id');
+  const fingerprint = request?.headers.get('x-fingerprint');
+  const timestamp = request?.headers.get('x-timestamp');
+  const signature = request?.headers.get('x-signature');
+
+  if (!token || !sessionId || !fingerprint || !timestamp || !signature) {
+    logger.warn('Missing auth headers', { channel });
+    return jsonResponse({ 
+      error: 'Authentication required',
+      hint: 'Use Quantum Shield to obtain access token'
+    }, 401, origin);
+  }
+
+  // SECURITY: Verify signature
+  const expectedSig = await generateSignature(sessionId, channel, parseInt(timestamp), env?.SIGNING_SECRET || '');
+  if (signature !== expectedSig) {
+    logger.warn('Invalid signature', { channel, sessionId: sessionId.substring(0, 8) });
+    return jsonResponse({ error: 'Invalid signature' }, 403, origin);
+  }
+
+  // SECURITY: Check token expiry (30 seconds)
+  const ts = parseInt(timestamp);
+  if (Date.now() - ts > 30000) {
+    logger.warn('Token expired', { channel, age: Date.now() - ts });
+    return jsonResponse({ error: 'Token expired' }, 401, origin);
+  }
+
   // Step 1: Get auth data (player page doesn't block CF IPs)
   const session = await fetchAuthData(channel, logger);
   if (!session) {
@@ -509,85 +649,58 @@ async function handlePlaylistRequest(
     return jsonResponse({ error: 'Failed to fetch server key' }, 502, origin);
   }
 
-  // Step 3: Fetch M3U8 - Try direct first, fall back to RPI if blocked
+  // Step 3: Fetch M3U8 - ALWAYS use RPI proxy (dvalna.ru blocks datacenter IPs)
   const m3u8Url = constructM3U8Url(serverKey, session.channelKey);
-  logger.info('Fetching M3U8', { m3u8Url });
+  logger.info('Fetching M3U8 via RPI proxy', { m3u8Url });
   
   try {
     let content: string;
-    let fetchedVia = 'direct';
+    let fetchedVia = 'rpi-proxy';
     
-    // Try direct fetch first (dvalna.ru may not block CF IPs anymore)
-    try {
-      const directResponse = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Origin': `https://${PLAYER_DOMAIN}`,
-          'Referer': `https://${PLAYER_DOMAIN}/`,
-        },
-      });
-      
-      if (directResponse.ok) {
-        content = await directResponse.text();
-        if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
-          logger.info('Direct M3U8 fetch succeeded');
-          fetchedVia = 'direct';
-        } else {
-          throw new Error('Invalid M3U8 response from direct fetch');
-        }
-      } else {
-        throw new Error(`Direct fetch failed: ${directResponse.status}`);
-      }
-    } catch (directError) {
-      logger.warn('Direct M3U8 fetch failed, trying RPI proxy', { error: (directError as Error).message });
-      
-      // Fall back to RPI proxy if configured
-      if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-        // Normalize RPI URL - same pattern as working animekai-proxy
-        let rpiBase = env.RPI_PROXY_URL;
-        if (!rpiBase.startsWith('http://') && !rpiBase.startsWith('https://')) {
-          rpiBase = `https://${rpiBase}`;
-        }
-        rpiBase = rpiBase.replace(/\/+$/, '');
-        
-        // Use /animekai endpoint for generic URL proxying
-        const rpiUrl = `${rpiBase}/animekai?key=${env.RPI_PROXY_KEY}&url=${encodeURIComponent(m3u8Url)}`;
-        logger.info('Calling RPI /animekai for M3U8', { m3u8Url, rpiUrl: rpiUrl.substring(0, 150) });
-        
-        const rpiResponse = await fetch(rpiUrl, {
-          signal: AbortSignal.timeout(30000),
-        });
-        
-        content = await rpiResponse.text();
-        logger.info('RPI response', { 
-          status: rpiResponse.status,
-          contentLength: content.length,
-          isM3U8: content.includes('#EXTM3U'),
-          preview: content.substring(0, 100),
-        });
-        
-        // Check if we got valid M3U8
-        if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
-          fetchedVia = 'rpi-proxy';
-        } else {
-          // RPI proxy worked but upstream returned error
-          return jsonResponse({ 
-            error: 'M3U8 fetch failed - upstream error', 
-            directError: (directError as Error).message,
-            rpiStatus: rpiResponse.status,
-            rpiResponse: content.substring(0, 300),
-            m3u8Url,
-            hint: 'dvalna.ru may be down or blocking requests',
-          }, 502, origin);
-        }
-      } else {
-        // No RPI proxy configured, return the direct error
-        return jsonResponse({ 
-          error: 'M3U8 fetch failed (direct)', 
-          details: (directError as Error).message,
-          hint: 'Configure RPI_PROXY_URL and RPI_PROXY_KEY if dvalna.ru blocks CF IPs',
-        }, 502, origin);
-      }
+    // ALWAYS route through RPI proxy - dvalna.ru blocks Cloudflare Worker IPs
+    if (!env?.RPI_PROXY_URL || !env?.RPI_PROXY_KEY) {
+      return jsonResponse({ 
+        error: 'RPI proxy not configured', 
+        hint: 'DLHD requires residential IP. Configure RPI_PROXY_URL and RPI_PROXY_KEY in Cloudflare Worker secrets.',
+      }, 503, origin);
+    }
+    
+    let rpiBase = env.RPI_PROXY_URL;
+    if (!rpiBase.startsWith('http://') && !rpiBase.startsWith('https://')) {
+      rpiBase = `https://${rpiBase}`;
+    }
+    rpiBase = rpiBase.replace(/\/+$/, '');
+    
+    // Use /proxy endpoint for generic URL proxying
+    const rpiUrl = `${rpiBase}/proxy?key=${env.RPI_PROXY_KEY}&url=${encodeURIComponent(m3u8Url)}`;
+    logger.info('Calling RPI /proxy for M3U8', { 
+      rpiBase,
+      rpiUrl: rpiUrl.substring(0, 200),
+      m3u8Url,
+      hasKey: !!env.RPI_PROXY_KEY,
+      // Don't log key length - security risk
+    });
+    
+    const rpiResponse = await fetch(rpiUrl, {
+      signal: AbortSignal.timeout(30000),
+    });
+    
+    content = await rpiResponse.text();
+    logger.info('RPI response', { 
+      status: rpiResponse.status,
+      contentLength: content.length,
+      isM3U8: content.includes('#EXTM3U'),
+      preview: content.substring(0, 100),
+    });
+    
+    if (!rpiResponse.ok || (!content.includes('#EXTM3U') && !content.includes('#EXT-X-'))) {
+      return jsonResponse({ 
+        error: 'M3U8 fetch failed via RPI proxy', 
+        rpiStatus: rpiResponse.status,
+        rpiResponse: content.substring(0, 300),
+        m3u8Url,
+        hint: 'RPI proxy returned error. Check if RPI proxy is running and accessible.',
+      }, 502, origin);
     }
 
     if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
@@ -760,11 +873,32 @@ function isDLHDDomain(urlString: string): boolean {
   }
 }
 
-async function handleSegmentProxy(url: URL, logger: any, origin: string | null, env?: Env): Promise<Response> {
+/**
+ * Handle segment proxy request
+ * SECURITY: Rate limited per IP
+ */
+async function handleSegmentProxy(url: URL, logger: any, origin: string | null, env?: Env, request?: Request): Promise<Response> {
   const segmentUrl = url.searchParams.get('url');
   
   if (!segmentUrl) {
     return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
+  }
+
+  // SECURITY: Rate limiting check
+  const ip = request?.headers.get('cf-connecting-ip') || '127.0.0.1';
+  if (env?.RATE_LIMIT_KV) {
+    const rateLimitKey = `ratelimit:segment:${ip}`;
+    const lastRequest = await env.RATE_LIMIT_KV.get(rateLimitKey);
+    
+    if (lastRequest) {
+      const timeSince = Date.now() - parseInt(lastRequest);
+      if (timeSince < 100) { // 100ms between segment requests
+        logger.warn('Rate limit exceeded', { ip, timeSince });
+        return jsonResponse({ error: 'Rate limit exceeded' }, 429, origin);
+      }
+    }
+    
+    await env.RATE_LIMIT_KV.put(rateLimitKey, Date.now().toString(), { expirationTtl: 10 });
   }
 
   const decodedUrl = decodeURIComponent(segmentUrl);
@@ -773,11 +907,37 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
 
   try {
     let data: ArrayBuffer;
-    let fetchedVia = 'direct';
+    let fetchedVia = 'rpi-proxy';
     
-    // Always try direct fetch first for segments - they may not be blocked
-    // Only fall back to RPI if direct fails
-    try {
+    // ALWAYS use RPI proxy for DLHD segments - dvalna.ru blocks Cloudflare IPs
+    if (isDlhd) {
+      if (!env?.RPI_PROXY_URL || !env?.RPI_PROXY_KEY) {
+        return jsonResponse({ 
+          error: 'RPI proxy not configured', 
+          hint: 'DLHD segments require residential IP. Configure RPI_PROXY_URL and RPI_PROXY_KEY.',
+        }, 503, origin);
+      }
+      
+      logger.info('Fetching DLHD segment via RPI proxy');
+      
+      const rpiUrl = `${env.RPI_PROXY_URL}/proxy?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}`;
+      const rpiRes = await fetch(rpiUrl);
+      
+      if (!rpiRes.ok) {
+        const errText = await rpiRes.text();
+        logger.warn('RPI segment fetch failed', { status: rpiRes.status, error: errText.substring(0, 100) });
+        return jsonResponse({ 
+          error: 'Segment fetch failed via RPI proxy', 
+          rpiStatus: rpiRes.status,
+          rpiError: errText.substring(0, 200),
+        }, 502, origin);
+      }
+      
+      data = await rpiRes.arrayBuffer();
+      logger.info('RPI segment fetch succeeded', { size: data.byteLength });
+    } else {
+      // Non-DLHD segments can be fetched directly
+      fetchedVia = 'direct';
       const directRes = await fetch(decodedUrl, {
         headers: {
           'User-Agent': USER_AGENT,
@@ -787,48 +947,14 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
       });
 
       if (!directRes.ok) {
-        throw new Error(`HTTP ${directRes.status}`);
+        return jsonResponse({ 
+          error: 'Segment fetch failed', 
+          details: `HTTP ${directRes.status}`,
+        }, 502, origin);
       }
 
       data = await directRes.arrayBuffer();
-      
-      // Check if response is an error (JSON) - small responses are suspicious
-      if (data.byteLength < 1000) {
-        const text = new TextDecoder().decode(data);
-        if (text.startsWith('{') || text.includes('"error"') || text.includes('"msg"')) {
-          throw new Error(`Server error: ${text}`);
-        }
-      }
-      
       logger.info('Direct segment fetch succeeded', { size: data.byteLength });
-    } catch (directError) {
-      // Only use RPI for DLHD domains when direct fails
-      if (isDlhd && env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-        logger.warn('Direct segment fetch failed, trying RPI', { error: (directError as Error).message });
-        
-        const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}`;
-        const rpiRes = await fetch(rpiUrl);
-        
-        if (!rpiRes.ok) {
-          const errText = await rpiRes.text();
-          logger.warn('RPI segment fetch failed', { status: rpiRes.status, error: errText.substring(0, 100) });
-          return jsonResponse({ 
-            error: 'Segment fetch failed (both direct and RPI)', 
-            directError: (directError as Error).message,
-            rpiStatus: rpiRes.status,
-          }, 502, origin);
-        }
-        
-        data = await rpiRes.arrayBuffer();
-        fetchedVia = 'rpi-proxy';
-        logger.info('RPI segment fetch succeeded', { size: data.byteLength });
-      } else {
-        // Non-DLHD domain or RPI not configured - return direct error
-        return jsonResponse({ 
-          error: 'Segment fetch failed', 
-          details: (directError as Error).message,
-        }, 502, origin);
-      }
     }
 
     return new Response(data, {
@@ -900,7 +1026,7 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
       }, 400, origin);
     }
 
-    return handlePlaylistRequest(channel, url.origin, logger, origin, env);
+    return handlePlaylistRequest(channel, url.origin, logger, origin, env, request);
   } catch (error) {
     logger.error('DLHD Proxy error', error as Error);
     return jsonResponse({

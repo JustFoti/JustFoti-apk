@@ -19,12 +19,12 @@ import styles from './DetailsPage.module.css';
 // Anime that use ABSOLUTE episode numbering on TMDB (single season with all episodes)
 // For these, we need to calculate which MAL entry an episode belongs to
 const TMDB_ABSOLUTE_EPISODE_ANIME: Record<number, Array<{ malId: number; episodes: number; title: string }>> = {
-  // JJK: TMDB shows as 1 season with 59 episodes
-  // Episodes 1-24 = MAL 40748, 25-47 = MAL 51009, 48-71 = MAL 57658
+  // JJK: TMDB shows as 1 season with 71 episodes (as of Jan 2026)
+  // Episodes 1-24 = MAL 40748, 25-47 = MAL 51009, 48-59 = MAL 57658 (Part 1 - 12 eps)
   95479: [
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' },
   ],
 };
 

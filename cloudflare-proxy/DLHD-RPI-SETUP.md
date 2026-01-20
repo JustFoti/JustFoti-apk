@@ -2,12 +2,43 @@
 
 This proxy routes daddyhd.com live streams through Cloudflare Workers with PoW authentication.
 
-**NO RPI PROXY NEEDED!** The new dvalna.ru domain doesn't block Cloudflare IPs.
+**⚠️ RPI PROXY REQUIRED!** The dvalna.ru domain BLOCKS Cloudflare IPs (returns 500).
 
 ## Architecture (January 2026)
 
 ```
-Browser → Cloudflare Worker → DLHD CDN (dvalna.ru with PoW auth)
+Browser → Cloudflare Worker → RPI Proxy (residential IP) → DLHD CDN (dvalna.ru)
+```
+
+## Setup Requirements
+
+### 1. Deploy RPI Proxy
+
+Copy the updated `rpi-proxy/` folder to your Raspberry Pi and run:
+
+```bash
+cd rpi-proxy
+npm install
+API_KEY=your-secret-key node server.js
+```
+
+Expose it via Cloudflare Tunnel:
+```bash
+cloudflared tunnel --url http://localhost:3001
+```
+
+### 2. Configure CF Worker Secrets
+
+```bash
+cd cloudflare-proxy
+npx wrangler secret put RPI_PROXY_URL   # e.g., https://xxx.trycloudflare.com
+npx wrangler secret put RPI_PROXY_KEY   # Same as API_KEY on RPI
+```
+
+### 3. Deploy CF Worker
+
+```bash
+npx wrangler deploy
 ```
 
 ## What Changed (January 2026)
@@ -16,8 +47,8 @@ Browser → Cloudflare Worker → DLHD CDN (dvalna.ru with PoW auth)
 |-------------------|------------------|
 | Domain: kiko2.ru, giokko.ru | Domain: dvalna.ru |
 | Auth: Bearer token + heartbeat | Auth: Proof-of-Work (PoW) |
-| Key server blocked CF IPs | Key server allows CF IPs |
-| Required RPI proxy fallback | No proxy needed |
+| Key server blocked CF IPs | **ALL servers block CF IPs** |
+| Required RPI proxy for keys only | **RPI proxy required for M3U8 AND keys** |
 
 ## How It Works
 

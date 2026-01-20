@@ -747,8 +747,43 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
 
   modified = modified.replace(/\n?#EXT-X-ENDLIST\s*$/m, '');
 
+  // Fix: DLHD now splits long segment URLs across multiple lines
+  // Join lines that are continuations of URLs (don't start with # or http)
+  const rawLines = modified.split('\n');
+  const joinedLines: string[] = [];
+  let currentLine = '';
+  
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+    
+    // If line starts with # or is empty, flush current and add this line
+    if (!trimmed || trimmed.startsWith('#')) {
+      if (currentLine) {
+        joinedLines.push(currentLine);
+        currentLine = '';
+      }
+      joinedLines.push(line);
+    }
+    // If line starts with http, it's a new URL
+    else if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      if (currentLine) {
+        joinedLines.push(currentLine);
+      }
+      currentLine = trimmed;
+    }
+    // Otherwise it's a continuation of the previous URL
+    else {
+      currentLine += trimmed;
+    }
+  }
+  
+  // Don't forget the last line
+  if (currentLine) {
+    joinedLines.push(currentLine);
+  }
+
   // Proxy segment URLs
-  const lines = modified.split('\n').map(line => {
+  const lines = joinedLines.map(line => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#') || trimmed.includes('/tv/segment?')) return line;
     if (trimmed.startsWith('http') && trimmed.includes(`.${CDN_DOMAIN}/`) && !trimmed.includes('mono.css')) {

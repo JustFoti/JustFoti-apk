@@ -185,14 +185,14 @@ const TITLE_MAPPINGS: Record<string, string> = {
 // For these, we use tmdbSeason=1 and calculate the MAL entry based on episode number
 const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number; episodes: number; title: string }>> = {
   // Jujutsu Kaisen (TMDB ID: 95479)
-  // TMDB has this as SINGLE SEASON with 59 episodes (absolute numbering)
-  // MAL has: S1=40748 (24 eps), S2=51009 (23 eps), S3=57658 (24 eps)
+  // TMDB has this as SINGLE SEASON with 71 episodes (absolute numbering)
+  // MAL has: S1=40748 (24 eps), S2=51009 (23 eps), S3=57658 (12 eps for Part 1, more coming)
   // We map TMDB season 1 to the first MAL entry, but the extractor will
   // calculate the correct MAL entry based on absolute episode number
   95479: {
     1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    3: { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
+    3: { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' },
   },
   // Solo Leveling (TMDB ID: 203624)
   // TMDB S1 = MAL 52299 (12 eps), S2 = MAL 58567 (13 eps)
@@ -234,12 +234,13 @@ const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number;
 // Anime that use ABSOLUTE episode numbering on TMDB (single season with all episodes)
 // For these, we need to calculate which MAL entry an episode belongs to
 const TMDB_ABSOLUTE_EPISODE_ANIME: Record<number, Array<{ malId: number; episodes: number; title: string }>> = {
-  // JJK: TMDB shows as 1 season with 59 episodes
-  // Episodes 1-24 = MAL 40748, 25-47 = MAL 51009, 48-71 = MAL 57658
+  // JJK: TMDB shows as 1 season with 71 episodes (as of Jan 2026)
+  // Episodes 1-24 = MAL 40748, 25-47 = MAL 51009, 48-59 = MAL 57658 (Part 1 - 12 eps)
+  // Note: Season 3 Part 2 will add more episodes later
   95479: [
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' },
   ],
 };
 
@@ -250,7 +251,7 @@ const TMDB_TO_MAL_ALL_SEASONS: Record<number, Array<{ malId: number; episodes: n
   95479: [ // Jujutsu Kaisen
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 24, title: 'Jujutsu Kaisen 3rd Season' },
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' },
   ],
   203624: [ // Solo Leveling
     { malId: 52299, episodes: 12, title: 'Solo Leveling' },

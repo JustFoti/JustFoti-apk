@@ -125,6 +125,24 @@ GET /tv/key?url=<encoded_url>
 GET /tv/segment?url=<encoded_url>
 ```
 
+### DLHD Proxy
+
+```
+GET /dlhd?channel=<id>
+GET /dlhd/auth?channel=<id>
+GET /dlhd/key?url=<encoded_url>&jwt=<token>
+GET /dlhd/segment?url=<encoded_url>
+GET /dlhd/health
+```
+
+**⚠️ REQUIRES RPI PROXY** - DLHD's CDN (dvalna.ru) blocks all datacenter IPs including Cloudflare Workers. All M3U8 playlists, encryption keys, and segments are routed through a residential IP proxy.
+
+**Configuration Required:**
+- `RPI_PROXY_URL` - URL of your residential IP proxy server
+- `RPI_PROXY_KEY` - Authentication key for the proxy
+
+Without RPI proxy configured, all DLHD requests will return 503 Service Unavailable.
+
 ### AnimeKai Proxy (MegaUp CDN)
 
 ```
@@ -293,13 +311,15 @@ Set via `wrangler secret` or Cloudflare Dashboard:
 # Required for analytics proxy (Neon PostgreSQL connection string)
 wrangler secret put DATABASE_URL
 
-# Optional: RPI proxy for geo-restricted content
+# Required for DLHD proxy (residential IP proxy for dvalna.ru)
 wrangler secret put RPI_PROXY_URL
 wrangler secret put RPI_PROXY_KEY
 
 # Optional: API key protection
 wrangler secret put API_KEY
 ```
+
+**Note:** DLHD proxy will not function without RPI_PROXY_URL and RPI_PROXY_KEY configured, as dvalna.ru blocks all datacenter IPs.
 
 ### wrangler.toml
 

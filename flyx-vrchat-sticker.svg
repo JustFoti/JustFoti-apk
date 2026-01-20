@@ -1,0 +1,151 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#5b21b6;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#4c1d95;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3b0764;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="borderGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#8b5cf6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="checkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Main rounded square with gradient -->
+  <rect x="0" y="0" width="1024" height="1024" rx="60" fill="url(#bgGradient)"/>
+  
+  <!-- Border -->
+  <rect x="0" y="0" width="1024" height="1024" rx="60" fill="none" stroke="url(#borderGradient)" stroke-width="12"/>
+  
+  <!-- Fire emoji top left -->
+  <text x="10" y="100" font-size="50">🔥</text>
+  
+  <!-- Top left badge: VIRAL -->
+  <g transform="translate(155, 90)">
+    <ellipse cx="0" cy="0" rx="80" ry="38" fill="#8b5cf6" stroke="#000000" stroke-width="5"/>
+    <text x="0" y="13" font-family="Arial Black, sans-serif" font-size="34" font-weight="900" fill="#ffffff" text-anchor="middle">VIRAL</text>
+  </g>
+  
+  <!-- Top right badge: NO CAP -->
+  <g transform="translate(869, 90)">
+    <ellipse cx="0" cy="0" rx="90" ry="38" fill="#f97316" stroke="#000000" stroke-width="5"/>
+    <text x="0" y="13" font-family="Arial Black, sans-serif" font-size="34" font-weight="900" fill="#ffffff" text-anchor="middle">NO CAP</text>
+  </g>
+  
+  <!-- Fire emoji top right -->
+  <text x="954" y="100" font-size="50">🔥</text>
+  
+  <!-- Main domain text with glow -->
+  <text x="512" y="200" font-family="Arial Black, sans-serif" font-size="88" font-weight="900" fill="#ec4899" text-anchor="middle" stroke="#000000" stroke-width="8" paint-order="stroke" filter="url(#glow)">TV.VYNX.CC</text>
+  <text x="512" y="200" font-family="Arial Black, sans-serif" font-size="88" font-weight="900" fill="#ec4899" text-anchor="middle" filter="url(#glow)">TV.VYNX.CC</text>
+  
+  <!-- Content description with better spacing -->
+  <text x="512" y="270" font-family="Arial Black, sans-serif" font-size="32" font-weight="900" fill="#ffffff" text-anchor="middle" stroke="#000000" stroke-width="4" paint-order="stroke">EVERY TV SHOW • MOVIE • ANIME</text>
+  <text x="512" y="315" font-family="Arial Black, sans-serif" font-size="32" font-weight="900" fill="#ffffff" text-anchor="middle" stroke="#000000" stroke-width="4" paint-order="stroke">+ LIVE TV • NO ADS • NO ACCOUNTS</text>
+  
+  <!-- Left W badge -->
+  <circle cx="220" cy="420" r="52" fill="#fbbf24" stroke="#000000" stroke-width="5"/>
+  <text x="220" y="445" font-family="Arial Black, sans-serif" font-size="64" font-weight="900" fill="#000000" text-anchor="middle">W</text>
+  
+  <!-- Right W badge -->
+  <circle cx="804" cy="420" r="52" fill="#fbbf24" stroke="#000000" stroke-width="5"/>
+  <text x="804" y="445" font-family="Arial Black, sans-serif" font-size="64" font-weight="900" fill="#000000" text-anchor="middle">W</text>
+  
+  <!-- Center checkmark badge with glow -->
+  <g transform="translate(512, 430)" filter="url(#glow)">
+    <path d="M -80,-80 L 80,-80 L 80,80 L -80,80 Z" fill="url(#checkGradient)" stroke="#ffffff" stroke-width="8" transform="rotate(45)"/>
+    <path d="M -40,5 L -10,45 L 52,-40" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  
+  <!-- Left sparkle -->
+  <text x="130" y="515" font-size="45">✨</text>
+  
+  <!-- Right sparkle -->
+  <text x="870" y="515" font-size="45">✨</text>
+  
+  <!-- Left rocket -->
+  <text x="110" y="600" font-size="55">🚀</text>
+  
+  <!-- Right rocket -->
+  <text x="890" y="600" font-size="55">🚀</text>
+  
+  <!-- FLYX 2.0 text with better spacing and glow -->
+  <text x="350" y="600" font-family="Arial Black, sans-serif" font-size="105" font-weight="900" fill="#8b5cf6" text-anchor="middle" stroke="#000000" stroke-width="8" paint-order="stroke" filter="url(#glow)">FLYX</text>
+  <text x="675" y="600" font-family="Arial Black, sans-serif" font-size="105" font-weight="900" fill="#06b6d4" text-anchor="middle" stroke="#000000" stroke-width="8" paint-order="stroke" filter="url(#glow)">2.0</text>
+  
+  <!-- STREAM BEYOND with glow -->
+  <text x="512" y="675" font-family="Arial Black, sans-serif" font-size="56" font-weight="900" fill="#10b981" text-anchor="middle" stroke="#000000" stroke-width="5" paint-order="stroke" filter="url(#glow)">STREAM BEYOND</text>
+  
+  <!-- Bottom badges row with better spacing -->
+  <g transform="translate(185, 755)">
+    <ellipse cx="0" cy="0" rx="100" ry="35" fill="#f97316" stroke="#000000" stroke-width="4"/>
+    <text x="0" y="12" font-family="Arial Black, sans-serif" font-size="28" font-weight="900" fill="#ffffff" text-anchor="middle">ZERO ADS</text>
+  </g>
+  
+  <g transform="translate(512, 755)">
+    <ellipse cx="0" cy="0" rx="90" ry="35" fill="#10b981" stroke="#000000" stroke-width="4"/>
+    <text x="0" y="12" font-family="Arial Black, sans-serif" font-size="28" font-weight="900" fill="#ffffff" text-anchor="middle">BUSSIN</text>
+  </g>
+  
+  <g transform="translate(839, 755)">
+    <ellipse cx="0" cy="0" rx="130" ry="35" fill="#8b5cf6" stroke="#000000" stroke-width="4"/>
+    <text x="0" y="12" font-family="Arial Black, sans-serif" font-size="26" font-weight="900" fill="#ffffff" text-anchor="middle">ZERO TRACKING</text>
+  </g>
+  
+  <!-- Call to action text with glow -->
+  <text x="512" y="830" font-family="Arial Black, sans-serif" font-size="38" font-weight="900" fill="#fbbf24" text-anchor="middle" stroke="#000000" stroke-width="6" paint-order="stroke" filter="url(#glow)">ASK HOW I USED WEAPONIZED</text>
+  <text x="512" y="875" font-family="Arial Black, sans-serif" font-size="38" font-weight="900" fill="#fbbf24" text-anchor="middle" stroke="#000000" stroke-width="6" paint-order="stroke" filter="url(#glow)">AUTISM TO MAKE IT</text>
+  
+  <!-- Arrow pointing straight down - MASSIVE and prominent with glow -->
+  <g transform="translate(512, 895)" filter="url(#glow)">
+    <line x1="0" y1="0" x2="0" y2="90" stroke="#000000" stroke-width="48" stroke-linecap="round"/>
+    <line x1="0" y1="0" x2="0" y2="90" stroke="#fbbf24" stroke-width="40" stroke-linecap="round"/>
+    <polygon points="0,120 -60,70 60,70" fill="#fbbf24" stroke="#000000" stroke-width="8"/>
+  </g>
+  
+  <!-- Stars left and right -->
+  <text x="65" y="835" font-size="52">⭐</text>
+  <text x="945" y="835" font-size="52">⭐</text>
+  
+  <!-- Bottom left badge: BASED -->
+  <g transform="translate(130, 945)">
+    <ellipse cx="0" cy="0" rx="78" ry="33" fill="#f97316" stroke="#000000" stroke-width="4"/>
+    <text x="0" y="12" font-family="Arial Black, sans-serif" font-size="26" font-weight="900" fill="#ffffff" text-anchor="middle">BASED</text>
+  </g>
+  
+  <!-- Bottom right badge: SLAPS -->
+  <g transform="translate(894, 945)">
+    <ellipse cx="0" cy="0" rx="78" ry="33" fill="#8b5cf6" stroke="#000000" stroke-width="4"/>
+    <text x="0" y="12" font-family="Arial Black, sans-serif" font-size="26" font-weight="900" fill="#ffffff" text-anchor="middle">SLAPS</text>
+  </g>
+  
+  <!-- Discord badge -->
+  <g transform="translate(290, 990)">
+    <rect x="-140" y="-25" width="280" height="50" rx="25" fill="#5865f2" stroke="#000000" stroke-width="4"/>
+    <text x="-125" y="12" font-size="28">💬</text>
+    <text x="20" y="12" font-family="Arial Black, sans-serif" font-size="21" font-weight="900" fill="#ffffff" text-anchor="middle">DISCORD.VYNX.CC</text>
+  </g>
+  
+  <!-- Open source badge -->
+  <g transform="translate(734, 990)">
+    <rect x="-140" y="-25" width="280" height="50" rx="25" fill="#1f2937" stroke="#000000" stroke-width="4"/>
+    <text x="-105" y="12" font-size="28">⚡</text>
+    <text x="20" y="12" font-family="Arial Black, sans-serif" font-size="21" font-weight="900" fill="#fbbf24" text-anchor="middle">OPEN SOURCE</text>
+  </g>
+  
+  <!-- 100 emojis bottom corners -->
+  <text x="60" y="1005" font-size="48">💯</text>
+  <text x="950" y="1005" font-size="48">💯</text>
+</svg>
