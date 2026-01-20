@@ -262,6 +262,13 @@ export async function GET(request: NextRequest) {
       cache.delete(cacheKey);
       cached = undefined;
     }
+    
+    // TEMPORARY: Force clear cache for JJK to pick up new MAL conversion
+    if (tmdbId === '95479' && cached) {
+      console.log('[EXTRACT] Clearing JJK cache to use new MAL conversion');
+      cache.delete(cacheKey);
+      cached = undefined;
+    }
 
     // Only use cache if it has valid sources with URLs
     if (cached && Date.now() - cached.timestamp < CACHE_TTL && cached.sources.length > 0 && cached.sources[0]?.url) {
@@ -351,12 +358,13 @@ export async function GET(request: NextRequest) {
       if (provider === 'animekai') {
         console.log('[EXTRACT] Using AnimeKai (explicit request)...');
         if (malId) {
-          console.log(`[EXTRACT] MAL info provided: ID=${malId}, Title="${malTitle}"`);
+          console.log(`[EXTRACT] MAL info provided: ID=${malId}, Title="${malTitle}", Episode=${episode}`);
         }
         if (!ANIMEKAI_ENABLED) {
           throw new Error('AnimeKai provider is disabled');
         }
         
+        console.log(`[EXTRACT] Calling extractAnimeKaiStreams with: tmdbId=${tmdbId}, season=${season}, episode=${episode}, malId=${malId}, malTitle=${malTitle}`);
         const animekaiResult = await extractAnimeKaiStreams(tmdbId, type, season, episode, malId, malTitle);
         
         if (animekaiResult.sources.length > 0) {
@@ -371,10 +379,11 @@ export async function GET(request: NextRequest) {
       if (isAnime) {
         console.log('[EXTRACT] Detected ANIME - trying AnimeKai first...');
         if (malId) {
-          console.log(`[EXTRACT] MAL info provided: ID=${malId}, Title="${malTitle}"`);
+          console.log(`[EXTRACT] MAL info provided: ID=${malId}, Title="${malTitle}", Episode=${episode}`);
         }
         if (ANIMEKAI_ENABLED) {
           try {
+            console.log(`[EXTRACT] Calling extractAnimeKaiStreams with: tmdbId=${tmdbId}, season=${season}, episode=${episode}, malId=${malId}, malTitle=${malTitle}`);
             const animekaiResult = await extractAnimeKaiStreams(tmdbId, type, season, episode, malId, malTitle);
             
             if (animekaiResult.sources.length > 0) {

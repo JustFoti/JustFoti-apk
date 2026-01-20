@@ -130,6 +130,20 @@ All changes have been tested and verified:
 - ✅ No TypeScript errors
 - ✅ Client and server mappings are synchronized
 
+### Quick Test Script
+You can verify the MAL conversion logic works correctly:
+```bash
+bun run test-mal-conversion.ts
+```
+
+Expected output:
+```
+✅ CORRECT! Episode 48 → Season 3 Episode 1
+  MAL ID: 57658
+  MAL Title: Jujutsu Kaisen 3rd Season
+  Relative Episode: 1
+```
+
 ### Console Output Example (Episode 48)
 ```
 [EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen 3rd Season) ep 1
