@@ -68,7 +68,7 @@ router.push(
 2. Details page passes: `episode=48` (absolute number)
 3. API receives: `tmdbId=95479, episode=48`
 4. API calculates: Episode 48 → MAL 57658 (Season 3) Episode 1
-5. API searches AnimeKai: "Jujutsu Kaisen 3rd Season" Episode 1
+5. API searches AnimeKai: "Jujutsu Kaisen: The Culling Game - Part 1" Episode 1
 6. Correct stream returned! ✅
 
 ## BENEFITS OF THIS APPROACH

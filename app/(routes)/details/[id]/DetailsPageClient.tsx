@@ -24,7 +24,7 @@ const TMDB_ABSOLUTE_EPISODE_ANIME: Record<number, Array<{ malId: number; episode
   95479: [
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen Culling Game' },
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' },
   ],
 };
 

@@ -29,7 +29,7 @@ In `app/api/stream/extract/route.ts`, added logic to:
 Now:
 - Request: Episode 48
 - API calculates: Episode 48 = MAL 57658 (Season 3) Episode 1 ✅
-- AnimeKai searches: "Jujutsu Kaisen 3rd Season" episode 1
+- AnimeKai searches: "Jujutsu Kaisen: The Culling Game - Part 1" episode 1
 - Returns correct stream! ✅
 
 ## Files Changed
@@ -68,4 +68,4 @@ The automatic MAL entry calculation is now live in production:
 - No manual `malId` parameter needed - the API calculates it automatically
 - Works for all anime with absolute episode numbering (JJK, and any future additions)
 - Transparent to the frontend - just pass the TMDB episode number
-- Console logs show the conversion for debugging: `[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen 3rd Season) ep 1`
+- Console logs show the conversion for debugging: `[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1`

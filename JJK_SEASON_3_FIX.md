@@ -21,7 +21,7 @@ Fixed three mapping constants:
 95479: {
   1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
   2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-  3: { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' }, // ✓ Fixed: 24 → 12
+  3: { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' }, // ✓ Fixed: 24 → 12
 }
 ```
 
@@ -30,7 +30,7 @@ Fixed three mapping constants:
 95479: [
   { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
   { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-  { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' }, // ✓ Fixed: 24 → 12
+  { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' }, // ✓ Fixed: 24 → 12
 ]
 ```
 
@@ -51,7 +51,7 @@ const TMDB_ABSOLUTE_EPISODE_ANIME = {
   95479: [
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen 3rd Season' }, // ✓ Fixed: 24 → 12
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' }, // ✓ Fixed: 24 → 12
   ],
 };
 ```
@@ -87,7 +87,7 @@ if (type === 'tv' && episode && !malId) {
 **Example for Episode 48:**
 ```
 Input:  tmdbId=95479, episode=48
-Output: malId=57658, malTitle="Jujutsu Kaisen 3rd Season", episode=1
+Output: malId=57658, malTitle="Jujutsu Kaisen: The Culling Game - Part 1", episode=1
 ```
 
 ## Episode Mapping
@@ -140,16 +140,16 @@ Expected output:
 ```
 ✅ CORRECT! Episode 48 → Season 3 Episode 1
   MAL ID: 57658
-  MAL Title: Jujutsu Kaisen 3rd Season
+  MAL Title: Jujutsu Kaisen: The Culling Game - Part 1
   Relative Episode: 1
 ```
 
 ### Console Output Example (Episode 48)
 ```
-[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen 3rd Season) ep 1
-[AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen 3rd Season"
-[AnimeKai] MAL title provided - searching for: "Jujutsu Kaisen 3rd Season"
-[AnimeKai] ✓ Found with MAL title: "Jujutsu Kaisen 3rd Season"
+[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1
+[AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen: The Culling Game - Part 1"
+[AnimeKai] MAL title provided - searching for: "Jujutsu Kaisen: The Culling Game - Part 1"
+[AnimeKai] ✓ Found with MAL title: "Jujutsu Kaisen: The Culling Game - Part 1"
 ```
 
 ### API Usage

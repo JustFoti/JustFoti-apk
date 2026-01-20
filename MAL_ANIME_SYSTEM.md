@@ -78,7 +78,7 @@ Stream plays
 - **MAL IDs**: 
   - Season 1: 40748 (24 episodes)
   - Season 2: 51009 (23 episodes) 
-  - Season 3: 57658 (12 episodes) - Culling Game
+  - Season 3: 57658 (12 episodes) - The Culling Game - Part 1
 
 ### URLs
 - Browse: `/anime` → Shows anime from TMDB
@@ -137,7 +137,7 @@ Stream plays
    - Open browser DevTools → Network tab
    - Watch episode 48
    - Should see request to `/api/stream/extract?tmdbId=95479&episode=48`
-   - Console should show: `[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen 3rd Season) ep 1`
+   - Console should show: `[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1`
 
 ## Configuration
 

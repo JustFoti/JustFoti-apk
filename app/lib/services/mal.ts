@@ -192,7 +192,7 @@ const TMDB_TO_MAL_SEASON_MAPPING: Record<number, Record<number, { malId: number;
   95479: {
     1: { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     2: { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    3: { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen Culling Game' },
+    3: { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' },
   },
   // Solo Leveling (TMDB ID: 203624)
   // TMDB S1 = MAL 52299 (12 eps), S2 = MAL 58567 (13 eps)
@@ -240,7 +240,7 @@ const TMDB_ABSOLUTE_EPISODE_ANIME: Record<number, Array<{ malId: number; episode
   95479: [
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen Culling Game' },
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' },
   ],
 };
 
@@ -251,7 +251,7 @@ const TMDB_TO_MAL_ALL_SEASONS: Record<number, Array<{ malId: number; episodes: n
   95479: [ // Jujutsu Kaisen
     { malId: 40748, episodes: 24, title: 'Jujutsu Kaisen' },
     { malId: 51009, episodes: 23, title: 'Jujutsu Kaisen 2nd Season' },
-    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen Culling Game' },
+    { malId: 57658, episodes: 12, title: 'Jujutsu Kaisen: The Culling Game - Part 1' },
   ],
   203624: [ // Solo Leveling
     { malId: 52299, episodes: 12, title: 'Solo Leveling' },
