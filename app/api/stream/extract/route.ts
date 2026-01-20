@@ -125,15 +125,36 @@ export async function GET(request: NextRequest) {
     const tmdbId = searchParams.get('tmdbId') || '';
     const type = searchParams.get('type') as 'movie' | 'tv';
     const season = searchParams.get('season') ? parseInt(searchParams.get('season')!) : undefined;
-    const episode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : undefined;
+    let episode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : undefined;
+    const originalEpisode = episode; // Save for cache key
     const provider = searchParams.get('provider') || 'auto';
     const sourceName = searchParams.get('source'); // Optional: fetch specific source by name
     
     // MAL info for anime - used to get correct episode from AnimeKai
     // When MAL splits a TMDB season into multiple parts, we need to use the MAL ID
     // and calculate the episode number within that MAL part
-    const malId = searchParams.get('malId') ? parseInt(searchParams.get('malId')!) : undefined;
-    const malTitle = searchParams.get('malTitle') || undefined;
+    let malId = searchParams.get('malId') ? parseInt(searchParams.get('malId')!) : undefined;
+    let malTitle = searchParams.get('malTitle') || undefined;
+    
+    // IMPORTANT: For anime with absolute episode numbering (like JJK), calculate the correct MAL entry
+    // JJK on TMDB uses absolute numbering: all episodes in Season 1
+    // But MAL has separate entries: S1 (24 eps), S2 (23 eps), S3 (12 eps)
+    // We need to convert absolute episode number to the correct MAL entry + relative episode
+    if (type === 'tv' && episode && !malId) {
+      const { malService } = await import('@/lib/services/mal');
+      const tmdbIdNum = parseInt(tmdbId);
+      
+      if (malService.usesAbsoluteEpisodeNumbering(tmdbIdNum)) {
+        const malEntry = malService.getMALEntryForAbsoluteEpisode(tmdbIdNum, episode);
+        if (malEntry) {
+          malId = malEntry.malId;
+          malTitle = malEntry.malTitle;
+          // Update episode to be relative to the MAL entry
+          episode = malEntry.relativeEpisode;
+          console.log(`[EXTRACT] Absolute episode anime detected: TMDB ep ${originalEpisode} → MAL ${malId} (${malTitle}) ep ${episode}`);
+        }
+      }
+    }
 
     // Validate parameters
     if (!tmdbId) {
@@ -224,8 +245,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Check cache
-    const cacheKey = `${tmdbId}-${type}-${season || ''}-${episode || ''}-${provider}`;
+    // Check cache - use original episode number for cache key
+    const cacheKey = `${tmdbId}-${type}-${season || ''}-${originalEpisode || ''}-${provider}`;
     let cached = cache.get(cacheKey);
 
     // TEMPORARY: Force clear cache for animekai to pick up new proxy routing

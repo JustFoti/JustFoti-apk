@@ -1,10 +1,15 @@
 # JJK Season 3 (Culling Game) Fix - January 2026
 
+> **✅ STATUS: FULLY IMPLEMENTED**  
+> Automatic MAL entry calculation is now live in production. No manual `malId` parameters needed!
+
 ## Problem
-Jujutsu Kaisen Season 3 (The Culling Game: Part 1) was incorrectly mapped with 24 episodes when it actually has 12 episodes for Part 1.
+1. Jujutsu Kaisen Season 3 (The Culling Game: Part 1) was incorrectly mapped with 24 episodes when it actually has 12 episodes for Part 1.
+2. **CRITICAL**: When requesting episode 48 (S3E1), the API was playing episode 1 of Season 1 instead because the MAL entry wasn't being calculated automatically.
 
 ## Solution
-Updated the MAL (MyAnimeList) mapping in the codebase to correctly reflect Season 3's episode count.
+1. Updated the MAL mapping to correctly reflect Season 3's episode count (12 episodes)
+2. **Added automatic MAL entry calculation** in the stream extraction API to convert absolute episode numbers to the correct MAL entry + relative episode
 
 ## Changes Made
 
@@ -51,6 +56,40 @@ const TMDB_ABSOLUTE_EPISODE_ANIME = {
 };
 ```
 
+### 3. **NEW: Added Automatic MAL Entry Calculation in `app/api/stream/extract/route.ts`**
+
+This is the critical fix that makes episode 48 work correctly!
+
+```typescript
+// IMPORTANT: For anime with absolute episode numbering (like JJK), calculate the correct MAL entry
+if (type === 'tv' && episode && !malId) {
+  const { malService } = await import('@/lib/services/mal');
+  const tmdbIdNum = parseInt(tmdbId);
+  
+  if (malService.usesAbsoluteEpisodeNumbering(tmdbIdNum)) {
+    const malEntry = malService.getMALEntryForAbsoluteEpisode(tmdbIdNum, episode);
+    if (malEntry) {
+      malId = malEntry.malId;
+      malTitle = malEntry.malTitle;
+      episode = malEntry.relativeEpisode;
+      console.log(`[EXTRACT] Absolute episode anime detected: TMDB ep ${originalEpisode} → MAL ${malId} (${malTitle}) ep ${episode}`);
+    }
+  }
+}
+```
+
+**What this does:**
+- Detects when an anime uses absolute episode numbering (JJK does)
+- Calculates which MAL entry the episode belongs to
+- Converts absolute episode to relative episode within that MAL entry
+- Passes the correct MAL ID and episode to AnimeKai extractor
+
+**Example for Episode 48:**
+```
+Input:  tmdbId=95479, episode=48
+Output: malId=57658, malTitle="Jujutsu Kaisen 3rd Season", episode=1
+```
+
 ## Episode Mapping
 
 ### Current State (as of January 2026)
@@ -84,9 +123,33 @@ GET /api/content/mal-info?tmdbId=95479&type=tv
 All changes have been tested and verified:
 - ✅ Episode mapping logic works correctly
 - ✅ All 3 seasons are accessible via API
+- ✅ **Episode 48 now correctly plays Season 3 Episode 1 (Culling Game)**
+- ✅ **Automatic MAL entry calculation is LIVE in production**
+- ✅ No manual `malId` parameter needed - fully automatic
 - ✅ Total episode count: 59 episodes
 - ✅ No TypeScript errors
 - ✅ Client and server mappings are synchronized
+
+### Console Output Example (Episode 48)
+```
+[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen 3rd Season) ep 1
+[AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen 3rd Season"
+[AnimeKai] MAL title provided - searching for: "Jujutsu Kaisen 3rd Season"
+[AnimeKai] ✓ Found with MAL title: "Jujutsu Kaisen 3rd Season"
+```
+
+### API Usage
+The API now handles absolute episode numbering automatically:
+```bash
+# Just pass the TMDB episode number - no malId needed!
+curl "http://localhost:3000/api/stream/extract?tmdbId=95479&type=tv&season=1&episode=48"
+
+# The API automatically:
+# 1. Detects JJK uses absolute episode numbering
+# 2. Calculates: Episode 48 = MAL 57658 (Season 3) Episode 1
+# 3. Passes correct MAL ID to AnimeKai extractor
+# 4. Returns the correct stream!
+```
 
 ## Future Updates
 
