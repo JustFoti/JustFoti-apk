@@ -14,7 +14,9 @@ All files compile without errors. System is ready for testing.
   - Fetches MAL data using `getCategoryIds()` from `app/data/anime-categories.ts`
   - Categories: Popular, Top Rated, Action, Fantasy, Romance
   - Uses `malService.getById()` for each anime
-  - Error handling with Promise.allSettled
+  - **Robust error handling**: `Promise.allSettled` ensures partial failures don't break the page
+  - Failed fetches are logged but don't prevent successful anime from displaying
+  - Each category is fetched independently via `fetchCategoryAnime()` helper
   
 - **Client**: `app/(routes)/anime/AnimePageClient.tsx`
   - Displays MAL anime with MAL posters
@@ -146,6 +148,14 @@ Located in `app/lib/services/mal.ts`:
 - `getById(malId)` - Fetch single anime
 - `getSeriesSeasons(malId)` - Fetch anime + related seasons
 - Caches responses for 24 hours
+
+### Error Handling
+The browse page uses resilient error handling:
+- `fetchCategoryAnime()` helper function wraps all MAL API calls
+- Uses `Promise.allSettled()` to handle partial failures gracefully
+- Failed anime fetches are logged with MAL IDs for debugging
+- Successful fetches are returned, ensuring the page always displays available content
+- If all fetches fail for a category, that category will be empty but won't crash the page
 
 ## Notes
 
