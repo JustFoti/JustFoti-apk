@@ -1298,6 +1298,7 @@ async function extractAnimeKaiStreamsLocal(
     // The API route already converts episode 48 → malId 57658, episode 1
     if (tmdbId === '95479' && malId === 57658 && episode) {
       console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode ${episode} (MAL ID ${malId}) ***`);
+      console.log(`[AnimeKai] *** THIS WILL BYPASS ALL SEARCH LOGIC AND USE DIRECT CONTENT_ID ***`);
       
       // Force the correct content_id from the AnimeKai URL
       const cullingGameContentId = '792m'; // From: jujutsu-kaisen-the-culling-game-part-1-792m
@@ -1306,107 +1307,136 @@ async function extractAnimeKaiStreamsLocal(
       
       // Get episodes list for the Culling Game entry
       const episodes = await getEpisodes(cullingGameContentId);
-      if (episodes) {
-        // Get the episode token
-        const episodeKey = String(episode);
-        let episodeToken: string | null = null;
-        
-        // Try season 1 (AnimeKai lists each season as separate anime)
-        const season1 = episodes["1"];
-        if (season1 && season1[episodeKey]) {
-          const epData = season1[episodeKey];
-          if (epData && typeof epData === 'object' && 'token' in epData) {
-            episodeToken = epData.token;
-            console.log(`[AnimeKai] ✓ Found hardcoded episode token for Culling Game E${episode}`);
-          }
+      if (!episodes) {
+        console.log(`[AnimeKai] ❌ CRITICAL: Failed to get episodes for hardcoded Culling Game entry`);
+        return {
+          success: false,
+          sources: [],
+          error: 'Failed to fetch JJK Culling Game episodes from AnimeKai',
+        };
+      }
+      
+      console.log(`[AnimeKai] ✓ Got episodes for Culling Game, looking for episode ${episode}...`);
+      
+      // Get the episode token
+      const episodeKey = String(episode);
+      let episodeToken: string | null = null;
+      
+      // Try season 1 (AnimeKai lists each season as separate anime)
+      const season1 = episodes["1"];
+      if (season1 && season1[episodeKey]) {
+        const epData = season1[episodeKey];
+        if (epData && typeof epData === 'object' && 'token' in epData) {
+          episodeToken = epData.token;
+          console.log(`[AnimeKai] ✓ Found hardcoded episode token for Culling Game E${episode}`);
         }
-        
-        if (episodeToken) {
-          // Get servers and extract streams
-          const servers = await getServers(episodeToken);
-          if (servers) {
-            const allSources: StreamSource[] = [];
-            const subSources: StreamSource[] = [];
-            const dubSources: StreamSource[] = [];
-            
-            // Collect all server tasks
-            const serverTasks: Array<{
-              lid: string;
-              displayName: string;
-              type: 'sub' | 'dub';
-            }> = [];
-            
-            // Add sub servers
-            if (servers.sub) {
-              for (const [serverKey, serverData] of Object.entries(servers.sub)) {
-                const server = serverData as any;
-                if (!server.lid) continue;
-                const serverName = server.name || `Server ${serverKey}`;
-                serverTasks.push({
-                  lid: server.lid,
-                  displayName: `${serverName} (sub)`,
-                  type: 'sub',
-                });
-              }
-            }
-            
-            // Add dub servers
-            if (servers.dub) {
-              for (const [serverKey, serverData] of Object.entries(servers.dub)) {
-                const server = serverData as any;
-                if (!server.lid) continue;
-                const serverName = server.name || `Server ${serverKey}`;
-                serverTasks.push({
-                  lid: server.lid,
-                  displayName: `${serverName} (dub)`,
-                  type: 'dub',
-                });
-              }
-            }
-            
-            // Process all servers in parallel
-            console.log(`[AnimeKai] Processing ${serverTasks.length} servers for hardcoded Culling Game...`);
-            const results = await Promise.allSettled(
-              serverTasks.map(async (task) => {
-                const source = await getStreamFromServer(task.lid, task.displayName);
-                if (source) {
-                  source.title = task.displayName;
-                  source.language = task.type === 'dub' ? 'en' : 'ja';
-                  return { source, type: task.type };
-                }
-                return null;
-              })
-            );
-            
-            // Collect successful results
-            for (const result of results) {
-              if (result.status === 'fulfilled' && result.value) {
-                const { source, type } = result.value;
-                if (type === 'sub' && subSources.length < 2) {
-                  subSources.push(source);
-                  console.log(`[AnimeKai] ✓ Got SUB source from ${source.title}`);
-                } else if (type === 'dub' && dubSources.length < 1) {
-                  dubSources.push(source);
-                  console.log(`[AnimeKai] ✓ Got DUB source from ${source.title}`);
-                }
-              }
-            }
-            
-            // Combine: sub sources first, then dub
-            allSources.push(...subSources, ...dubSources);
-            
-            if (allSources.length > 0) {
-              console.log(`[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning ${allSources.length} sources for JJK Culling Game ***`);
-              return {
-                success: true,
-                sources: allSources,
-              };
-            }
+      }
+      
+      if (!episodeToken) {
+        console.log(`[AnimeKai] ❌ CRITICAL: Episode ${episode} not found in Culling Game episodes`);
+        console.log(`[AnimeKai] Available episodes:`, Object.keys(season1 || {}));
+        return {
+          success: false,
+          sources: [],
+          error: `JJK Culling Game episode ${episode} not available on AnimeKai`,
+        };
+      }
+      
+      // Get servers and extract streams
+      const servers = await getServers(episodeToken);
+      if (!servers) {
+        console.log(`[AnimeKai] ❌ CRITICAL: Failed to get servers for Culling Game episode ${episode}`);
+        return {
+          success: false,
+          sources: [],
+          error: 'Failed to fetch servers for JJK Culling Game episode',
+        };
+      }
+      
+      const allSources: StreamSource[] = [];
+      const subSources: StreamSource[] = [];
+      const dubSources: StreamSource[] = [];
+      
+      // Collect all server tasks
+      const serverTasks: Array<{
+        lid: string;
+        displayName: string;
+        type: 'sub' | 'dub';
+      }> = [];
+      
+      // Add sub servers
+      if (servers.sub) {
+        for (const [serverKey, serverData] of Object.entries(servers.sub)) {
+          const server = serverData as any;
+          if (!server.lid) continue;
+          const serverName = server.name || `Server ${serverKey}`;
+          serverTasks.push({
+            lid: server.lid,
+            displayName: `${serverName} (sub)`,
+            type: 'sub',
+          });
+        }
+      }
+      
+      // Add dub servers
+      if (servers.dub) {
+        for (const [serverKey, serverData] of Object.entries(servers.dub)) {
+          const server = serverData as any;
+          if (!server.lid) continue;
+          const serverName = server.name || `Server ${serverKey}`;
+          serverTasks.push({
+            lid: server.lid,
+            displayName: `${serverName} (dub)`,
+            type: 'dub',
+          });
+        }
+      }
+      
+      // Process all servers in parallel
+      console.log(`[AnimeKai] Processing ${serverTasks.length} servers for hardcoded Culling Game...`);
+      const results = await Promise.allSettled(
+        serverTasks.map(async (task) => {
+          const source = await getStreamFromServer(task.lid, task.displayName);
+          if (source) {
+            source.title = task.displayName;
+            source.language = task.type === 'dub' ? 'en' : 'ja';
+            return { source, type: task.type };
+          }
+          return null;
+        })
+      );
+      
+      // Collect successful results
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value) {
+          const { source, type } = result.value;
+          if (type === 'sub' && subSources.length < 2) {
+            subSources.push(source);
+            console.log(`[AnimeKai] ✓ Got SUB source from ${source.title}`);
+          } else if (type === 'dub' && dubSources.length < 1) {
+            dubSources.push(source);
+            console.log(`[AnimeKai] ✓ Got DUB source from ${source.title}`);
           }
         }
       }
       
-      console.log(`[AnimeKai] Hardcoded override failed, falling back to normal search...`);
+      // Combine: sub sources first, then dub
+      allSources.push(...subSources, ...dubSources);
+      
+      if (allSources.length === 0) {
+        console.log(`[AnimeKai] ❌ CRITICAL: All servers failed for Culling Game episode ${episode}`);
+        return {
+          success: false,
+          sources: [],
+          error: 'All servers failed for JJK Culling Game episode',
+        };
+      }
+      
+      console.log(`[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning ${allSources.length} sources for JJK Culling Game E${episode} ***`);
+      return {
+        success: true,
+        sources: allSources,
+      };
     }
     
     // Step 1: Get anime IDs (MAL/AniList) from TMDB ID
