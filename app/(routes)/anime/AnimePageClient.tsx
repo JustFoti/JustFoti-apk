@@ -42,7 +42,7 @@ export default function AnimePageClient({
   const handleContentClick = useCallback((item: MediaItem, source: string) => {
     trackEvent('content_clicked', { content_id: item.id, source });
     router.push(`/details/${item.id}?type=${item.mediaType || 'tv'}`);
-  }, [router, trackEvent]);
+  }, [router]); // trackEvent is stable from context
 
   const handleSearch = useCallback((query: string) => {
     if (query.trim()) router.push(`/search?q=${encodeURIComponent(query)}`);
@@ -54,6 +54,17 @@ export default function AnimePageClient({
     if (genre) params.set('genre', genre);
     router.push(`/browse?${params.toString()}`);
   }, [router]);
+
+  // Content sections configuration
+  const contentSections = [
+    { title: '🔴 Currently Airing', data: airing, filter: 'airing', accentColor: 'pink' as const },
+    { title: '🔥 Popular Anime', data: popular, filter: 'popular', accentColor: 'fuchsia' as const },
+    { title: '⭐ Top Rated', data: topRated, filter: 'top_rated', accentColor: 'purple' as const },
+    { title: '⚔️ Action & Adventure', data: action, filter: '', genre: 'action', accentColor: 'red' as const },
+    { title: '✨ Fantasy & Sci-Fi', data: fantasy, filter: '', genre: 'fantasy', accentColor: 'violet' as const },
+    { title: '💕 Romance', data: romance, filter: '', genre: 'romance', accentColor: 'rose' as const },
+    { title: '🎬 Anime Movies', data: movies, filter: 'movies', accentColor: 'amber' as const },
+  ];
 
   return (
     <PageTransition>
@@ -121,13 +132,18 @@ export default function AnimePageClient({
 
         {/* Content Sections */}
         <main className="pb-20 space-y-2">
-          <ContentRow title="🔴 Currently Airing" data={airing} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('airing')} accentColor="pink" isAiring />
-          <ContentRow title="🔥 Popular Anime" data={popular} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('popular')} accentColor="fuchsia" />
-          <ContentRow title="⭐ Top Rated" data={topRated} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('top_rated')} accentColor="purple" />
-          <ContentRow title="⚔️ Action & Adventure" data={action} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('', 'action')} accentColor="red" />
-          <ContentRow title="✨ Fantasy & Sci-Fi" data={fantasy} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('', 'fantasy')} accentColor="violet" />
-          <ContentRow title="💕 Romance" data={romance} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('', 'romance')} accentColor="rose" />
-          <ContentRow title="🎬 Anime Movies" data={movies} onItemClick={handleContentClick} onSeeAll={() => handleSeeAll('movies')} accentColor="amber" isMovie />
+          {contentSections
+            .filter(section => section.data?.items?.length > 0)
+            .map((section) => (
+              <ContentRow
+                key={section.title}
+                title={section.title}
+                data={section.data}
+                onItemClick={handleContentClick}
+                onSeeAll={() => handleSeeAll(section.filter, section.genre)}
+                accentColor={section.accentColor}
+              />
+            ))}
         </main>
 
         <Footer />
@@ -152,16 +168,12 @@ function ContentRow({
   onItemClick,
   onSeeAll,
   accentColor = 'pink',
-  isAiring = false,
-  isMovie = false
 }: { 
   title: string; 
   data: CategoryData; 
   onItemClick: (item: MediaItem, source: string) => void;
   onSeeAll: () => void;
   accentColor?: string;
-  isAiring?: boolean;
-  isMovie?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const colors = accentColors[accentColor] || accentColors.pink;
