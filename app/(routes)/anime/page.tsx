@@ -1,86 +1,46 @@
 import { Metadata } from 'next';
 import AnimePageClient from './AnimePageClient';
-import { malService, type MALAnime } from '@/lib/services/mal';
-import { getCategoryIds } from '../../data/anime-categories';
+import { fetchTMDBData } from '@/app/lib/services/tmdb';
 
 export const metadata: Metadata = {
   title: 'Anime | FlyX',
   description: 'Browse and stream the best anime on FlyX',
 };
 
-export const revalidate = 3600; // Revalidate every hour
+export const revalidate = 3600;
 
-/**
- * Fetch anime data for a specific category with error handling
- * Returns only successfully fetched anime, logs failures
- * Fetches sequentially to respect MAL API rate limits
- */
-async function fetchCategoryAnime(categoryId: string, limit: number = 20): Promise<MALAnime[]> {
-  const malIds = getCategoryIds(categoryId).slice(0, limit);
-  const successful: MALAnime[] = [];
-  const failed: number[] = [];
-  
-  // Fetch sequentially to respect rate limits (350ms between requests)
-  for (const id of malIds) {
-    try {
-      const anime = await malService.getById(id);
-      if (anime) {
-        successful.push(anime);
-      } else {
-        failed.push(id);
-      }
-    } catch (error) {
-      console.error(`[AnimePage] Failed to fetch MAL ID ${id}:`, error);
-      failed.push(id);
-    }
-  }
-  
-  if (failed.length > 0) {
-    console.warn(`[AnimePage] Failed to fetch ${failed.length} anime in category "${categoryId}":`, failed);
-  }
-  
-  console.log(`[AnimePage] Category "${categoryId}": ${successful.length}/${malIds.length} successful`);
-  return successful;
-}
-
-/**
- * Fetch all anime data for the browse page
- * Uses curated MAL IDs from anime-categories.ts
- * Fetches categories sequentially to respect rate limits
- */
-async function getMALAnimeData() {
+async function getAnimeData() {
   try {
-    console.log('[AnimePage] Fetching anime data for all categories...');
-    const startTime = Date.now();
-    
-    // Fetch categories sequentially to avoid overwhelming the API
-    // Reduced to 10 per category for faster loading
-    const popular = await fetchCategoryAnime('popular', 10);
-    const topRated = await fetchCategoryAnime('top-rated', 10);
-    const action = await fetchCategoryAnime('action', 7);
-    const fantasy = await fetchCategoryAnime('fantasy', 5);
-    const romance = await fetchCategoryAnime('romance', 4);
+    const [popularAnime, topRatedAnime, airingAnime, actionAnime, fantasyAnime, romanceAnime, animeMovies] = await Promise.all([
+      fetchTMDBData('/discover/tv', { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc', page: '1' }),
+      fetchTMDBData('/discover/tv', { with_genres: '16', with_origin_country: 'JP', sort_by: 'vote_average.desc', 'vote_count.gte': '100', page: '1' }),
+      fetchTMDBData('/discover/tv', { with_genres: '16', with_origin_country: 'JP', 'air_date.gte': new Date(Date.now() - 60*24*60*60*1000).toISOString().split('T')[0], sort_by: 'popularity.desc' }),
+      fetchTMDBData('/discover/tv', { with_genres: '16,10759', with_origin_country: 'JP', sort_by: 'popularity.desc' }),
+      fetchTMDBData('/discover/tv', { with_genres: '16,10765', with_origin_country: 'JP', sort_by: 'popularity.desc' }),
+      fetchTMDBData('/discover/tv', { with_genres: '16', with_keywords: '210024', with_origin_country: 'JP', sort_by: 'popularity.desc' }),
+      fetchTMDBData('/discover/movie', { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc', page: '1' }),
+    ]);
 
-    const executionTime = Date.now() - startTime;
-    console.log(`[AnimePage] Fetched anime data in ${executionTime}ms`);
-    console.log(`[AnimePage] Results: popular=${popular.length}, topRated=${topRated.length}, action=${action.length}, fantasy=${fantasy.length}, romance=${romance.length}`);
+    const addMediaType = (items: any[], type: 'tv' | 'movie') => items?.map((item: any) => ({ ...item, mediaType: type })) || [];
 
     return {
-      popular,
-      topRated,
-      action,
-      fantasy,
-      romance,
+      popular: { items: addMediaType(popularAnime?.results, 'tv'), total: popularAnime?.total_results || 0 },
+      topRated: { items: addMediaType(topRatedAnime?.results, 'tv'), total: topRatedAnime?.total_results || 0 },
+      airing: { items: addMediaType(airingAnime?.results, 'tv'), total: airingAnime?.total_results || 0 },
+      action: { items: addMediaType(actionAnime?.results, 'tv'), total: actionAnime?.total_results || 0 },
+      fantasy: { items: addMediaType(fantasyAnime?.results, 'tv'), total: fantasyAnime?.total_results || 0 },
+      romance: { items: addMediaType(romanceAnime?.results, 'tv'), total: romanceAnime?.total_results || 0 },
+      movies: { items: addMediaType(animeMovies?.results, 'movie'), total: animeMovies?.total_results || 0 },
     };
   } catch (error) {
-    console.error('[AnimePage] Error fetching MAL anime:', error);
+    console.error('Error fetching anime:', error);
     return null;
   }
 }
 
 export default async function AnimePage() {
-  const data = await getMALAnimeData();
-  
+  const data = await getAnimeData();
+
   if (!data) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">

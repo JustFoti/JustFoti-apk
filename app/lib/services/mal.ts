@@ -482,9 +482,9 @@ async function collectSequelChain(
     const relations = await getMALAnimeRelations(startId);
     
     for (const relation of relations) {
-      // Follow BOTH Sequel AND Prequel relations to get all parts of the series
-      // This ensures we find all seasons regardless of which one we start with
-      if (relation.relation === 'Sequel' || relation.relation === 'Prequel') {
+      // ONLY follow SEQUEL relations to get subsequent parts
+      // Do NOT follow PREQUEL to avoid including the original series
+      if (relation.relation === 'Sequel') {
         for (const entry of relation.entry) {
           if (entry.type === 'anime' && !collected.has(entry.mal_id)) {
             console.log(`[MAL] Following ${relation.relation}: ${entry.name} (${entry.mal_id})`);
