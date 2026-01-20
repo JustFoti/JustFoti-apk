@@ -46,6 +46,7 @@ The system uses TMDB for the browse page (fast, reliable) and MAL for details/st
 - Calculates correct MAL entry and relative episode number
 - Calls `extractAnimeKaiStreams()` with MAL info
 - Returns proxied stream URLs
+- ⚠️ **Note**: JJK episodes 48-59 use a hardcoded override (see `JJK_HARDCODED_OVERRIDE.md`)
 
 ## Data Flow
 
@@ -192,3 +193,4 @@ The details page automatically detects anime content:
 - Works seamlessly for anime with absolute episode numbering (like JJK)
 - `/anime/[malId]` routes still exist but are not currently used by the browse page
 - MAL API has rate limits - responses are cached for 24 hours
+- ⚠️ **JJK Season 3 (episodes 48-59)** uses a hardcoded override - see `JJK_HARDCODED_OVERRIDE.md` for details

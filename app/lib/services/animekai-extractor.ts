@@ -469,11 +469,14 @@ async function getTmdbSeasonEpisodeCounts(tmdbId: string): Promise<Record<number
 
 /**
  * Helper to normalize title for comparison
+ * Removes special characters, normalizes spaces, and handles common variations
  */
 function normalizeTitle(title: string): string {
   return title.toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '') // Remove special chars
+    .replace(/[^a-z0-9\s]/g, '') // Remove special chars (including hyphens, colons)
     .replace(/\s+/g, ' ')        // Normalize spaces
+    .replace(/\bpart\s+(\d+)\b/g, 'part$1') // "Part 1" → "part1" for consistent matching
+    .replace(/\bseason\s+(\d+)\b/g, 'season$1') // "Season 2" → "season2"
     .trim();
 }
 
@@ -630,15 +633,24 @@ async function searchAnimeKai(query: string, malId?: number | null): Promise<{ c
     
     for (const result of results) {
       const score = scoreMatch(result.enTitle, query);
-      console.log(`[AnimeKai]   - "${result.enTitle}" score: ${score}`);
+      const jpScore = result.jpTitle ? scoreMatch(result.jpTitle, query) : 0;
+      const finalScore = Math.max(score, jpScore);
       
-      if (score > bestScore) {
-        bestScore = score;
+      console.log(`[AnimeKai]   - "${result.enTitle}" (EN score: ${score}, JP score: ${jpScore}, final: ${finalScore})`);
+      
+      if (finalScore > bestScore) {
+        bestScore = finalScore;
         bestResult = result;
       }
     }
 
     console.log(`[AnimeKai] Best match: "${bestResult.enTitle}" (score: ${bestScore})`);
+    
+    // If score is too low, reject the match
+    if (bestScore < 30) {
+      console.log(`[AnimeKai] Score too low (${bestScore} < 30), rejecting match`);
+      return null;
+    };
 
     // Fetch the watch page to get kai_id
     const watchUrl = `https://animekai.to/watch/${bestResult.slug}`;
@@ -1259,6 +1271,13 @@ export async function extractAnimeKaiStreams(
 
 /**
  * Local extraction (fallback) - may fail due to datacenter IP blocking
+ * 
+ * ⚠️ CONTAINS HARDCODED OVERRIDE FOR JJK SEASON 3 (EPISODES 48-59)
+ * See: JJK_HARDCODED_OVERRIDE.md for details and removal instructions
+ * Location: Lines ~1276-1393 (search for "HARDCODED OVERRIDE FOR JJK SEASON 3")
+ * 
+ * This is a TEMPORARY workaround to bypass MAL search issues.
+ * Remove when AnimeKai search can reliably find "The Culling Game - Part 1".
  */
 async function extractAnimeKaiStreamsLocal(
   tmdbId: string,
@@ -1274,25 +1293,22 @@ async function extractAnimeKaiStreamsLocal(
 
   try {
     // *** HARDCODED OVERRIDE FOR JJK SEASON 3 (CULLING GAME) ***
-    // TMDB ID 95479, episodes 48-59 = Season 3 (The Culling Game Part 1)
+    // TMDB ID 95479 + MAL ID 57658 = The Culling Game Part 1
     // AnimeKai URL: https://anikai.to/watch/jujutsu-kaisen-the-culling-game-part-1-792m
-    if (tmdbId === '95479' && episode && episode >= 48 && episode <= 59) {
-      console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Episode ${episode} → Culling Game Part 1 Episode ${episode - 47} ***`);
+    // The API route already converts episode 48 → malId 57658, episode 1
+    if (tmdbId === '95479' && malId === 57658 && episode) {
+      console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode ${episode} (MAL ID ${malId}) ***`);
       
-      // Force the correct content_id and episode mapping
-      const cullingGameContentId = '792m'; // From the AnimeKai URL
-      const cullingGameEpisode = episode - 47; // Episode 48 → 1, 49 → 2, etc.
+      // Force the correct content_id from the AnimeKai URL
+      const cullingGameContentId = '792m'; // From: jujutsu-kaisen-the-culling-game-part-1-792m
       
-      console.log(`[AnimeKai] Using hardcoded content_id: ${cullingGameContentId}, episode: ${cullingGameEpisode}`);
+      console.log(`[AnimeKai] Using hardcoded content_id: ${cullingGameContentId}, episode: ${episode}`);
       
       // Get episodes list for the Culling Game entry
       const episodes = await getEpisodes(cullingGameContentId);
-      if (!episodes) {
-        console.log(`[AnimeKai] Failed to get episodes for hardcoded Culling Game entry`);
-        // Fall through to normal search logic
-      } else {
+      if (episodes) {
         // Get the episode token
-        const episodeKey = String(cullingGameEpisode);
+        const episodeKey = String(episode);
         let episodeToken: string | null = null;
         
         // Try season 1 (AnimeKai lists each season as separate anime)
@@ -1301,7 +1317,7 @@ async function extractAnimeKaiStreamsLocal(
           const epData = season1[episodeKey];
           if (epData && typeof epData === 'object' && 'token' in epData) {
             episodeToken = epData.token;
-            console.log(`[AnimeKai] ✓ Found hardcoded episode token for Culling Game E${cullingGameEpisode}`);
+            console.log(`[AnimeKai] ✓ Found hardcoded episode token for Culling Game E${episode}`);
           }
         }
         
@@ -1388,9 +1404,9 @@ async function extractAnimeKaiStreamsLocal(
             }
           }
         }
-        
-        console.log(`[AnimeKai] Hardcoded override failed, falling back to normal search...`);
       }
+      
+      console.log(`[AnimeKai] Hardcoded override failed, falling back to normal search...`);
     }
     
     // Step 1: Get anime IDs (MAL/AniList) from TMDB ID

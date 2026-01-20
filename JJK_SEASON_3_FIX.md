@@ -1,7 +1,8 @@
 # JJK Season 3 (Culling Game) Fix - January 2026
 
-> **✅ STATUS: FULLY IMPLEMENTED**  
-> Automatic MAL entry calculation is now live in production. No manual `malId` parameters needed!
+> **⚠️ STATUS: HARDCODED OVERRIDE ACTIVE**  
+> A temporary hardcoded override is now in place for JJK episodes 48-59 to ensure correct playback.  
+> This bypasses the automatic MAL search and directly uses the AnimeKai content ID.
 
 ## Problem
 1. Jujutsu Kaisen Season 3 (The Culling Game: Part 1) was incorrectly mapped with 24 episodes when it actually has 12 episodes for Part 1.
@@ -10,6 +11,7 @@
 ## Solution
 1. Updated the MAL mapping to correctly reflect Season 3's episode count (12 episodes)
 2. **Added automatic MAL entry calculation** in the stream extraction API to convert absolute episode numbers to the correct MAL entry + relative episode
+3. **⚠️ TEMPORARY WORKAROUND**: Added hardcoded override in AnimeKai extractor for episodes 48-59 to bypass MAL search issues
 
 ## Changes Made
 
@@ -90,6 +92,42 @@ Input:  tmdbId=95479, episode=48
 Output: malId=57658, malTitle="Jujutsu Kaisen: The Culling Game - Part 1", episode=1
 ```
 
+### 4. **⚠️ TEMPORARY: Added Hardcoded Override in `app/lib/services/animekai-extractor.ts`**
+
+Due to MAL search issues with "The Culling Game - Part 1" title, a hardcoded override was added:
+
+```typescript
+// *** HARDCODED OVERRIDE FOR JJK SEASON 3 (CULLING GAME) ***
+// TMDB ID 95479 + MAL ID 57658 = The Culling Game Part 1
+// The API route already converts episode 48 → malId 57658, episode 1
+if (tmdbId === '95479' && malId === 57658 && episode) {
+  console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode ${episode} (MAL ID ${malId}) ***`);
+  
+  const cullingGameContentId = '792m'; // From the AnimeKai URL
+  
+  // Episode is already converted to relative number by the API
+  // Directly fetch streams using content_id, bypassing search
+  // ...
+}
+```
+
+**Why this is needed:**
+- The MAL title "Jujutsu Kaisen: The Culling Game - Part 1" doesn't match AnimeKai's listing
+- AnimeKai uses content ID `792m` for this season
+- This override bypasses the search and directly uses the correct content ID
+- **This is a temporary workaround** until the MAL search logic can be improved
+
+**Key Improvement:**
+- The override now checks **MAL ID** (57658) instead of absolute episode range (48-59)
+- The API route already converts absolute episodes to MAL entries
+- No manual episode offset calculation needed
+- More robust and cleaner implementation
+
+**When to remove:**
+- When AnimeKai's search can reliably find "The Culling Game - Part 1"
+- When a better title matching algorithm is implemented
+- When the season completes and Part 2 is released (may need different handling)
+
 ## Episode Mapping
 
 ### Current State (as of January 2026)
@@ -124,8 +162,8 @@ All changes have been tested and verified:
 - ✅ Episode mapping logic works correctly
 - ✅ All 3 seasons are accessible via API
 - ✅ **Episode 48 now correctly plays Season 3 Episode 1 (Culling Game)**
-- ✅ **Automatic MAL entry calculation is LIVE in production**
-- ✅ No manual `malId` parameter needed - fully automatic
+- ✅ **Hardcoded override is ACTIVE for episodes 48-59**
+- ⚠️ **Automatic MAL search bypassed for JJK Season 3** (temporary workaround)
 - ✅ Total episode count: 59 episodes
 - ✅ No TypeScript errors
 - ✅ Client and server mappings are synchronized
@@ -148,12 +186,18 @@ Expected output:
 ```
 [EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1
 [AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen: The Culling Game - Part 1"
-[AnimeKai] MAL title provided - searching for: "Jujutsu Kaisen: The Culling Game - Part 1"
-[AnimeKai] ✓ Found with MAL title: "Jujutsu Kaisen: The Culling Game - Part 1"
+[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode 1 (MAL ID 57658) ***
+[AnimeKai] Using hardcoded content_id: 792m, episode: 1
+[AnimeKai] ✓ Found hardcoded episode token for Culling Game E1
+[AnimeKai] Processing 4 servers for hardcoded Culling Game...
+[AnimeKai] ✓ Got SUB source from Server 1 (sub)
+[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning 2 sources for JJK Culling Game ***
 ```
 
+**Note:** The hardcoded override logs show the **relative episode number** (1-12), not the absolute episode (48-59), because the API route already performed the conversion.
+
 ### API Usage
-The API now handles absolute episode numbering automatically:
+The API now handles absolute episode numbering automatically with a hardcoded override for JJK Season 3:
 ```bash
 # Just pass the TMDB episode number - no malId needed!
 curl "http://localhost:3000/api/stream/extract?tmdbId=95479&type=tv&season=1&episode=48"
@@ -161,13 +205,44 @@ curl "http://localhost:3000/api/stream/extract?tmdbId=95479&type=tv&season=1&epi
 # The API automatically:
 # 1. Detects JJK uses absolute episode numbering
 # 2. Calculates: Episode 48 = MAL 57658 (Season 3) Episode 1
-# 3. Passes correct MAL ID to AnimeKai extractor
-# 4. Returns the correct stream!
+# 3. ⚠️ HARDCODED OVERRIDE: Bypasses MAL search, uses content_id=792m directly
+# 4. Fetches episode 1 from AnimeKai's Culling Game entry
+# 5. Returns the correct stream!
 ```
+
+**Important:** The hardcoded override is transparent to the API consumer - the endpoint works the same way.
 
 ## Future Updates
 
-When Season 3 Part 2 is released, update the episode count for MAL ID 57658 or add a new MAL entry if it's released as a separate season.
+### When Season 3 Part 2 is Released
+Update the episode count for MAL ID 57658 or add a new MAL entry if it's released as a separate season.
+
+### Removing the Hardcoded Override
+The hardcoded override in `animekai-extractor.ts` should be removed when:
+1. **AnimeKai's search improves** - Can reliably find "The Culling Game - Part 1" by title
+2. **Better title matching** - Implement fuzzy matching or alternative search strategies
+3. **Season completes** - Part 2 releases and may need different handling
+4. **Content ID changes** - If AnimeKai updates their database structure
+
+**To remove the override:**
+1. Delete the hardcoded block in `extractAnimeKaiStreamsLocal()` (lines ~1276-1393)
+2. Test that episodes 48-59 still work via normal MAL search
+3. Update this documentation to reflect the removal
+
+**Location of hardcoded override:**
+```
+File: app/lib/services/animekai-extractor.ts
+Function: extractAnimeKaiStreamsLocal()
+Lines: ~1295-1410
+Search for: "HARDCODED OVERRIDE FOR JJK SEASON 3"
+Trigger: tmdbId === '95479' && malId === 57658 && episode
+```
+
+**How it works:**
+- The API route converts absolute episodes to MAL entries first
+- Episode 48 arrives as: `malId=57658, episode=1`
+- The override checks MAL ID instead of episode range
+- No manual episode offset calculation needed
 
 ## MAL Reference
 - MAL ID 57658: https://myanimelist.net/anime/57658/Jujutsu_Kaisen__Shimetsu_Kaiyuu_-_Zenpen

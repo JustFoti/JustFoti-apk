@@ -32,10 +32,18 @@ Now:
 - AnimeKai searches: "Jujutsu Kaisen: The Culling Game - Part 1" episode 1
 - Returns correct stream! ✅
 
+### 3. **⚠️ Added Hardcoded Override** (TEMPORARY WORKAROUND)
+In `app/lib/services/animekai-extractor.ts`, added a hardcoded override for episodes 48-59:
+- Bypasses MAL search (which was failing for "The Culling Game - Part 1")
+- Directly uses AnimeKai content ID `792m`
+- Ensures episodes 48-59 always work correctly
+- **This is temporary** until MAL search can be improved
+
 ## Files Changed
 1. `app/lib/services/mal.ts` - Episode counts
 2. `app/(routes)/details/[id]/DetailsPageClient.tsx` - Client mapping
 3. `app/api/stream/extract/route.ts` - **Automatic MAL calculation** ⭐
+4. `app/lib/services/animekai-extractor.ts` - **Hardcoded override for episodes 48-59** ⚠️
 
 ## Test It
 ```bash
@@ -50,10 +58,12 @@ curl "http://localhost:3000/api/stream/extract?tmdbId=95479&type=tv&season=1&epi
 ```
 
 ## Status
-✅ **FULLY IMPLEMENTED** - All 3 JJK seasons now work correctly!
+✅ **FULLY WORKING** - All 3 JJK seasons now work correctly!
 - Season 1: Episodes 1-24 ✅
 - Season 2: Episodes 25-47 ✅
 - Season 3: Episodes 48-59 ✅ (THE CULLING GAME!)
+
+⚠️ **Note:** Episodes 48-59 use a **hardcoded override** to bypass MAL search issues. This is a temporary workaround.
 
 ### Details Page Verification
 ✅ **Episode numbers display correctly** (1-59 absolute numbering)
@@ -69,3 +79,12 @@ The automatic MAL entry calculation is now live in production:
 - Works for all anime with absolute episode numbering (JJK, and any future additions)
 - Transparent to the frontend - just pass the TMDB episode number
 - Console logs show the conversion for debugging: `[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1`
+
+**⚠️ Hardcoded Override Active:**
+- Episodes 48-59 bypass the normal MAL search
+- Directly use AnimeKai content ID `792m`
+- Trigger condition: `tmdbId === '95479' && malId === 57658 && episode`
+- The API route converts absolute episodes to MAL entries first
+- Episode 48 arrives as: `malId=57658, episode=1` (already converted)
+- This ensures reliability until MAL search can be improved
+- See `JJK_HARDCODED_OVERRIDE.md` for details on removing the override
