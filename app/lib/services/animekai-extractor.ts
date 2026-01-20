@@ -1340,13 +1340,14 @@ async function extractAnimeKaiStreamsLocal(
       
       if (!animeResult) {
         // Try variations of the MAL title
-        const malTitleVariants = [
+        const malTitleVariants: (string | null)[] = [
           malTitle.replace(/:/g, ''), // Remove colons
           malTitle.replace(/-/g, ' '), // Replace hyphens with spaces
           malTitle.split(':').pop()?.trim() || malTitle, // Just the subtitle
           // Handle "X 2nd Season" -> "X Season 2"
           malTitle.replace(/(\w+)\s+2nd\s+Season/i, '$1 Season 2'),
           malTitle.replace(/(\w+)\s+3rd\s+Season/i, '$1 Season 3'),
+          malTitle.replace(/(\w+)\s+3rd\s+Season/i, '$1 3'),
           // Handle "X Season 2: Subtitle" -> "X Season 2"
           malTitle.replace(/:\s*[^:]+$/, '').trim(),
           // Handle "Solo Leveling Season 2: Arise from the Shadow" -> "Solo Leveling Season 2"
@@ -1354,14 +1355,18 @@ async function extractAnimeKaiStreamsLocal(
           // Just the base title + season number
           `${baseTitle} Season ${seasonNum}`,
           `${baseTitle} S${seasonNum}`,
+          `${baseTitle} ${seasonNum}`,
           // Handle "X: The Culling Game" -> "X Season 3", "X 3rd Season"
           `${baseTitle} ${seasonNum}${seasonNum === 2 ? 'nd' : seasonNum === 3 ? 'rd' : 'th'} Season`,
           // Try Roman numerals
           `${baseTitle} ${toRomanNumeral(seasonNum)}`,
+          // For JJK Season 3 specifically - try "Culling Game"
+          malTitle.includes('Culling Game') ? `${baseTitle} Culling Game` : null,
+          malTitle.includes('Culling Game') ? `${baseTitle}: Culling Game` : null,
         ];
         
-        // Remove duplicates and empty strings
-        const uniqueVariants = [...new Set(malTitleVariants.filter(v => v && v !== malTitle))];
+        // Remove duplicates, null values, and empty strings
+        const uniqueVariants = [...new Set(malTitleVariants.filter((v): v is string => v !== null && v !== '' && v !== malTitle))];
         
         for (const variant of uniqueVariants) {
           console.log(`[AnimeKai] Trying MAL title variant: "${variant}"`);

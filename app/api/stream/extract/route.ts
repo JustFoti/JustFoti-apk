@@ -30,6 +30,60 @@ import { getStreamProxyUrl, getAnimeKaiProxyUrl, isMegaUpCdnUrl, is1moviesCdnUrl
 
 // Node.js runtime (default) - required for fetch
 
+// ============================================================================
+// RATE LIMITING & ANTI-ABUSE
+// ============================================================================
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 30; // 30 requests per minute per IP
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIP(request: NextRequest): string {
+  // Check Cloudflare headers first
+  const cfIP = request.headers.get('cf-connecting-ip');
+  if (cfIP) return cfIP;
+  
+  // Check X-Forwarded-For
+  const forwarded = request.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  
+  // Check X-Real-IP
+  const realIP = request.headers.get('x-real-ip');
+  if (realIP) return realIP;
+  
+  // Fallback to 'unknown' (should never happen in production)
+  return 'unknown';
+}
+
+function checkRateLimit(ip: string): { allowed: boolean; remaining: number; resetAt: number } {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  
+  // Clean up expired entries periodically
+  if (rateLimitMap.size > 10000) {
+    for (const [key, value] of rateLimitMap.entries()) {
+      if (value.resetAt < now) {
+        rateLimitMap.delete(key);
+      }
+    }
+  }
+  
+  if (!record || record.resetAt < now) {
+    // New window
+    const resetAt = now + RATE_LIMIT_WINDOW;
+    rateLimitMap.set(ip, { count: 1, resetAt });
+    return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - 1, resetAt };
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
+    // Rate limit exceeded
+    return { allowed: false, remaining: 0, resetAt: record.resetAt };
+  }
+  
+  // Increment count
+  record.count++;
+  return { allowed: true, remaining: RATE_LIMIT_MAX_REQUESTS - record.count, resetAt: record.resetAt };
+}
+
 // Helper to conditionally proxy URLs based on requiresSegmentProxy flag
 // AnimeKai sources use the /animekai route which goes through RPI residential proxy
 // Other sources use the /stream route with optional noreferer mode
@@ -119,6 +173,33 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // ============================================================================
+    // RATE LIMITING - Prevent abuse and bandwidth exhaustion
+    // ============================================================================
+    const clientIP = getClientIP(request);
+    const rateLimit = checkRateLimit(clientIP);
+    
+    if (!rateLimit.allowed) {
+      console.warn(`[EXTRACT] Rate limit exceeded for IP: ${clientIP}`);
+      return NextResponse.json(
+        {
+          error: 'Too many requests',
+          message: 'Rate limit exceeded. Please wait before making more requests.',
+          retryAfter: Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+        },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': RATE_LIMIT_MAX_REQUESTS.toString(),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': rateLimit.resetAt.toString(),
+            'Retry-After': Math.ceil((rateLimit.resetAt - Date.now()) / 1000).toString(),
+            'Cache-Control': 'no-store',
+          },
+        }
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
 
     // Parse parameters
@@ -129,6 +210,59 @@ export async function GET(request: NextRequest) {
     const originalEpisode = episode; // Save for cache key
     const provider = searchParams.get('provider') || 'auto';
     const sourceName = searchParams.get('source'); // Optional: fetch specific source by name
+    
+    // ============================================================================
+    // INPUT VALIDATION - Prevent injection and abuse
+    // ============================================================================
+    
+    // Validate TMDB ID format (should be numeric)
+    if (!tmdbId || !/^\d+$/.test(tmdbId)) {
+      return NextResponse.json(
+        { error: 'Invalid tmdbId format. Must be a positive integer.' },
+        { status: 400 }
+      );
+    }
+    
+    // Validate type
+    if (!type || !['movie', 'tv'].includes(type)) {
+      return NextResponse.json(
+        { error: 'Invalid or missing type (must be "movie" or "tv")' },
+        { status: 400 }
+      );
+    }
+    
+    // Validate season/episode for TV shows
+    if (type === 'tv') {
+      if (!season || season < 0 || season > 100) {
+        return NextResponse.json(
+          { error: 'Invalid season number (must be between 1-100)' },
+          { status: 400 }
+        );
+      }
+      if (!episode || episode < 0 || episode > 1000) {
+        return NextResponse.json(
+          { error: 'Invalid episode number (must be between 1-1000)' },
+          { status: 400 }
+        );
+      }
+    }
+    
+    // Validate provider (whitelist)
+    const validProviders = ['auto', 'animekai', 'vidsrc', 'flixer', '1movies', 'videasy', 'smashystream', 'multimovies', 'multiembed'];
+    if (!validProviders.includes(provider)) {
+      return NextResponse.json(
+        { error: `Invalid provider. Must be one of: ${validProviders.join(', ')}` },
+        { status: 400 }
+      );
+    }
+    
+    // Validate source name if provided (prevent injection)
+    if (sourceName && (sourceName.length > 100 || /[<>\"']/.test(sourceName))) {
+      return NextResponse.json(
+        { error: 'Invalid source name format' },
+        { status: 400 }
+      );
+    }
     
     // MAL info for anime - used to get correct episode from AnimeKai
     // When MAL splits a TMDB season into multiple parts, we need to use the MAL ID
@@ -147,11 +281,23 @@ export async function GET(request: NextRequest) {
       if (malService.usesAbsoluteEpisodeNumbering(tmdbIdNum)) {
         const malEntry = malService.getMALEntryForAbsoluteEpisode(tmdbIdNum, episode);
         if (malEntry) {
+          // Log conversion for debugging (only in development or when DEBUG_MAL is enabled)
+          if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MAL === 'true') {
+            console.log('[EXTRACT] MAL absolute episode conversion:', {
+              tmdbId,
+              originalEpisode: episode,
+              converted: {
+                malId: malEntry.malId,
+                malTitle: malEntry.malTitle,
+                relativeEpisode: malEntry.relativeEpisode
+              }
+            });
+          }
+          
           malId = malEntry.malId;
           malTitle = malEntry.malTitle;
           // Update episode to be relative to the MAL entry
           episode = malEntry.relativeEpisode;
-          console.log(`[EXTRACT] Absolute episode anime detected: TMDB ep ${originalEpisode} → MAL ${malId} (${malTitle}) ep ${episode}`);
         }
       }
     }
@@ -777,13 +923,40 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  // ============================================================================
+  // CORS - Only allow requests from your own domains
+  // ============================================================================
+  const origin = request.headers.get('origin');
+  const allowedOrigins = [
+    'https://tv.vynx.cc',
+    'https://flyx.tv',
+    'https://www.flyx.tv',
+    process.env.NEXT_PUBLIC_APP_URL,
+    // Development
+    'http://localhost:3000',
+    'http://localhost:3001',
+  ].filter(Boolean);
+  
+  // Check if origin is allowed (including Vercel/Cloudflare preview deployments)
+  const isAllowed = origin && (
+    allowedOrigins.includes(origin) ||
+    origin.endsWith('.vercel.app') ||
+    origin.endsWith('.pages.dev') ||
+    origin.includes('localhost')
+  );
+  
+  if (!isAllowed) {
+    return new NextResponse(null, { status: 403 });
+  }
+
   return new NextResponse(null, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': origin || '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '86400',
     },
   });
 }
