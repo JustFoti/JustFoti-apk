@@ -357,9 +357,19 @@ export default function DetailsPageClient({
   }, [selectedSeason, content]);
   
   // When we have MAL data, store it for episode navigation
-  // With the new 1:1 TMDB season to MAL entry mapping, no splitting is needed
+  // IMPORTANT: For anime with absolute episode numbering (like JJK), DON'T set animeSeasonMapping
+  // because the episode selection logic needs to calculate the correct MAL entry based on episode number
   useEffect(() => {
     if (isAnime && malData && seasonData) {
+      const tmdbId = parseInt(String(content?.id || '0'));
+      
+      // Skip setting animeSeasonMapping for absolute episode anime
+      if (usesAbsoluteEpisodeNumbering(tmdbId)) {
+        console.log('[DetailsPage] Skipping animeSeasonMapping for absolute episode anime (will calculate per episode)');
+        setAnimeSeasonMapping(null);
+        return;
+      }
+      
       const malEntry = malData.allSeasons[0]; // Single MAL entry for this TMDB season
       
       console.log('[DetailsPage] MAL mapping for season:', {
@@ -507,15 +517,13 @@ export default function DetailsPageClient({
     if (content.mediaType === 'movie') {
       router.push(`/watch/${content.id}?type=movie&title=${title}`);
     } else if (isAnime && usesAbsoluteEpisodeNumbering(tmdbId)) {
-      // For anime with absolute episode numbering, start with episode 1 of first MAL entry
-      const malEntry = getMALEntryForAbsoluteEpisode(tmdbId, 1);
-      if (malEntry) {
-        console.log(`[handleWatchNow] Starting absolute episode anime with MAL: ${malEntry.malId} (${malEntry.malTitle})`);
-        router.push(
-          `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=1&title=${title}&malId=${malEntry.malId}&malTitle=${encodeURIComponent(malEntry.malTitle)}`
-        );
-        return;
-      }
+      // For anime with absolute episode numbering, start with episode 1
+      // Pass absolute episode number - API will convert to correct MAL entry
+      console.log(`[handleWatchNow] Starting absolute episode anime with episode 1`);
+      router.push(
+        `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=1&title=${title}`
+      );
+      return;
     } else if (animeSeasonMapping && animeSeasonMapping.malParts.length >= 1) {
       // For anime with MAL data, include MAL info for accurate episode mapping
       const malPart = animeSeasonMapping.malParts[0]; // Single MAL entry per TMDB season
@@ -547,8 +555,10 @@ export default function DetailsPageClient({
       const malEntry = getMALEntryForAbsoluteEpisode(tmdbId, episodeNumber);
       if (malEntry) {
         console.log(`[handleEpisodeSelect] Absolute episode ${episodeNumber} → MAL ${malEntry.malId} (${malEntry.malTitle}) episode ${malEntry.relativeEpisode}`);
+        // IMPORTANT: Pass the ABSOLUTE episode number (episodeNumber), not the relative one
+        // The API will convert it to the correct MAL entry + relative episode
         router.push(
-          `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${malEntry.relativeEpisode}&title=${title}&malId=${malEntry.malId}&malTitle=${encodeURIComponent(malEntry.malTitle)}`
+          `/watch/${content.id}?type=tv&season=${selectedSeason}&episode=${episodeNumber}&title=${title}`
         );
         return;
       }
