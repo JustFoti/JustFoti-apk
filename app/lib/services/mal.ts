@@ -456,12 +456,18 @@ export async function findMALMatch(
 }
 
 /**
- * Recursively collect all sequel IDs following the chain
- * e.g., Part 1 → Part 2 → Part 3
+ * Recursively collect all related anime IDs following sequel/prequel chains
+ * e.g., Part 1 ↔ Part 2 ↔ Part 3
  * 
- * IMPORTANT: Only follow SEQUEL relations, not PREQUEL
- * This prevents including the original series when searching for a specific season
- * e.g., Bleach TYBW should not include original Bleach (366 eps)
+ * Follows BOTH Sequel AND Prequel relations to ensure complete series discovery
+ * regardless of which entry point is used (start, middle, or end of series).
+ * 
+ * Note: This may collect unwanted entries (e.g., original Bleach when searching TYBW).
+ * Filtering is applied in getMALSeriesSeasons() based on title keywords.
+ * 
+ * @param startId - MAL ID to start the chain from
+ * @param collected - Set to track already collected IDs (prevents infinite loops)
+ * @param maxDepth - Maximum recursion depth to prevent runaway queries
  */
 async function collectSequelChain(
   startId: number,
@@ -476,9 +482,9 @@ async function collectSequelChain(
     const relations = await getMALAnimeRelations(startId);
     
     for (const relation of relations) {
-      // ONLY follow SEQUEL relations to get subsequent parts
-      // Do NOT follow PREQUEL to avoid including the original series
-      if (relation.relation === 'Sequel') {
+      // Follow BOTH Sequel AND Prequel relations to get all parts of the series
+      // This ensures we find all seasons regardless of which one we start with
+      if (relation.relation === 'Sequel' || relation.relation === 'Prequel') {
         for (const entry of relation.entry) {
           if (entry.type === 'anime' && !collected.has(entry.mal_id)) {
             console.log(`[MAL] Following ${relation.relation}: ${entry.name} (${entry.mal_id})`);
@@ -505,6 +511,11 @@ export async function getMALSeriesSeasons(malId: number): Promise<MALAnimeDetail
     
     console.log(`[MAL] Getting series seasons for: ${mainAnime.title} (${malId})`);
     
+    // Check if this is a specific arc/season that should be isolated (e.g., TYBW)
+    const mainTitleLower = mainAnime.title.toLowerCase();
+    const isTYBW = mainTitleLower.includes('sennen kessen') || mainTitleLower.includes('thousand-year');
+    const titleKeywords = isTYBW ? ['sennen kessen', 'thousand-year'] : null;
+    
     // Recursively collect all related anime IDs following sequel/prequel chains
     const relatedIds = new Set<number>();
     await collectSequelChain(malId, relatedIds);
@@ -517,6 +528,16 @@ export async function getMALSeriesSeasons(malId: number): Promise<MALAnimeDetail
     for (const id of relatedIds) {
       const anime = await getMALAnimeById(id);
       if (anime) {
+        // Early filtering: Skip entries that don't match title keywords (if specified)
+        if (titleKeywords) {
+          const animeTitleLower = anime.title.toLowerCase();
+          const matchesKeywords = titleKeywords.some(keyword => animeTitleLower.includes(keyword));
+          if (!matchesKeywords) {
+            console.log(`[MAL] Skipping non-matching entry: ${anime.title} (${anime.mal_id})`);
+            continue;
+          }
+        }
+        
         allAnime.push(anime);
         console.log(`[MAL] Fetched: ${anime.title} (${anime.episodes} eps)`);
       } else {
@@ -541,24 +562,11 @@ export async function getMALSeriesSeasons(malId: number): Promise<MALAnimeDetail
       aired: a.aired.from
     })));
     
-    // For Bleach TYBW specifically, we need to filter to only the TYBW entries
-    // Check if the main anime title contains specific keywords
-    const mainTitleLower = mainAnime.title.toLowerCase();
-    const isTYBW = mainTitleLower.includes('sennen kessen') || mainTitleLower.includes('thousand-year');
+    // Filter out entries with null episodes (not yet aired)
+    const filteredSeries = tvSeries.filter(a => a.episodes !== null && a.episodes > 0);
     
-    let filteredSeries = tvSeries;
-    if (isTYBW) {
-      // Filter to only TYBW entries (they all have "Sennen Kessen" in the title)
-      // Also filter out entries with null episodes (not yet aired)
-      filteredSeries = tvSeries.filter(a => 
-        (a.title.toLowerCase().includes('sennen kessen') || 
-         a.title.toLowerCase().includes('thousand-year')) &&
-        a.episodes !== null && a.episodes > 0
-      );
+    if (isTYBW && filteredSeries.length !== tvSeries.length) {
       console.log(`[MAL] Filtered to TYBW entries only: ${filteredSeries.length}`);
-    } else {
-      // For non-TYBW anime, still filter out entries with null episodes
-      filteredSeries = tvSeries.filter(a => a.episodes !== null && a.episodes > 0);
     }
     
     // Convert to MALSeason format
