@@ -156,7 +156,8 @@ async function fetchKeyWithAuth(keyUrl, authData) {
   const keyNumber = keyMatch[2]; // e.g., "5893400"
   
   // Generate auth headers
-  const timestamp = Math.floor(Date.now() / 1000);
+  // IMPORTANT: DLHD requires timestamp to be 5-10 seconds in the past (January 2026 security update)
+  const timestamp = Math.floor(Date.now() / 1000) - 7; // Use 7 seconds in the past
   const nonce = computePoWNonce(resource, keyNumber, timestamp);
   
   console.log(`[KeyV3] Fetching key for ${resource}/${keyNumber}`);

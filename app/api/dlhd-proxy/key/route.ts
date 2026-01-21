@@ -1,78 +1,99 @@
 /**
- * DLHD Key Proxy API
+ * DLHD Key Proxy API - Direct Fetch with Timestamp Fix
  * 
- * Routes key requests through Cloudflare Worker → RPI Proxy
- * Keys MUST come from residential IP - datacenter IPs are blocked.
+ * Fetches encryption keys directly from DLHD with PoW authentication.
+ * Includes January 2026 timestamp fix (timestamp - 7 seconds).
  * 
- * Route is determined by NEXT_PUBLIC_USE_DLHD_PROXY:
- *   - true: /dlhd/key (Oxylabs residential proxy)
- *   - false: /tv/key (direct fetch with RPI fallback)
+ * Updated: January 21, 2026 - Added timestamp fix for PoW authentication
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHmac, createHash } from 'crypto';
 
-export const runtime = 'edge';
 export const dynamic = 'force-dynamic';
 
-// Determine route based on env var
-function getTvRoute(): string {
-  return process.env.NEXT_PUBLIC_USE_DLHD_PROXY === 'true' ? '/dlhd' : '/tv';
+const PLAYER_DOMAIN = 'epicplayplay.cfd';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+const POW_THRESHOLD = 0x1000;
+
+/**
+ * Compute PoW nonce for key authentication
+ */
+function computePoWNonce(resource: string, keyNumber: string, timestamp: number): number {
+  const hmac = createHmac('sha256', HMAC_SECRET).update(resource).digest('hex');
+
+  for (let nonce = 0; nonce < 100000; nonce++) {
+    const data = `${hmac}${resource}${keyNumber}${timestamp}${nonce}`;
+    const hash = createHash('md5').update(data).digest('hex');
+    const prefix = parseInt(hash.substring(0, 4), 16);
+
+    if (prefix < POW_THRESHOLD) {
+      return nonce;
+    }
+  }
+
+  return 99999;
 }
 
 export async function GET(request: NextRequest) {
-  const cfProxyUrl = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL;
-  
-  if (!cfProxyUrl) {
-    return NextResponse.json({
-      error: 'DLHD proxy not configured',
-      hint: 'Set NEXT_PUBLIC_CF_TV_PROXY_URL environment variable',
-    }, { status: 503 });
-  }
-  
-  // Strip trailing path if present
-  const baseUrl = cfProxyUrl.replace(/\/(tv|dlhd)\/?$/, '');
-  const route = getTvRoute();
-  
   const searchParams = request.nextUrl.searchParams;
-  const url = searchParams.get('url');
-  const channel = searchParams.get('channel');
+  const keyUrl = searchParams.get('url');
+  const jwt = searchParams.get('jwt');
 
-  if (!url && !channel) {
+  if (!keyUrl) {
     return NextResponse.json({
-      error: 'Missing parameters',
-      usage: {
-        url: 'GET /api/dlhd-proxy/key?url=<encoded_key_url>',
-        channel: 'GET /api/dlhd-proxy/key?channel=325',
-      },
+      error: 'Missing url parameter',
+      usage: 'GET /api/dlhd-proxy/key?url=<encoded_key_url>&jwt=<jwt>',
+    }, { status: 400 });
+  }
+
+  if (!jwt) {
+    return NextResponse.json({
+      error: 'Missing jwt parameter',
     }, { status: 400 });
   }
 
   try {
-    // Forward to Cloudflare Worker key endpoint - route determined by NEXT_PUBLIC_USE_DLHD_PROXY
-    let cfUrl: string;
-    if (url) {
-      cfUrl = `${baseUrl}${route}/key?url=${encodeURIComponent(url)}`;
-    } else {
-      cfUrl = `${baseUrl}${route}/key?channel=${channel}`;
+    // Extract resource and key number from URL
+    const keyMatch = keyUrl.match(/\/key\/([^/]+)\/(\d+)/);
+    if (!keyMatch) {
+      return NextResponse.json({
+        error: 'Invalid key URL format',
+      }, { status: 400 });
     }
-    
-    const response = await fetch(cfUrl, {
+
+    const resource = keyMatch[1];
+    const keyNumber = keyMatch[2];
+
+    // IMPORTANT: Use timestamp - 7 seconds (January 2026 security update)
+    const timestamp = Math.floor(Date.now() / 1000) - 7;
+    const nonce = computePoWNonce(resource, keyNumber, timestamp);
+
+    // Fetch key with PoW authentication
+    const keyRes = await fetch(keyUrl, {
       headers: {
-        'Accept': 'application/octet-stream',
+        'User-Agent': USER_AGENT,
+        'Origin': `https://${PLAYER_DOMAIN}`,
+        'Referer': `https://${PLAYER_DOMAIN}/`,
+        'Authorization': `Bearer ${jwt}`,
+        'X-Key-Timestamp': timestamp.toString(),
+        'X-Key-Nonce': nonce.toString(),
       },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[DLHD Key] CF Worker error:', response.status, errorText);
+    if (!keyRes.ok) {
+      const errorText = await keyRes.text();
+      console.error('[DLHD Key] Fetch failed:', keyRes.status, errorText);
       return NextResponse.json({
         error: 'Key fetch failed',
+        status: keyRes.status,
         details: errorText,
-      }, { status: response.status });
+      }, { status: 502 });
     }
 
-    const keyBuffer = await response.arrayBuffer();
-    
+    const keyBuffer = await keyRes.arrayBuffer();
+
     // Validate key size (AES-128 keys should be 16 bytes)
     if (keyBuffer.byteLength !== 16) {
       console.error('[DLHD Key] Invalid key size:', keyBuffer.byteLength);
@@ -92,7 +113,7 @@ export async function GET(request: NextRequest) {
         'Access-Control-Allow-Methods': 'GET, OPTIONS',
         'Access-Control-Allow-Headers': 'Range, Content-Type',
         'Cache-Control': 'no-cache',
-        'X-Proxied-Via': 'cloudflare-worker',
+        'X-Proxied-Via': 'nextjs-direct',
       },
     });
 
