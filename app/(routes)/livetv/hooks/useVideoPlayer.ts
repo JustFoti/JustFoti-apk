@@ -54,9 +54,12 @@ export function useVideoPlayer() {
   const [currentSource, setCurrentSource] = useState<StreamSource | null>(null);
 
   const getStreamUrl = useCallback((source: StreamSource): string => {
+    console.log('[useVideoPlayer] getStreamUrl called with:', source);
     switch (source.type) {
       case 'dlhd':
-        return getTvPlaylistUrl(source.channelId);
+        const dlhdUrl = getTvPlaylistUrl(source.channelId);
+        console.log('[useVideoPlayer] DLHD URL:', dlhdUrl);
+        return dlhdUrl;
       case 'cdnlive':
         const cdnParts = source.channelId.split('|');
         const channelName = encodeURIComponent(cdnParts[0] || source.channelId);
@@ -79,7 +82,11 @@ export function useVideoPlayer() {
   }, []);
 
   const loadStream = useCallback(async (source: StreamSource) => {
-    if (!videoRef.current) return;
+    console.log('[useVideoPlayer] loadStream called with:', source);
+    if (!videoRef.current) {
+      console.log('[useVideoPlayer] No video ref!');
+      return;
+    }
 
     setState(prev => ({ ...prev, isLoading: true, isBuffering: false, loadingStage: 'fetching', error: null }));
     setCurrentSource(source);

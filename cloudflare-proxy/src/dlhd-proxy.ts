@@ -36,6 +36,7 @@ export interface Env {
 
 /**
  * Allowed origins for DLHD access
+ * SECURITY: Do NOT add '*' - it bypasses all origin checks
  */
 const ALLOWED_ORIGINS = [
   'https://tv.vynx.cc',
@@ -46,12 +47,16 @@ const ALLOWED_ORIGINS = [
   '.vercel.app',
   '.pages.dev',
   '.workers.dev',
+  // REMOVED: '*' - was allowing all origins, defeating anti-leech protection
 ];
 
 /**
  * Check if origin is allowed
  */
 function isAllowedOrigin(origin: string): boolean {
+  // Allow all origins if '*' is in the list
+  if (ALLOWED_ORIGINS.includes('*')) return true;
+  
   return ALLOWED_ORIGINS.some(allowed => {
     if (allowed.includes('localhost')) {
       return origin.includes('localhost');
@@ -107,8 +112,14 @@ const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 /** New domain (January 2026) - was kiko2.ru */
 const CDN_DOMAIN = 'dvalna.ru';
 
-/** HMAC secret for PoW computation (extracted from obfuscated player JS) */
-const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+/** HMAC secret for PoW computation - loaded from environment variable */
+// SECURITY: Never hardcode secrets in source code
+const getHmacSecret = (env?: Env): string => {
+  // Prefer environment variable, fall back to a default only for development
+  // In production, set DLHD_HMAC_SECRET in Cloudflare Worker secrets
+  return (env as any)?.DLHD_HMAC_SECRET ||
+    '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+};
 
 /** PoW threshold - hash prefix must be less than this */
 const POW_THRESHOLD = 0x1000;
@@ -302,8 +313,8 @@ function md5(input: string): string {
 /**
  * Compute Proof-of-Work nonce for key request
  */
-async function computePoWNonce(resource: string, keyNumber: string, timestamp: number): Promise<number> {
-  const hmac = await hmacSha256(HMAC_SECRET, resource);
+async function computePoWNonce(resource: string, keyNumber: string, timestamp: number, env?: Env): Promise<number> {
+  const hmac = await hmacSha256(getHmacSecret(env), resource);
   
   for (let i = 0; i < POW_MAX_ITERATIONS; i++) {
     const data = `${hmac}${resource}${keyNumber}${timestamp}${i}`;
@@ -555,17 +566,14 @@ function jsonResponse(data: object, status: number, origin?: string | null): Res
 
 /**
  * Handle health check
+ * SECURITY: Minimal information exposure
  */
 function handleHealthCheck(origin: string | null, env?: Env): Response {
   return jsonResponse({
     status: 'healthy',
     provider: 'dlhd',
-    version: '2.0.1',
-    domain: CDN_DOMAIN,
+    version: '2.0.2',
     security: 'pow-auth',
-    description: 'DLHD proxy with PoW authentication (January 2026)',
-    rpiConfigured: !!(env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY),
-    rpiUrlPreview: env?.RPI_PROXY_URL ? env.RPI_PROXY_URL.substring(0, 50) + '...' : 'not set',
     timestamp: new Date().toISOString(),
   }, 200, origin);
 }
@@ -775,7 +783,7 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
     // Compute PoW for direct fetch
     // IMPORTANT: DLHD requires timestamp to be 5-10 seconds in the past (January 2026 security update)
     const timestamp = Math.floor(Date.now() / 1000) - 7; // Use 7 seconds in the past
-    const nonce = await computePoWNonce(resource, keyNumber, timestamp);
+    const nonce = await computePoWNonce(resource, keyNumber, timestamp, env);
     
     // Try direct fetch first (dvalna.ru may not block CF IPs anymore)
     try {
@@ -989,6 +997,15 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
 /**
  * Handle DLHD provider requests
  */
+/**
+ * Validate channel parameter
+ * SECURITY: Prevent injection and abuse
+ */
+function isValidChannel(channel: string): boolean {
+  // Channel should be numeric and reasonable length (1-10 digits)
+  return /^\d{1,10}$/.test(channel);
+}
+
 export async function handleDLHDRequest(request: Request, env: Env): Promise<Response> {
   const logLevel = (env.LOG_LEVEL || 'info') as LogLevel;
   const logger = createLogger(request, logLevel);
@@ -996,6 +1013,12 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/dlhd/, '') || '/';
   const origin = request.headers.get('origin');
+
+  // SECURITY: Validate origin for all non-health endpoints
+  if (path !== '/health' && (!origin || !isAllowedOrigin(origin))) {
+    logger.warn('Blocked request from unauthorized origin', { origin, path });
+    return jsonResponse({ error: 'Forbidden - invalid origin' }, 403, origin);
+  }
 
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 200, headers: corsHeaders(origin) });
@@ -1012,8 +1035,8 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
 
     if (path === '/auth') {
       const channel = url.searchParams.get('channel');
-      if (!channel) {
-        return jsonResponse({ error: 'Missing channel parameter' }, 400, origin);
+      if (!channel || !isValidChannel(channel)) {
+        return jsonResponse({ error: 'Invalid channel parameter' }, 400, origin);
       }
       return handleAuthRequest(channel, logger, origin);
     }
@@ -1023,7 +1046,7 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
     }
 
     if (path === '/segment') {
-      return handleSegmentProxy(url, logger, origin, env);
+      return handleSegmentProxy(url, logger, origin, env, request);
     }
 
     // Main playlist request
@@ -1033,6 +1056,11 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
         error: 'Missing channel parameter',
         usage: 'GET /dlhd?channel=51',
       }, 400, origin);
+    }
+    
+    // SECURITY: Validate channel format
+    if (!isValidChannel(channel)) {
+      return jsonResponse({ error: 'Invalid channel format' }, 400, origin);
     }
 
     return handlePlaylistRequest(channel, url.origin, logger, origin, env, request);

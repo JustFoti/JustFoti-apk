@@ -45,6 +45,8 @@ export function useDlhdProxy(): boolean {
 export function getTvProxyBaseUrl(): string {
   let cfProxyUrl = process.env.NEXT_PUBLIC_CF_TV_PROXY_URL;
   
+  console.log('[proxy-config] NEXT_PUBLIC_CF_TV_PROXY_URL:', cfProxyUrl);
+  
   if (!cfProxyUrl) {
     console.error('[proxy-config] NEXT_PUBLIC_CF_TV_PROXY_URL is not set! Cloudflare Worker is required.');
     throw new Error('TV proxy not configured. Set NEXT_PUBLIC_CF_TV_PROXY_URL environment variable.');
@@ -69,7 +71,9 @@ function getTvProxyRoute(): string {
 export function getTvPlaylistUrl(channel: string): string {
   const baseUrl = getTvProxyBaseUrl();
   const route = getTvProxyRoute();
-  return `${baseUrl}${route}?channel=${channel}`;
+  const url = `${baseUrl}${route}?channel=${channel}`;
+  console.log('[proxy-config] getTvPlaylistUrl:', url);
+  return url;
 }
 
 // Get TV key proxy URL
