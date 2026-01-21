@@ -42,9 +42,12 @@ Explains how episode URLs were fixed.
 ### 5. `JJK_OVERRIDE_IMPROVEMENT.md` - **IMPLEMENTATION IMPROVEMENT**
 ✨ **Recent enhancement!**
 - How the override was improved (Jan 19, 2026)
+- **Three improvements**: MAL ID check, error handling, and API logging
 - Old vs new implementation comparison
 - Benefits of checking MAL ID instead of episode range
 - Code quality improvements
+- Error handling enhancements with early returns
+- **Enhanced API logging** for better production monitoring
 - No user-facing changes
 
 ## Quick Links
@@ -57,7 +60,7 @@ Explains how episode URLs were fixed.
 ### Key Files
 - `app/lib/services/mal.ts` - MAL episode mappings
 - `app/api/stream/extract/route.ts` - Automatic MAL conversion
-- `app/lib/services/animekai-extractor.ts` - **Hardcoded override (lines ~1295-1410)**
+- `app/lib/services/animekai-extractor.ts` - **Hardcoded override (lines ~1295-1443)**
 - `app/(routes)/details/[id]/DetailsPageClient.tsx` - Client-side mapping
 
 ### Testing Endpoints
@@ -110,7 +113,7 @@ Returns correct stream ✅
 See `JJK_HARDCODED_OVERRIDE.md` for detailed instructions.
 
 **Quick checklist:**
-1. Delete override block in `animekai-extractor.ts`
+1. Delete override block in `animekai-extractor.ts` (lines ~1295-1443)
 2. Test episodes 48-59 still work
 3. Update all documentation files
 4. Remove or archive `JJK_HARDCODED_OVERRIDE.md`
@@ -126,8 +129,10 @@ See `JJK_HARDCODED_OVERRIDE.md` for detailed instructions.
 
 ### Episode 48 not playing correctly?
 1. Check console logs for "HARDCODED OVERRIDE" message
-2. Verify content_id is still `792m` on AnimeKai
-3. Test if AnimeKai URL still works: `https://animekai.to/watch/jujutsu-kaisen-the-culling-game-part-1-792m`
+2. Look for "❌ CRITICAL" error messages in logs
+3. Verify content_id is still `792m` on AnimeKai
+4. Test if AnimeKai URL still works: `https://animekai.to/watch/jujutsu-kaisen-the-culling-game-part-1-792m`
+5. Check if episode is available (should be 1-12)
 
 ### Want to test without override?
 1. Comment out the override block temporarily
@@ -150,4 +155,5 @@ See `JJK_HARDCODED_OVERRIDE.md` for detailed instructions.
 ---
 
 **Last Updated:** 2026-01-19  
-**Status:** Hardcoded override active for episodes 48-59
+**Status:** Hardcoded override active for episodes 48-59  
+**Recent Changes:** Enhanced API logging for better production monitoring

@@ -19,6 +19,7 @@ The MAL title for JJK Season 3 is "Jujutsu Kaisen: The Culling Game - Part 1", b
 // The API route already converts episode 48 → malId 57658, episode 1
 if (tmdbId === '95479' && malId === 57658 && episode) {
   console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode ${episode} (MAL ID ${malId}) ***`);
+  console.log(`[AnimeKai] *** THIS WILL BYPASS ALL SEARCH LOGIC AND USE DIRECT CONTENT_ID ***`);
   
   const cullingGameContentId = '792m'; // AnimeKai content ID
   
@@ -26,22 +27,25 @@ if (tmdbId === '95479' && malId === 57658 && episode) {
   // No need for manual offset calculation!
   
   // Directly fetch streams using content_id, bypassing search
+  // With improved error handling and early returns
   // ...
 }
 ```
 
-**Key Improvement:**
+**Key Features:**
 - The API route (`/api/stream/extract`) already converts absolute episode numbers to MAL entries
 - Episode 48 → MAL ID 57658, relative episode 1
 - The override now checks **MAL ID** instead of absolute episode range
 - No manual episode offset calculation needed (`episode - 47` removed)
-- More robust and cleaner implementation
+- **Improved error handling** with early returns and clear error messages
+- **Better logging** with CRITICAL markers for debugging
+- **No fallback to search** - returns immediately on failure for clarity
 
 ## Location
 
 **File:** `app/lib/services/animekai-extractor.ts`  
 **Function:** `extractAnimeKaiStreamsLocal()`  
-**Lines:** ~1295-1410  
+**Lines:** ~1295-1443  
 **Search for:** `"HARDCODED OVERRIDE FOR JJK SEASON 3"`
 
 **Trigger Condition:**
@@ -59,6 +63,16 @@ The API route already converts absolute episodes to MAL entries, so:
 - Episode 52 arrives as: `malId=57658, episode=5`
 - Episode 59 arrives as: `malId=57658, episode=12`
 
+**Error Handling:**
+The override now uses **early returns** with clear error messages:
+- ❌ Failed to fetch episodes → Returns error immediately
+- ❌ Episode not found → Returns error with available episodes list
+- ❌ Failed to get servers → Returns error immediately
+- ❌ All servers failed → Returns error immediately
+- ✅ Success → Returns sources
+
+**No fallback to search** - if the override fails, it returns an error rather than falling back to the normal search logic. This makes debugging easier and prevents confusing behavior.
+
 ## When to Remove
 
 Remove this override when **ANY** of the following is true:
@@ -71,13 +85,13 @@ Remove this override when **ANY** of the following is true:
 ## How to Remove
 
 ### Step 1: Delete the Override Block
-Remove lines ~1295-1410 in `app/lib/services/animekai-extractor.ts`:
+Remove lines ~1295-1443 in `app/lib/services/animekai-extractor.ts`:
 
 ```typescript
 // DELETE THIS ENTIRE BLOCK:
 // *** HARDCODED OVERRIDE FOR JJK SEASON 3 (CULLING GAME) ***
 if (tmdbId === '95479' && malId === 57658 && episode) {
-  // ... entire override logic ...
+  // ... entire override logic (148 lines) ...
 }
 ```
 
@@ -108,21 +122,56 @@ After successful removal, update these files:
 
 ### With Override Active (Current)
 ```
-[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1
+[EXTRACT] *** MAL ABSOLUTE EPISODE CONVERSION ***
+{
+  tmdbId: '95479',
+  originalEpisode: 48,
+  converted: {
+    malId: 57658,
+    malTitle: 'Jujutsu Kaisen: The Culling Game - Part 1',
+    relativeEpisode: 1
+  }
+}
+[EXTRACT] *** JJK DETECTED: Will pass malId=57658, malTitle="Jujutsu Kaisen: The Culling Game - Part 1", episode=1 to AnimeKai extractor ***
 [AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen: The Culling Game - Part 1"
 [AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode 1 (MAL ID 57658) ***
+[AnimeKai] *** THIS WILL BYPASS ALL SEARCH LOGIC AND USE DIRECT CONTENT_ID ***
 [AnimeKai] Using hardcoded content_id: 792m, episode: 1
+[AnimeKai] ✓ Got episodes for Culling Game, looking for episode 1...
 [AnimeKai] ✓ Found hardcoded episode token for Culling Game E1
 [AnimeKai] Processing 4 servers for hardcoded Culling Game...
 [AnimeKai] ✓ Got SUB source from Server 1 (sub)
-[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning 2 sources for JJK Culling Game ***
+[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning 2 sources for JJK Culling Game E1 ***
 ```
 
-**Note:** The episode number shown is already the **relative episode** (1-12), not the absolute episode (48-59), because the API route converted it before calling the extractor.
+**Note:** The episode number shown is already the **relative episode** (1-12), not the absolute episode (48-59), because the API route converted it before calling the extractor. The enhanced logging now shows the full conversion details for easier debugging.
+
+### Error Cases (New)
+```
+# Episode not available
+[AnimeKai] ❌ CRITICAL: Episode 13 not found in Culling Game episodes
+[AnimeKai] Available episodes: [ '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12' ]
+
+# Server failure
+[AnimeKai] ❌ CRITICAL: All servers failed for Culling Game episode 1
+
+# Episode fetch failure
+[AnimeKai] ❌ CRITICAL: Failed to get episodes for hardcoded Culling Game entry
+```
 
 ### After Removal (Expected)
 ```
-[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1
+[EXTRACT] *** MAL ABSOLUTE EPISODE CONVERSION ***
+{
+  tmdbId: '95479',
+  originalEpisode: 48,
+  converted: {
+    malId: 57658,
+    malTitle: 'Jujutsu Kaisen: The Culling Game - Part 1',
+    relativeEpisode: 1
+  }
+}
+[EXTRACT] *** JJK DETECTED: Will pass malId=57658, malTitle="Jujutsu Kaisen: The Culling Game - Part 1", episode=1 to AnimeKai extractor ***
 [AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen: The Culling Game - Part 1"
 [AnimeKai] MAL title provided - searching for: "Jujutsu Kaisen: The Culling Game - Part 1"
 [AnimeKai] ✓ Found with MAL title: "Jujutsu Kaisen: The Culling Game - Part 1"
@@ -174,6 +223,8 @@ If the override needs to stay longer than expected, consider:
 ## Changelog
 
 - **2026-01-19**: Override added to fix episodes 48-59 playback
+- **2026-01-19**: Improved error handling with early returns and clear error messages
+- **2026-01-19**: Enhanced logging in API route - JJK episodes now always log conversion details
 - **TBD**: Override removed after MAL search improvement
 
 ---

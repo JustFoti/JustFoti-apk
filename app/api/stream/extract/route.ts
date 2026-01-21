@@ -281,9 +281,10 @@ export async function GET(request: NextRequest) {
       if (malService.usesAbsoluteEpisodeNumbering(tmdbIdNum)) {
         const malEntry = malService.getMALEntryForAbsoluteEpisode(tmdbIdNum, episode);
         if (malEntry) {
-          // Log conversion for debugging (only in development or when DEBUG_MAL is enabled)
-          if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MAL === 'true') {
-            console.log('[EXTRACT] MAL absolute episode conversion:', {
+          // ALWAYS log for JJK to debug the issue
+          const isJJK = tmdbIdNum === 95479;
+          if (isJJK || process.env.NODE_ENV === 'development' || process.env.DEBUG_MAL === 'true') {
+            console.log('[EXTRACT] *** MAL ABSOLUTE EPISODE CONVERSION ***', {
               tmdbId,
               originalEpisode: episode,
               converted: {
@@ -298,6 +299,10 @@ export async function GET(request: NextRequest) {
           malTitle = malEntry.malTitle;
           // Update episode to be relative to the MAL entry
           episode = malEntry.relativeEpisode;
+          
+          if (isJJK) {
+            console.log(`[EXTRACT] *** JJK DETECTED: Will pass malId=${malId}, malTitle="${malTitle}", episode=${episode} to AnimeKai extractor ***`);
+          }
         }
       }
     }

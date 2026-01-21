@@ -1,11 +1,201 @@
-# JJK Hardcoded Override - Implementation Improvement
+# JJK Hardcoded Override - Implementation Improvements
 
 **Date:** January 19, 2026  
 **Status:** ✅ Improved and Active
 
-## What Changed
+## Latest Update: Enhanced Error Handling (Jan 19, 2026)
 
-The hardcoded override for JJK Season 3 (episodes 48-59) was **improved** to use a more robust trigger condition.
+The hardcoded override was further improved with better error handling and control flow.
+
+### Changes Made
+
+#### 1. Early Returns Instead of Nested Conditionals
+**Before:**
+```typescript
+const episodes = await getEpisodes(cullingGameContentId);
+if (episodes) {
+  // ... nested logic ...
+  if (episodeToken) {
+    // ... more nested logic ...
+    if (servers) {
+      // ... even more nesting ...
+    }
+  }
+}
+
+console.log(`[AnimeKai] Hardcoded override failed, falling back to normal search...`);
+```
+
+**After:**
+```typescript
+const episodes = await getEpisodes(cullingGameContentId);
+if (!episodes) {
+  console.log(`[AnimeKai] ❌ CRITICAL: Failed to get episodes...`);
+  return { success: false, sources: [], error: '...' };
+}
+
+// ... continue with flat logic ...
+
+if (!episodeToken) {
+  console.log(`[AnimeKai] ❌ CRITICAL: Episode not found...`);
+  return { success: false, sources: [], error: '...' };
+}
+
+// ... continue ...
+```
+
+**Benefits:**
+- ✅ Flatter code structure (easier to read)
+- ✅ Clear error messages at each failure point
+- ✅ No confusing fallback to search
+- ✅ Explicit error returns
+
+#### 2. Enhanced Logging with CRITICAL Markers
+**Before:**
+```typescript
+console.log(`[AnimeKai] Failed to get episodes`);
+```
+
+**After:**
+```typescript
+console.log(`[AnimeKai] ❌ CRITICAL: Failed to get episodes for hardcoded Culling Game entry`);
+console.log(`[AnimeKai] ❌ CRITICAL: Episode ${episode} not found in Culling Game episodes`);
+console.log(`[AnimeKai] Available episodes:`, Object.keys(season1 || {}));
+```
+
+**Benefits:**
+- ✅ Easy to spot failures in logs (❌ CRITICAL)
+- ✅ More descriptive error messages
+- ✅ Shows available episodes when episode not found
+- ✅ Better debugging experience
+
+#### 3. No Fallback to Search
+**Before:**
+```typescript
+// If override fails, fall back to normal search
+console.log(`[AnimeKai] Hardcoded override failed, falling back to normal search...`);
+// ... continues to normal search logic ...
+```
+
+**After:**
+```typescript
+// If override fails, return error immediately
+if (allSources.length === 0) {
+  console.log(`[AnimeKai] ❌ CRITICAL: All servers failed...`);
+  return { success: false, sources: [], error: '...' };
+}
+```
+
+**Benefits:**
+- ✅ Clear failure mode - no confusing behavior
+- ✅ Easier to debug (know exactly where it failed)
+- ✅ Prevents incorrect streams from being returned
+- ✅ Explicit about what went wrong
+
+#### 4. Improved Success Logging
+**Before:**
+```typescript
+console.log(`[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning ${allSources.length} sources for JJK Culling Game ***`);
+```
+
+**After:**
+```typescript
+console.log(`[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning ${allSources.length} sources for JJK Culling Game E${episode} ***`);
+```
+
+**Benefits:**
+- ✅ Shows which episode succeeded
+- ✅ More informative success message
+
+## Latest Update: Enhanced API Logging (Jan 19, 2026)
+
+The API route was enhanced with better logging specifically for JJK episodes to aid in debugging and production monitoring.
+
+### Changes Made
+
+#### 1. Always Log JJK Conversions
+**Before:**
+```typescript
+// Only logged in development or when DEBUG_MAL=true
+if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MAL === 'true') {
+  console.log('[EXTRACT] MAL absolute episode conversion:', { ... });
+}
+```
+
+**After:**
+```typescript
+// ALWAYS log for JJK to debug the issue
+const isJJK = tmdbIdNum === 95479;
+if (isJJK || process.env.NODE_ENV === 'development' || process.env.DEBUG_MAL === 'true') {
+  console.log('[EXTRACT] *** MAL ABSOLUTE EPISODE CONVERSION ***', { ... });
+}
+```
+
+**Benefits:**
+- ✅ JJK episodes always log conversion details (even in production)
+- ✅ Clear visual markers (`***`) make logs easy to spot
+- ✅ Helps monitor if the conversion is working correctly
+- ✅ Easier debugging when issues occur
+
+#### 2. Additional JJK-Specific Logging
+**New:**
+```typescript
+if (isJJK) {
+  console.log(`[EXTRACT] *** JJK DETECTED: Will pass malId=${malId}, malTitle="${malTitle}", episode=${episode} to AnimeKai extractor ***`);
+}
+```
+
+**Benefits:**
+- ✅ Shows exactly what parameters are passed to the extractor
+- ✅ Confirms the conversion happened before calling AnimeKai
+- ✅ Makes it obvious when JJK-specific logic is triggered
+- ✅ Helps verify the hardcoded override receives correct data
+
+#### 3. Structured Log Format
+**Before:**
+```
+[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (...) ep 1
+```
+
+**After:**
+```
+[EXTRACT] *** MAL ABSOLUTE EPISODE CONVERSION ***
+{
+  tmdbId: '95479',
+  originalEpisode: 48,
+  converted: {
+    malId: 57658,
+    malTitle: 'Jujutsu Kaisen: The Culling Game - Part 1',
+    relativeEpisode: 1
+  }
+}
+[EXTRACT] *** JJK DETECTED: Will pass malId=57658, malTitle="...", episode=1 to AnimeKai extractor ***
+```
+
+**Benefits:**
+- ✅ Structured JSON format is easier to parse
+- ✅ Shows all conversion details in one place
+- ✅ Clear separation between conversion and extractor call
+- ✅ Better for log aggregation tools
+
+### Why This Matters
+
+#### Production Monitoring
+- Can verify JJK episodes are converting correctly in production
+- No need to enable DEBUG_MAL flag or switch to development mode
+- Logs are always available when investigating issues
+
+#### Debugging
+- Clear visual markers make JJK logs easy to find
+- Structured format shows all relevant data
+- Can verify the hardcoded override receives correct parameters
+
+#### Maintenance
+- When removing the hardcoded override, these logs will help verify normal search works
+- Can monitor conversion accuracy over time
+- Easier to spot if episode counts change or new seasons are added
+
+## Previous Improvement: MAL ID Check (Jan 19, 2026)
 
 ### Old Implementation (Before)
 ```typescript
@@ -180,18 +370,50 @@ The improved implementation makes removal easier because:
 - Clear trigger condition to identify and remove
 - Better separation of concerns
 
-## Summary
+## Summary of All Improvements
 
-This is a **quality improvement** to the existing hardcoded override:
-- ✅ More robust trigger condition (MAL ID instead of episode range)
-- ✅ Leverages API's MAL conversion (no duplication)
-- ✅ Cleaner code (no manual offset calculation)
-- ✅ Better maintainability (single source of truth)
-- ✅ Same functionality (no user-facing changes)
+This hardcoded override has been improved **three times** on January 19, 2026:
 
-The override is still **temporary** and should be removed when MAL search improves, but it's now implemented in a much better way!
+### Improvement 1: MAL ID Check
+- ✅ Checks **MAL ID** instead of episode range
+- ✅ Leverages API's automatic MAL conversion
+- ✅ No manual episode offset calculation
+- ✅ More robust trigger condition
+
+### Improvement 2: Enhanced Error Handling
+- ✅ Early returns instead of nested conditionals
+- ✅ Clear error messages with ❌ CRITICAL markers
+- ✅ No fallback to search (explicit failure)
+- ✅ Better debugging with available episodes list
+- ✅ Improved success logging with episode number
+
+### Improvement 3: Enhanced API Logging
+- ✅ JJK episodes now **always log** conversion details (not just in development)
+- ✅ Structured logging with clear markers (`*** MAL ABSOLUTE EPISODE CONVERSION ***`)
+- ✅ Shows original episode, MAL ID, MAL title, and relative episode
+- ✅ Additional JJK-specific log showing parameters passed to extractor
+- ✅ Easier debugging and monitoring in production
+
+## Code Quality Metrics
+
+**Before all improvements:**
+- Lines of code: ~115
+- Nesting depth: 4-5 levels
+- Error handling: Implicit (falls through)
+- Debugging: Difficult (nested conditionals)
+- Production logging: Minimal
+
+**After all improvements:**
+- Lines of code: ~148 (more explicit error handling)
+- Nesting depth: 1-2 levels
+- Error handling: Explicit with early returns
+- Debugging: Easy (clear error messages at each step)
+- Production logging: **Enhanced** - JJK always logs conversion details
+
+**Trade-off:** Slightly more lines of code, but **much better maintainability, debuggability, and production monitoring**.
 
 ---
 
 **Last Updated:** January 19, 2026  
-**Status:** Active and Improved ✨
+**Status:** Active and Improved (3 improvements) ✨  
+**Next Step:** Remove when MAL search can find "The Culling Game - Part 1"

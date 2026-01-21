@@ -1296,7 +1296,13 @@ async function extractAnimeKaiStreamsLocal(
     // TMDB ID 95479 + MAL ID 57658 = The Culling Game Part 1
     // AnimeKai URL: https://anikai.to/watch/jujutsu-kaisen-the-culling-game-part-1-792m
     // The API route already converts episode 48 → malId 57658, episode 1
-    if (tmdbId === '95479' && malId === 57658 && episode) {
+    
+    // CRITICAL: Check both string and number comparison for malId
+    const isJJKCullingGame = tmdbId === '95479' && (malId === 57658 || malId === '57658') && episode;
+    
+    console.log(`[AnimeKai] Checking JJK override: tmdbId=${tmdbId}, malId=${malId} (type: ${typeof malId}), episode=${episode}, isMatch=${isJJKCullingGame}`);
+    
+    if (isJJKCullingGame) {
       console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode ${episode} (MAL ID ${malId}) ***`);
       console.log(`[AnimeKai] *** THIS WILL BYPASS ALL SEARCH LOGIC AND USE DIRECT CONTENT_ID ***`);
       

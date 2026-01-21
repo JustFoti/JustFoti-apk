@@ -102,11 +102,13 @@ Due to MAL search issues with "The Culling Game - Part 1" title, a hardcoded ove
 // The API route already converts episode 48 → malId 57658, episode 1
 if (tmdbId === '95479' && malId === 57658 && episode) {
   console.log(`[AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode ${episode} (MAL ID ${malId}) ***`);
+  console.log(`[AnimeKai] *** THIS WILL BYPASS ALL SEARCH LOGIC AND USE DIRECT CONTENT_ID ***`);
   
   const cullingGameContentId = '792m'; // From the AnimeKai URL
   
   // Episode is already converted to relative number by the API
   // Directly fetch streams using content_id, bypassing search
+  // With improved error handling and early returns
   // ...
 }
 ```
@@ -117,11 +119,14 @@ if (tmdbId === '95479' && malId === 57658 && episode) {
 - This override bypasses the search and directly uses the correct content ID
 - **This is a temporary workaround** until the MAL search logic can be improved
 
-**Key Improvement:**
+**Key Improvements (Jan 19, 2026):**
 - The override now checks **MAL ID** (57658) instead of absolute episode range (48-59)
 - The API route already converts absolute episodes to MAL entries
 - No manual episode offset calculation needed
-- More robust and cleaner implementation
+- **Enhanced error handling** with early returns and clear error messages
+- **Better logging** with ❌ CRITICAL markers for debugging
+- **No fallback to search** - returns immediately on failure for clarity
+- More robust and maintainable implementation
 
 **When to remove:**
 - When AnimeKai's search can reliably find "The Culling Game - Part 1"
@@ -184,17 +189,39 @@ Expected output:
 
 ### Console Output Example (Episode 48)
 ```
-[EXTRACT] Absolute episode anime detected: TMDB ep 48 → MAL 57658 (Jujutsu Kaisen: The Culling Game - Part 1) ep 1
+[EXTRACT] *** MAL ABSOLUTE EPISODE CONVERSION ***
+{
+  tmdbId: '95479',
+  originalEpisode: 48,
+  converted: {
+    malId: 57658,
+    malTitle: 'Jujutsu Kaisen: The Culling Game - Part 1',
+    relativeEpisode: 1
+  }
+}
+[EXTRACT] *** JJK DETECTED: Will pass malId=57658, malTitle="Jujutsu Kaisen: The Culling Game - Part 1", episode=1 to AnimeKai extractor ***
 [AnimeKai] MAL override: ID=57658, Title="Jujutsu Kaisen: The Culling Game - Part 1"
 [AnimeKai] *** HARDCODED OVERRIDE: JJK Culling Game Episode 1 (MAL ID 57658) ***
+[AnimeKai] *** THIS WILL BYPASS ALL SEARCH LOGIC AND USE DIRECT CONTENT_ID ***
 [AnimeKai] Using hardcoded content_id: 792m, episode: 1
+[AnimeKai] ✓ Got episodes for Culling Game, looking for episode 1...
 [AnimeKai] ✓ Found hardcoded episode token for Culling Game E1
 [AnimeKai] Processing 4 servers for hardcoded Culling Game...
 [AnimeKai] ✓ Got SUB source from Server 1 (sub)
-[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning 2 sources for JJK Culling Game ***
+[AnimeKai] *** HARDCODED OVERRIDE SUCCESS: Returning 2 sources for JJK Culling Game E1 ***
 ```
 
 **Note:** The hardcoded override logs show the **relative episode number** (1-12), not the absolute episode (48-59), because the API route already performed the conversion.
+
+**Error handling examples:**
+```
+# Episode not available
+[AnimeKai] ❌ CRITICAL: Episode 13 not found in Culling Game episodes
+[AnimeKai] Available episodes: [ '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12' ]
+
+# All servers failed
+[AnimeKai] ❌ CRITICAL: All servers failed for Culling Game episode 1
+```
 
 ### API Usage
 The API now handles absolute episode numbering automatically with a hardcoded override for JJK Season 3:
@@ -233,7 +260,7 @@ The hardcoded override in `animekai-extractor.ts` should be removed when:
 ```
 File: app/lib/services/animekai-extractor.ts
 Function: extractAnimeKaiStreamsLocal()
-Lines: ~1295-1410
+Lines: ~1295-1443
 Search for: "HARDCODED OVERRIDE FOR JJK SEASON 3"
 Trigger: tmdbId === '95479' && malId === 57658 && episode
 ```
@@ -243,6 +270,9 @@ Trigger: tmdbId === '95479' && malId === 57658 && episode
 - Episode 48 arrives as: `malId=57658, episode=1`
 - The override checks MAL ID instead of episode range
 - No manual episode offset calculation needed
+- **Enhanced error handling** with early returns
+- **Clear error messages** with ❌ CRITICAL markers
+- **No fallback** - returns immediately on failure
 
 ## MAL Reference
 - MAL ID 57658: https://myanimelist.net/anime/57658/Jujutsu_Kaisen__Shimetsu_Kaiyuu_-_Zenpen
