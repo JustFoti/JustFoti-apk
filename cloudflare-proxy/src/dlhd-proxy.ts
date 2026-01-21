@@ -608,33 +608,41 @@ async function handlePlaylistRequest(
     return jsonResponse({ error: 'Forbidden - invalid origin' }, 403, origin);
   }
 
-  // SECURITY: Require authentication token
+  // SECURITY: Optional authentication token validation
+  // If auth headers are provided, validate them. Otherwise allow unauthenticated access.
   const token = request?.headers.get('x-dlhd-token');
   const sessionId = request?.headers.get('x-session-id');
   const fingerprint = request?.headers.get('x-fingerprint');
   const timestamp = request?.headers.get('x-timestamp');
   const signature = request?.headers.get('x-signature');
 
-  if (!token || !sessionId || !fingerprint || !timestamp || !signature) {
-    logger.warn('Missing auth headers', { channel });
-    return jsonResponse({ 
-      error: 'Authentication required',
-      hint: 'Use Quantum Shield to obtain access token'
-    }, 401, origin);
-  }
+  // If ANY auth header is provided, ALL must be provided and valid
+  if (token || sessionId || fingerprint || timestamp || signature) {
+    if (!token || !sessionId || !fingerprint || !timestamp || !signature) {
+      logger.warn('Incomplete auth headers', { channel });
+      return jsonResponse({ 
+        error: 'Authentication incomplete',
+        hint: 'Provide all auth headers or none'
+      }, 401, origin);
+    }
 
-  // SECURITY: Verify signature
-  const expectedSig = await generateSignature(sessionId, channel, parseInt(timestamp), env?.SIGNING_SECRET || '');
-  if (signature !== expectedSig) {
-    logger.warn('Invalid signature', { channel, sessionId: sessionId.substring(0, 8) });
-    return jsonResponse({ error: 'Invalid signature' }, 403, origin);
-  }
+    // SECURITY: Verify signature
+    const expectedSig = await generateSignature(sessionId, channel, parseInt(timestamp), env?.SIGNING_SECRET || '');
+    if (signature !== expectedSig) {
+      logger.warn('Invalid signature', { channel, sessionId: sessionId.substring(0, 8) });
+      return jsonResponse({ error: 'Invalid signature' }, 403, origin);
+    }
 
-  // SECURITY: Check token expiry (30 seconds)
-  const ts = parseInt(timestamp);
-  if (Date.now() - ts > 30000) {
-    logger.warn('Token expired', { channel, age: Date.now() - ts });
-    return jsonResponse({ error: 'Token expired' }, 401, origin);
+    // SECURITY: Check token expiry (30 seconds)
+    const ts = parseInt(timestamp);
+    if (Date.now() - ts > 30000) {
+      logger.warn('Token expired', { channel, age: Date.now() - ts });
+      return jsonResponse({ error: 'Token expired' }, 401, origin);
+    }
+    
+    logger.info('Authenticated request', { channel, sessionId: sessionId.substring(0, 8) });
+  } else {
+    logger.info('Unauthenticated request (allowed)', { channel });
   }
 
   // Step 1: Get auth data (player page doesn't block CF IPs)
