@@ -1298,7 +1298,7 @@ async function extractAnimeKaiStreamsLocal(
     // The API route already converts episode 48 → malId 57658, episode 1
     
     // CRITICAL: Check both string and number comparison for malId
-    const isJJKCullingGame = tmdbId === '95479' && (malId === 57658 || malId === '57658') && episode;
+    const isJJKCullingGame = tmdbId === '95479' && (malId === 57658 || String(malId) === '57658') && episode;
     
     console.log(`[AnimeKai] Checking JJK override: tmdbId=${tmdbId}, malId=${malId} (type: ${typeof malId}), episode=${episode}, isMatch=${isJJKCullingGame}`);
     
