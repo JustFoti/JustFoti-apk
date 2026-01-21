@@ -765,7 +765,8 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
     let fetchedVia = 'direct';
     
     // Compute PoW for direct fetch
-    const timestamp = Math.floor(Date.now() / 1000);
+    // IMPORTANT: DLHD requires timestamp to be 5-10 seconds in the past (January 2026 security update)
+    const timestamp = Math.floor(Date.now() / 1000) - 7; // Use 7 seconds in the past
     const nonce = await computePoWNonce(resource, keyNumber, timestamp);
     
     // Try direct fetch first (dvalna.ru may not block CF IPs anymore)

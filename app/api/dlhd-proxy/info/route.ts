@@ -174,7 +174,8 @@ async function fetchFreshInfo(channel: string): Promise<CachedInfo> {
   // Step 4: Extract key number and compute PoW
   const keyNumMatch = keyUrl.match(/\/key\/[^/]+\/(\d+)/);
   const keyNumber = keyNumMatch?.[1] || '0';
-  const timestamp = Math.floor(Date.now() / 1000);
+  // IMPORTANT: DLHD requires timestamp to be 5-10 seconds in the past (January 2026 security update)
+  const timestamp = Math.floor(Date.now() / 1000) - 7; // Use 7 seconds in the past
   const nonce = computePoWNonce(channelKey, keyNumber, timestamp);
 
   // Step 5: Fetch key with PoW auth
