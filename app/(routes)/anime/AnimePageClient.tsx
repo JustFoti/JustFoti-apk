@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MALAnimeListItem } from '@/lib/services/mal-listings';
@@ -89,49 +89,146 @@ export default function AnimePageClient({
   );
 }
 
-
-const accentColors: Record<string, { bg: string; text: string }> = {
-  pink: { bg: 'bg-pink-500', text: 'text-pink-400' },
-  fuchsia: { bg: 'bg-fuchsia-500', text: 'text-fuchsia-400' },
-  purple: { bg: 'bg-purple-500', text: 'text-purple-400' },
-  red: { bg: 'bg-red-500', text: 'text-red-400' },
-  violet: { bg: 'bg-violet-500', text: 'text-violet-400' },
-  rose: { bg: 'bg-rose-500', text: 'text-rose-400' },
-  amber: { bg: 'bg-amber-500', text: 'text-amber-400' },
+const accentColors: Record<string, { bg: string; text: string; gradient: string }> = {
+  pink: { bg: 'bg-pink-500', text: 'text-pink-400', gradient: 'from-pink-600/20 to-pink-600/40' },
+  fuchsia: { bg: 'bg-fuchsia-500', text: 'text-fuchsia-400', gradient: 'from-fuchsia-600/20 to-fuchsia-600/40' },
+  purple: { bg: 'bg-purple-500', text: 'text-purple-400', gradient: 'from-purple-600/20 to-purple-600/40' },
+  red: { bg: 'bg-red-500', text: 'text-red-400', gradient: 'from-red-600/20 to-red-600/40' },
+  violet: { bg: 'bg-violet-500', text: 'text-violet-400', gradient: 'from-violet-600/20 to-violet-600/40' },
+  rose: { bg: 'bg-rose-500', text: 'text-rose-400', gradient: 'from-rose-600/20 to-rose-600/40' },
+  amber: { bg: 'bg-amber-500', text: 'text-amber-400', gradient: 'from-amber-600/20 to-amber-600/40' },
 };
 
 function ContentRow({ title, data, onItemClick, onSeeAll, accentColor = 'pink' }: { 
   title: string; data: CategoryData; onItemClick: (item: MALAnimeListItem, source: string) => void; onSeeAll: () => void; accentColor?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
   const colors = accentColors[accentColor] || accentColors.pink;
+  
   if (!data?.items?.length) return null;
 
+  const checkScrollButtons = () => {
+    if (scrollRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
+      setCanScrollLeft(scrollLeft > 10);
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
+    }
+  };
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (scrollRef.current) {
+      const scrollAmount = scrollRef.current.clientWidth * 0.8;
+      scrollRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+      setTimeout(checkScrollButtons, 300);
+    }
+  };
+
   return (
-    <section className="py-4 md:py-6 px-3 md:px-6">
+    <section className="py-4 md:py-6 px-3 md:px-6 group/section">
       <div className="container mx-auto">
         <div className="flex items-center justify-between mb-3 md:mb-5">
-          <button onClick={onSeeAll} className="text-base sm:text-lg md:text-2xl font-bold text-white flex items-center gap-2">
+          <button onClick={onSeeAll} className="text-base sm:text-lg md:text-2xl font-bold text-white flex items-center gap-2 hover:opacity-80 transition-opacity">
             {title} <span className={`text-xs sm:text-sm font-normal ${colors.text}`}>({data.total.toLocaleString()})</span>
           </button>
+          
+          {/* Scroll Buttons */}
+          <div className="hidden md:flex gap-2">
+            <button
+              onClick={() => scroll('left')}
+              disabled={!canScrollLeft}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border border-white/10 ${
+                canScrollLeft 
+                  ? `bg-gradient-to-r ${colors.gradient} hover:border-white/30 text-white` 
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              }`}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => scroll('right')}
+              disabled={!canScrollRight}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border border-white/10 ${
+                canScrollRight 
+                  ? `bg-gradient-to-r ${colors.gradient} hover:border-white/30 text-white` 
+                  : 'bg-white/5 text-white/30 cursor-not-allowed'
+              }`}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+              </svg>
+            </button>
+          </div>
         </div>
-        <div ref={scrollRef} className="flex gap-3 overflow-x-auto scrollbar-hide pb-4" style={{ scrollbarWidth: 'none' }}>
-          {data.items.map((item) => (
-            <motion.div key={item.mal_id} initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} onClick={() => onItemClick(item, title)} className="flex-shrink-0 w-[120px] sm:w-32 md:w-36 lg:w-44 cursor-pointer group">
-              <div className="relative rounded-lg overflow-hidden bg-gray-900 shadow-lg">
-                <img src={item.images?.jpg?.large_image_url || '/placeholder-poster.jpg'} alt={item.title || ''} className="w-full aspect-[2/3] object-cover" loading="lazy" />
-                {(item.score ?? 0) > 0 && (
-                  <div className="absolute top-1.5 right-1.5 px-1 py-0.5 bg-black/70 rounded text-[10px] font-semibold text-pink-400">
-                    {item.score?.toFixed(1)}
+        
+        <div className="relative">
+          {/* Left fade gradient */}
+          {canScrollLeft && (
+            <div className="absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-[#0a0812] to-transparent z-10 pointer-events-none hidden md:block" />
+          )}
+          
+          {/* Right fade gradient */}
+          {canScrollRight && (
+            <div className="absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-[#0a0812] to-transparent z-10 pointer-events-none hidden md:block" />
+          )}
+          
+          <div 
+            ref={scrollRef} 
+            className="flex gap-3 overflow-x-auto scrollbar-hide pb-4" 
+            style={{ scrollbarWidth: 'none' }}
+            onScroll={checkScrollButtons}
+          >
+            {data.items.map((item) => (
+              <motion.div 
+                key={item.mal_id} 
+                initial={{ opacity: 0 }} 
+                whileInView={{ opacity: 1 }} 
+                viewport={{ once: true }} 
+                onClick={() => onItemClick(item, title)} 
+                className="flex-shrink-0 w-[120px] sm:w-32 md:w-36 lg:w-44 cursor-pointer group"
+              >
+                <div className="relative rounded-lg overflow-hidden bg-gray-900 shadow-lg transition-all duration-300 group-hover:scale-105 group-hover:shadow-xl group-hover:shadow-pink-500/20">
+                  <img 
+                    src={item.images?.jpg?.large_image_url || '/placeholder-poster.jpg'} 
+                    alt={item.title || ''} 
+                    className="w-full aspect-[2/3] object-cover transition-transform duration-300 group-hover:scale-110" 
+                    loading="lazy" 
+                  />
+                  
+                  {/* Hover overlay with play button */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className={`w-12 h-12 rounded-full bg-gradient-to-r ${colors.gradient} backdrop-blur-sm flex items-center justify-center border border-white/20 transform scale-0 group-hover:scale-100 transition-transform duration-300`}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-              <div className="mt-2 px-0.5">
-                <h3 className="text-white font-medium text-xs sm:text-sm line-clamp-1">{item.title_english || item.title}</h3>
-                <p className="text-gray-500 text-[10px] mt-0.5">{item.year || ''}</p>
-              </div>
-            </motion.div>
-          ))}
+                  
+                  {/* Score badge */}
+                  {(item.score ?? 0) > 0 && (
+                    <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 bg-black/70 backdrop-blur-sm rounded text-[10px] font-semibold text-yellow-400 flex items-center gap-0.5">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                      {item.score?.toFixed(1)}
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 px-0.5">
+                  <h3 className="text-white font-medium text-xs sm:text-sm line-clamp-1 group-hover:text-pink-300 transition-colors">{item.title_english || item.title}</h3>
+                  <p className="text-gray-500 text-[10px] mt-0.5">{item.year || ''}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     </section>

@@ -745,6 +745,63 @@ export function getAbsoluteEpisodeEntries(tmdbId: number): Array<{ malId: number
   return TMDB_ABSOLUTE_EPISODE_ANIME[tmdbId] || null;
 }
 
+/**
+ * Episode data from Jikan API
+ */
+export interface MALEpisode {
+  mal_id: number;
+  title: string;
+  title_japanese: string | null;
+  title_romanji: string | null;
+  aired: string | null;
+  score: number | null;
+  filler: boolean;
+  recap: boolean;
+}
+
+/**
+ * Get episodes for an anime from Jikan API
+ * Episodes are paginated (100 per page)
+ */
+export async function getMALAnimeEpisodes(malId: number, page: number = 1): Promise<{ episodes: MALEpisode[]; hasNextPage: boolean }> {
+  try {
+    const response = await rateLimitedFetch(`${JIKAN_BASE_URL}/anime/${malId}/episodes?page=${page}`);
+    
+    if (!response.ok) {
+      console.error(`[MAL] Episodes fetch failed for ${malId}:`, response.status);
+      return { episodes: [], hasNextPage: false };
+    }
+    
+    const data = await response.json();
+    
+    return {
+      episodes: data.data || [],
+      hasNextPage: data.pagination?.has_next_page || false,
+    };
+  } catch (error) {
+    console.error(`[MAL] Episodes fetch error for ${malId}:`, error);
+    return { episodes: [], hasNextPage: false };
+  }
+}
+
+/**
+ * Get all episodes for an anime (handles pagination)
+ */
+export async function getAllMALAnimeEpisodes(malId: number): Promise<MALEpisode[]> {
+  const allEpisodes: MALEpisode[] = [];
+  let page = 1;
+  let hasNextPage = true;
+  
+  while (hasNextPage && page <= 10) { // Max 10 pages (1000 episodes)
+    const result = await getMALAnimeEpisodes(malId, page);
+    allEpisodes.push(...result.episodes);
+    hasNextPage = result.hasNextPage;
+    page++;
+  }
+  
+  return allEpisodes;
+}
+
 export const malService = {
   search: searchMALAnime,
   getById: getMALAnimeById,
@@ -757,4 +814,6 @@ export const malService = {
   getMALEntryForAbsoluteEpisode,
   usesAbsoluteEpisodeNumbering,
   getAbsoluteEpisodeEntries,
+  getEpisodes: getMALAnimeEpisodes,
+  getAllEpisodes: getAllMALAnimeEpisodes,
 };

@@ -1,12 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MALAnime, MALSeason } from '@/lib/services/mal';
 import { GlassPanel } from '@/components/ui/GlassPanel';
 import { FluidButton } from '@/components/ui/FluidButton';
 import styles from './AnimeDetails.module.css';
+
+interface EpisodeData {
+  number: number;
+  title: string;
+  titleJapanese: string | null;
+  aired: string | null;
+  score: number | null;
+  filler: boolean;
+  recap: boolean;
+}
 
 interface Props {
   anime: MALAnime;
@@ -16,10 +26,57 @@ interface Props {
 
 export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }: Props) {
   const router = useRouter();
-  const [selectedSeason, setSelectedSeason] = useState(0); // Index in allSeasons array
+  const [selectedSeason, setSelectedSeason] = useState(0);
+  const [episodeData, setEpisodeData] = useState<Record<number, EpisodeData[]>>({});
+  const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   
   const currentSeason = allSeasons[selectedSeason] || allSeasons[0];
-  const episodes = Array.from({ length: currentSeason?.episodes || 0 }, (_, i) => i + 1);
+
+  // Fetch episode data when season changes
+  useEffect(() => {
+    if (!currentSeason) return;
+    
+    const malId = currentSeason.malId;
+    
+    // Check if we already have data for this season
+    if (episodeData[malId]) return;
+    
+    async function fetchEpisodes() {
+      setLoadingEpisodes(true);
+      try {
+        const response = await fetch(`/api/content/mal-episodes?malId=${malId}`);
+        const data = await response.json();
+        
+        if (data.success && data.data?.episodes) {
+          setEpisodeData(prev => ({
+            ...prev,
+            [malId]: data.data.episodes,
+          }));
+        }
+      } catch (error) {
+        console.error('[AnimeDetails] Failed to fetch episodes:', error);
+      } finally {
+        setLoadingEpisodes(false);
+      }
+    }
+    
+    fetchEpisodes();
+  }, [currentSeason, episodeData]);
+
+  // Get episodes for current season
+  const currentEpisodes = currentSeason ? episodeData[currentSeason.malId] : null;
+  const episodeCount = currentSeason?.episodes || 0;
+  
+  // Generate episode list - use fetched data if available, otherwise generate placeholders
+  const episodes = currentEpisodes || Array.from({ length: episodeCount }, (_, i) => ({
+    number: i + 1,
+    title: `Episode ${i + 1}`,
+    titleJapanese: null,
+    aired: null,
+    score: null,
+    filler: false,
+    recap: false,
+  }));
 
   const handleWatchNow = () => {
     if (currentSeason) {
@@ -30,6 +87,16 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
   const handleEpisodeSelect = (episodeNumber: number) => {
     if (currentSeason) {
       router.push(`/anime/${currentSeason.malId}/watch?episode=${episodeNumber}`);
+    }
+  };
+
+  const formatAirDate = (dateStr: string | null) => {
+    if (!dateStr) return null;
+    try {
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return null;
     }
   };
 
@@ -118,25 +185,57 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
             </div>
           )}
 
+          {/* Loading indicator */}
+          {loadingEpisodes && (
+            <div className={styles.loadingEpisodes}>
+              <div className={styles.spinner} />
+              <p>Loading episode details...</p>
+            </div>
+          )}
+
           {/* Episode Grid */}
           <div className={styles.episodeGrid}>
-            {episodes.map((episodeNumber) => (
-              <motion.div
-                key={episodeNumber}
-                className={styles.episodeCard}
-                whileHover={{ scale: 1.02 }}
-                onClick={() => handleEpisodeSelect(episodeNumber)}
-              >
-                <div className={styles.episodeThumbnail}>
-                  <div className={styles.playOverlay}>
-                    <svg fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
+            {episodes.map((ep) => {
+              const airDate = formatAirDate(ep.aired);
+              const isFuture = ep.aired ? new Date(ep.aired) > new Date() : false;
+              
+              return (
+                <motion.div
+                  key={ep.number}
+                  className={`${styles.episodeCard} ${isFuture ? styles.futureEpisode : ''}`}
+                  whileHover={!isFuture ? { scale: 1.02 } : undefined}
+                  onClick={() => !isFuture && handleEpisodeSelect(ep.number)}
+                >
+                  <div className={styles.episodeThumbnail}>
+                    <div className={styles.thumbnailPlaceholder}>
+                      <span className={styles.episodeNumberBadge}>{ep.number}</span>
+                    </div>
+                    {!isFuture && (
+                      <div className={styles.playOverlay}>
+                        <svg fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </div>
+                    )}
+                    {ep.filler && <span className={styles.fillerBadge}>Filler</span>}
+                    {ep.recap && <span className={styles.recapBadge}>Recap</span>}
                   </div>
-                  <span className={styles.episodeNumber}>Episode {episodeNumber}</span>
-                </div>
-              </motion.div>
-            ))}
+                  <div className={styles.episodeInfo}>
+                    <h4 className={styles.episodeTitle}>
+                      {ep.title || `Episode ${ep.number}`}
+                    </h4>
+                    {airDate && (
+                      <p className={styles.episodeAirDate}>
+                        {isFuture ? `Airs: ${airDate}` : airDate}
+                      </p>
+                    )}
+                    {ep.score && ep.score > 0 && (
+                      <p className={styles.episodeScore}>⭐ {ep.score.toFixed(2)}</p>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
           </div>
         </GlassPanel>
       </section>
