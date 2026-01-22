@@ -145,9 +145,13 @@ export default function AnimeWatchClient() {
       
       for (const provider of providerOrder) {
         const params = new URLSearchParams({
-          malId: malId.toString(),
+          tmdbId: '0', // Placeholder - we're using malId directly
+          type: 'tv',
+          season: '1',
           episode: episode.toString(),
           provider,
+          malId: malId.toString(),
+          malTitle: anime?.title_english || anime?.title || '',
         });
 
         try {
@@ -201,7 +205,7 @@ export default function AnimeWatchClient() {
       setMobileError('Failed to load video');
       setMobileLoading(false);
     }
-  }, [malId, episode, audioPref, sourceMatchesAudioPref]);
+  }, [malId, episode, audioPref, sourceMatchesAudioPref, anime]);
 
   // Fetch mobile stream on mount
   const lastFetchedRef = useRef<string | null>(null);
@@ -227,9 +231,13 @@ export default function AnimeWatchClient() {
     setLoadingProvider(true);
     
     const params = new URLSearchParams({
-      malId: malId.toString(),
+      tmdbId: '0', // Placeholder - we're using malId directly
+      type: 'tv',
+      season: '1',
       episode: episode.toString(),
       provider,
+      malId: malId.toString(),
+      malTitle: anime?.title_english || anime?.title || '',
     });
 
     try {
@@ -260,7 +268,7 @@ export default function AnimeWatchClient() {
     } finally {
       setLoadingProvider(false);
     }
-  }, [malId, episode]);
+  }, [malId, episode, anime]);
 
   // Handle source change
   const handleMobileSourceChange = useCallback((index: number, currentTime: number = 0) => {
@@ -367,7 +375,7 @@ export default function AnimeWatchClient() {
     return (
       <div className={styles.container}>
         <MobileVideoPlayer
-          tmdbId={String(malId)}
+          tmdbId="0"
           mediaType="tv"
           season={1}
           episode={episode}
@@ -394,10 +402,12 @@ export default function AnimeWatchClient() {
   }
 
   // Desktop player - use the same VideoPlayer as regular watch page
+  // IMPORTANT: Pass malId as tmdbId="0" (placeholder) since we're using MAL ID directly
+  // The VideoPlayer will use malId for the actual extraction
   return (
     <div className={styles.container}>
       <DesktopVideoPlayer
-        tmdbId={String(malId)}
+        tmdbId="0"
         mediaType="tv"
         season={1}
         episode={episode}

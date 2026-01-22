@@ -1445,11 +1445,31 @@ async function extractAnimeKaiStreamsLocal(
       };
     }
     
+    // *** END HARDCODED OVERRIDE FOR JJK SEASON 3 ***
+    
     // Step 1: Get anime IDs (MAL/AniList) from TMDB ID
-    const animeIds = await getAnimeIds(tmdbId, type);
+    // IMPORTANT: If malId is already provided (from /anime/[malId] route), use it directly!
+    let animeIds: { mal_id: number | null; anilist_id: number | null };
+    
+    if (malId) {
+      // MAL ID was provided directly - skip TMDB lookup
+      console.log(`[AnimeKai] Using provided MAL ID directly: ${malId} (skipping TMDB lookup)`);
+      animeIds = { mal_id: malId, anilist_id: null };
+    } else {
+      // No MAL ID provided - look it up from TMDB
+      animeIds = await getAnimeIds(tmdbId, type);
+    }
     
     // Step 2: Get title from TMDB for fallback search
-    const tmdbInfo = await getTmdbAnimeInfo(tmdbId, type);
+    // If malTitle is provided, use it instead of fetching from TMDB
+    let tmdbInfo: { title: string } | null = null;
+    
+    if (malTitle) {
+      console.log(`[AnimeKai] Using provided MAL title: "${malTitle}" (skipping TMDB lookup)`);
+      tmdbInfo = { title: malTitle };
+    } else {
+      tmdbInfo = await getTmdbAnimeInfo(tmdbId, type);
+    }
     
     if (!animeIds.mal_id && !animeIds.anilist_id && !tmdbInfo) {
       console.log('[AnimeKai] Could not identify anime');
