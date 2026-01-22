@@ -9,6 +9,40 @@ import { useCast, CastMedia } from '@/hooks/useCast';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import styles from './MobileVideoPlayer.module.css';
 
+// Copy URL button with feedback for external players
+function CopyUrlButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    
+    // Convert relative URLs to absolute URLs
+    let fullUrl = url;
+    if (url.startsWith('/')) {
+      fullUrl = `${window.location.origin}${url}`;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  };
+
+  return (
+    <button 
+      className={`${styles.speedButton} ${copied ? styles.active : ''}`}
+      onClick={handleCopy}
+      onTouchEnd={(e) => e.stopPropagation()}
+      title="Copy stream URL"
+    >
+      {copied ? '✓' : '🔗'}
+    </button>
+  );
+}
+
 type AudioPreference = 'sub' | 'dub';
 type Provider = 'vidsrc' | '1movies' | 'flixer' | 'videasy' | 'animekai';
 
@@ -1421,6 +1455,8 @@ export default function MobileVideoPlayer({
                   <span className={styles.nextIcon}>⏭️</span>
                 </button>
               )}
+              {/* Copy URL button */}
+              <CopyUrlButton url={streamUrl} />
             </div>
             
             {/* Fullscreen on far right */}

@@ -10,6 +10,49 @@ import { useVideoPlayer } from '../hooks/useVideoPlayer';
 import { LiveEvent, TVChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
 
+// Copy URL button with feedback
+function CopyUrlButton({ getUrl }: { getUrl: () => string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    const url = getUrl();
+    if (!url) return;
+    
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  };
+
+  return (
+    <button 
+      onClick={handleCopy} 
+      className={styles.copyUrlButton}
+      title="Copy stream URL for external player"
+    >
+      {copied ? (
+        <>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>Copied!</span>
+        </>
+      ) : (
+        <>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+          <span>URL</span>
+        </>
+      )}
+    </button>
+  );
+}
+
 const SPORT_ICONS: Record<string, string> = {
   soccer: '⚽', football: '⚽', basketball: '🏀', tennis: '🎾',
   cricket: '🏏', hockey: '🏒', baseball: '⚾', golf: '⛳',
@@ -50,6 +93,7 @@ export const VideoPlayer = memo(function VideoPlayer({
     error,
     volume,
     currentSource,
+    getStreamUrlForCopy,
     loadStream,
     stopStream,
     togglePlay,
@@ -366,6 +410,10 @@ export const VideoPlayer = memo(function VideoPlayer({
               </div>
 
               <div className={styles.controlsSpacer}></div>
+
+              {currentSource && (
+                <CopyUrlButton getUrl={getStreamUrlForCopy} />
+              )}
 
               {currentSource && (
                 <span className={styles.sourceLabel}>

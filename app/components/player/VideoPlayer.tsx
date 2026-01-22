@@ -31,6 +31,49 @@ import TranscriptButton from './TranscriptButton';
 import { getStreamProxyUrl } from '@/app/lib/proxy-config';
 import styles from './VideoPlayer.module.css';
 
+// Copy URL button with feedback for external players
+function CopyUrlButton({ url }: { url: string }) {
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Convert relative URLs to absolute URLs
+    let fullUrl = url;
+    if (url.startsWith('/')) {
+      fullUrl = `${window.location.origin}${url}`;
+    }
+    
+    try {
+      await navigator.clipboard.writeText(fullUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy URL:', err);
+    }
+  };
+
+  return (
+    <button 
+      onClick={handleCopy} 
+      className={`${styles.btn} ${copied ? styles.active : ''}`}
+      data-player-control="copy-url"
+      title="Copy stream URL for external player (VLC, mpv, etc.)"
+    >
+      {copied ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
 interface VideoPlayerProps {
   tmdbId: string;
   mediaType: 'movie' | 'tv';
@@ -4109,6 +4152,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               } : null}
               disabled={!currentSubtitle}
             />
+
+            {/* Copy URL button - for external players */}
+            {streamUrl && (
+              <CopyUrlButton url={streamUrl} />
+            )}
 
             <button onClick={(e) => { e.stopPropagation(); toggleFullscreen(); }} className={styles.btn} data-player-control="fullscreen" title="Fullscreen">
               {isFullscreen ? (

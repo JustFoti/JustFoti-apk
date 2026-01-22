@@ -2386,3 +2386,53 @@
     font-size: 0.75rem;
   }
 }
+
+/* ============================================
+   COPY URL BUTTON
+   ============================================ */
+
+.copyUrlButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+
+.copyUrlButton:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.copyUrlButton:active {
+  transform: scale(0.95);
+}
+
+.copyUrlButton svg {
+  flex-shrink: 0;
+}
+
+.copyUrlButton span {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Hide on very small screens */
+@media (max-width: 480px) {
+  .copyUrlButton span {
+    display: none;
+  }
+  
+  .copyUrlButton {
+    padding: 0.5rem;
+  }
+}

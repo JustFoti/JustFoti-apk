@@ -54,11 +54,16 @@ export function useVideoPlayer() {
   const [currentSource, setCurrentSource] = useState<StreamSource | null>(null);
 
   const getStreamUrl = useCallback((source: StreamSource): string => {
-    console.log('[useVideoPlayer] getStreamUrl called with:', source);
+    // SECURITY: Only log in development to prevent URL exposure
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[useVideoPlayer] getStreamUrl called with:', source);
+    }
     switch (source.type) {
       case 'dlhd':
         const dlhdUrl = getTvPlaylistUrl(source.channelId);
-        console.log('[useVideoPlayer] DLHD URL:', dlhdUrl);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[useVideoPlayer] DLHD URL:', dlhdUrl);
+        }
         return dlhdUrl;
       case 'cdnlive':
         const cdnParts = source.channelId.split('|');
@@ -82,9 +87,13 @@ export function useVideoPlayer() {
   }, []);
 
   const loadStream = useCallback(async (source: StreamSource) => {
-    console.log('[useVideoPlayer] loadStream called with:', source);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[useVideoPlayer] loadStream called with:', source);
+    }
     if (!videoRef.current) {
-      console.log('[useVideoPlayer] No video ref!');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[useVideoPlayer] No video ref!');
+      }
       return;
     }
 
@@ -373,10 +382,21 @@ export function useVideoPlayer() {
     return () => { stopStream(); };
   }, [stopStream]);
 
+  // Get the current stream URL for copying
+  const getStreamUrlForCopy = useCallback((): string | null => {
+    if (!currentSource) return null;
+    try {
+      return getStreamUrl(currentSource);
+    } catch {
+      return null;
+    }
+  }, [currentSource, getStreamUrl]);
+
   return {
     videoRef,
     ...state,
     currentSource,
+    getStreamUrlForCopy,
     loadStream,
     stopStream,
     togglePlay,
