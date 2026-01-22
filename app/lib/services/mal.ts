@@ -753,6 +753,7 @@ export const malService = {
   getSeriesSeasons: getMALSeriesSeasons,
   getDataForTMDB: getMALDataForTMDBAnime,
   getDataForTMDBWithSeasonMapping: getMALDataForTMDBAnimeWithSeasonMapping,
+  getAllMALSeasonsForTMDB,
   getMALEntryForAbsoluteEpisode,
   usesAbsoluteEpisodeNumbering,
   getAbsoluteEpisodeEntries,

@@ -67,8 +67,14 @@ export async function GET(request: NextRequest) {
 
     console.log(`[mal-info] Fetching MAL data for: "${title}" (TMDB ${tmdbId} S${season})`);
     
-    // Get MAL data - use special season mapping if available
-    const malData = await malService.getDataForTMDBWithSeasonMapping(parseInt(tmdbId), title, season);
+    // First, try to get ALL seasons for anime with complete mappings (like JJK)
+    // This returns all MAL entries for the series, not just one season
+    let malData = await malService.getAllMALSeasonsForTMDB(parseInt(tmdbId), title);
+    
+    // If no complete mapping exists, fall back to season-specific mapping
+    if (!malData) {
+      malData = await malService.getDataForTMDBWithSeasonMapping(parseInt(tmdbId), title, season);
+    }
 
     console.log(`[mal-info] MAL result:`, {
       found: !!malData,

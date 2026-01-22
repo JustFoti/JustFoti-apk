@@ -180,26 +180,29 @@ Added comprehensive encoding detection and conversion in the subtitle proxy:
 
 ---
 
-## Anime Details Page - MAL Title Display
+## Anime Details Page - MAL Title Display & Auto-Redirect
 
 ### Problem
 The anime details page was showing generic "Season 1", "Season 2" labels instead of actual anime titles. This caused confusion because TMDB season numbers don't match what anime streaming sites (AnimeKai) expect. For example, Jujutsu Kaisen on TMDB shows as 1 season with 71 episodes, but MAL has 3 separate entries.
 
 ### Solution
-Created a new `AnimeSeasonSelector` component that displays actual MAL anime titles instead of generic season labels.
+1. Created a new `AnimeSeasonSelector` component that displays actual MAL anime titles instead of generic season labels.
+2. Added automatic anime detection and redirect - when users navigate to a TMDB details page for anime content, they are automatically redirected to the dedicated MAL-based anime page (`/anime/[malId]`).
 
 ### Files Changed
+- `app/(routes)/details/[id]/page.tsx` - **MODIFIED** - Added `isAnimeContent()` detection and automatic redirect to `/anime/[malId]`
 - `app/(routes)/details/[id]/AnimeSeasonSelector.tsx` - **NEW** - Component for selecting anime entries by title
 - `app/(routes)/details/[id]/DetailsPageClient.tsx` - Updated to use AnimeSeasonSelector for anime with MAL mappings
 
 ### How It Works
-1. When viewing an anime details page, the system fetches MAL data
-2. If MAL entries are found, `AnimeSeasonSelector` displays titles like:
+1. When navigating to `/details/[tmdbId]?type=tv`, the server checks if content is anime (Japanese animation)
+2. Anime detection checks: Animation genre (16) + Japanese origin (JP country, `ja` language, or JP production)
+3. If anime is detected, the system fetches MAL data and redirects to `/anime/[malId]`
+4. The dedicated anime page displays proper MAL titles like:
    - "Jujutsu Kaisen" (24 episodes)
    - "Jujutsu Kaisen 2nd Season" (23 episodes)
    - "Jujutsu Kaisen: The Culling Game - Part 1" (12 episodes)
-3. When user selects an entry, episodes 1-N are shown for that specific anime
-4. Episode selection passes correct `malId` and `malTitle` to the player
+5. Episode selection passes correct `malId` and `malTitle` to the player
 
 ---
 
@@ -233,6 +236,7 @@ Replaced the SVG icon with a Unicode character (✕) for better visibility and s
 | `cloudflare-proxy/src/tv-proxy.ts` | MODIFIED | Skip segment proxying, only proxy keys |
 | `app/api/subtitle-proxy/route.ts` | MODIFIED | Added encoding detection for non-UTF8 subtitles |
 | `app/components/player/TranscriptButton.tsx` | MODIFIED | Pass language code to subtitle proxy |
+| `app/(routes)/details/[id]/page.tsx` | MODIFIED | Added anime detection and auto-redirect to MAL page |
 | `app/(routes)/details/[id]/AnimeSeasonSelector.tsx` | NEW | Anime title selector component |
 | `app/(routes)/details/[id]/DetailsPageClient.tsx` | MODIFIED | Integrated AnimeSeasonSelector |
 | `app/components/home/ContinueWatching.tsx` | MODIFIED | Fixed X icon visibility |

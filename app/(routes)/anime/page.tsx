@@ -1,39 +1,48 @@
 import { Metadata } from 'next';
 import AnimePageClient from './AnimePageClient';
-import { fetchTMDBData } from '@/app/lib/services/tmdb';
+import { malListingsService, MAL_GENRES, type MALAnimeListItem } from '@/lib/services/mal-listings';
 
 export const metadata: Metadata = {
   title: 'Anime | FlyX',
-  description: 'Browse and stream the best anime on FlyX',
+  description: 'Browse and stream the best anime on FlyX - powered by MyAnimeList',
 };
 
+// Revalidate every hour
 export const revalidate = 3600;
 
-async function getAnimeData() {
-  try {
-    const [popularAnime, topRatedAnime, airingAnime, actionAnime, fantasyAnime, romanceAnime, animeMovies] = await Promise.all([
-      fetchTMDBData('/discover/tv', { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc', page: '1' }),
-      fetchTMDBData('/discover/tv', { with_genres: '16', with_origin_country: 'JP', sort_by: 'vote_average.desc', 'vote_count.gte': '100', page: '1' }),
-      fetchTMDBData('/discover/tv', { with_genres: '16', with_origin_country: 'JP', 'air_date.gte': new Date(Date.now() - 60*24*60*60*1000).toISOString().split('T')[0], sort_by: 'popularity.desc' }),
-      fetchTMDBData('/discover/tv', { with_genres: '16,10759', with_origin_country: 'JP', sort_by: 'popularity.desc' }),
-      fetchTMDBData('/discover/tv', { with_genres: '16,10765', with_origin_country: 'JP', sort_by: 'popularity.desc' }),
-      fetchTMDBData('/discover/tv', { with_genres: '16', with_keywords: '210024', with_origin_country: 'JP', sort_by: 'popularity.desc' }),
-      fetchTMDBData('/discover/movie', { with_genres: '16', with_origin_country: 'JP', sort_by: 'popularity.desc', page: '1' }),
-    ]);
+interface AnimeData {
+  airing: { items: MALAnimeListItem[]; total: number };
+  popular: { items: MALAnimeListItem[]; total: number };
+  topRated: { items: MALAnimeListItem[]; total: number };
+  action: { items: MALAnimeListItem[]; total: number };
+  fantasy: { items: MALAnimeListItem[]; total: number };
+  romance: { items: MALAnimeListItem[]; total: number };
+  movies: { items: MALAnimeListItem[]; total: number };
+}
 
-    const addMediaType = (items: any[], type: 'tv' | 'movie') => items?.map((item: any) => ({ ...item, mediaType: type })) || [];
+async function getAnimeData(): Promise<AnimeData | null> {
+  try {
+    // Fetch all anime data from MAL with rate limiting handled internally
+    // We stagger the requests to avoid hitting rate limits
+    const airing = await malListingsService.getAiringAnime(1, 25);
+    const popular = await malListingsService.getPopularAnime(1, 25);
+    const topRated = await malListingsService.getTopRatedAnime(1, 25);
+    const action = await malListingsService.getAnimeByGenre(MAL_GENRES.ACTION, 1, 25);
+    const fantasy = await malListingsService.getAnimeByGenre(MAL_GENRES.FANTASY, 1, 25);
+    const romance = await malListingsService.getAnimeByGenre(MAL_GENRES.ROMANCE, 1, 25);
+    const movies = await malListingsService.getAnimeMovies(1, 25);
 
     return {
-      popular: { items: addMediaType(popularAnime?.results, 'tv'), total: popularAnime?.total_results || 0 },
-      topRated: { items: addMediaType(topRatedAnime?.results, 'tv'), total: topRatedAnime?.total_results || 0 },
-      airing: { items: addMediaType(airingAnime?.results, 'tv'), total: airingAnime?.total_results || 0 },
-      action: { items: addMediaType(actionAnime?.results, 'tv'), total: actionAnime?.total_results || 0 },
-      fantasy: { items: addMediaType(fantasyAnime?.results, 'tv'), total: fantasyAnime?.total_results || 0 },
-      romance: { items: addMediaType(romanceAnime?.results, 'tv'), total: romanceAnime?.total_results || 0 },
-      movies: { items: addMediaType(animeMovies?.results, 'movie'), total: animeMovies?.total_results || 0 },
+      airing: { items: airing.items, total: airing.pagination.items.total },
+      popular: { items: popular.items, total: popular.pagination.items.total },
+      topRated: { items: topRated.items, total: topRated.pagination.items.total },
+      action: { items: action.items, total: action.pagination.items.total },
+      fantasy: { items: fantasy.items, total: fantasy.pagination.items.total },
+      romance: { items: romance.items, total: romance.pagination.items.total },
+      movies: { items: movies.items, total: movies.pagination.items.total },
     };
   } catch (error) {
-    console.error('Error fetching anime:', error);
+    console.error('[AnimePage] Error fetching anime data:', error);
     return null;
   }
 }
