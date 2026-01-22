@@ -10,6 +10,7 @@ import { GlassPanel } from '@/components/ui/GlassPanel';
 import { FluidButton } from '@/components/ui/FluidButton';
 import { WatchlistButton } from '@/components/ui/WatchlistButton';
 import { SeasonSelector } from './SeasonSelector';
+import { AnimeSeasonSelector, type AnimeEntry } from './AnimeSeasonSelector';
 import { EpisodeList } from './EpisodeList';
 import { usePresenceContext } from '@/components/analytics/PresenceProvider';
 import { shouldReduceAnimations } from '@/lib/utils/performance';
@@ -228,6 +229,10 @@ export default function DetailsPageClient({
   const [malData, setMalData] = useState<MALAnimeDetails | null>(null);
   const [loadingMAL, setLoadingMAL] = useState<boolean>(false);
   
+  // For anime with MAL mappings: list of all MAL entries and currently selected one
+  const [animeEntries, setAnimeEntries] = useState<AnimeEntry[]>([]);
+  const [selectedMalId, setSelectedMalId] = useState<number | null>(null);
+  
   // For anime: maps TMDB season to MAL parts (e.g., TMDB S2 -> MAL Part 1, 2, 3)
   // Structure: { tmdbSeason: number, malParts: MALSeason[], tmdbEpisodes: Episode[] }
   const [animeSeasonMapping, setAnimeSeasonMapping] = useState<{
@@ -328,18 +333,40 @@ export default function DetailsPageClient({
             episodes: malResult.data.totalEpisodes
           });
           setMalData(malResult.data);
+          
+          // Populate anime entries for the selector
+          if (malResult.data.allSeasons && malResult.data.allSeasons.length > 0) {
+            const entries: AnimeEntry[] = malResult.data.allSeasons.map((s: any) => ({
+              malId: s.malId,
+              title: s.titleEnglish || s.title,
+              episodes: s.episodes || 0,
+            }));
+            setAnimeEntries(entries);
+            
+            // Set initial selection to first entry if not already set
+            if (!selectedMalId || !entries.find(e => e.malId === selectedMalId)) {
+              setSelectedMalId(entries[0].malId);
+            }
+            console.log('[DetailsPage] Anime entries populated:', entries.map(e => e.title));
+          }
         } else {
           console.log('[DetailsPage] No MAL match found, using standard TMDB display');
           setMalData(null);
+          setAnimeEntries([]);
+          setSelectedMalId(null);
         }
       } else {
         setIsAnime(false);
         setMalData(null);
+        setAnimeEntries([]);
+        setSelectedMalId(null);
       }
     } catch (err) {
       console.error('[DetailsPage] Error checking anime/MAL:', err);
       setIsAnime(false);
       setMalData(null);
+      setAnimeEntries([]);
+      setSelectedMalId(null);
     } finally {
       setLoadingMAL(false);
     }
@@ -355,6 +382,43 @@ export default function DetailsPageClient({
       loadEpisodeProgress(selectedSeason);
     }
   }, [selectedSeason, content]);
+  
+  // Handle anime entry selection change
+  const handleAnimeEntryChange = (malId: number) => {
+    setSelectedMalId(malId);
+    console.log('[DetailsPage] Selected anime entry:', malId);
+  };
+  
+  // Get the currently selected anime entry
+  const getSelectedAnimeEntry = () => {
+    if (!selectedMalId || !malData?.allSeasons) return null;
+    return malData.allSeasons.find((s: any) => s.malId === selectedMalId);
+  };
+  
+  // Generate episode list for the selected MAL entry
+  const getEpisodesForSelectedEntry = () => {
+    const entry = getSelectedAnimeEntry();
+    if (!entry) return [];
+    
+    // Generate episode numbers 1 to entry.episodes
+    const episodes = [];
+    for (let i = 1; i <= (entry.episodes || 0); i++) {
+      episodes.push({
+        id: `${entry.malId}-${i}`,
+        episodeNumber: i,
+        seasonNumber: 1, // MAL entries are treated as single seasons
+        title: `Episode ${i}`,
+        overview: '',
+        stillPath: '', // No thumbnail for generated episodes
+        airDate: '',
+        runtime: 0,
+        // Store MAL info for navigation
+        _malId: entry.malId,
+        _malTitle: entry.titleEnglish || entry.title,
+      });
+    }
+    return episodes;
+  };
   
   // When we have MAL data, store it for episode navigation
   // IMPORTANT: For anime with absolute episode numbering (like JJK), DON'T set animeSeasonMapping
@@ -516,6 +580,16 @@ export default function DetailsPageClient({
     
     if (content.mediaType === 'movie') {
       router.push(`/watch/${content.id}?type=movie&title=${title}`);
+    } else if (isAnime && animeEntries.length > 0 && selectedMalId) {
+      // For anime with MAL entries, use the selected entry
+      const selectedEntry = getSelectedAnimeEntry();
+      if (selectedEntry) {
+        console.log(`[handleWatchNow] Starting with MAL entry: ${selectedEntry.malId} (${selectedEntry.titleEnglish || selectedEntry.title})`);
+        router.push(
+          `/watch/${content.id}?type=tv&season=1&episode=1&title=${title}&malId=${selectedEntry.malId}&malTitle=${encodeURIComponent(selectedEntry.titleEnglish || selectedEntry.title)}`
+        );
+        return;
+      }
     } else if (isAnime && usesAbsoluteEpisodeNumbering(tmdbId)) {
       // For anime with absolute episode numbering, start with episode 1
       // Pass absolute episode number - API will convert to correct MAL entry
@@ -544,10 +618,19 @@ export default function DetailsPageClient({
     }
   };
 
-  const handleEpisodeSelect = (episodeNumber: number) => {
+  const handleEpisodeSelect = (episodeNumber: number, malId?: number, malTitle?: string) => {
     if (!content) return;
     const title = encodeURIComponent(content.title || content.name || 'Unknown');
     const tmdbId = parseInt(String(content.id));
+    
+    // If MAL info is passed directly (from anime entry selector), use it
+    if (malId && malTitle) {
+      console.log(`[handleEpisodeSelect] Episode ${episodeNumber} with direct MAL ID: ${malId}, Title: ${malTitle}`);
+      router.push(
+        `/watch/${content.id}?type=tv&season=1&episode=${episodeNumber}&title=${title}&malId=${malId}&malTitle=${encodeURIComponent(malTitle)}`
+      );
+      return;
+    }
     
     // Check if this anime uses absolute episode numbering on TMDB
     // e.g., JJK on TMDB is 1 season with 59 episodes, but MAL has 3 separate entries
@@ -813,14 +896,23 @@ export default function DetailsPageClient({
           <GlassPanel className={styles.seasonsPanel}>
             <h2 className={styles.sectionTitle}>Episodes</h2>
             
-            {/* TMDB Season Selector - always show for TV */}
-            <SeasonSelector
-              seasons={content.seasons}
-              selectedSeason={selectedSeason}
-              onSeasonChange={(s) => {
-                setSelectedSeason(s);
-              }}
-            />
+            {/* For anime with MAL entries: show anime title selector instead of TMDB seasons */}
+            {isAnime && animeEntries.length > 0 && selectedMalId ? (
+              <AnimeSeasonSelector
+                entries={animeEntries}
+                selectedMalId={selectedMalId}
+                onEntryChange={handleAnimeEntryChange}
+              />
+            ) : (
+              /* TMDB Season Selector - show for non-anime TV */
+              <SeasonSelector
+                seasons={content.seasons}
+                selectedSeason={selectedSeason}
+                onSeasonChange={(s) => {
+                  setSelectedSeason(s);
+                }}
+              />
+            )}
             
             {/* Loading indicator */}
             {(loadingEpisodes || loadingMAL) && (
@@ -830,33 +922,43 @@ export default function DetailsPageClient({
               </div>
             )}
             
-            {/* For anime with MAL data: show MAL info badge */}
-            {!loadingEpisodes && !loadingMAL && animeSeasonMapping && animeSeasonMapping.malParts.length >= 1 && (
+            {/* For anime with MAL entries: show episodes for selected entry */}
+            {!loadingEpisodes && !loadingMAL && isAnime && animeEntries.length > 0 && selectedMalId && (
               <>
                 {/* MAL Info Badge */}
-                <div className={styles.malPartSelector}>
-                  <div className={styles.malPartHeader}>
-                    <span className={styles.malBadgeSmall}>MAL</span>
-                    <span className={styles.malPartNote}>
-                      {animeSeasonMapping.malParts[0].titleEnglish || animeSeasonMapping.malParts[0].title}
-                    </span>
-                    <span className={styles.malPartRange}>
-                      {animeSeasonMapping.malParts[0].episodes} episodes • ⭐ {animeSeasonMapping.malParts[0].score?.toFixed(2) || 'N/A'}
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const selectedEntry = getSelectedAnimeEntry();
+                  return selectedEntry ? (
+                    <div className={styles.malPartSelector}>
+                      <div className={styles.malPartHeader}>
+                        <span className={styles.malBadgeSmall}>MAL</span>
+                        <span className={styles.malPartNote}>
+                          {selectedEntry.titleEnglish || selectedEntry.title}
+                        </span>
+                        <span className={styles.malPartRange}>
+                          {selectedEntry.episodes} episodes • ⭐ {selectedEntry.score?.toFixed(2) || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
                 
-                {/* Show TMDB episodes */}
+                {/* Show generated episodes for selected MAL entry */}
                 <EpisodeList
-                  episodes={seasonData?.episodes || []}
-                  onEpisodeSelect={handleEpisodeSelect}
+                  episodes={getEpisodesForSelectedEntry()}
+                  onEpisodeSelect={(epNum) => {
+                    const entry = getSelectedAnimeEntry();
+                    if (entry) {
+                      handleEpisodeSelect(epNum, entry.malId, entry.titleEnglish || entry.title);
+                    }
+                  }}
                   episodeProgress={episodeProgress}
                 />
               </>
             )}
             
-            {/* Standard TMDB display (non-anime or anime without MAL data) */}
-            {!loadingEpisodes && !loadingMAL && !animeSeasonMapping && seasonData && (
+            {/* For anime without MAL entries or non-anime: show TMDB episodes */}
+            {!loadingEpisodes && !loadingMAL && seasonData && !(isAnime && animeEntries.length > 0 && selectedMalId) && (
               <EpisodeList
                 episodes={seasonData.episodes}
                 onEpisodeSelect={handleEpisodeSelect}

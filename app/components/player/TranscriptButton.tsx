@@ -11,6 +11,8 @@ interface TranscriptButtonProps {
   subtitleData: {
     url: string;
     language?: string;
+    langCode?: string;
+    iso639?: string;
     isCustom?: boolean;
   } | null;
   disabled?: boolean;
@@ -40,8 +42,9 @@ export default function TranscriptButton({
       return subtitleData.url;
     }
     
-    // Use the subtitle proxy API
-    return `/api/subtitle-proxy?url=${encodeURIComponent(subtitleData.url)}`;
+    // Use the subtitle proxy API with language code for proper encoding
+    const langCode = subtitleData.iso639 || subtitleData.langCode || '';
+    return `/api/subtitle-proxy?url=${encodeURIComponent(subtitleData.url)}&lang=${encodeURIComponent(langCode)}`;
   }, [subtitleData]);
 
   // Close transcript when subtitle changes

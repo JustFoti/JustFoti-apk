@@ -2436,3 +2436,207 @@
     padding: 0.5rem;
   }
 }
+
+
+/* ============================================
+   CAST/AIRPLAY BUTTON
+   ============================================ */
+
+.castButton {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.castButton:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.castButton.active {
+  background: rgba(78, 205, 196, 0.4);
+  color: #4ecdc4;
+}
+
+.castButton svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Cast Error Overlay */
+.castErrorOverlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 25;
+  pointer-events: auto;
+}
+
+.castErrorContent {
+  background: rgba(52, 152, 219, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 1.5rem 2rem;
+  max-width: 400px;
+  text-align: center;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.castErrorClose {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.castErrorClose:hover {
+  color: #ffffff;
+}
+
+.castErrorIcon {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.castErrorText {
+  color: #ffffff;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+  white-space: pre-line;
+}
+
+/* Mobile responsive for cast button */
+@media (max-width: 768px) {
+  .castButton {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 10px;
+  }
+  
+  .castButton svg {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .castErrorContent {
+    max-width: 320px;
+    padding: 1.25rem 1.5rem;
+  }
+  
+  .castErrorText {
+    font-size: 0.85rem;
+  }
+}
+
+
+/* ============================================
+   CAST ACTIVE OVERLAY
+   ============================================ */
+
+.castActiveOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+}
+
+.castActiveContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem;
+}
+
+.castActiveIcon {
+  color: #4ecdc4;
+  margin-bottom: 1.5rem;
+  animation: castPulse 2s ease-in-out infinite;
+}
+
+@keyframes castPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+
+.castActiveTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 0.5rem;
+}
+
+.castActiveSubtitle {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 2rem;
+  max-width: 300px;
+}
+
+.stopCastButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.5rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stopCastButton:hover {
+  background: rgba(255, 71, 87, 0.3);
+  border-color: rgba(255, 71, 87, 0.5);
+}
+
+/* Mobile responsive for cast overlay */
+@media (max-width: 768px) {
+  .castActiveContent {
+    padding: 1.5rem;
+  }
+  
+  .castActiveIcon svg {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .castActiveTitle {
+    font-size: 1.25rem;
+  }
+  
+  .castActiveSubtitle {
+    font-size: 0.9rem;
+  }
+  
+  .stopCastButton {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9rem;
+  }
+}

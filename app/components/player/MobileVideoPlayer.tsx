@@ -975,7 +975,9 @@ export default function MobileVideoPlayer({
     tracks.forEach(track => track.remove());
 
     if (subtitle) {
-      const subtitleUrl = `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}&_t=${Date.now()}`;
+      // Pass language code for proper encoding detection (especially for Arabic, Hebrew, etc.)
+      const langCode = subtitle.iso639 || subtitle.langCode || '';
+      const subtitleUrl = `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}&lang=${encodeURIComponent(langCode)}&_t=${Date.now()}`;
       
       const track = document.createElement('track');
       track.kind = 'subtitles';

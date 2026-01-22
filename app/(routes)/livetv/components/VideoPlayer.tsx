@@ -7,6 +7,7 @@
 
 import { memo, useEffect, useState, useRef, useCallback } from 'react';
 import { useVideoPlayer } from '../hooks/useVideoPlayer';
+import { useCast, CastMedia } from '@/hooks/useCast';
 import { LiveEvent, TVChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
 
@@ -103,8 +104,100 @@ export const VideoPlayer = memo(function VideoPlayer({
   } = useVideoPlayer();
 
   const [showControls, setShowControls] = useState(true);
+  const [castError, setCastError] = useState<string | null>(null);
+  const castErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Get the stream URL for casting
+  const streamUrl = getStreamUrlForCopy();
+
+  // Cast/AirPlay support
+  const handleCastConnect = useCallback(() => {
+    console.log('[LiveTV Player] Cast/AirPlay connected');
+    setCastError(null);
+  }, []);
+
+  const handleCastDisconnect = useCallback(() => {
+    console.log('[LiveTV Player] Cast/AirPlay disconnected');
+  }, []);
+
+  const handleCastError = useCallback((error: string) => {
+    console.error('[LiveTV Player] Cast error:', error);
+    setCastError(error);
+    if (castErrorTimeoutRef.current) {
+      clearTimeout(castErrorTimeoutRef.current);
+    }
+    // Don't auto-dismiss help messages
+    const isHelpMessage = error.includes('LG') || error.includes('Samsung') || 
+                          error.includes('Cast tab') || error.includes('screen mirroring');
+    if (!isHelpMessage) {
+      castErrorTimeoutRef.current = setTimeout(() => {
+        setCastError(null);
+      }, 5000);
+    }
+  }, []);
+
+  const cast = useCast({
+    videoRef,
+    streamUrl: streamUrl || undefined,
+    onConnect: handleCastConnect,
+    onDisconnect: handleCastDisconnect,
+    onError: handleCastError,
+  });
+
+  // Build cast media object for live TV
+  const getCastMedia = useCallback((): CastMedia | undefined => {
+    if (!streamUrl) return undefined;
+    
+    const displayTitle = event?.title || channel?.name || 'Live TV';
+    
+    // Convert relative URLs to absolute URLs for Chromecast
+    let castUrl = streamUrl;
+    if (streamUrl.startsWith('/')) {
+      castUrl = `${window.location.origin}${streamUrl}`;
+    }
+    
+    return {
+      url: castUrl,
+      title: displayTitle,
+      subtitle: event?.sport || channel?.category || 'Live Stream',
+      contentType: 'application/x-mpegURL',
+      isLive: true,
+    };
+  }, [streamUrl, event, channel]);
+
+  // Handle cast button click
+  const handleCastClick = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // If already casting, stop
+    if (cast.isCasting || cast.isAirPlayActive) {
+      cast.stop();
+      return;
+    }
+    
+    // If already connected, load media
+    if (cast.isConnected) {
+      const media = getCastMedia();
+      if (media) {
+        videoRef.current?.pause();
+        await cast.loadMedia(media);
+      }
+      return;
+    }
+    
+    // Try to start a cast session
+    const connected = await cast.requestSession();
+    
+    if (connected) {
+      const media = getCastMedia();
+      if (media) {
+        videoRef.current?.pause();
+        await cast.loadMedia(media);
+      }
+    }
+  }, [cast, getCastMedia, videoRef]);
 
   const resetHideTimer = useCallback(() => {
     setShowControls(true);
@@ -263,6 +356,12 @@ export const VideoPlayer = memo(function VideoPlayer({
           ref={videoRef}
           className={styles.videoElement}
           playsInline
+          // @ts-ignore - iOS/Safari AirPlay attributes
+          x-webkit-airplay="allow"
+          // @ts-ignore
+          webkit-playsinline="true"
+          // @ts-ignore - Allow AirPlay
+          airplay="allow"
           onClick={(e) => {
             e.stopPropagation();
             togglePlay();
@@ -332,6 +431,55 @@ export const VideoPlayer = memo(function VideoPlayer({
                 className={styles.retryButton}
               >
                 Retry
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Cast Error Message */}
+        {castError && (
+          <div className={styles.castErrorOverlay}>
+            <div className={styles.castErrorContent}>
+              <button 
+                className={styles.castErrorClose}
+                onClick={() => setCastError(null)}
+              >
+                ✕
+              </button>
+              <div className={styles.castErrorIcon}>📺</div>
+              <p className={styles.castErrorText}>{castError}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Cast Overlay - shown when casting to TV */}
+        {(cast.isCasting || cast.isAirPlayActive) && (
+          <div className={styles.castActiveOverlay}>
+            <div className={styles.castActiveContent}>
+              <div className={styles.castActiveIcon}>
+                {cast.isAirPlayAvailable ? (
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 22h12l-6-6-6 6z" />
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                  </svg>
+                ) : (
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                    <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                    <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                  </svg>
+                )}
+              </div>
+              <h3 className={styles.castActiveTitle}>
+                {cast.isAirPlayActive ? 'AirPlaying to TV' : 'Casting to TV'}
+              </h3>
+              <p className={styles.castActiveSubtitle}>{displayTitle}</p>
+              <button 
+                className={styles.stopCastButton}
+                onClick={() => cast.stop()}
+              >
+                Stop {cast.isAirPlayActive ? 'AirPlay' : 'Casting'}
               </button>
             </div>
           </div>
@@ -420,6 +568,33 @@ export const VideoPlayer = memo(function VideoPlayer({
                   {currentSource.type.toUpperCase()}
                 </span>
               )}
+
+              {/* Cast/AirPlay button */}
+              <button 
+                onClick={handleCastClick} 
+                className={`${styles.castButton} ${cast.isCasting || cast.isAirPlayActive ? styles.active : ''}`}
+                title={cast.isCasting || cast.isAirPlayActive 
+                  ? 'Stop casting' 
+                  : cast.isAirPlayAvailable 
+                    ? 'AirPlay to Apple TV' 
+                    : 'Cast to TV'}
+              >
+                {cast.isAirPlayAvailable ? (
+                  // AirPlay icon
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 22h12l-6-6-6 6z" />
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                  </svg>
+                ) : (
+                  // Chromecast icon
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
+                    <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
+                    <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
+                    <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
+                  </svg>
+                )}
+              </button>
 
               <button onClick={toggleFullscreen} className={styles.fullscreenButton}>
                 {isFullscreen ? (

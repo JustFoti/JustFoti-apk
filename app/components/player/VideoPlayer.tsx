@@ -2477,17 +2477,19 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
     
     if (subtitle) {
       // For custom uploaded subtitles, use the blob URL directly
-      // For OpenSubtitles, proxy through our API with cache-busting
+      // For OpenSubtitles, proxy through our API with cache-busting and language code for encoding
       const cacheBuster = Date.now();
+      const langCode = subtitle.iso639 || subtitle.langCode || '';
       const subtitleUrl = subtitle.isCustom 
         ? subtitle.url 
-        : `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}&_t=${cacheBuster}`;
+        : `/api/subtitle-proxy?url=${encodeURIComponent(subtitle.url)}&lang=${encodeURIComponent(langCode)}&_t=${cacheBuster}`;
       
       console.log('[VideoPlayer] Loading subtitle:', { 
         isCustom: subtitle.isCustom, 
         url: subtitleUrl.substring(0, 100),
         language: subtitle.language,
         langCode: subtitle.langCode,
+        iso639: subtitle.iso639,
         id: subtitle.id,
         offset: offset
       });
@@ -4148,6 +4150,8 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
               subtitleData={currentSubtitleDataRef.current ? {
                 url: currentSubtitleDataRef.current.url,
                 language: currentSubtitleDataRef.current.language,
+                langCode: currentSubtitleDataRef.current.langCode,
+                iso639: currentSubtitleDataRef.current.iso639,
                 isCustom: currentSubtitleDataRef.current.isCustom,
               } : null}
               disabled={!currentSubtitle}
