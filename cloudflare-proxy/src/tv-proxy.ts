@@ -25,6 +25,7 @@ export interface Env {
   LOG_LEVEL?: string;
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
+  RATE_LIMIT_KV?: KVNamespace;  // For rate limiting
 }
 
 const ALLOWED_ORIGINS = [
@@ -33,7 +34,10 @@ const ALLOWED_ORIGINS = [
   'https://www.flyx.tv',
   'http://localhost:3000',
   'http://localhost:3001',
-  '*',
+  // SECURITY: Removed '*' - was allowing all origins, defeating anti-leech protection
+  '.vercel.app',
+  '.pages.dev',
+  '.workers.dev',
 ];
 
 const PLAYER_DOMAIN = 'epicplayplay.cfd';
@@ -405,7 +409,7 @@ export default {
           receivedChannel: channel 
         }, 400, origin);
       }
-      return handlePlaylistRequest(channel, url.origin, logger, origin, env);
+      return handlePlaylistRequest(channel, url.origin, logger, origin, env, request);
     } catch (error) {
       logger.error('TV Proxy error', error as Error);
       return jsonResponse({ error: 'Proxy error', details: (error as Error).message }, 500, origin);
@@ -413,7 +417,22 @@ export default {
   },
 };
 
-async function handlePlaylistRequest(channel: string, proxyOrigin: string, logger: any, origin: string | null, env?: Env): Promise<Response> {
+async function handlePlaylistRequest(channel: string, proxyOrigin: string, logger: any, origin: string | null, env?: Env, request?: Request): Promise<Response> {
+  // SECURITY: Rate limiting - prevent abuse
+  if (env?.RATE_LIMIT_KV && request) {
+    const ip = request.headers.get('cf-connecting-ip') || '127.0.0.1';
+    const rateLimitKey = `ratelimit:tv:playlist:${ip}`;
+    const requestCount = await env.RATE_LIMIT_KV.get(rateLimitKey);
+    
+    if (requestCount && parseInt(requestCount) > 30) { // 30 playlist requests per minute
+      logger.warn('Rate limit exceeded', { ip, count: requestCount });
+      return jsonResponse({ error: 'Rate limit exceeded. Try again later.' }, 429, origin);
+    }
+    
+    const newCount = requestCount ? parseInt(requestCount) + 1 : 1;
+    await env.RATE_LIMIT_KV.put(rateLimitKey, newCount.toString(), { expirationTtl: 60 });
+  }
+
   const channelKey = `premium${channel}`;
   
   // First try to get server key (this endpoint doesn't block CF IPs)
@@ -734,7 +753,7 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
 function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string): string {
   let modified = content;
 
-  // Rewrite key URLs
+  // Rewrite key URLs - keys MUST be proxied (require PoW auth)
   modified = modified.replace(/URI="([^"]+)"/g, (_, originalKeyUrl) => {
     let absoluteKeyUrl = originalKeyUrl;
     if (!absoluteKeyUrl.startsWith('http')) {
@@ -783,13 +802,13 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
     joinedLines.push(currentLine);
   }
 
-  // Proxy segment URLs
+  // DON'T proxy segment URLs - let browser fetch directly from CDN
+  // This is MUCH faster than going through CF Worker -> RPI Proxy
+  // Segments don't require authentication, only keys do
   const lines = joinedLines.map(line => {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.includes('/tv/segment?')) return line;
-    if (trimmed.startsWith('http') && trimmed.includes(`.${CDN_DOMAIN}/`) && !trimmed.includes('mono.css')) {
-      return `${proxyOrigin}/tv/segment?url=${encodeURIComponent(trimmed)}`;
-    }
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    // Keep segment URLs as-is (direct to CDN)
     return line;
   });
 
@@ -797,10 +816,25 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
 }
 
 function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
-  if (ALLOWED_ORIGINS.includes('*')) return true;
+  // SECURITY: No wildcard fallback - must match explicitly
   const check = (o: string) => ALLOWED_ORIGINS.some(a => {
     if (a.includes('localhost')) return o.includes('localhost');
-    try { return new URL(o).hostname === new URL(a).hostname; } catch { return false; }
+    // Handle domain suffix patterns (e.g., '.pages.dev', '.workers.dev', '.vercel.app')
+    if (a.startsWith('.')) {
+      try {
+        const originHost = new URL(o).hostname;
+        return originHost.endsWith(a);
+      } catch {
+        return false;
+      }
+    }
+    try {
+      const allowedHost = new URL(a).hostname;
+      const originHost = new URL(o).hostname;
+      return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+    } catch {
+      return false;
+    }
   });
   if (origin && check(origin)) return true;
   if (referer) try { return check(new URL(referer).origin); } catch {}

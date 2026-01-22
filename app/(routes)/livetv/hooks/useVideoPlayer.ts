@@ -129,25 +129,33 @@ export function useVideoPlayer() {
       const hls = new Hls({
         enableWorker: true,
         // Disable low latency mode - prioritize smooth playback over low latency
-        // This is important because DLHD segments go through RPI proxy which adds latency
+        // DLHD CDN is slow, so we need large buffers
         lowLatencyMode: false,
-        backBufferLength: 90,
-        // Increase buffer sizes to handle slow segment fetches
-        maxBufferLength: 60,        // Buffer up to 60 seconds ahead (was 30)
-        maxMaxBufferLength: 120,    // Allow up to 120 seconds buffer (was 60)
-        maxBufferSize: 120 * 1000 * 1000, // 120MB buffer (was 60MB)
-        maxBufferHole: 1.0,         // Allow larger gaps (was 0.5)
-        highBufferWatchdogPeriod: 3, // Check buffer less frequently (was 2)
-        nudgeOffset: 0.2,           // Larger nudge offset (was 0.1)
-        nudgeMaxRetry: 5,           // More retries (was 3)
-        maxFragLookUpTolerance: 0.5, // More tolerance (was 0.25)
-        // Live stream settings - allow more latency for stability
-        liveSyncDurationCount: 5,   // Sync to 5 segments behind live (was 3)
-        liveMaxLatencyDurationCount: 15, // Allow up to 15 segments latency (was 10)
-        // Fragment loading settings
-        fragLoadingTimeOut: 30000,  // 30 second timeout for fragments
-        fragLoadingMaxRetry: 6,     // Retry fragment loading 6 times
-        fragLoadingRetryDelay: 1000, // 1 second between retries
+        backBufferLength: 120,
+        // AGGRESSIVE buffer sizes for slow DLHD CDN
+        maxBufferLength: 90,        // Buffer up to 90 seconds ahead
+        maxMaxBufferLength: 180,    // Allow up to 180 seconds buffer (3 min)
+        maxBufferSize: 200 * 1000 * 1000, // 200MB buffer
+        maxBufferHole: 2.0,         // Allow 2 second gaps
+        highBufferWatchdogPeriod: 5, // Check buffer every 5 seconds
+        nudgeOffset: 0.5,           // Larger nudge offset
+        nudgeMaxRetry: 10,          // More retries
+        maxFragLookUpTolerance: 1.0, // More tolerance
+        // Live stream settings - allow MORE latency for stability
+        liveSyncDurationCount: 8,   // Sync to 8 segments behind live (~32 sec)
+        liveMaxLatencyDurationCount: 20, // Allow up to 20 segments latency (~80 sec)
+        // Fragment loading settings - be patient with slow CDN
+        fragLoadingTimeOut: 60000,  // 60 second timeout for fragments
+        fragLoadingMaxRetry: 10,    // Retry fragment loading 10 times
+        fragLoadingRetryDelay: 2000, // 2 seconds between retries
+        // Manifest loading
+        manifestLoadingTimeOut: 30000,
+        manifestLoadingMaxRetry: 4,
+        // Level loading
+        levelLoadingTimeOut: 30000,
+        levelLoadingMaxRetry: 4,
+        // Start from live edge minus buffer
+        startPosition: -1,
       });
 
       hlsRef.current = hls;
