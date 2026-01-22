@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useEffect, useState } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import type { MALAnimeListItem } from '@/lib/services/mal-listings';
@@ -103,19 +103,9 @@ function ContentRow({ title, data, onItemClick, onSeeAll, accentColor = 'pink' }
   title: string; data: CategoryData; onItemClick: (item: MALAnimeListItem, source: string) => void; onSeeAll: () => void; accentColor?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
   const colors = accentColors[accentColor] || accentColors.pink;
   
   if (!data?.items?.length) return null;
-
-  const checkScrollButtons = () => {
-    if (scrollRef.current) {
-      const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
-      setCanScrollLeft(scrollLeft > 10);
-      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 10);
-    }
-  };
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -124,7 +114,6 @@ function ContentRow({ title, data, onItemClick, onSeeAll, accentColor = 'pink' }
         left: direction === 'left' ? -scrollAmount : scrollAmount,
         behavior: 'smooth'
       });
-      setTimeout(checkScrollButtons, 300);
     }
   };
 
@@ -137,52 +126,31 @@ function ContentRow({ title, data, onItemClick, onSeeAll, accentColor = 'pink' }
           </button>
           
           {/* Scroll Buttons */}
-          <div className="hidden md:flex gap-2">
-            <button
-              onClick={() => scroll('left')}
-              disabled={!canScrollLeft}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border border-white/10 ${
-                canScrollLeft 
-                  ? `bg-gradient-to-r ${colors.gradient} hover:border-white/30 text-white` 
-                  : 'bg-white/5 text-white/30 cursor-not-allowed'
-              }`}
+          <div className="hidden md:flex gap-1.5 md:gap-2">
+            <button 
+              onClick={() => scroll('left')} 
+              className="w-8 h-8 md:w-9 md:h-9 bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 rounded-full flex items-center justify-center text-white transition-all text-base md:text-lg font-bold" 
+              data-tv-skip="true" 
+              tabIndex={-1}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z" />
-              </svg>
+              ‹
             </button>
-            <button
-              onClick={() => scroll('right')}
-              disabled={!canScrollRight}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border border-white/10 ${
-                canScrollRight 
-                  ? `bg-gradient-to-r ${colors.gradient} hover:border-white/30 text-white` 
-                  : 'bg-white/5 text-white/30 cursor-not-allowed'
-              }`}
+            <button 
+              onClick={() => scroll('right')} 
+              className="w-8 h-8 md:w-9 md:h-9 bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 rounded-full flex items-center justify-center text-white transition-all text-base md:text-lg font-bold" 
+              data-tv-skip="true" 
+              tabIndex={-1}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
-              </svg>
+              ›
             </button>
           </div>
         </div>
         
         <div className="relative">
-          {/* Left fade gradient */}
-          {canScrollLeft && (
-            <div className="absolute left-0 top-0 bottom-4 w-12 bg-gradient-to-r from-[#0a0812] to-transparent z-10 pointer-events-none hidden md:block" />
-          )}
-          
-          {/* Right fade gradient */}
-          {canScrollRight && (
-            <div className="absolute right-0 top-0 bottom-4 w-12 bg-gradient-to-l from-[#0a0812] to-transparent z-10 pointer-events-none hidden md:block" />
-          )}
-          
           <div 
             ref={scrollRef} 
             className="flex gap-3 overflow-x-auto scrollbar-hide pb-4" 
             style={{ scrollbarWidth: 'none' }}
-            onScroll={checkScrollButtons}
           >
             {data.items.map((item) => (
               <motion.div 

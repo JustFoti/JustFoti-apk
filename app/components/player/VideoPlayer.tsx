@@ -663,8 +663,17 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       params.append('season', season.toString());
       params.append('episode', episode.toString());
     }
+    
+    // Pass MAL info for anime - critical for AnimeKai to get correct episode
+    if (malId) {
+      params.append('malId', malId.toString());
+      console.log(`[VideoPlayer] Including malId=${malId} in request to ${providerName}`);
+    }
+    if (malTitle) {
+      params.append('malTitle', malTitle);
+    }
 
-    console.log(`[VideoPlayer] Fetching from ${providerName}...`);
+    console.log(`[VideoPlayer] Fetching from ${providerName}...${malId ? ` (malId=${malId})` : ''}`);
 
     try {
       const response = await fetch(`/api/stream/extract?${params}`, { priority: 'high' as RequestPriority, cache: 'no-store' });
@@ -778,24 +787,29 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       }
 
       // Check if this is anime content by calling the API
-      let isAnime = false;
-      try {
-        const animeCheckRes = await fetch(`/api/content/check-anime?tmdbId=${tmdbId}&type=${mediaType}`);
-        if (animeCheckRes.ok) {
-          const animeData = await animeCheckRes.json();
-          isAnime = animeData.isAnime === true;
-          console.log(`[VideoPlayer] Anime check result:`, animeData);
-        } else {
-          console.warn(`[VideoPlayer] Anime check failed: HTTP ${animeCheckRes.status}`);
+      // OR if malId is provided (we already know it's anime from the /anime/[malId] route)
+      let isAnime = !!malId; // If malId is provided, it's definitely anime
+      if (!isAnime) {
+        try {
+          const animeCheckRes = await fetch(`/api/content/check-anime?tmdbId=${tmdbId}&type=${mediaType}`);
+          if (animeCheckRes.ok) {
+            const animeData = await animeCheckRes.json();
+            isAnime = animeData.isAnime === true;
+            console.log(`[VideoPlayer] Anime check result:`, animeData);
+          } else {
+            console.warn(`[VideoPlayer] Anime check failed: HTTP ${animeCheckRes.status}`);
+          }
+        } catch (err) {
+          console.warn('[VideoPlayer] Failed to check anime status:', err);
         }
-      } catch (err) {
-        console.warn('[VideoPlayer] Failed to check anime status:', err);
+      } else {
+        console.log(`[VideoPlayer] malId=${malId} provided - skipping anime check, this is anime content`);
       }
       setIsAnimeContent(isAnime);
-      console.log(`[VideoPlayer] Content type: ${isAnime ? 'ANIME' : 'regular'}, AnimeKai available: ${availability.animekai}`);
+      console.log(`[VideoPlayer] Content type: ${isAnime ? 'ANIME' : 'regular'}, AnimeKai available: ${availability.animekai}, malId: ${malId || 'none'}`);
 
       // Build provider priority list based on content type and user preferences
-      // For ANIME: AnimeKai FIRST, then Videasy as fallback
+      // For ANIME: AnimeKai FIRST (MANDATORY when malId is provided), then Videasy as fallback
       // For non-anime: VidSrc (primary), Flixer, 1movies, Videasy
       // User can customize order via Settings > Providers
       const userProviderSettings = getProviderSettings();

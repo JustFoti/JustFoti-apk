@@ -78,6 +78,16 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
     recap: false,
   }));
 
+  // Get thumbnail for current season (use the season's image or main anime image)
+  const getSeasonThumbnail = () => {
+    if (currentSeason?.imageUrl) return currentSeason.imageUrl;
+    return anime.images.jpg.large_image_url;
+  };
+
+  const handleBack = () => {
+    router.push('/anime');
+  };
+
   const handleWatchNow = () => {
     if (currentSeason) {
       router.push(`/anime/${currentSeason.malId}/watch?episode=1`);
@@ -100,8 +110,18 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
     }
   };
 
+  const seasonThumbnail = getSeasonThumbnail();
+
   return (
     <div className={styles.container}>
+      {/* Back Button */}
+      <button onClick={handleBack} className={styles.backButton}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        Back to Anime
+      </button>
+
       {/* Hero Section */}
       <div className={styles.hero} style={{ backgroundImage: `url(${anime.images.jpg.large_image_url})` }}>
         <div className={styles.heroOverlay} />
@@ -207,7 +227,14 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
                   onClick={() => !isFuture && handleEpisodeSelect(ep.number)}
                 >
                   <div className={styles.episodeThumbnail}>
-                    <div className={styles.thumbnailPlaceholder}>
+                    {/* Use anime poster as episode thumbnail with gradient overlay */}
+                    <img 
+                      src={seasonThumbnail} 
+                      alt={`Episode ${ep.number}`}
+                      className={styles.thumbnailImage}
+                      loading="lazy"
+                    />
+                    <div className={styles.thumbnailOverlay}>
                       <span className={styles.episodeNumberBadge}>{ep.number}</span>
                     </div>
                     {!isFuture && (
