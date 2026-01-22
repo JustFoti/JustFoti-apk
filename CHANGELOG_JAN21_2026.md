@@ -209,15 +209,14 @@ Created a new `AnimeSeasonSelector` component that displays actual MAL anime tit
 The X icon for removing items from "Continue Watching" was not visible.
 
 ### Solution
-Fixed the SVG icon visibility by:
-- Increased button size from 28px to 32px
-- Increased SVG size from 14px to 16px
-- Changed stroke from `currentColor` to direct `white` color
-- Increased stroke width from 2.5 to 3
-- Increased background opacity for better contrast
+Replaced the SVG icon with a Unicode character (✕) for better visibility and simplicity:
+- Changed from SVG to Unicode ✕ character
+- Added `text-white text-lg font-bold` classes for styling
+- Button size remains 32px (w-8 h-8)
+- Maintains hover states and accessibility attributes
 
 ### Files Changed
-- `app/components/home/ContinueWatching.tsx` - Fixed remove button SVG visibility
+- `app/components/home/ContinueWatching.tsx` - Replaced SVG with Unicode ✕ character
 
 ---
 

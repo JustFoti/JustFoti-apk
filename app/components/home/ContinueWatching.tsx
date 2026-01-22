@@ -294,15 +294,12 @@ export default function ContinueWatching() {
                       {/* Remove button - always visible on mobile, hover on desktop */}
                       <button
                         onClick={(e) => handleRemove(e, item)}
-                        className="absolute top-2 right-2 w-8 h-8 bg-black/70 hover:bg-red-600 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200 z-10 border border-white/30 hover:border-red-500"
+                        className="absolute top-2 right-2 w-8 h-8 bg-black/70 hover:bg-red-600 rounded-full flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200 z-10 border border-white/30 hover:border-red-500 text-white text-lg font-bold"
                         aria-label={`Remove ${item.metadata?.title || 'item'} from continue watching`}
                         data-tv-skip="true"
                         tabIndex={-1}
                       >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
+                        ✕
                       </button>
 
                       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
