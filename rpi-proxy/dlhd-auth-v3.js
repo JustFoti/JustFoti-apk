@@ -67,7 +67,12 @@ function computePoWNonce(resource, keyNumber, timestamp) {
 }
 
 /**
- * Extract auth data from player page
+ * Extract auth data from hitsplay.fun player page (PRIMARY) or topembed.pw (FALLBACK)
+ * 
+ * UPDATED January 2026: 
+ * - epicplayplay.cfd is DEAD!
+ * - hitsplay.fun provides JWT directly for ALL channels
+ * - topembed.pw as fallback
  * 
  * @param {string} channel - Channel number
  * @returns {Promise<{token: string, channelKey: string, country: string, timestamp: string} | null>}
@@ -75,13 +80,157 @@ function computePoWNonce(resource, keyNumber, timestamp) {
 async function fetchAuthData(channel) {
   console.log(`[AuthV3] Fetching auth data for channel ${channel}...`);
   
+  // ============================================================================
+  // METHOD 1: Try hitsplay.fun first - it provides JWT directly for ALL channels
+  // ============================================================================
+  try {
+    console.log(`[AuthV3] Trying hitsplay.fun...`);
+    const hitsplayResult = await new Promise((resolve) => {
+      const url = `https://hitsplay.fun/premiumtv/daddyhd.php?id=${channel}`;
+      https.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://dlhd.link/',
+        },
+        timeout: 10000,
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          // Find JWT token (eyJ...)
+          const jwtMatch = data.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+          if (jwtMatch) {
+            const token = jwtMatch[0];
+            try {
+              const payloadB64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+              const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+              console.log(`[AuthV3] JWT from hitsplay.fun:`, payload);
+              resolve({
+                token,
+                channelKey: payload.sub || `premium${channel}`,
+                country: payload.country || 'US',
+                timestamp: String(payload.iat || Math.floor(Date.now() / 1000)),
+                expiry: payload.exp,
+                source: 'hitsplay.fun',
+              });
+            } catch (e) {
+              console.log(`[AuthV3] JWT decode failed: ${e.message}`);
+              resolve({
+                token,
+                channelKey: `premium${channel}`,
+                country: 'US',
+                timestamp: String(Math.floor(Date.now() / 1000)),
+                source: 'hitsplay.fun',
+              });
+            }
+          } else {
+            resolve(null);
+          }
+        });
+      }).on('error', (e) => {
+        console.log(`[AuthV3] hitsplay.fun error: ${e.message}`);
+        resolve(null);
+      }).on('timeout', () => {
+        console.log(`[AuthV3] hitsplay.fun timeout`);
+        resolve(null);
+      });
+    });
+    
+    if (hitsplayResult) {
+      return hitsplayResult;
+    }
+  } catch (e) {
+    console.log(`[AuthV3] hitsplay.fun failed: ${e.message}`);
+  }
+  
+  // ============================================================================
+  // METHOD 2: Fallback to topembed.pw
+  // ============================================================================
+  // Channel ID to topembed.pw channel name mapping
+  const CHANNEL_TO_TOPEMBED = {
+    '31': 'TNTSports1[UK]',
+    '32': 'TNTSports2[UK]',
+    '33': 'TNTSports3[UK]',
+    '34': 'TNTSports4[UK]',
+    '35': 'SkySportsFootball[UK]',
+    '36': 'SkySportsArena[UK]',
+    '37': 'SkySportsAction[UK]',
+    '38': 'SkySportsMainEvent[UK]',
+    '39': 'FOXSports1[USA]',
+    '40': 'TennisChannel[USA]',
+    '43': 'PDCTV[USA]',
+    '44': 'ESPN[USA]',
+    '45': 'ESPN2[USA]',
+    '46': 'SkySportsTennis[UK]',
+    '48': 'CanalSport[Poland]',
+    '49': 'SportTV1[Portugal]',
+    '51': 'AbcTv[USA]',
+    '52': 'CBS[USA]',
+    '53': 'NBC[USA]',
+    '54': 'Fox[USA]',
+    '56': 'SuperSportFootball[SouthAfrica]',
+    '57': 'Eurosport1[Poland]',
+    '58': 'Eurosport2[Poland]',
+    '60': 'SkySportsF1[UK]',
+    '61': 'BeinSportsMena1[UK]',
+    '65': 'SkySportsCricket[UK]',
+    '66': 'TUDN[USA]',
+    '70': 'SkySportsGolf[UK]',
+    '71': 'ElevenSports1[Poland]',
+    '74': 'SportTV2[Portugal]',
+    '75': 'CanalPlusSport5[Poland]',
+    '81': 'ESPNBrazil[Brazil]',
+    '84': 'MLaliga[Spain]',
+    '88': 'Premiere1[Brasil]',
+    '89': 'Combate[Brazil]',
+    '91': 'BeinSports1[Arab]',
+    '92': 'BeinSports2[Arab]',
+  };
+  
+  // Get topembed channel name
+  let topembedName = CHANNEL_TO_TOPEMBED[channel];
+  
+  if (!topembedName) {
+    // Try to get from DLHD page
+    console.log(`[AuthV3] Channel ${channel} not in mapping, fetching from DLHD...`);
+    try {
+      const dlhdUrl = `https://dlhd.link/watch/stream-${channel}.php`;
+      const dlhdRes = await new Promise((resolve, reject) => {
+        https.get(dlhdUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://dlhd.link/',
+          },
+          timeout: 5000,
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve(data));
+        }).on('error', reject).on('timeout', () => reject(new Error('Timeout')));
+      });
+      
+      const match = dlhdRes.match(/topembed\.pw\/channel\/([^"'\s]+)/);
+      if (match) {
+        topembedName = match[1];
+        console.log(`[AuthV3] Found topembed name: ${topembedName}`);
+      }
+    } catch (e) {
+      console.log(`[AuthV3] Failed to fetch from DLHD: ${e.message}`);
+    }
+  }
+  
+  if (!topembedName) {
+    console.log(`[AuthV3] No topembed mapping for channel ${channel}`);
+    return null;
+  }
+  
   return new Promise((resolve) => {
-    const url = `https://epicplayplay.cfd/premiumtv/daddyhd.php?id=${channel}`;
+    const url = `https://topembed.pw/channel/${topembedName}`;
     
     https.get(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://daddyhd.com/',
+        'Referer': 'https://dlhd.link/',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       }
     }, (res) => {
@@ -123,7 +272,7 @@ async function fetchAuthData(channel) {
             }
           }
           
-          console.log(`[AuthV3] No JWT found in page`);
+          console.log(`[AuthV3] No JWT found in topembed page`);
           resolve(null);
           
         } catch (err) {
@@ -152,7 +301,7 @@ async function fetchKeyWithAuth(keyUrl, authData) {
     return { success: false, error: 'Invalid key URL format' };
   }
   
-  const resource = keyMatch[1]; // e.g., "premium51"
+  const resource = keyMatch[1]; // e.g., "premium51" or "ustvabc"
   const keyNumber = keyMatch[2]; // e.g., "5893400"
   
   // Generate auth headers
@@ -166,6 +315,9 @@ async function fetchKeyWithAuth(keyUrl, authData) {
   return new Promise((resolve) => {
     const url = new URL(keyUrl);
     
+    // Use hitsplay.fun as Origin/Referer since that's where we get the JWT from
+    const origin = authData.source === 'hitsplay.fun' ? 'https://hitsplay.fun' : 'https://topembed.pw';
+    
     const req = https.request({
       hostname: url.hostname,
       path: url.pathname,
@@ -173,8 +325,8 @@ async function fetchKeyWithAuth(keyUrl, authData) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
-        'Origin': 'https://epicplayplay.cfd',
-        'Referer': 'https://epicplayplay.cfd/',
+        'Origin': origin,
+        'Referer': `${origin}/`,
         'Authorization': `Bearer ${authData.token}`,
         'X-Key-Timestamp': timestamp.toString(),
         'X-Key-Nonce': nonce.toString(),
@@ -249,15 +401,18 @@ async function callHeartbeat(authData) {
   const signData = `${authData.channelKey}|${authData.country}|${authData.timestamp}|${userAgent}|${fingerprint}`;
   const clientToken = Buffer.from(signData).toString('base64');
   
-  console.log(`[HeartbeatV3] Calling heartbeat...`);
+  // Use hitsplay.fun as Origin/Referer since that's where we get the JWT from
+  const origin = authData.source === 'hitsplay.fun' ? 'https://hitsplay.fun' : 'https://topembed.pw';
+  
+  console.log(`[HeartbeatV3] Calling heartbeat (origin: ${origin})...`);
   
   return new Promise((resolve) => {
     const req = https.get('https://chevy.dvalna.ru/heartbeat', {
       headers: {
         'User-Agent': userAgent,
         'Accept': '*/*',
-        'Origin': 'https://epicplayplay.cfd',
-        'Referer': 'https://epicplayplay.cfd/',
+        'Origin': origin,
+        'Referer': `${origin}/`,
         'Authorization': `Bearer ${authData.token}`,
         'X-Channel-Key': authData.channelKey,
         'X-Client-Token': clientToken,

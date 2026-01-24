@@ -1,0 +1,32 @@
+[
+  {
+    "channelId": "44",
+    "channelName": "ESPN",
+    "requests": [],
+    "m3u8": []
+  },
+  {
+    "channelId": "51",
+    "channelName": "ABC",
+    "requests": [],
+    "m3u8": []
+  },
+  {
+    "channelId": "52",
+    "channelName": "CBS",
+    "requests": [],
+    "m3u8": []
+  },
+  {
+    "channelId": "53",
+    "channelName": "NBC",
+    "requests": [],
+    "m3u8": []
+  },
+  {
+    "channelId": "54",
+    "channelName": "Fox",
+    "requests": [],
+    "m3u8": []
+  }
+]

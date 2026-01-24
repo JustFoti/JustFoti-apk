@@ -105,9 +105,51 @@ async function generateSignature(sessionId: string, resource: string, timestamp:
 // CONSTANTS
 // =============================================================================
 
-const PLAYER_DOMAIN = 'epicplayplay.cfd';
-const PARENT_DOMAIN = 'daddyhd.com';
+// UPDATED January 2026: epicplayplay.cfd is DEAD! Using topembed.pw instead
+const PLAYER_DOMAIN = 'topembed.pw';
+const PARENT_DOMAIN = 'dlhd.link';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
+// Channel ID to topembed.pw channel name mapping
+const CHANNEL_TO_TOPEMBED: Record<string, string> = {
+  '31': 'TNTSports1[UK]',
+  '32': 'TNTSports2[UK]',
+  '33': 'TNTSports3[UK]',
+  '34': 'TNTSports4[UK]',
+  '35': 'SkySportsFootball[UK]',
+  '36': 'SkySportsArena[UK]',
+  '37': 'SkySportsAction[UK]',
+  '38': 'SkySportsMainEvent[UK]',
+  '39': 'FOXSports1[USA]',
+  '40': 'TennisChannel[USA]',
+  '43': 'PDCTV[USA]',
+  '44': 'ESPN[USA]',
+  '45': 'ESPN2[USA]',
+  '46': 'SkySportsTennis[UK]',
+  '48': 'CanalSport[Poland]',
+  '49': 'SportTV1[Portugal]',
+  '51': 'AbcTv[USA]',
+  '52': 'CBS[USA]',
+  '53': 'NBC[USA]',
+  '54': 'Fox[USA]',
+  '56': 'SuperSportFootball[SouthAfrica]',
+  '57': 'Eurosport1[Poland]',
+  '58': 'Eurosport2[Poland]',
+  '60': 'SkySportsF1[UK]',
+  '61': 'BeinSportsMena1[UK]',
+  '65': 'SkySportsCricket[UK]',
+  '66': 'TUDN[USA]',
+  '70': 'SkySportsGolf[UK]',
+  '71': 'ElevenSports1[Poland]',
+  '74': 'SportTV2[Portugal]',
+  '75': 'CanalPlusSport5[Poland]',
+  '81': 'ESPNBrazil[Brazil]',
+  '84': 'MLaliga[Spain]',
+  '88': 'Premiere1[Brasil]',
+  '89': 'Combate[Brazil]',
+  '91': 'BeinSports1[Arab]',
+  '92': 'BeinSports2[Arab]',
+};
 
 /** New domain (January 2026) - was kiko2.ru */
 const CDN_DOMAIN = 'dvalna.ru';
@@ -334,7 +376,9 @@ async function computePoWNonce(resource: string, keyNumber: string, timestamp: n
 // =============================================================================
 
 /**
- * Fetch JWT token from player page
+ * Fetch JWT token from topembed.pw player page
+ * 
+ * UPDATED January 2026: epicplayplay.cfd is DEAD! Using topembed.pw instead.
  */
 async function fetchAuthData(channel: string, logger: any): Promise<SessionData | null> {
   // Check cache first
@@ -344,10 +388,43 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
     return cached;
   }
 
-  logger.info('Fetching fresh JWT', { channel });
+  logger.info('Fetching fresh JWT from topembed.pw', { channel });
 
   try {
-    const url = `https://${PLAYER_DOMAIN}/premiumtv/daddyhd.php?id=${channel}`;
+    // Get topembed channel name from mapping
+    let topembedName = CHANNEL_TO_TOPEMBED[channel];
+    
+    if (!topembedName) {
+      // Try to get the topembed name from DLHD /watch/ page
+      logger.info('Channel not in mapping, fetching from DLHD', { channel });
+      try {
+        const dlhdUrl = `https://dlhd.link/watch/stream-${channel}.php`;
+        const dlhdRes = await fetch(dlhdUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Referer': 'https://dlhd.link/',
+          },
+        });
+        
+        if (dlhdRes.ok) {
+          const dlhdHtml = await dlhdRes.text();
+          const topembedMatch = dlhdHtml.match(/topembed\.pw\/channel\/([^"'\s]+)/);
+          if (topembedMatch) {
+            topembedName = topembedMatch[1];
+            logger.info('Found topembed name from DLHD', { channel, topembedName });
+          }
+        }
+      } catch (e) {
+        logger.warn('Failed to fetch topembed name from DLHD', { error: (e as Error).message });
+      }
+    }
+    
+    if (!topembedName) {
+      logger.warn('No topembed mapping for channel', { channel });
+      return null;
+    }
+    
+    const url = `https://${PLAYER_DOMAIN}/channel/${topembedName}`;
     
     const response = await fetch(url, {
       headers: {
@@ -359,10 +436,10 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
 
     const html = await response.text();
     
-    // Find JWT token
+    // Find JWT token (topembed stores it in SESSION_TOKEN variable)
     const jwtMatch = html.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
     if (!jwtMatch) {
-      logger.warn('No JWT found in page', { channel });
+      logger.warn('No JWT found in topembed page', { channel, topembedName });
       return null;
     }
 
@@ -377,7 +454,7 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
     try {
       const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
       const payload = JSON.parse(atob(payloadB64));
-      channelKey = payload.sub || channelKey;
+      channelKey = payload.sub || channelKey; // topembed uses different keys like 'ustvabc'
       country = payload.country || country;
       iat = payload.iat || iat;
       exp = payload.exp || exp;
@@ -403,7 +480,8 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
 }
 
 /** Fallback server keys to try if lookup fails */
-const FALLBACK_SERVER_KEYS = ['zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
+// UPDATED January 2026: Added 'wiki', 'hzt', and 'x4' servers used by topembed.pw
+const FALLBACK_SERVER_KEYS = ['wiki', 'hzt', 'x4', 'zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
 
 /**
  * Fetch server key from lookup endpoint
@@ -447,8 +525,18 @@ async function fetchServerKey(channelKey: string, logger: any): Promise<string |
 
 /**
  * Construct M3U8 URL for a channel
+ * UPDATED January 2026: Added 'wiki', 'hzt', and 'x4' servers used by topembed.pw
  */
 function constructM3U8Url(serverKey: string, channelKey: string): string {
+  if (serverKey === 'wiki') {
+    return `https://wikinew.${CDN_DOMAIN}/wiki/${channelKey}/mono.css`;
+  }
+  if (serverKey === 'hzt') {
+    return `https://hztnew.${CDN_DOMAIN}/hzt/${channelKey}/mono.css`;
+  }
+  if (serverKey === 'x4') {
+    return `https://x4new.${CDN_DOMAIN}/x4/${channelKey}/mono.css`;
+  }
   if (serverKey === 'top1/cdn') {
     return `https://top1.${CDN_DOMAIN}/top1/cdn/${channelKey}/mono.css`;
   }

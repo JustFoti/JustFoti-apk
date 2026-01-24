@@ -1,0 +1,14 @@
+[
+  {
+    "channelId": "44",
+    "channelName": "ESPN",
+    "allRequests": [],
+    "m3u8Requests": []
+  },
+  {
+    "channelId": "51",
+    "channelName": "ABC",
+    "allRequests": [],
+    "m3u8Requests": []
+  }
+]

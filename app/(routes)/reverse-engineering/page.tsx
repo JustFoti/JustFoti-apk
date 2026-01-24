@@ -22,7 +22,7 @@ const sections = [
 ];
 
 const providerStats = [
-  { name: 'DLHD', status: 'working', type: 'Live TV', method: 'Bearer Token + Heartbeat' },
+  { name: 'DLHD', status: 'working', type: 'Live TV', method: 'PoW + Timestamp Validation' },
   { name: '111movies', status: 'working', type: 'Movies/TV', method: 'AES-256-CBC + XOR' },
   { name: 'Flixer', status: 'working', type: 'Movies/TV', method: 'WASM Bundling' },
   { name: 'VidSrc', status: 'working', type: 'Movies/TV', method: 'Static Decoders' },
@@ -174,7 +174,7 @@ export default function ReverseEngineeringPage() {
             transition={{ delay: 0.2 }}
           >
             <span className={styles.badgeDot} />
-            Technical Documentation • December 2025
+            Technical Documentation • January 2026
           </motion.div>
           
           <h1 className={styles.heroTitle}>
@@ -185,7 +185,8 @@ export default function ReverseEngineeringPage() {
           
           <p className={styles.heroSubtitle}>
             A comprehensive guide to bypassing embed protections and extracting clean m3u8 streams 
-            without ads, popups, or malware.
+            without ads, popups, or malware. Updated January 2026 with PoW authentication, WASM 
+            cracking, and 183-table cipher analysis.
           </p>
 
           <motion.div 
@@ -212,7 +213,7 @@ export default function ReverseEngineeringPage() {
             transition={{ delay: 0.5 }}
           >
             <div className={styles.stat}>
-              <span className={styles.statNum}>7</span>
+              <span className={styles.statNum}>8</span>
               <span className={styles.statLabel}>Providers</span>
             </div>
             <div className={styles.stat}>
@@ -319,7 +320,9 @@ export default function ReverseEngineeringPage() {
               
               <p>
                 By reverse engineering these protections, we can extract the clean stream URLs and 
-                play them in our own player—no ads, no popups, no cryptocurrency miners.
+                play them in our own player—no ads, no popups, no cryptocurrency miners. As of 
+                January 2026, we&apos;ve cracked 8 providers including PoW authentication, WASM 
+                binaries, and 183-table substitution ciphers.
               </p>
 
               <div className={styles.providerGrid}>
@@ -380,13 +383,6 @@ export default function ReverseEngineeringPage() {
                     <p>Knowledge should be shared so others can build on it.</p>
                   </div>
                 </div>
-                <div className={styles.rule}>
-                  <span className={styles.ruleIcon}>🔄</span>
-                  <div>
-                    <strong>Keep It Updated</strong>
-                    <p>Providers change their obfuscation. We adapt.</p>
-                  </div>
-                </div>
               </div>
             </motion.div>
           </section>
@@ -405,29 +401,26 @@ export default function ReverseEngineeringPage() {
               
               <div className={styles.statusBadge}>
                 <span className={styles.statusDot} />
-                Fully Reverse Engineered - December 2025
+                Fully Reverse Engineered - January 2026 (PoW + Timestamp Validation)
               </div>
               
               <h3>Overview</h3>
               <p>
-                DLHD (daddyhd.com) provides live TV streams using HLS with AES-128 encryption. 
-                As of January 2026, they switched to dvalna.ru domain with Proof-of-Work (PoW) 
-                authentication for key requests. The good news: the new domain doesn&apos;t block 
-                Cloudflare IPs, so no residential proxy is needed.
+                DLHD (daddyhd.com) provides 850+ live TV streams using HLS with AES-128 encryption. 
+                As of January 2026, they use Proof-of-Work authentication with HMAC-SHA256 + MD5 
+                nonce computation. The twist: timestamps must be 5-10 seconds in the past.
               </p>
 
-              <h3>The Algorithm (January 2026)</h3>
+              <h3>January 2026 Security Updates</h3>
               <div className={styles.flowContainer}>
-                <FlowStep num={1} title="Get Server Key" description="Call server_lookup?channel_id=premium{channel} to get CDN server" />
-                <FlowStep num={2} title="Fetch M3U8 Playlist" description="Build URL: https://{server}new.dvalna.ru/{server}/premium{channel}/mono.css" />
-                <FlowStep num={3} title="Compute PoW Nonce" description="HMAC-SHA256 + MD5 hash with threshold check (prefix < 0x1000)" />
-                <FlowStep num={4} title="Generate JWT" description="Create JWT with resource, keyNumber, timestamp, nonce" />
-                <FlowStep num={5} title="Fetch Key with PoW" description="Request key with Authorization: Bearer {jwt} + X-Key-Timestamp + X-Key-Nonce headers" />
+                <FlowStep num={1} title="January 16: PoW Authentication" description="Added HMAC-SHA256 + MD5 nonce computation. Domain changed to dvalna.ru." />
+                <FlowStep num={2} title="January 21: Timestamp Validation" description="Timestamps must be 5-10 seconds in the past. Current time fails with E11 error." />
+                <FlowStep num={3} title="January 22: Server Discovery" description="Found missing servers (dokko1, ddy6). Channels 565, 770 now working." />
               </div>
 
-              <h3>PoW Nonce Computation</h3>
+              <h3>The PoW Algorithm</h3>
               <CodeBlock 
-                title="Proof-of-Work Algorithm"
+                title="Proof-of-Work Nonce Computation"
                 id="dlhd-pow"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
@@ -448,20 +441,44 @@ function computePoWNonce(resource, keyNumber, timestamp) {
 }`}
               />
 
-              <h3>Key Request with PoW (January 2026)</h3>
+              <h3>Critical Discovery: Timestamp Validation</h3>
               <CodeBlock 
-                title="Key Fetch with PoW Auth"
-                id="dlhd-key-pow"
+                title="Timestamp Must Be 5-10 Seconds in the Past"
+                id="dlhd-timestamp"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
-                code={`// Compute PoW nonce
+                code={`// CRITICAL: DLHD requires timestamp to be 5-10 seconds in the past
+// Using current time returns: {"error":"E11","message":"Timestamp out of range"}
+
+// ❌ FAILS: Current time
 const timestamp = Math.floor(Date.now() / 1000);
+
+// ✅ WORKS: 7 seconds in the past (middle of acceptable range)
+const timestamp = Math.floor(Date.now() / 1000) - 7;
+
+// Why 7 seconds?
+// - 5 seconds: Minimum acceptable (works but close to edge)
+// - 7 seconds: Optimal middle ground (recommended)
+// - 10 seconds: Maximum tested (works but close to upper limit)
+// - 15+ seconds: Likely to fail (too old)`}
+              />
+
+              <h3>Key Request with PoW Headers</h3>
+              <CodeBlock 
+                title="Complete Key Fetch Implementation"
+                id="dlhd-key"
+                copiedCode={copiedCode}
+                onCopy={copyCode}
+                code={`// 1. Compute timestamp (7 seconds in the past)
+const timestamp = Math.floor(Date.now() / 1000) - 7;
+
+// 2. Compute PoW nonce
 const nonce = computePoWNonce(channelKey, keyNumber, timestamp);
 
-// Generate JWT
+// 3. Generate JWT (from player page)
 const jwt = generateJWT({ resource: channelKey, keyNumber, timestamp, nonce });
 
-// Fetch key with PoW headers
+// 4. Fetch key with PoW headers
 const keyUrl = \`https://chevy.dvalna.ru/key/\${channelKey}/\${keyNumber}\`;
 const response = await fetch(keyUrl, {
   headers: {
@@ -473,33 +490,34 @@ const response = await fetch(keyUrl, {
   }
 });
 
-// Response: 16-byte AES key`}
+// Response: 16-byte AES-128 key`}
               />
 
               <h3>Error Codes</h3>
               <div className={styles.errorCodes}>
                 <div className={styles.errorCode}>
-                  <span className={styles.errorBadge}>E2</span>
+                  <span className={styles.errorBadge}>E9</span>
                   <div>
-                    <code>&quot;Invalid PoW nonce&quot;</code>
-                    <p>Nonce computation failed or hash prefix &gt;= 0x1000</p>
+                    <code>Missing required headers</code>
+                    <p>PoW headers not provided</p>
                   </div>
                 </div>
                 <div className={styles.errorCode}>
-                  <span className={styles.errorBadge}>E3</span>
+                  <span className={styles.errorBadge}>E11</span>
                   <div>
-                    <code>Token expired or invalid</code>
-                    <p>Refresh auth token from player page</p>
+                    <code>Timestamp out of range</code>
+                    <p>Timestamp too recent or too old. Use current_time - 7 seconds.</p>
                   </div>
                 </div>
               </div>
 
               <blockquote className={styles.quote}>
                 <p>
-                  &quot;When requests fail from code but work in browser, don&apos;t assume IP blocking. 
-                  Check what headers the browser is actually sending.&quot;
+                  &quot;DLHD updated their security twice in January 2026. First PoW authentication, 
+                  then timestamp validation. Each time we cracked it within hours. The cat-and-mouse 
+                  game continues.&quot;
                 </p>
-                <cite>- Field Notes, December 2025</cite>
+                <cite>- Field Notes, January 21, 2026</cite>
               </blockquote>
             </motion.div>
           </section>
@@ -523,24 +541,24 @@ const response = await fetch(keyUrl, {
               
               <h3>Overview</h3>
               <p>
-                111movies uses a Next.js frontend with a sophisticated encoding scheme to protect their 
-                API endpoints. The encoding involves AES-256-CBC encryption, XOR obfuscation, and custom 
-                alphabet substitution.
+                111movies uses a Next.js frontend with a sophisticated encoding scheme: AES-256-CBC 
+                encryption, XOR obfuscation, and custom alphabet substitution. Five layers of 
+                obfuscation in total.
               </p>
 
               <h3>The Algorithm</h3>
               <div className={styles.flowContainer}>
-                <FlowStep num={1} title="Extract Page Data" description="Fetch the page and extract __NEXT_DATA__.props.pageProps.data" />
-                <FlowStep num={2} title="AES-256-CBC Encrypt" description="Encrypt the page data using static key and IV, output as hex string" />
-                <FlowStep num={3} title="XOR Obfuscation" description="XOR each character with a 9-byte rotating key" />
-                <FlowStep num={4} title="Base64 Encode" description="UTF-8 encode the XORed string, then Base64 with URL-safe characters" />
-                <FlowStep num={5} title="Alphabet Substitution" description="Replace each character using a shuffled alphabet mapping" />
+                <FlowStep num={1} title="Extract Page Data" description="Fetch __NEXT_DATA__.props.pageProps.data from page" />
+                <FlowStep num={2} title="AES-256-CBC Encrypt" description="Encrypt with static key and IV, output as hex" />
+                <FlowStep num={3} title="XOR Obfuscation" description="XOR each character with 9-byte rotating key" />
+                <FlowStep num={4} title="Base64 Encode" description="UTF-8 encode, then Base64 with URL-safe characters" />
+                <FlowStep num={5} title="Alphabet Substitution" description="Replace each character using shuffled alphabet" />
               </div>
 
               <h3>Extracted Keys</h3>
               <CodeBlock 
-                title="AES Key (32 bytes)"
-                id="111-aes"
+                title="AES Key (32 bytes) + XOR Key (9 bytes)"
+                id="111-keys"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
                 code={`const AES_KEY = Buffer.from([
@@ -548,32 +566,13 @@ const response = await fetch(keyUrl, {
   64, 89, 191, 251, 35, 214, 209, 210,
   62, 164, 155, 85, 247, 158, 167, 48,
   172, 84, 13, 18, 19, 166, 19, 57
-]);`}
-              />
+]);
 
-              <CodeBlock 
-                title="XOR Key (9 bytes)"
-                id="111-xor"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`const XOR_KEY = Buffer.from([170, 162, 126, 126, 60, 255, 136, 130, 133]);`}
-              />
+const XOR_KEY = Buffer.from([170, 162, 126, 126, 60, 255, 136, 130, 133]);
 
-              <CodeBlock 
-                title="Alphabet Mapping"
-                id="111-alphabet"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`const STANDARD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+const STANDARD = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
 const SHUFFLED = "TuzHOxl7b0RW9o_1FPV3eGfmL4Z5pD8cahBQr2U-6yvEYwngXCdJjANtqKIMiSks";`}
               />
-
-              <h3>CDN Proxy Requirement</h3>
-              <p>
-                The 1movies CDN (<code>p.XXXXX.workers.dev</code>) blocks datacenter IPs. Requests from 
-                Cloudflare Workers, AWS, Vercel, etc. return 403. Solution: route through a residential 
-                proxy.
-              </p>
             </motion.div>
           </section>
 
@@ -596,10 +595,9 @@ const SHUFFLED = "TuzHOxl7b0RW9o_1FPV3eGfmL4Z5pD8cahBQr2U-6yvEYwngXCdJjANtqKIMiS
               
               <h3>Overview</h3>
               <p>
-                Flixer.sh represents the most sophisticated encryption we&apos;ve encountered. They use a 
-                Rust-compiled WebAssembly module for key generation and AES-256-CTR encryption with HMAC 
-                authentication. After a 12-hour reverse engineering session involving Ghidra, memory 
-                forensics, and ~150 test scripts, we cracked it.
+                Flixer.sh uses a Rust-compiled WebAssembly module for key generation and AES-256-CTR 
+                encryption with HMAC authentication. After a 12-hour reverse engineering session 
+                involving Ghidra, memory forensics, and ~150 test scripts, we cracked it.
               </p>
 
               <h3>The Challenge</h3>
@@ -626,27 +624,6 @@ const SHUFFLED = "TuzHOxl7b0RW9o_1FPV3eGfmL4Z5pD8cahBQr2U-6yvEYwngXCdJjANtqKIMiS
                 </div>
               </div>
 
-              <h3>The WASM Binary</h3>
-              <CodeBlock 
-                title="WASM Analysis"
-                id="flixer-wasm"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`File: img_data_bg.wasm
-Size: 136,881 bytes
-Functions: 377 total (52 imported, 325 defined)
-Language: Compiled from Rust
-
-Key Exports:
-  get_img_key()                    → Returns 64-char hex session key
-  process_img_data(encrypted, key) → Decrypts API responses
-
-Rust Crates Identified (via Ghidra):
-  - aes-0.8.4 (fixslice32.rs)     → AES-256 encryption
-  - ctr-0.9.2 (ctr32.rs)          → CTR mode
-  - hmac-0.12.1                    → HMAC authentication`}
-              />
-
               <h3>The Breakthrough: WASM Bundling</h3>
               <p>
                 Instead of cracking the algorithm, we bundle their WASM binary directly into our 
@@ -672,21 +649,6 @@ Rust Crates Identified (via Ghidra):
   screen: { width: 1920, height: 1080, colorDepth: 24 },
   performance: { now: () => Date.now() - timestamp },
 };`}
-              />
-
-              <h3>Critical Discovery: Header Blocking</h3>
-              <CodeBlock 
-                title="Headers That BLOCK Requests"
-                id="flixer-headers"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`// These headers cause Flixer to reject requests:
-
-'bW90aGFmYWth': '1'     // Base64 for "mothafaka" - anti-scraping marker!
-'Origin': '...'         // Browser adds this automatically
-'sec-fetch-*': '...'    // Fetch metadata headers
-
-// Solution: Don't send these headers from the Worker`}
               />
 
               <blockquote className={styles.quote}>
@@ -717,33 +679,20 @@ Rust Crates Identified (via Ghidra):
                 Working - Primary Provider
               </div>
               
-              <h3>Overview</h3>
-              <p>
-                VidSrc is our primary provider for movies and TV shows. We reverse engineered their 
-                encoding schemes and implemented static decoders—no remote script execution required.
-              </p>
-
               <h3>Encoding Formats</h3>
               <CodeBlock 
-                title="HEX Format (Primary - December 2025)"
+                title="HEX Format (Primary)"
                 id="vidsrc-hex"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
                 code={`// Algorithm: Reverse → Subtract 1 from each char → Hex decode
 function decodeHexFormat(encoded) {
-  // Step 1: Reverse the string
   const reversed = encoded.split('').reverse().join('');
-  
-  // Step 2: Subtract 1 from each character code
   let adjusted = '';
   for (let i = 0; i < reversed.length; i++) {
     adjusted += String.fromCharCode(reversed.charCodeAt(i) - 1);
   }
-  
-  // Step 3: Remove non-hex characters
   const hexClean = adjusted.replace(/[^0-9a-fA-F]/g, '');
-  
-  // Step 4: Convert hex pairs to ASCII
   let decoded = '';
   for (let i = 0; i < hexClean.length; i += 2) {
     decoded += String.fromCharCode(parseInt(hexClean.substr(i, 2), 16));
@@ -751,36 +700,6 @@ function decodeHexFormat(encoded) {
   return decoded;
 }`}
               />
-
-              <CodeBlock 
-                title="ROT3 Format"
-                id="vidsrc-rot3"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`// Content starts with "eqqmp://" (https with -3 shift)
-function decodeRot3(encoded) {
-  let decoded = '';
-  for (const char of encoded) {
-    const code = char.charCodeAt(0);
-    if (code >= 97 && code <= 122) { // lowercase
-      decoded += String.fromCharCode(((code - 97 + 3) % 26) + 97);
-    } else if (code >= 65 && code <= 90) { // uppercase
-      decoded += String.fromCharCode(((code - 65 + 3) % 26) + 65);
-    } else {
-      decoded += char; // Numbers NOT shifted!
-    }
-  }
-  return decoded;
-}`}
-              />
-
-              <div className={styles.warningNote}>
-                <span>⚠️</span>
-                <p>
-                  VidSrc is <strong>disabled by default</strong> because the fallback dynamic decoder uses 
-                  <code>new Function()</code> to execute remote scripts. Enable with <code>ENABLE_VIDSRC_PROVIDER=true</code>.
-                </p>
-              </div>
             </motion.div>
           </section>
 
@@ -818,28 +737,6 @@ function decodeRot3(encoded) {
                   </div>
                 </div>
               </div>
-
-              <CodeBlock 
-                title="API Flow"
-                id="videasy-api"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`// 1. Build API URL
-const url = \`https://api.videasy.net/{endpoint}/sources-with-title
-  ?title={title}&mediaType={type}&year={year}&tmdbId={tmdbId}\`;
-
-// 2. Fetch encrypted response
-const encrypted = await fetch(url).then(r => r.text());
-
-// 3. Decrypt via external API
-const decrypted = await fetch('https://enc-dec.app/api/dec-videasy', {
-  method: 'POST',
-  body: JSON.stringify({ text: encrypted, id: tmdbId })
-}).then(r => r.json());
-
-// 4. Extract stream URL
-const streamUrl = decrypted.result.sources[0].url;`}
-              />
             </motion.div>
           </section>
 
@@ -857,22 +754,14 @@ const streamUrl = decrypted.result.sources[0].url;`}
               
               <div className={styles.statusBadge}>
                 <span className={styles.statusDot} />
-                Fully Reverse Engineered - December 2025
+                Fully Reverse Engineered - 183 Substitution Tables
               </div>
               
               <h3>Overview</h3>
               <p>
-                AnimeKai uses a position-dependent substitution cipher for all API encryption. After 
-                extensive analysis, we discovered the cipher uses 183 unique substitution tables—one 
-                for each character position. We reverse engineered all tables and now have 100% native 
-                encryption/decryption with zero external dependencies.
-              </p>
-
-              <h3>The Discovery</h3>
-              <p>
-                The breakthrough came when we noticed that encrypting the same character at different 
-                positions produced different outputs, but the same character at the same position 
-                always produced the same output. This revealed a position-dependent substitution cipher.
+                AnimeKai uses a position-dependent substitution cipher with 183 unique tables—one 
+                for each character position. We reverse engineered all tables and now have 100% 
+                native encryption/decryption with zero external dependencies.
               </p>
 
               <h3>Cipher Structure</h3>
@@ -883,36 +772,6 @@ const streamUrl = decrypted.result.sources[0].url;`}
                 <FlowStep num={4} title="Substitution Tables" description="183 tables, each mapping 78 characters to unique bytes" />
                 <FlowStep num={5} title="URL-Safe Base64" description="Output encoded with - and _ instead of + and /" />
               </div>
-
-              <h3>Building the Tables</h3>
-              <p>
-                We built all 183 substitution tables by systematically encrypting test strings and 
-                observing the output bytes. Each table maps the 78 printable characters (a-z, A-Z, 
-                0-9, and special chars) to unique byte values.
-              </p>
-
-              <CodeBlock 
-                title="Table Building Process"
-                id="animekai-tables"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`// For each position 0-182:
-const chars = '0123456789 !"#$%&()*+,-./:;<=>?@' +
-              'ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_\`' +
-              'abcdefghijklmnopqrstuvwxyz{|}~';
-
-for (let pos = 0; pos < 183; pos++) {
-  const table = {};
-  for (const char of chars) {
-    // Build test string with char at position
-    const testStr = 'a'.repeat(pos) + char;
-    const encrypted = await encryptViaAPI(testStr);
-    const cipherPos = getCipherPosition(pos);
-    table[char] = encrypted[HEADER_LEN + cipherPos];
-  }
-  ENCRYPT_TABLES[pos] = table;
-}`}
-              />
 
               <h3>Native Encryption</h3>
               <CodeBlock 
@@ -942,51 +801,21 @@ for (let pos = 0; pos < 183; pos++) {
 }`}
               />
 
-              <h3>Native Decryption</h3>
-              <CodeBlock 
-                title="decryptKai() Implementation"
-                id="animekai-decrypt"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`export function decryptKai(ciphertext: string): string {
-  const bytes = urlSafeBase64Decode(ciphertext);
-  
-  // Skip header, extract cipher bytes
-  const cipherBytes = bytes.slice(HEADER_LEN);
-  
-  // Decrypt using reverse lookup tables
-  let result = '';
-  for (let plainPos = 0; plainPos < 183; plainPos++) {
-    const cipherPos = getCipherPosition(plainPos);
-    if (cipherPos >= cipherBytes.length) break;
-    
-    const byte = cipherBytes[cipherPos];
-    const table = DECRYPT_TABLES[plainPos];
-    const char = table[byte];
-    
-    if (char) result += char;
-    else break; // End of message
-  }
-  
-  return result;
-}`}
-              />
-
               <h3>Complete API Flow</h3>
               <div className={styles.flowContainer}>
-                <FlowStep num={1} title="ID Mapping" description="TMDB ID → MAL/AniList ID via ARM API (arm.haglund.dev)" />
-                <FlowStep num={2} title="Search" description="encryptKai(malId) → POST /ajax/anime/search → parse HTML for kai_id" />
-                <FlowStep num={3} title="Episodes" description="encryptKai(kai_id) → GET /ajax/episodes → parse HTML for episode tokens" />
-                <FlowStep num={4} title="Servers" description="encryptKai(token) → GET /ajax/links → parse HTML for server lids (sub/dub)" />
-                <FlowStep num={5} title="Embed URL" description="encryptKai(lid) → GET /ajax/embed → decryptKai(response) → MegaUp URL" />
-                <FlowStep num={6} title="Stream" description="MegaUp URL → native decryption → HLS m3u8 stream" />
+                <FlowStep num={1} title="ID Mapping" description="TMDB ID → MAL/AniList ID via ARM API" />
+                <FlowStep num={2} title="Search" description="encryptKai(malId) → POST /ajax/anime/search" />
+                <FlowStep num={3} title="Episodes" description="encryptKai(kai_id) → GET /ajax/episodes" />
+                <FlowStep num={4} title="Servers" description="encryptKai(token) → GET /ajax/links (sub/dub)" />
+                <FlowStep num={5} title="Embed URL" description="encryptKai(lid) → decryptKai(response) → MegaUp URL" />
+                <FlowStep num={6} title="Stream" description="MegaUp URL → native decryption → HLS m3u8" />
               </div>
 
               <blockquote className={styles.quote}>
                 <p>
                   &quot;The cipher looked complex at first—183 different substitution tables! But once 
                   we realized it was position-dependent with no key derivation, building the tables 
-                  was just tedious, not hard. The real insight was recognizing the pattern.&quot;
+                  was just tedious, not hard.&quot;
                 </p>
                 <cite>- Field Notes, December 2025</cite>
               </blockquote>
@@ -1007,45 +836,15 @@ for (let pos = 0; pos < 183; pos++) {
               
               <div className={styles.statusBadge}>
                 <span className={styles.statusDot} />
-                Fully Reverse Engineered - December 2025
+                Fully Reverse Engineered - Pre-computed Keystream
               </div>
               
               <h3>Overview</h3>
               <p>
-                MegaUp is the CDN used by AnimeKai for video hosting. Their <code>/media/</code> endpoint 
-                returns encrypted JSON containing the HLS stream URL. After analyzing their obfuscated 
-                JavaScript, we discovered a stream cipher where the keystream depends on the User-Agent.
+                MegaUp is the CDN used by AnimeKai. Their <code>/media/</code> endpoint returns 
+                encrypted JSON. Key insight: For a fixed User-Agent, the keystream is constant. 
+                We pre-computed a 521-byte keystream for our fixed UA.
               </p>
-
-              <h3>The Discovery</h3>
-              <p>
-                Key insight: For a fixed User-Agent, the keystream is constant across all requests. 
-                The cipher XORs plaintext with a keystream derived from specific characters in the UA 
-                string (positions 0, 2, 4, 6, 8). By using a fixed UA, we can pre-compute the keystream 
-                and decrypt without understanding the full algorithm.
-              </p>
-
-              <h3>Keystream Analysis</h3>
-              <CodeBlock 
-                title="UA Dependency Discovery"
-                id="megaup-ua"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`// Testing revealed keystream depends on UA characters at even positions
-const ua1 = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
-const ua2 = 'Nozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
-//           ^-- Position 0 changed: M→N
-
-// Result: Completely different keystreams!
-// But same UA = same keystream every time
-
-// Key positions that affect keystream:
-// Position 0: 'M' (0x4D)
-// Position 2: 'z' (0x7A)  
-// Position 4: 'l' (0x6C)
-// Position 6: 'a' (0x61)
-// Position 8: '/' (0x2F)`}
-              />
 
               <h3>Pre-Computed Keystream</h3>
               <CodeBlock 
@@ -1085,61 +884,15 @@ const MEGAUP_KEYSTREAM_HEX =
     decBytes[i] = encBytes[i] ^ keystream[i];
   }
   
-  // Find valid JSON (handles minor tail variations)
-  const result = decBytes.toString('utf8');
-  for (let i = result.length; i > 0; i--) {
-    const substr = result.substring(0, i);
-    if (substr.endsWith('}')) {
-      try {
-        JSON.parse(substr);
-        return substr;
-      } catch { /* continue */ }
-    }
-  }
-  return result;
+  return decBytes.toString('utf8');
 }`}
               />
-
-              <h3>Decrypted Response Format</h3>
-              <CodeBlock 
-                title="MegaUp Response Structure"
-                id="megaup-response"
-                copiedCode={copiedCode}
-                onCopy={copyCode}
-                code={`// Decrypted JSON structure:
-{
-  "sources": [{
-    "file": "https://xxx.megaup.net/hls/xxx/master.m3u8",
-    "type": "hls"
-  }],
-  "tracks": [{
-    "file": "https://xxx.megaup.net/subs/xxx.vtt",
-    "kind": "captions",
-    "label": "English"
-  }]
-}`}
-              />
-
-              <h3>CDN Blocking</h3>
-              <p>
-                MegaUp CDN blocks datacenter IPs AND requests with Origin headers. Our solution routes 
-                through a Raspberry Pi on residential internet, stripping Origin/Referer headers.
-              </p>
-
-              <div className={styles.warningNote}>
-                <span>⚠️</span>
-                <p>
-                  The keystream is tied to the specific User-Agent. If you change the UA, you must 
-                  re-compute the keystream by XORing known plaintext with ciphertext.
-                </p>
-              </div>
 
               <blockquote className={styles.quote}>
                 <p>
-                  &quot;We spent days trying to reverse engineer the full keystream generation algorithm 
-                  from their obfuscated JS. Then realized: if the keystream is constant for a fixed UA, 
-                  we don&apos;t need to understand HOW it&apos;s generated—just WHAT it is. Pre-compute once, 
-                  use forever.&quot;
+                  &quot;We spent days trying to reverse engineer the full keystream generation algorithm. 
+                  Then realized: if the keystream is constant for a fixed UA, we don&apos;t need to 
+                  understand HOW it&apos;s generated—just WHAT it is. Pre-compute once, use forever.&quot;
                 </p>
                 <cite>- Field Notes, December 2025</cite>
               </blockquote>
@@ -1160,12 +913,12 @@ const MEGAUP_KEYSTREAM_HEX =
               
               <div className={styles.statusBadge}>
                 <span className={styles.statusDot} />
-                Production Ready
+                Production Ready - Multi-Layer
               </div>
               
               <h3>The Problem</h3>
               <p>
-                Multiple CDNs block datacenter IPs. They also reject requests with Origin headers 
+                Multiple CDNs block datacenter IPs and reject requests with Origin headers 
                 (which browsers add automatically to XHR).
               </p>
 
@@ -1198,27 +951,27 @@ const MEGAUP_KEYSTREAM_HEX =
               </div>
 
               <CodeBlock 
-                title="CDN Detection"
+                title="CDN Detection & Routing"
                 id="proxy-cdn"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
-                code={`// MegaUp CDN (AnimeKai)
+                code={`// MegaUp CDN (AnimeKai) - requires residential IP
 function isMegaUpCdnUrl(url) {
   return url.includes('megaup') || 
          url.includes('hub26link') || 
          url.includes('app28base');
 }
 
-// 1movies CDN
+// 1movies CDN - requires residential IP
 function is1moviesCdnUrl(url) {
   return url.match(/p\\.\\d+\\.workers\\.dev/);
 }
 
 // Route decision
 if (isAnimeKai || isMegaUpCdn || is1moviesCdn) {
-  return getAnimeKaiProxyUrl(url); // → RPI
+  return getAnimeKaiProxyUrl(url); // → RPI residential proxy
 } else {
-  return getStreamProxyUrl(url);   // → direct
+  return getStreamProxyUrl(url);   // → direct Cloudflare Worker
 }`}
               />
             </motion.div>
@@ -1258,14 +1011,14 @@ if (isAnimeKai || isMegaUpCdn || is1moviesCdn) {
                   <code>ABCDEFGHIJKLMabc... → shuffled</code>
                 </div>
                 <div className={styles.techniqueCard}>
-                  <h4>Packed JavaScript</h4>
-                  <p>Code compressed using custom base encoding (p,a,c,k,e,d).</p>
-                  <code>eval(function(p,a,c,k,e,d)...)</code>
+                  <h4>Proof-of-Work</h4>
+                  <p>Computational challenge to prevent automated requests.</p>
+                  <code>MD5(data)[0:4] &lt; threshold</code>
                 </div>
                 <div className={styles.techniqueCard}>
-                  <h4>Proxy Functions</h4>
-                  <p>Simple operations wrapped in functions to hide purpose.</p>
-                  <code>_0xabc(a, b) → a + b</code>
+                  <h4>WASM Encryption</h4>
+                  <p>Crypto logic compiled to WebAssembly. Harder to reverse.</p>
+                  <code>Rust → WASM → AES-256-CTR</code>
                 </div>
               </div>
             </motion.div>
@@ -1296,63 +1049,14 @@ if (isAnimeKai || isMegaUpCdn || is1moviesCdn) {
                   <p>Online JavaScript deobfuscator. Good starting point for most obfuscation.</p>
                 </div>
                 <div className={styles.toolCard}>
-                  <div className={styles.toolIcon}>🌳</div>
-                  <h4>AST Explorer</h4>
-                  <p>Visualize JavaScript AST. Essential for understanding code structure.</p>
+                  <div className={styles.toolIcon}>🔬</div>
+                  <h4>Ghidra</h4>
+                  <p>NSA&apos;s reverse engineering tool. Essential for WASM binary analysis.</p>
                 </div>
                 <div className={styles.toolCard}>
                   <div className={styles.toolIcon}>🍳</div>
                   <h4>CyberChef</h4>
                   <p>Swiss army knife for encoding/decoding. Base64, XOR, AES, hex, everything.</p>
-                </div>
-                <div className={styles.toolCard}>
-                  <div className={styles.toolIcon}>🔌</div>
-                  <h4>Burp Suite</h4>
-                  <p>Intercept and modify HTTP traffic. See exactly what browser sends.</p>
-                </div>
-                <div className={styles.toolCard}>
-                  <div className={styles.toolIcon}>💻</div>
-                  <h4>Node.js REPL</h4>
-                  <p>Quick testing of decoding functions. Copy their code, run locally.</p>
-                </div>
-              </div>
-
-              <h3>Methodology</h3>
-              <div className={styles.methodologyList}>
-                <div className={styles.methodStep}>
-                  <span>1</span>
-                  <div>
-                    <strong>Capture Traffic</strong>
-                    <p>Use DevTools Network tab to see all requests. Filter by XHR/Fetch.</p>
-                  </div>
-                </div>
-                <div className={styles.methodStep}>
-                  <span>2</span>
-                  <div>
-                    <strong>Identify API Calls</strong>
-                    <p>Find requests that return stream data or encrypted blobs.</p>
-                  </div>
-                </div>
-                <div className={styles.methodStep}>
-                  <span>3</span>
-                  <div>
-                    <strong>Trace Parameters</strong>
-                    <p>Work backwards from API call to find how params are generated.</p>
-                  </div>
-                </div>
-                <div className={styles.methodStep}>
-                  <span>4</span>
-                  <div>
-                    <strong>Extract Keys</strong>
-                    <p>Search for crypto functions, find their inputs.</p>
-                  </div>
-                </div>
-                <div className={styles.methodStep}>
-                  <span>5</span>
-                  <div>
-                    <strong>Replicate</strong>
-                    <p>Build your own implementation, compare outputs byte-by-byte.</p>
-                  </div>
                 </div>
               </div>
 
@@ -1364,7 +1068,7 @@ if (isAnimeKai || isMegaUpCdn || is1moviesCdn) {
                 </div>
                 <div className={styles.pitfall}>
                   <span className={styles.pitfallIcon}>⏰</span>
-                  <strong>Timing Issues</strong> - Some tokens are time-based, ensure clock is synced
+                  <strong>Timestamp Validation</strong> - Some APIs require timestamps in the past (DLHD: 5-10 seconds)
                 </div>
                 <div className={styles.pitfall}>
                   <span className={styles.pitfallIcon}>🌐</span>
@@ -1444,6 +1148,7 @@ if (isAnimeKai || isMegaUpCdn || is1moviesCdn) {
               </div>
             </motion.div>
           </section>
+
         </main>
       </div>
     </div>
