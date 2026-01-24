@@ -123,7 +123,10 @@ Parameters:
 GET /tv/?channel=<id>
 GET /tv/key?url=<encoded_url>
 GET /tv/segment?url=<encoded_url>
+GET /tv/cdnlive?url=<encoded_url>
 ```
+
+The `/tv/cdnlive` endpoint proxies M3U8 playlists from cdn-live.tv backend (DLHD's alternative backend that doesn't require PoW authentication). Only allows requests to `cdn-live-tv.ru`, `cdn-live-tv.cfd`, and `cdn-live.tv` domains.
 
 ### DLHD Proxy
 

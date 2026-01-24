@@ -103,7 +103,7 @@ export default function VideoPlayerWrapper(props: VideoPlayerWrapperProps) {
       const providersData = await providersRes.json();
       
       const availability = {
-        vidsrc: providersData.providers?.vidsrc?.enabled ?? false,
+        vidsrc: providersData.providers?.vidsrc?.enabled ?? true,
         flixer: providersData.providers?.flixer?.enabled ?? true,
         '1movies': providersData.providers?.['1movies']?.enabled ?? true,
         videasy: providersData.providers?.videasy?.enabled ?? true,

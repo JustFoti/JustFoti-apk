@@ -376,9 +376,12 @@ async function computePoWNonce(resource: string, keyNumber: string, timestamp: n
 // =============================================================================
 
 /**
- * Fetch JWT token from topembed.pw player page
+ * Fetch JWT token from hitsplay.fun or topembed.pw player page
  * 
- * UPDATED January 2026: epicplayplay.cfd is DEAD! Using topembed.pw instead.
+ * UPDATED January 2026: 
+ * - epicplayplay.cfd is DEAD! 
+ * - hitsplay.fun provides JWT directly for ALL channels (including 1-30)
+ * - topembed.pw is fallback for channels with specific mappings
  */
 async function fetchAuthData(channel: string, logger: any): Promise<SessionData | null> {
   // Check cache first
@@ -388,8 +391,75 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
     return cached;
   }
 
-  logger.info('Fetching fresh JWT from topembed.pw', { channel });
+  logger.info('Fetching fresh JWT', { channel });
 
+  // ============================================================================
+  // METHOD 1: Try hitsplay.fun first - it provides JWT directly for ALL channels
+  // This is essential for channels 1-30 which don't have topembed mappings
+  // ============================================================================
+  try {
+    const hitsplayUrl = `https://hitsplay.fun/premiumtv/daddyhd.php?id=${channel}`;
+    logger.info('Trying hitsplay.fun for JWT', { channel });
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    const res = await fetch(hitsplayUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Referer': 'https://dlhd.link/',
+      },
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (res.ok) {
+      const html = await res.text();
+      
+      // hitsplay.fun embeds JWT directly in the page
+      const jwtMatch = html.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+      if (jwtMatch) {
+        const jwt = jwtMatch[0];
+        
+        // Decode payload
+        let channelKey = `premium${channel}`;
+        let country = 'US';
+        let iat = Math.floor(Date.now() / 1000);
+        let exp = iat + 18000;
+        
+        try {
+          const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+          const payload = JSON.parse(atob(payloadB64));
+          channelKey = payload.sub || channelKey;
+          country = payload.country || country;
+          iat = payload.iat || iat;
+          exp = payload.exp || exp;
+          logger.info('JWT from hitsplay.fun', { channelKey, exp, expiresIn: exp - Math.floor(Date.now() / 1000) });
+        } catch (e) {
+          logger.warn('JWT decode failed, using defaults');
+        }
+        
+        const session: SessionData = {
+          jwt,
+          channelKey,
+          country,
+          iat,
+          exp,
+          fetchedAt: Date.now(),
+        };
+        
+        sessionCache.set(channel, session);
+        return session;
+      }
+    }
+  } catch (e) {
+    logger.warn('hitsplay.fun JWT fetch failed', { error: (e as Error).message });
+  }
+
+  // ============================================================================
+  // METHOD 2: Try topembed.pw (for channels with specific mappings)
+  // ============================================================================
   try {
     // Get topembed channel name from mapping
     let topembedName = CHANNEL_TO_TOPEMBED[channel];

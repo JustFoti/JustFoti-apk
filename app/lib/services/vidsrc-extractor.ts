@@ -6,6 +6,13 @@
  * Updated to extract file URLs directly from PlayerJS initialization.
  * No decoding required - URLs are embedded in the page source.
  *
+ * IMPROVEMENTS (Jan 2026):
+ * - Multiple embed domain fallbacks (vidsrc-embed.ru, vidsrc.cc, vidsrc.me)
+ * - Expanded CDN domain list for better URL resolution
+ * - More robust file URL extraction with multiple regex patterns
+ * - Parallel URL testing for faster availability checks
+ * - Reduced timeout for faster fallback to other providers
+ *
  * TURNSTILE BYPASS:
  * If Cloudflare Turnstile appears, you can optionally use a captcha solving service.
  * Set CAPSOLVER_API_KEY in your environment to enable automatic Turnstile solving.
@@ -34,10 +41,32 @@ export const VIDSRC_ENABLED = process.env.ENABLE_VIDSRC_PROVIDER !== 'false';
 // Optional: Captcha solving service API key for Turnstile bypass
 const CAPSOLVER_API_KEY = process.env.CAPSOLVER_API_KEY;
 
-// Rate limiting configuration
-const VIDSRC_MIN_DELAY_MS = 500;  // Minimum delay between requests
-const VIDSRC_MAX_DELAY_MS = 3000; // Maximum delay for backoff
-const VIDSRC_BACKOFF_MULTIPLIER = 1.5;
+// Rate limiting configuration - reduced for faster response
+const VIDSRC_MIN_DELAY_MS = 300;  // Minimum delay between requests (reduced from 500)
+const VIDSRC_MAX_DELAY_MS = 2000; // Maximum delay for backoff (reduced from 3000)
+const VIDSRC_BACKOFF_MULTIPLIER = 1.3; // Reduced from 1.5
+
+// Multiple embed domains to try (in order of preference)
+// TODO: Implement domain fallback logic in extractVidSrcStreams
+const EMBED_DOMAINS = [
+  'vidsrc-embed.ru',
+  'vidsrc.cc',
+  'vidsrc.me',
+  'vidsrc.xyz',
+] as const;
+
+// Expanded CDN domains (January 2026 - updated list)
+// Used in URL resolution when extracting stream URLs
+const CDN_DOMAINS = [
+  'shadowlandschronicles.com',
+  'shadowlandschronicles.net',
+  'shadowlandschronicles.org',
+  'cloudnestra.com',
+  'cloudnestra.net',
+  'vidsrc.stream',
+  'vidsrc.xyz',
+  'embedsito.com',
+] as const;
 
 // Track rate limit state
 let vidsrcLastRequestTime = 0;
@@ -275,13 +304,46 @@ async function randomDelay(): Promise<void> {
 }
 
 /**
- * Check if a stream URL is accessible
+ * Check if a stream URL is accessible - with reduced timeout for faster response
  */
 async function checkStreamAvailability(url: string): Promise<'working' | 'down'> {
   try {
-    const response = await fetchWithHeaders(url, 'https://cloudnestra.com/', 5000);
-    const text = await response.text();
-    return response.ok && (text.includes('#EXTM3U') || text.includes('#EXT-X')) ? 'working' : 'down';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // Reduced from 5000
+    
+    const response = await fetch(url, {
+      method: 'HEAD', // Use HEAD for faster check
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://cloudnestra.com/',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    
+    // Accept 200, 206 (partial content), or 302 (redirect) as working
+    if (response.ok || response.status === 206 || response.status === 302) {
+      return 'working';
+    }
+    
+    // If HEAD fails, try GET with range header
+    const getController = new AbortController();
+    const getTimeoutId = setTimeout(() => getController.abort(), 3000);
+    
+    const getResponse = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Referer': 'https://cloudnestra.com/',
+        'Range': 'bytes=0-1000',
+      },
+      signal: getController.signal,
+    });
+    clearTimeout(getTimeoutId);
+    
+    const text = await getResponse.text();
+    return (getResponse.ok || getResponse.status === 206) && 
+           (text.includes('#EXTM3U') || text.includes('#EXT-X') || text.length > 0) 
+           ? 'working' : 'down';
   } catch {
     return 'down';
   }
@@ -291,6 +353,12 @@ async function checkStreamAvailability(url: string): Promise<'working' | 'down'>
  * Main extraction function
  * 
  * ✅ ENABLED BY DEFAULT - No security risk as we extract URLs directly from page
+ * 
+ * Improvements:
+ * - Tries multiple embed domains for better reliability
+ * - Multiple regex patterns for file URL extraction
+ * - Parallel URL testing for faster results
+ * - Better error messages for debugging
  */
 export async function extractVidSrcStreams(
   tmdbId: string,
@@ -309,14 +377,52 @@ export async function extractVidSrcStreams(
 
   console.log(`[VidSrc] Extracting streams for ${type} ID ${tmdbId}...`);
 
+  // Try each embed domain until one works
+  let lastError = '';
+  
+  for (const embedDomain of EMBED_DOMAINS) {
+    try {
+      const result = await extractFromDomain(embedDomain, tmdbId, type, season, episode);
+      if (result.success && result.sources.length > 0) {
+        const workingSources = result.sources.filter(s => s.status === 'working');
+        if (workingSources.length > 0) {
+          console.log(`[VidSrc] ✓ Success with ${embedDomain}: ${workingSources.length} working sources`);
+          return result;
+        }
+      }
+      lastError = result.error || 'No working sources';
+      console.log(`[VidSrc] ${embedDomain}: ${lastError}, trying next domain...`);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      console.log(`[VidSrc] ${embedDomain} failed: ${lastError}, trying next domain...`);
+    }
+  }
+
+  return {
+    success: false,
+    sources: [],
+    error: `All embed domains failed. Last error: ${lastError}`
+  };
+}
+
+/**
+ * Extract from a specific embed domain
+ */
+async function extractFromDomain(
+  embedDomain: string,
+  tmdbId: string,
+  type: 'movie' | 'tv',
+  season?: number,
+  episode?: number
+): Promise<ExtractionResult> {
   try {
-    // Step 1: Fetch vidsrc-embed.ru page
+    // Step 1: Fetch embed page
     const embedUrl = type === 'tv' && season && episode
-      ? `https://vidsrc-embed.ru/embed/tv/${tmdbId}/${season}/${episode}`
-      : `https://vidsrc-embed.ru/embed/movie/${tmdbId}`;
+      ? `https://${embedDomain}/embed/tv/${tmdbId}/${season}/${episode}`
+      : `https://${embedDomain}/embed/movie/${tmdbId}`;
     
     console.log('[VidSrc] Fetching embed page:', embedUrl);
-    const embedResponse = await fetchWithHeaders(embedUrl);
+    const embedResponse = await fetchWithHeaders(embedUrl, undefined, 10000);
     
     if (!embedResponse.ok) {
       throw new Error(`Embed page returned ${embedResponse.status}`);
@@ -324,22 +430,49 @@ export async function extractVidSrcStreams(
     
     const embedHtml = await embedResponse.text();
 
-    // Step 2: Extract RCP iframe URL
-    const iframeMatch = embedHtml.match(/<iframe[^>]*src=["']([^"']+cloudnestra\.com\/rcp\/([^"']+))["']/i);
-    if (!iframeMatch) {
+    // Step 2: Extract RCP iframe URL - try multiple patterns
+    const iframePatterns = [
+      /<iframe[^>]*src=["']([^"']+cloudnestra\.com\/rcp\/([^"']+))["']/i,
+      /<iframe[^>]*src=["']([^"']+\/rcp\/([^"']+))["']/i,
+      /src=["'](https?:\/\/[^"']+\/rcp\/([^"']+))["']/i,
+    ];
+    
+    let rcpPath: string | null = null;
+    let rcpDomain = 'cloudnestra.com';
+    
+    for (const pattern of iframePatterns) {
+      const match = embedHtml.match(pattern);
+      if (match) {
+        rcpPath = match[2];
+        // Extract domain from full URL if present
+        try {
+          const fullUrl = new URL(match[1]);
+          rcpDomain = fullUrl.hostname;
+        } catch {
+          // Use default domain
+        }
+        break;
+      }
+    }
+    
+    if (!rcpPath) {
+      // Try to find any iframe src
+      const anyIframe = embedHtml.match(/<iframe[^>]*src=["']([^"']+)["']/i);
+      if (anyIframe) {
+        console.log('[VidSrc] Found iframe but not RCP format:', anyIframe[1].substring(0, 100));
+      }
       throw new Error('Could not find RCP iframe in embed page');
     }
     
-    const rcpPath = iframeMatch[2];
-    console.log('[VidSrc] Found RCP hash');
+    console.log('[VidSrc] Found RCP hash on', rcpDomain);
 
     // Small delay to avoid rate limiting
     await randomDelay();
 
     // Step 3: Fetch RCP page to get prorcp URL
-    const rcpUrl = `https://cloudnestra.com/rcp/${rcpPath}`;
+    const rcpUrl = `https://${rcpDomain}/rcp/${rcpPath}`;
     console.log('[VidSrc] Fetching RCP page');
-    const rcpResponse = await fetchWithHeaders(rcpUrl, 'https://vidsrc-embed.ru/');
+    const rcpResponse = await fetchWithHeaders(rcpUrl, `https://${embedDomain}/`, 10000);
     
     if (!rcpResponse.ok) {
       throw new Error(`RCP page returned ${rcpResponse.status}`);
@@ -347,11 +480,7 @@ export async function extractVidSrcStreams(
     
     let rcpHtml = await rcpResponse.text();
 
-    // Step 4: Extract prorcp OR srcrcp URL (site uses both dynamically)
-    let rcpEndpointPath: string | null = null;
-    let rcpEndpointType: 'prorcp' | 'srcrcp' = 'prorcp';
-    
-    // Check for Cloudflare Turnstile first
+    // Step 4: Check for Cloudflare Turnstile
     if (rcpHtml.includes('cf-turnstile') || rcpHtml.includes('turnstile')) {
       console.log('[VidSrc] Cloudflare Turnstile detected');
 
@@ -369,8 +498,8 @@ export async function extractVidSrcStreams(
             /\$\.post\s*\(\s*["']([^"']+)["']\s*,\s*\{\s*token/i
           );
           const verifyUrl = verifyMatch
-            ? `https://cloudnestra.com${verifyMatch[1]}`
-            : 'https://cloudnestra.com/verify';
+            ? `https://${rcpDomain}${verifyMatch[1]}`
+            : `https://${rcpDomain}/verify`;
 
           const verifyResult = await submitTurnstileToken(
             verifyUrl,
@@ -382,7 +511,7 @@ export async function extractVidSrcStreams(
             console.log('[VidSrc] Turnstile verified, re-fetching RCP page...');
             const newRcpResponse = await fetchWithHeaders(
               rcpUrl,
-              'https://vidsrc-embed.ru/'
+              `https://${embedDomain}/`
             );
             rcpHtml = await newRcpResponse.text();
 
@@ -411,7 +540,6 @@ export async function extractVidSrcStreams(
         console.warn(
           '[VidSrc] ⚠️ Turnstile detected but no CAPSOLVER_API_KEY configured'
         );
-        // Return empty result instead of throwing - allows fallback to other providers
         return {
           success: false,
           sources: [],
@@ -420,19 +548,24 @@ export async function extractVidSrcStreams(
       }
     }
     
-    // Extract prorcp/srcrcp path
+    // Step 5: Extract prorcp/srcrcp path - expanded patterns
+    let rcpEndpointPath: string | null = null;
+    let rcpEndpointType: 'prorcp' | 'srcrcp' = 'prorcp';
+    
     const patterns = [
       { regex: /src:\s*['"]\/prorcp\/([^'"]+)['"]/i, type: 'prorcp' as const },
       { regex: /src:\s*['"]\/srcrcp\/([^'"]+)['"]/i, type: 'srcrcp' as const },
       { regex: /['"]\/prorcp\/([A-Za-z0-9+\/=\-_]+)['"]/i, type: 'prorcp' as const },
       { regex: /['"]\/srcrcp\/([A-Za-z0-9+\/=\-_]+)['"]/i, type: 'srcrcp' as const },
+      { regex: /prorcp\/([A-Za-z0-9+\/=\-_]+)/i, type: 'prorcp' as const },
+      { regex: /srcrcp\/([A-Za-z0-9+\/=\-_]+)/i, type: 'srcrcp' as const },
     ];
     
-    for (const { regex, type } of patterns) {
+    for (const { regex, type: endpointType } of patterns) {
       const match = rcpHtml.match(regex);
       if (match) {
         rcpEndpointPath = match[1];
-        rcpEndpointType = type;
+        rcpEndpointType = endpointType;
         break;
       }
     }
@@ -444,10 +577,10 @@ export async function extractVidSrcStreams(
     // Small delay before next request
     await randomDelay();
 
-    // Step 5: Fetch PRORCP/SRCRCP page
-    const endpointUrl = `https://cloudnestra.com/${rcpEndpointType}/${rcpEndpointPath}`;
+    // Step 6: Fetch PRORCP/SRCRCP page
+    const endpointUrl = `https://${rcpDomain}/${rcpEndpointType}/${rcpEndpointPath}`;
     console.log(`[VidSrc] Fetching ${rcpEndpointType.toUpperCase()} page`);
-    const prorcpResponse = await fetchWithHeaders(endpointUrl, 'https://cloudnestra.com/');
+    const prorcpResponse = await fetchWithHeaders(endpointUrl, `https://${rcpDomain}/`, 10000);
     
     if (!prorcpResponse.ok) {
       throw new Error(`PRORCP page returned ${prorcpResponse.status}`);
@@ -455,29 +588,45 @@ export async function extractVidSrcStreams(
     
     const prorcpHtml = await prorcpResponse.text();
 
-    // Step 6: Extract file URL directly from PlayerJS initialization
-    // The file URL is embedded directly in the page, no decoding needed!
+    // Step 7: Extract file URL - multiple patterns for robustness
     console.log('[VidSrc] Extracting file URL from PlayerJS...');
     
-    const fileMatch = prorcpHtml.match(/file:\s*["']([^"']+)["']/);
-    if (!fileMatch || !fileMatch[1]) {
+    const filePatterns = [
+      /file:\s*["']([^"']+)["']/,
+      /file\s*=\s*["']([^"']+)["']/,
+      /"file"\s*:\s*"([^"]+)"/,
+      /sources\s*:\s*\[\s*\{\s*file\s*:\s*["']([^"']+)["']/,
+      /src\s*:\s*["']([^"']+\.m3u8[^"']*)["']/,
+      /source\s*:\s*["']([^"']+\.m3u8[^"']*)["']/,
+    ];
+    
+    let fileUrl: string | null = null;
+    for (const pattern of filePatterns) {
+      const match = prorcpHtml.match(pattern);
+      if (match && match[1]) {
+        fileUrl = match[1];
+        break;
+      }
+    }
+    
+    if (!fileUrl) {
+      // Try to find any m3u8 URL in the page
+      const m3u8Match = prorcpHtml.match(/https?:\/\/[^"'\s]+\.m3u8[^"'\s]*/);
+      if (m3u8Match) {
+        fileUrl = m3u8Match[0];
+        console.log('[VidSrc] Found m3u8 URL via fallback pattern');
+      }
+    }
+    
+    if (!fileUrl) {
       throw new Error('Could not find file URL in PlayerJS initialization');
     }
     
-    const fileUrl = fileMatch[1];
     console.log('[VidSrc] Found file URL, length:', fileUrl.length);
     
-    // The URL contains multiple alternatives separated by " or "
+    // Step 8: Parse URL alternatives and resolve CDN domains
     const urlAlternatives = fileUrl.split(' or ');
     console.log(`[VidSrc] Found ${urlAlternatives.length} URL alternatives`);
-    
-    // CDN domains to try (in order of preference)
-    const cdnDomains = [
-      'shadowlandschronicles.com',
-      'shadowlandschronicles.net', 
-      'shadowlandschronicles.org',
-      'cloudnestra.com',
-    ];
     
     // Resolve URLs by replacing {v1}, {v2}, etc. with actual domains
     const resolvedUrls = new Set<string>();
@@ -489,7 +638,7 @@ export async function extractVidSrcStreams(
       
       // Check if URL has domain placeholders
       if (url.includes('{v')) {
-        for (const domain of cdnDomains) {
+        for (const domain of CDN_DOMAINS) {
           const resolved = url.replace(/\{v\d+\}/g, domain);
           if (resolved.includes('.m3u8')) {
             resolvedUrls.add(resolved);
@@ -506,24 +655,32 @@ export async function extractVidSrcStreams(
       throw new Error('No valid stream URLs found');
     }
 
-    // Step 7: Build sources and check availability
-    const sources: StreamSource[] = [];
+    // Step 9: Test URLs in parallel for faster results
     const urlArray = Array.from(resolvedUrls);
+    const sources: StreamSource[] = [];
     
-    // Test up to 4 URLs to avoid too many requests
-    for (let i = 0; i < Math.min(urlArray.length, 4); i++) {
-      const url = urlArray[i];
-      const status = await checkStreamAvailability(url);
-      
-      sources.push({
-        quality: 'auto',
-        title: `VidSrc ${i + 1}`,
-        url,
-        type: 'hls',
-        referer: 'https://cloudnestra.com/',
-        requiresSegmentProxy: true,
-        status
-      });
+    // Test up to 6 URLs in parallel
+    const testUrls = urlArray.slice(0, 6);
+    const statusResults = await Promise.allSettled(
+      testUrls.map(async (url) => {
+        const status = await checkStreamAvailability(url);
+        return { url, status };
+      })
+    );
+    
+    for (let i = 0; i < statusResults.length; i++) {
+      const result = statusResults[i];
+      if (result.status === 'fulfilled') {
+        sources.push({
+          quality: 'auto',
+          title: `VidSrc ${i + 1}`,
+          url: result.value.url,
+          type: 'hls',
+          referer: `https://${rcpDomain}/`,
+          requiresSegmentProxy: true,
+          status: result.value.status
+        });
+      }
     }
 
     const workingSources = sources.filter(s => s.status === 'working');

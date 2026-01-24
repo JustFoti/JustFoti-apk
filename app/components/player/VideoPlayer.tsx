@@ -764,21 +764,21 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       // First fetch provider availability
       // NOTE: VidSrc is the primary provider
       let availability: Record<string, boolean> = {
-        vidsrc: false, // VidSrc is PRIMARY but DISABLED by default (requires ENABLE_VIDSRC_PROVIDER=true)
-        flixer: true, // Flixer as secondary fallback (enabled by default)
-        '1movies': true, // 1movies as third fallback (enabled by default)
-        videasy: true, // Videasy as final fallback provider with multi-language support
-        animekai: true, // Anime-specific provider - auto-selected for anime content
+        vidsrc: true,
+        flixer: true,
+        '1movies': true,
+        videasy: true,
+        animekai: true,
       };
 
       try {
         const res = await fetch('/api/providers');
         const data = await res.json();
         availability = {
-          videasy: data.providers?.videasy?.enabled ?? true,
-          vidsrc: data.providers?.vidsrc?.enabled ?? false,
-          '1movies': data.providers?.['1movies']?.enabled ?? true,
+          vidsrc: data.providers?.vidsrc?.enabled ?? true,
           flixer: data.providers?.flixer?.enabled ?? true,
+          '1movies': data.providers?.['1movies']?.enabled ?? true,
+          videasy: data.providers?.videasy?.enabled ?? true,
           animekai: data.providers?.animekai?.enabled ?? true,
         };
         setProviderAvailability(availability);

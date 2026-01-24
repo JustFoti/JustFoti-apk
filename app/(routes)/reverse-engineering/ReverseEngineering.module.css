@@ -1152,3 +1152,24 @@
     padding: 0.5rem 1rem;
   }
 }
+
+
+/* Disabled Provider Styles */
+.providerDisabled {
+  opacity: 0.7;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.providerDisabled:hover {
+  border-color: rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 30px rgba(239, 68, 68, 0.1);
+}
+
+.statusDisabled {
+  color: #ef4444;
+}
+
+.statusDotDisabled {
+  background: #ef4444;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}

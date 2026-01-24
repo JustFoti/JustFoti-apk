@@ -3,10 +3,10 @@
  * Returns which stream providers are enabled/available
  * 
  * Provider Priority:
- * - VidSrc: PRIMARY provider (if enabled via ENABLE_VIDSRC_PROVIDER=true)
- * - 1movies: 2nd backup provider (111movies.com)
- * - Flixer: 3rd backup provider (flixer.sh)
- * - Videasy: Fallback provider with multi-language support (always enabled)
+ * - VidSrc: PRIMARY provider
+ * - Flixer: 2nd fallback (flixer.sh / Hexa)
+ * - 1movies: 3rd fallback (111movies.com)
+ * - Videasy: Final fallback with multi-language support
  * - AnimeKai: PRIMARY for anime content only (auto-detected)
  */
 
@@ -22,32 +22,32 @@ export async function GET() {
       vidsrc: {
         enabled: VIDSRC_ENABLED,
         name: 'VidSrc',
-        primary: true, // VidSrc is PRIMARY when enabled
-        description: 'Primary streaming source (disabled by default)',
-      },
-      '1movies': {
-        enabled: ONEMOVIES_ENABLED,
-        name: '1movies',
-        primary: false, // 2nd backup between vidsrc and videasy
-        description: '111movies.com - Multiple servers with HLS streams',
+        primary: true,
+        description: 'Primary streaming source',
       },
       flixer: {
         enabled: FLIXER_ENABLED,
         name: 'Flixer',
-        primary: false, // 3rd backup provider
-        description: 'Flixer.sh - TV shows and movies streaming',
+        primary: false,
+        description: 'Flixer/Hexa - TV shows and movies streaming',
+      },
+      '1movies': {
+        enabled: ONEMOVIES_ENABLED,
+        name: '1movies',
+        primary: false,
+        description: '111movies.com - Multiple servers with HLS streams',
       },
       videasy: {
         enabled: true,
         name: 'Videasy',
-        primary: false, // Fallback provider with multi-language support
-        description: 'Multi-language streaming with English, German, French, Spanish, Portuguese, and more',
+        primary: false,
+        description: 'Multi-language streaming fallback',
       },
       animekai: {
         enabled: ANIMEKAI_ENABLED,
         name: 'AnimeKai',
-        primary: false, // Primary only for anime content (auto-detected)
-        animeOnly: true, // Only available for anime content
+        primary: false,
+        animeOnly: true,
         description: 'Specialized anime streaming with Japanese audio',
       },
     },

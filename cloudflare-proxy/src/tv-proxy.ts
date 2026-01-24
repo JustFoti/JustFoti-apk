@@ -1348,6 +1348,7 @@ export default {
       }
       if (path === '/key') return handleKeyProxy(url, logger, origin, env);
       if (path === '/segment') return handleSegmentProxy(url, logger, origin, env);
+      if (path === '/cdnlive') return handleCdnLiveProxy(url, logger, origin, url.origin);
 
       const channel = url.searchParams.get('channel');
       logger.info('Channel param', { channel, hasChannel: !!channel });
@@ -1756,6 +1757,12 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
 /**
  * Rewrite M3U8 for cdn-live-tv.ru backend
  * This backend uses token-based auth, segments include the token
+ * 
+ * CRITICAL: All URLs must be proxied through appropriate endpoints because
+ * cdn-live-tv.ru blocks direct browser requests (CORS/geo-blocking)
+ * 
+ * - .m3u8 files → /cdnlive?url=... (will recursively rewrite)
+ * - .ts segments → /segment?url=...
  */
 function rewriteCdnLiveM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string): string {
   const baseUrl = new URL(m3u8BaseUrl);
@@ -1764,21 +1771,116 @@ function rewriteCdnLiveM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: s
   
   const lines = content.split('\n').map(line => {
     const trimmed = line.trim();
+    
+    // Handle EXT-X-KEY URI - proxy key URLs
+    if (trimmed.includes('URI="')) {
+      return trimmed.replace(/URI="([^"]+)"/, (_, uri: string) => {
+        const fullUrl = uri.startsWith('http') ? uri : `${baseUrl.origin}${basePath}${uri}`;
+        return `URI="${proxyOrigin}/segment?url=${encodeURIComponent(fullUrl)}"`;
+      });
+    }
+    
     if (!trimmed || trimmed.startsWith('#')) return line;
+    
+    // Skip if already proxied
+    if (trimmed.includes('/segment?url=') || trimmed.includes('/cdnlive?url=')) return line;
+    
+    let absoluteUrl: string;
     
     // Make relative URLs absolute
     if (!trimmed.startsWith('http')) {
-      let absoluteUrl = `${baseUrl.origin}${basePath}${trimmed}`;
-      // Ensure token is included
-      if (!absoluteUrl.includes('token=') && token) {
-        absoluteUrl += (absoluteUrl.includes('?') ? '&' : '?') + `token=${token}`;
-      }
-      return absoluteUrl;
+      absoluteUrl = `${baseUrl.origin}${basePath}${trimmed}`;
+    } else {
+      absoluteUrl = trimmed;
     }
-    return line;
+    
+    // Ensure token is included
+    if (!absoluteUrl.includes('token=') && token) {
+      absoluteUrl += (absoluteUrl.includes('?') ? '&' : '?') + `token=${token}`;
+    }
+    
+    // Route based on file type:
+    // - .m3u8 files need recursive rewriting → /cdnlive endpoint
+    // - .ts segments just need proxying → /segment endpoint
+    if (absoluteUrl.includes('.m3u8')) {
+      return `${proxyOrigin}/cdnlive?url=${encodeURIComponent(absoluteUrl)}`;
+    } else {
+      return `${proxyOrigin}/segment?url=${encodeURIComponent(absoluteUrl)}`;
+    }
   });
   
   return lines.join('\n');
+}
+
+/**
+ * Handle /cdnlive proxy requests for cdn-live-tv.ru M3U8 files
+ * This endpoint proxies M3U8 playlists and rewrites URLs to go through our proxy
+ */
+async function handleCdnLiveProxy(url: URL, logger: any, origin: string | null, proxyOrigin: string): Promise<Response> {
+  const m3u8Url = url.searchParams.get('url');
+  if (!m3u8Url) {
+    return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
+  }
+
+  const decodedUrl = decodeURIComponent(m3u8Url);
+  logger.info('CDN-Live M3U8 proxy request', { url: decodedUrl.substring(0, 100) });
+
+  try {
+    // SECURITY: Strict domain validation - must be EXACTLY these domains, not substrings
+    const urlObj = new URL(decodedUrl);
+    const allowedDomains = ['cdn-live-tv.ru', 'cdn-live-tv.cfd', 'cdn-live.tv'];
+    const isAllowedDomain = allowedDomains.some(domain => 
+      urlObj.hostname === domain || urlObj.hostname.endsWith(`.${domain}`)
+    );
+    
+    if (!isAllowedDomain) {
+      logger.warn('CDN-Live domain validation failed', { host: urlObj.hostname });
+      return jsonResponse({ error: 'Invalid URL domain', host: urlObj.hostname }, 400, origin);
+    }
+    
+    // SECURITY: Validate URL scheme
+    if (urlObj.protocol !== 'https:' && urlObj.protocol !== 'http:') {
+      return jsonResponse({ error: 'Invalid URL scheme' }, 400, origin);
+    }
+
+    const response = await fetch(decodedUrl, {
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://cdn-live.tv/',
+        'Origin': 'https://cdn-live.tv',
+      },
+    });
+
+    if (!response.ok) {
+      logger.error('CDN-Live upstream error', { status: response.status, url: decodedUrl.substring(0, 80) });
+      return jsonResponse({ error: `Upstream error: ${response.status}` }, response.status, origin);
+    }
+
+    const content = await response.text();
+    
+    // Check if it's a valid M3U8
+    if (!content.includes('#EXTM3U')) {
+      logger.warn('CDN-Live response is not M3U8', { preview: content.substring(0, 100) });
+      return jsonResponse({ error: 'Invalid M3U8 response' }, 502, origin);
+    }
+
+    // Rewrite URLs to go through our proxy
+    const rewritten = rewriteCdnLiveM3U8(content, proxyOrigin, decodedUrl);
+
+    return new Response(rewritten, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/vnd.apple.mpegurl',
+        'Cache-Control': 'no-store',
+        ...corsHeaders(origin),
+      },
+    });
+  } catch (error) {
+    logger.error('CDN-Live proxy error', { error: (error as Error).message });
+    return jsonResponse({ error: 'CDN-Live proxy failed', details: (error as Error).message }, 502, origin);
+  }
 }
 
 /**
@@ -2048,11 +2150,20 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
     let data: ArrayBuffer;
     let fetchedVia = 'direct';
     
+    // Determine the correct Referer based on the domain
+    let referer = `https://${PLAYER_DOMAIN}/`;
+    try {
+      const urlHost = new URL(decodedUrl).hostname;
+      if (urlHost.includes('cdn-live-tv.ru') || urlHost.includes('cdn-live-tv.cfd') || urlHost.includes('cdn-live.tv')) {
+        referer = 'https://cdn-live.tv/';
+      }
+    } catch {}
+    
     // Always try direct fetch first for segments - they may not be blocked
     // Only fall back to RPI if direct fails
     try {
       const directRes = await fetch(decodedUrl, {
-        headers: { 'User-Agent': USER_AGENT, 'Referer': `https://${PLAYER_DOMAIN}/` },
+        headers: { 'User-Agent': USER_AGENT, 'Referer': referer },
       });
       
       if (!directRes.ok) {
@@ -2188,7 +2299,9 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
 }
 
 function isAllowedOrigin(origin: string | null, referer: string | null): boolean {
-  // Allow requests with no origin/referer (direct access, media players, etc.)
+  // SECURITY: Allow requests with no origin/referer ONLY for media players (HLS.js, mpegts.js)
+  // These make direct requests without Origin headers
+  // Browser-based leechers will always have Origin/Referer
   if (!origin && !referer) return true;
   
   const check = (o: string) => ALLOWED_ORIGINS.some(a => {
@@ -2213,8 +2326,9 @@ function isAllowedOrigin(origin: string | null, referer: string | null): boolean
   if (origin && check(origin)) return true;
   if (referer) try { return check(new URL(referer).origin); } catch {}
   
-  // Allow all origins - the proxy is meant to be publicly accessible
-  return true;
+  // SECURITY: Do NOT allow all origins - this defeats anti-leech protection
+  // If origin/referer is provided but doesn't match, DENY access
+  return false;
 }
 
 function corsHeaders(origin?: string | null): Record<string, string> {

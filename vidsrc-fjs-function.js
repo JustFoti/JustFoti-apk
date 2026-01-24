@@ -1,1 +1,0 @@
-function fjs(x){if(x.indexOf(\'js:\')==0){try{x=eval(x.substr(3))}catch(e){console.log(e.message)}}return x?x:\'\'}

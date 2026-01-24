@@ -23,7 +23,7 @@ const sections = [
 
 const providerStats = [
   { name: 'DLHD', status: 'working', type: 'Live TV', method: 'PoW + Timestamp Validation' },
-  { name: '111movies', status: 'working', type: 'Movies/TV', method: 'AES-256-CBC + XOR' },
+  { name: '111movies', status: 'disabled', type: 'Movies/TV', method: 'Hash Obfuscation Changed' },
   { name: 'Flixer', status: 'working', type: 'Movies/TV', method: 'WASM Bundling' },
   { name: 'VidSrc', status: 'working', type: 'Movies/TV', method: 'Static Decoders' },
   { name: 'Videasy', status: 'working', type: 'Multi-Lang', method: 'External API' },
@@ -74,24 +74,26 @@ function FlowStep({ num, title, description }: { num: number; title: string; des
   );
 }
 
-function ProviderCard({ name, type, method, delay }: { 
+function ProviderCard({ name, type, method, delay, status }: { 
   name: string; 
   type: string; 
   method: string;
   delay: number;
+  status: string;
 }) {
+  const isDisabled = status === 'disabled';
   return (
     <motion.div 
-      className={styles.providerCard}
+      className={`${styles.providerCard} ${isDisabled ? styles.providerDisabled : ''}`}
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
       transition={{ delay }}
       whileHover={{ scale: 1.02, y: -5 }}
     >
-      <div className={styles.providerStatus}>
-        <span className={styles.statusDot} />
-        Working
+      <div className={`${styles.providerStatus} ${isDisabled ? styles.statusDisabled : ''}`}>
+        <span className={`${styles.statusDot} ${isDisabled ? styles.statusDotDisabled : ''}`} />
+        {isDisabled ? 'Disabled' : 'Working'}
       </div>
       <h3>{name}</h3>
       <div className={styles.providerMeta}>
@@ -213,11 +215,11 @@ export default function ReverseEngineeringPage() {
             transition={{ delay: 0.5 }}
           >
             <div className={styles.stat}>
-              <span className={styles.statNum}>8</span>
+              <span className={styles.statNum}>7/8</span>
               <span className={styles.statLabel}>Providers</span>
             </div>
             <div className={styles.stat}>
-              <span className={styles.statNum}>100%</span>
+              <span className={styles.statNum}>87%</span>
               <span className={styles.statLabel}>Working</span>
             </div>
             <div className={styles.stat}>
