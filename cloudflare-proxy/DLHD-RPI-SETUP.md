@@ -145,9 +145,12 @@ Response: 16-byte AES-128 key
 | Route | Description |
 |-------|-------------|
 | `GET /tv?channel=<id>` | Get proxied M3U8 playlist |
+| `GET /tv/cdnlive?url=<encoded_url>` | Proxy nested M3U8 manifests (through Next.js) |
+| `GET /segment?url=<encoded_url>` | Proxy video segments (DIRECT to worker) |
 | `GET /tv/key?url=<encoded_url>` | Proxy encryption key (handles PoW) |
-| `GET /tv/segment?url=<encoded_url>` | Proxy video segment |
 | `GET /tv/health` | Health check |
+
+**Note:** Segments use the direct `/segment` route (not `/tv/segment`) for optimal performance. This bypasses Next.js routing and reduces latency.
 
 ## Key Servers
 

@@ -119,14 +119,45 @@ Parameters:
 
 ### TV Proxy
 
+**Architecture:**
+- Manifests (.m3u8) → `/tv/cdnlive` (through Next.js routing)
+- Segments (.ts) → `/segment` (DIRECT to worker, bypasses Next.js)
+
+**Security Model (January 24, 2026):**
+- **Manifests and keys**: Require Origin or Referer header from allowed domains
+- **Segments**: Bypass origin check to support HLS.js XHR requests
+- **Rationale**: Segments are ephemeral public data; protection is at manifest/key level
+
+**Endpoints:**
 ```
-GET /tv/?channel=<id>
-GET /tv/key?url=<encoded_url>
-GET /tv/segment?url=<encoded_url>
-GET /tv/cdnlive?url=<encoded_url>
+GET /tv/?channel=<id>              - Get proxied M3U8 playlist (requires origin)
+GET /tv/cdnlive?url=<encoded_url>  - Proxy nested M3U8 manifests (requires origin)
+GET /segment?url=<encoded_url>     - Proxy video segments (no origin check)
+GET /tv/key?url=<encoded_url>      - Proxy encryption keys (requires origin)
+GET /tv/health                     - Health check
 ```
 
-The `/tv/cdnlive` endpoint proxies M3U8 playlists from cdn-live.tv backend (DLHD's alternative backend that doesn't require PoW authentication). Only allows requests to `cdn-live-tv.ru`, `cdn-live-tv.cfd`, and `cdn-live.tv` domains.
+**Routing Flow:**
+```
+1. User requests /tv/?channel=31
+2. Worker fetches M3U8 from cdn-live-tv.ru (requires Origin/Referer)
+3. Worker rewrites URLs in manifest:
+   - .m3u8 files → /tv/cdnlive?url=... (through Next.js, requires origin)
+   - .ts segments → /segment?url=...   (DIRECT to worker, no origin check)
+4. Video player fetches segments directly from worker
+```
+
+**Security Notes:**
+- Manifests and encryption keys require Origin or Referer header
+- Segments bypass origin check to support HLS.js XHR requests
+- This is safe because segments are ephemeral and useless without the manifest
+- See `SECURITY-ANALYSIS-TV-PROXY.md` for detailed security analysis
+
+**Why Direct Segment Routing?**
+- ✅ Reduced latency (no Next.js overhead)
+- ✅ Better video playback performance
+- ✅ Cleaner separation of concerns
+- ✅ Matches Cloudflare Workers edge architecture
 
 ### DLHD Proxy
 

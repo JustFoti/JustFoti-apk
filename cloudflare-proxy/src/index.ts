@@ -381,6 +381,34 @@ export default {
       }
     }
 
+    // CRITICAL: Direct /segment route for cdn-live-tv.ru segments
+    // This bypasses the /tv route for performance - segments go straight to worker
+    // Manifests still use /tv/cdnlive route for proper handling
+    if (path === '/segment') {
+      metrics.tvRequests++;
+      logger.info('Routing to direct segment proxy (bypassing /tv)', { path });
+      
+      try {
+        return await tvProxy.fetch(request, env);
+      } catch (error) {
+        metrics.errors++;
+        const err = error as Error;
+        logger.error('Direct segment proxy error', err);
+        return new Response(JSON.stringify({
+          error: 'Segment proxy error',
+          message: err.message,
+          stack: err.stack,
+          timestamp: new Date().toISOString(),
+        }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        });
+      }
+    }
+
     // Route to TV proxy (DLHD streams - NOT IPTV)
     if (path.startsWith('/tv')) {
       metrics.tvRequests++;
