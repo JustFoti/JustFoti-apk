@@ -1240,6 +1240,103 @@
   white-space: nowrap;
 }
 
+/* Server Status Indicator */
+.serverStatusContainer {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 12px;
+  min-width: 240px;
+  backdrop-filter: blur(8px);
+}
+
+.serverStatusHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.elapsedTime {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  color: var(--accent-primary, #8b5cf6);
+  font-weight: 600;
+}
+
+.serverStatusList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.serverStatusItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+}
+
+.serverStatusIcon {
+  width: 1.2rem;
+  text-align: center;
+  font-weight: bold;
+}
+
+.serverStatusName {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.serverStatusElapsed {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Server status states */
+.statusPending {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.statusPending .serverStatusIcon {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.statusChecking {
+  background: rgba(139, 92, 246, 0.15);
+}
+
+.statusChecking .serverStatusIcon {
+  color: var(--accent-primary, #8b5cf6);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.statusSuccess {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.statusSuccess .serverStatusIcon {
+  color: #22c55e;
+}
+
+.statusFailed {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.statusFailed .serverStatusIcon {
+  color: #ef4444;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
 /* Buffering overlay - smaller, less intrusive */
 .bufferingOverlay {
   position: absolute;

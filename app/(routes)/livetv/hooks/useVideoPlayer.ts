@@ -21,6 +21,13 @@ export interface PlayerState {
   buffered: number;
 }
 
+export interface ServerStatus {
+  name: string;
+  status: 'pending' | 'checking' | 'success' | 'failed';
+  elapsed?: number;
+  error?: string;
+}
+
 export interface StreamSource {
   type: 'dlhd' | 'cdnlive' | 'viprow';
   channelId: string;
@@ -31,11 +38,19 @@ export interface StreamSource {
   linkNum?: number;
 }
 
+// Server backends in order of priority (matches tv-proxy.ts)
+const DLHD_SERVERS = [
+  { id: 'moveonjoy', name: 'MoveonJoy', desc: 'Unencrypted' },
+  { id: 'cdnlive', name: 'CDN-Live', desc: 'Token auth' },
+  { id: 'dvalna', name: 'Dvalna.ru', desc: 'JWT + PoW' },
+];
+
 export function useVideoPlayer() {
   const { trackLiveTVEvent, startLiveTVSession, endLiveTVSession } = useAnalytics();
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
+  const loadStartTimeRef = useRef<number>(0);
   
   const [state, setState] = useState<PlayerState>({
     isPlaying: false,
@@ -52,6 +67,10 @@ export function useVideoPlayer() {
   });
 
   const [currentSource, setCurrentSource] = useState<StreamSource | null>(null);
+  const [serverStatuses, setServerStatuses] = useState<ServerStatus[]>([]);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const [activeBackend, setActiveBackend] = useState<string | null>(null);
+  const elapsedIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const getStreamUrl = useCallback((source: StreamSource): string => {
     // SECURITY: Only log in development to prevent URL exposure
@@ -96,6 +115,26 @@ export function useVideoPlayer() {
       }
       return;
     }
+
+    // Reset and start tracking
+    loadStartTimeRef.current = Date.now();
+    setElapsedTime(0);
+    setActiveBackend(null);
+    
+    // Initialize server statuses based on source type
+    if (source.type === 'dlhd') {
+      setServerStatuses(DLHD_SERVERS.map(s => ({ name: s.name, status: 'pending' as const })));
+    } else if (source.type === 'cdnlive') {
+      setServerStatuses([{ name: 'CDN-Live API', status: 'checking' as const }]);
+    } else if (source.type === 'viprow') {
+      setServerStatuses([{ name: 'VIPRow Proxy', status: 'checking' as const }]);
+    }
+    
+    // Start elapsed time counter (updates every 100ms, stores tenths of seconds)
+    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+    elapsedIntervalRef.current = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - loadStartTimeRef.current) / 100));
+    }, 100);
 
     setState(prev => ({ ...prev, isLoading: true, isBuffering: false, loadingStage: 'fetching', error: null }));
     setCurrentSource(source);
@@ -169,7 +208,45 @@ export function useVideoPlayer() {
 
       hlsRef.current = hls;
 
+      // Track manifest loading to get backend info from headers
+      hls.on(Hls.Events.MANIFEST_LOADING, () => {
+        if (source.type === 'dlhd') {
+          // Mark first server as checking
+          setServerStatuses(prev => prev.map((s, i) => 
+            i === 0 ? { ...s, status: 'checking' as const } : s
+          ));
+        }
+      });
+
+      hls.on(Hls.Events.MANIFEST_LOADED, () => {
+        // Try to get backend info from response
+        const elapsed = Date.now() - loadStartTimeRef.current;
+        
+        // The CF worker adds X-DLHD-Backend header
+        // We can't access it directly from HLS.js, but we can infer from URL or timing
+        if (source.type === 'dlhd') {
+          // Mark all as success since we got a manifest
+          setServerStatuses(prev => {
+            const updated = [...prev];
+            // Find first pending/checking and mark as success
+            const checkingIdx = updated.findIndex(s => s.status === 'checking' || s.status === 'pending');
+            if (checkingIdx >= 0) {
+              updated[checkingIdx] = { ...updated[checkingIdx], status: 'success', elapsed };
+            }
+            return updated;
+          });
+        } else {
+          setServerStatuses(prev => prev.map(s => ({ ...s, status: 'success' as const, elapsed })));
+        }
+      });
+
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        // Stop elapsed timer
+        if (elapsedIntervalRef.current) {
+          clearInterval(elapsedIntervalRef.current);
+          elapsedIntervalRef.current = null;
+        }
+        
         setState(prev => ({ ...prev, loadingStage: 'buffering' }));
         const video = videoRef.current;
         if (video) {
@@ -195,6 +272,38 @@ export function useVideoPlayer() {
         console.error('HLS Error:', data);
         
         if (data.fatal) {
+          // Stop elapsed timer
+          if (elapsedIntervalRef.current) {
+            clearInterval(elapsedIntervalRef.current);
+            elapsedIntervalRef.current = null;
+          }
+          
+          const elapsed = Date.now() - loadStartTimeRef.current;
+          
+          // Mark current server as failed
+          if (source.type === 'dlhd') {
+            setServerStatuses(prev => {
+              const updated = [...prev];
+              const checkingIdx = updated.findIndex(s => s.status === 'checking');
+              if (checkingIdx >= 0) {
+                updated[checkingIdx] = { 
+                  ...updated[checkingIdx], 
+                  status: 'failed', 
+                  elapsed,
+                  error: data.details || 'Failed'
+                };
+              }
+              return updated;
+            });
+          } else {
+            setServerStatuses(prev => prev.map(s => ({ 
+              ...s, 
+              status: 'failed' as const, 
+              elapsed,
+              error: data.details || 'Failed'
+            })));
+          }
+          
           let errorMessage = 'Stream error';
           
           // Handle specific error types
@@ -276,6 +385,12 @@ export function useVideoPlayer() {
   }, [getStreamUrl, trackLiveTVEvent, startLiveTVSession]);
 
   const stopStream = useCallback(() => {
+    // Clean up elapsed timer
+    if (elapsedIntervalRef.current) {
+      clearInterval(elapsedIntervalRef.current);
+      elapsedIntervalRef.current = null;
+    }
+    
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -299,6 +414,9 @@ export function useVideoPlayer() {
     }));
 
     setCurrentSource(null);
+    setServerStatuses([]);
+    setElapsedTime(0);
+    setActiveBackend(null);
   }, [endLiveTVSession]);
 
   const togglePlay = useCallback(() => {
@@ -396,6 +514,9 @@ export function useVideoPlayer() {
     videoRef,
     ...state,
     currentSource,
+    serverStatuses,
+    elapsedTime,
+    activeBackend,
     getStreamUrlForCopy,
     loadStream,
     stopStream,

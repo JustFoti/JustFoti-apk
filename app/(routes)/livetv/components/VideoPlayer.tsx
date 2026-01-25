@@ -94,6 +94,8 @@ export const VideoPlayer = memo(function VideoPlayer({
     error,
     volume,
     currentSource,
+    serverStatuses,
+    elapsedTime,
     getStreamUrlForCopy,
     loadStream,
     stopStream,
@@ -376,6 +378,34 @@ export const VideoPlayer = memo(function VideoPlayer({
               <div className={styles.loadingSpinnerLarge} />
               <p className={styles.loadingText}>{getLoadingMessage()}</p>
               <p className={styles.loadingSubtext}>{displayTitle}</p>
+              
+              {/* Server Status Indicator */}
+              {serverStatuses.length > 0 && (
+                <div className={styles.serverStatusContainer}>
+                  <div className={styles.serverStatusHeader}>
+                    <span>Checking servers...</span>
+                    <span className={styles.elapsedTime}>{(elapsedTime / 10).toFixed(1)}s</span>
+                  </div>
+                  <div className={styles.serverStatusList}>
+                    {serverStatuses.map((server, idx) => (
+                      <div key={idx} className={`${styles.serverStatusItem} ${styles[`status${server.status.charAt(0).toUpperCase() + server.status.slice(1)}`]}`}>
+                        <span className={styles.serverStatusIcon}>
+                          {server.status === 'pending' && '○'}
+                          {server.status === 'checking' && '◐'}
+                          {server.status === 'success' && '✓'}
+                          {server.status === 'failed' && '✗'}
+                        </span>
+                        <span className={styles.serverStatusName}>{server.name}</span>
+                        {server.elapsed !== undefined && (
+                          <span className={styles.serverStatusElapsed}>
+                            {(server.elapsed / 1000).toFixed(1)}s
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
