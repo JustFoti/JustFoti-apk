@@ -157,10 +157,13 @@ const CDN_DOMAIN = 'dvalna.ru';
 /** HMAC secret for PoW computation - loaded from environment variable */
 // SECURITY: Never hardcode secrets in source code
 const getHmacSecret = (env?: Env): string => {
-  // Prefer environment variable, fall back to a default only for development
-  // In production, set DLHD_HMAC_SECRET in Cloudflare Worker secrets
-  return (env as any)?.DLHD_HMAC_SECRET ||
-    '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+  const secret = (env as any)?.DLHD_HMAC_SECRET;
+  if (!secret) {
+    // SECURITY: Log warning but don't expose in production
+    console.warn('[DLHD] WARNING: DLHD_HMAC_SECRET not configured - using insecure fallback');
+  }
+  // In production, ALWAYS set DLHD_HMAC_SECRET in Cloudflare Worker secrets
+  return secret || '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
 };
 
 /** PoW threshold - hash prefix must be less than this */
@@ -172,6 +175,9 @@ const POW_MAX_ITERATIONS = 100000;
 /** Session cache TTL (4 hours - JWT valid for 5) */
 const SESSION_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
 
+/** Maximum session cache size to prevent memory exhaustion */
+const SESSION_CACHE_MAX_SIZE = 500;
+
 // Session cache
 interface SessionData {
   jwt: string;
@@ -180,8 +186,21 @@ interface SessionData {
   iat: number;
   exp: number;
   fetchedAt: number;
+  source?: 'hitsplay.fun' | 'topembed.pw'; // Track where JWT was obtained from
 }
 const sessionCache = new Map<string, SessionData>();
+
+/**
+ * Add to session cache with size limit enforcement
+ */
+function addToSessionCache(channel: string, session: SessionData): void {
+  // Evict oldest entries if cache is full
+  if (sessionCache.size >= SESSION_CACHE_MAX_SIZE) {
+    const oldestKey = sessionCache.keys().next().value;
+    if (oldestKey) sessionCache.delete(oldestKey);
+  }
+  sessionCache.set(channel, session);
+}
 
 // =============================================================================
 // CRYPTO HELPERS
@@ -447,9 +466,10 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
           iat,
           exp,
           fetchedAt: Date.now(),
+          source: 'hitsplay.fun',
         };
         
-        sessionCache.set(channel, session);
+        addToSessionCache(channel, session);
         return session;
       }
     }
@@ -537,10 +557,11 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
       iat,
       exp,
       fetchedAt: Date.now(),
+      source: 'topembed.pw',
     };
 
-    sessionCache.set(channel, session);
-    logger.info('JWT fetched and cached', { channel, channelKey, exp });
+    addToSessionCache(channel, session);
+    logger.info('JWT fetched and cached', { channel, channelKey, exp, source: 'topembed.pw' });
     
     return session;
   } catch (error) {
@@ -620,6 +641,7 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string, 
   let modified = content;
 
   // Rewrite key URLs to proxy through us with JWT
+  // Key URLs can be on various subdomains but must be normalized to chevy.dvalna.ru
   modified = modified.replace(/URI="([^"]+)"/g, (_, originalKeyUrl) => {
     let absoluteKeyUrl = originalKeyUrl;
 
@@ -634,6 +656,13 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string, 
         const baseWithoutFile = m3u8BaseUrl.replace(/\/[^/]*$/, '/');
         absoluteKeyUrl = baseWithoutFile + absoluteKeyUrl;
       }
+    }
+
+    // Normalize key URLs to chevy.dvalna.ru (the key server)
+    // Key URLs can be on any subdomain but keys are always served from chevy
+    const keyPathMatch = absoluteKeyUrl.match(/\/key\/([^/]+)\/(\d+)/);
+    if (keyPathMatch) {
+      absoluteKeyUrl = `https://chevy.${CDN_DOMAIN}/key/${keyPathMatch[1]}/${keyPathMatch[2]}`;
     }
 
     const params = new URLSearchParams({ url: absoluteKeyUrl, jwt });
@@ -772,6 +801,23 @@ async function handlePlaylistRequest(
   if (!origin || !isAllowedOrigin(origin)) {
     logger.warn('Unauthorized origin', { origin });
     return jsonResponse({ error: 'Forbidden - invalid origin' }, 403, origin);
+  }
+
+  // SECURITY: Rate limiting for playlist requests
+  const ip = request?.headers.get('cf-connecting-ip') || '127.0.0.1';
+  if (env?.RATE_LIMIT_KV) {
+    const rateLimitKey = `ratelimit:playlist:${ip}`;
+    const lastRequest = await env.RATE_LIMIT_KV.get(rateLimitKey);
+    
+    if (lastRequest) {
+      const timeSince = Date.now() - parseInt(lastRequest);
+      if (timeSince < 1000) { // 1 second between playlist requests per IP
+        logger.warn('Playlist rate limit exceeded', { ip, timeSince });
+        return jsonResponse({ error: 'Rate limit exceeded - try again in 1 second' }, 429, origin);
+      }
+    }
+    
+    await env.RATE_LIMIT_KV.put(rateLimitKey, Date.now().toString(), { expirationTtl: 60 });
   }
 
   // SECURITY: Optional authentication token validation
@@ -932,7 +978,10 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
   const resource = keyMatch[1];
   const keyNumber = keyMatch[2];
   
-  logger.info('Key fetch request', { resource, keyNumber });
+  // Normalize key URL to chevy.dvalna.ru (the key server)
+  const normalizedKeyUrl = `https://chevy.${CDN_DOMAIN}/key/${resource}/${keyNumber}`;
+  
+  logger.info('Key fetch request', { resource, keyNumber, normalizedKeyUrl });
 
   try {
     let data: ArrayBuffer;
@@ -944,14 +993,15 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
     const nonce = await computePoWNonce(resource, keyNumber, timestamp, env);
     
     // Try direct fetch first (dvalna.ru may not block CF IPs anymore)
+    // Use hitsplay.fun as Origin/Referer since that's the primary JWT source
     try {
       logger.info('Trying direct key fetch with PoW', { timestamp, nonce });
       
-      const directResponse = await fetch(keyUrl, {
+      const directResponse = await fetch(normalizedKeyUrl, {
         headers: {
           'User-Agent': USER_AGENT,
-          'Origin': `https://${PLAYER_DOMAIN}`,
-          'Referer': `https://${PLAYER_DOMAIN}/`,
+          'Origin': 'https://hitsplay.fun',
+          'Referer': 'https://hitsplay.fun/',
           'Authorization': `Bearer ${jwt}`,
           'X-Key-Timestamp': timestamp.toString(),
           'X-Key-Nonce': nonce.toString(),
@@ -973,7 +1023,7 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
       
       // Fall back to RPI proxy if configured
       if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-        const rpiKeyUrl = `${env.RPI_PROXY_URL}/dlhd-key?url=${encodeURIComponent(keyUrl)}&key=${env.RPI_PROXY_KEY}`;
+        const rpiKeyUrl = `${env.RPI_PROXY_URL}/dlhd-key?url=${encodeURIComponent(normalizedKeyUrl)}&key=${env.RPI_PROXY_KEY}`;
         const rpiRes = await fetch(rpiKeyUrl);
         
         if (!rpiRes.ok) {

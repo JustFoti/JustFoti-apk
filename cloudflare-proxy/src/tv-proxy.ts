@@ -86,6 +86,7 @@ const CHANNEL_TO_CDNLIVE: Record<string, { name: string; code: string }> = {
   '451': { name: 'viaplay sports 1', code: 'gb' },
   '550': { name: 'viaplay sports 2', code: 'gb' },
   '554': { name: 'sky sports racing', code: 'gb' },
+  '576': { name: 'sky sports news', code: 'gb' },
   '350': { name: 'itv 1', code: 'gb' },
   '351': { name: 'itv 2', code: 'gb' },
   '352': { name: 'itv 3', code: 'gb' },
@@ -334,6 +335,11 @@ const CHANNEL_TO_TOPEMBED: Record<string, string> = {
   '98': 'BeinSports8[Arab]',
   '99': 'BeinSports9[Arab]',
   '100': 'BeinSportsXtra1',
+  // Sky Sports UK (additional)
+  '130': 'SkySportsPremierLeague[UK]',
+  '449': 'SkySportsMix[UK]',
+  '554': 'SkySportsRacing[UK]',
+  '576': 'SkySportsNews[UK]',
   // beIN France
   '116': 'BeinSports1[France]',
   '117': 'BeinSports2[France]',
@@ -1833,6 +1839,10 @@ function rewriteCdnLiveM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: s
     // Handle EXT-X-KEY URI - proxy key URLs DIRECTLY to worker
     if (trimmed.includes('URI="')) {
       return trimmed.replace(/URI="([^"]+)"/, (_, uri: string) => {
+        // Skip if already proxied
+        if (uri.includes('/segment?url=') || uri.includes('/key?url=')) {
+          return `URI="${uri}"`;
+        }
         const fullUrl = uri.startsWith('http') ? uri : `${baseUrl.origin}${basePath}${uri}`;
         // Keys go DIRECTLY to worker /segment endpoint (bypassing /tv route)
         const workerOrigin = proxyOrigin.replace(/\/tv$/, '');
@@ -2359,6 +2369,11 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
   // Key URLs can be on kiko2.ru, dvalna.ru, or giokko.ru domains
   // Channel keys can be premium{id} OR named keys like eplayerespn_usa, ustvabc, etc.
   modified = modified.replace(/URI="([^"]+)"/g, (_, originalKeyUrl) => {
+    // Skip if already proxied through our worker
+    if (originalKeyUrl.includes('/key?url=') || originalKeyUrl.includes('/segment?url=')) {
+      return `URI="${originalKeyUrl}"`;
+    }
+    
     let absoluteKeyUrl = originalKeyUrl;
     if (!absoluteKeyUrl.startsWith('http')) {
       const base = new URL(m3u8BaseUrl);
@@ -2371,7 +2386,8 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
       // Normalize to chevy.dvalna.ru for our proxy
       absoluteKeyUrl = `https://chevy.${CDN_DOMAIN}/key/${keyPathMatch[1]}/${keyPathMatch[2]}`;
     }
-    return `URI="${proxyOrigin}/tv/key?url=${encodeURIComponent(absoluteKeyUrl)}"`;
+    // proxyOrigin already contains /tv, so just append /key (not /tv/key)
+    return `URI="${proxyOrigin}/key?url=${encodeURIComponent(absoluteKeyUrl)}"`;
   });
 
   modified = modified.replace(/\n?#EXT-X-ENDLIST\s*$/m, '');

@@ -185,6 +185,11 @@ async function fetchAuthData(channel) {
     '89': 'Combate[Brazil]',
     '91': 'BeinSports1[Arab]',
     '92': 'BeinSports2[Arab]',
+    // Sky Sports UK (additional)
+    '130': 'SkySportsPremierLeague[UK]',
+    '449': 'SkySportsMix[UK]',
+    '554': 'SkySportsRacing[UK]',
+    '576': 'SkySportsNews[UK]',
   };
   
   // Get topembed channel name
@@ -452,17 +457,66 @@ async function callHeartbeat(authData) {
  * @returns {Promise<{success: boolean, data?: Buffer, error?: string}>}
  */
 async function fetchDLHDKeyV3(keyUrl) {
-  // Extract channel from URL
-  const channelMatch = keyUrl.match(/premium(\d+)/);
-  if (!channelMatch) {
-    return { success: false, error: 'Could not extract channel from URL' };
+  // Extract channel key from URL - can be premium{id} OR named keys like skysportsnews_uk
+  const keyMatch = keyUrl.match(/\/key\/([^/]+)\/(\d+)/);
+  if (!keyMatch) {
+    return { success: false, error: 'Could not extract channel key from URL' };
   }
-  const channel = channelMatch[1];
+  
+  const channelKey = keyMatch[1]; // e.g., "premium576" or "skysportsnews_uk"
+  
+  // Try to extract channel ID from premium{id} format, otherwise use the key directly
+  const premiumMatch = channelKey.match(/^premium(\d+)$/);
+  const channel = premiumMatch ? premiumMatch[1] : null;
+  
+  console.log(`[DLHD-V3] Key request: channelKey=${channelKey}, channel=${channel || 'named'}`);
   
   // Step 1: Get auth data
-  const authData = await fetchAuthData(channel);
+  let authData = null;
+  
+  if (channel) {
+    // Standard premium{id} format - fetch auth for that channel
+    authData = await fetchAuthData(channel);
+  } else {
+    // Named channel key - we need to find which channel this belongs to
+    // Try common Sky Sports channels first (576 = Sky Sports News UK)
+    const namedChannelMap = {
+      'skysportsnews_uk': '576',
+      'skysportsnews': '576',
+      'skysportsf1_uk': '60',
+      'skysportscricket_uk': '65',
+      'skysportsgolf_uk': '70',
+      'skysportsfootball_uk': '35',
+      'skysportsarena_uk': '36',
+      'skysportsaction_uk': '37',
+      'skysportsmainevent_uk': '38',
+      'skysportstennis_uk': '46',
+      'skysportspremierleague_uk': '130',
+      'skysportsmix_uk': '449',
+      'skysportsracing_uk': '554',
+    };
+    
+    // Try to find channel ID from named key
+    const mappedChannel = namedChannelMap[channelKey.toLowerCase()];
+    if (mappedChannel) {
+      console.log(`[DLHD-V3] Mapped named key ${channelKey} to channel ${mappedChannel}`);
+      authData = await fetchAuthData(mappedChannel);
+    } else {
+      // Try fetching auth for a few common channels and see if JWT matches
+      console.log(`[DLHD-V3] Unknown named key ${channelKey}, trying common channels...`);
+      for (const testChannel of ['576', '35', '38', '60', '130']) {
+        const testAuth = await fetchAuthData(testChannel);
+        if (testAuth && testAuth.channelKey === channelKey) {
+          console.log(`[DLHD-V3] Found matching auth from channel ${testChannel}`);
+          authData = testAuth;
+          break;
+        }
+      }
+    }
+  }
+  
   if (!authData) {
-    return { success: false, error: 'Failed to get auth data' };
+    return { success: false, error: `Failed to get auth data for ${channelKey}` };
   }
   
   // Step 2: Establish heartbeat session

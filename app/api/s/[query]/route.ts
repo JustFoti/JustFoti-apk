@@ -46,17 +46,16 @@ function formatItem(item: any, defaultType: string = 'movie', baseUrl: string = 
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { query: string[] } }
+  { params }: { params: Promise<{ query: string }> }
 ) {
   const baseUrl = getBaseUrl(request);
   const searchParams = request.nextUrl.searchParams;
   const page = parseInt(searchParams.get('page') || '1');
   
-  // Get query from path segments
-  // URL: /s/the/matrix/1999 -> query segments: ["the", "matrix", "1999"]
-  // Join with spaces to form: "the matrix 1999"
-  const querySegments = params.query || [];
-  const query = decodeURIComponent(querySegments.join(' ')).trim();
+  // Get query from path segment - params is now a Promise in Next.js 16
+  const resolvedParams = await params;
+  // URL: /s/matrix -> query: "matrix"
+  const query = decodeURIComponent(resolvedParams.query || '').trim();
   
   console.log(`[VRChat Search] Path-based search: "${query}" (page ${page})`);
   
