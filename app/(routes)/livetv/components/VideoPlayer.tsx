@@ -6,7 +6,7 @@
 'use client';
 
 import { memo, useEffect, useState, useRef, useCallback } from 'react';
-import { useVideoPlayer } from '../hooks/useVideoPlayer';
+import { useVideoPlayer, DLHD_BACKENDS, BACKEND_DISPLAY_NAMES } from '../hooks/useVideoPlayer';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { LiveEvent, TVChannel } from '../hooks/useLiveTVData';
 import styles from '../LiveTV.module.css';
@@ -96,9 +96,11 @@ export const VideoPlayer = memo(function VideoPlayer({
     currentSource,
     serverStatuses,
     elapsedTime,
+    currentBackend,
     getStreamUrlForCopy,
     loadStream,
     stopStream,
+    switchBackend,
     togglePlay,
     toggleMute,
     setVolume,
@@ -106,6 +108,7 @@ export const VideoPlayer = memo(function VideoPlayer({
   } = useVideoPlayer();
 
   const [showControls, setShowControls] = useState(true);
+  const [showServerPicker, setShowServerPicker] = useState(false);
   const [castError, setCastError] = useState<string | null>(null);
   const castErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -282,6 +285,25 @@ export const VideoPlayer = memo(function VideoPlayer({
       }
     };
   }, []);
+
+  // Close server picker when clicking outside
+  useEffect(() => {
+    if (!showServerPicker) return;
+    
+    const handleClickOutside = () => {
+      setShowServerPicker(false);
+    };
+    
+    // Delay to avoid immediate close from the button click
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 0);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showServerPicker]);
 
   const handleInteraction = useCallback(() => {
     resetHideTimer();
@@ -593,7 +615,59 @@ export const VideoPlayer = memo(function VideoPlayer({
                 <CopyUrlButton getUrl={getStreamUrlForCopy} />
               )}
 
-              {currentSource && (
+              {/* Server Picker - only for DLHD sources */}
+              {currentSource?.type === 'dlhd' && (
+                <div className={styles.serverPickerContainer}>
+                  <button 
+                    className={styles.serverPickerButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowServerPicker(!showServerPicker);
+                    }}
+                    title="Switch server"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="3" width="20" height="6" rx="1" />
+                      <rect x="2" y="15" width="20" height="6" rx="1" />
+                      <circle cx="6" cy="6" r="1" fill="currentColor" />
+                      <circle cx="6" cy="18" r="1" fill="currentColor" />
+                    </svg>
+                    <span>{currentBackend ? BACKEND_DISPLAY_NAMES[currentBackend] : 'Server'}</span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points={showServerPicker ? "18 15 12 9 6 15" : "6 9 12 15 18 9"} />
+                    </svg>
+                  </button>
+                  
+                  {showServerPicker && (
+                    <div className={styles.serverPickerDropdown}>
+                      {DLHD_BACKENDS.map((backend) => (
+                        <button
+                          key={backend}
+                          className={`${styles.serverPickerOption} ${currentBackend === backend ? styles.active : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (backend !== currentBackend) {
+                              switchBackend(backend);
+                            }
+                            setShowServerPicker(false);
+                          }}
+                        >
+                          <span className={styles.serverPickerOptionName}>
+                            {BACKEND_DISPLAY_NAMES[backend]}
+                          </span>
+                          {currentBackend === backend && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {currentSource && currentSource.type !== 'dlhd' && (
                 <span className={styles.sourceLabel}>
                   {currentSource.type.toUpperCase()}
                 </span>

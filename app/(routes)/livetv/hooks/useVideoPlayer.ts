@@ -39,11 +39,21 @@ export interface StreamSource {
 }
 
 // Server backends in order of priority (matches tv-proxy.ts)
-const DLHD_SERVERS = [
-  { id: 'moveonjoy', name: 'MoveonJoy', desc: 'Unencrypted' },
-  { id: 'cdnlive', name: 'CDN-Live', desc: 'Token auth' },
-  { id: 'dvalna', name: 'Dvalna.ru', desc: 'JWT + PoW' },
-];
+export const DLHD_BACKENDS = ['moveonjoy', 'cdnlive', 'dvalna'] as const;
+export type DLHDBackend = typeof DLHD_BACKENDS[number];
+
+export const BACKEND_DISPLAY_NAMES: Record<DLHDBackend, string> = {
+  moveonjoy: 'MoveonJoy',
+  cdnlive: 'CDN-Live',
+  dvalna: 'Dvalna.ru',
+};
+
+// Generate a simple session fingerprint for anti-leech validation
+function generateSessionFingerprint(): string {
+  const timestamp = Date.now();
+  const random = Math.random().toString(36).substring(2, 10);
+  return btoa(`${timestamp}:${random}`).replace(/[+/=]/g, '');
+}
 
 export function useVideoPlayer() {
   const { trackLiveTVEvent, startLiveTVSession, endLiveTVSession } = useAnalytics();
@@ -51,6 +61,10 @@ export function useVideoPlayer() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<any>(null);
   const loadStartTimeRef = useRef<number>(0);
+  const failedBackendsRef = useRef<string[]>([]);
+  const currentSourceRef = useRef<StreamSource | null>(null);
+  const retryCountRef = useRef(0);
+  const sessionFingerprintRef = useRef<string>(generateSessionFingerprint());
   
   const [state, setState] = useState<PlayerState>({
     isPlaying: false,
@@ -70,16 +84,21 @@ export function useVideoPlayer() {
   const [serverStatuses, setServerStatuses] = useState<ServerStatus[]>([]);
   const [elapsedTime, setElapsedTime] = useState(0);
   const [activeBackend, setActiveBackend] = useState<string | null>(null);
+  const [currentBackend, setCurrentBackend] = useState<DLHDBackend | null>(null);
   const elapsedIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const getStreamUrl = useCallback((source: StreamSource): string => {
+  const getStreamUrl = useCallback((source: StreamSource, skipBackends: string[] = []): string => {
     // SECURITY: Only log in development to prevent URL exposure
     if (process.env.NODE_ENV === 'development') {
-      console.log('[useVideoPlayer] getStreamUrl called with:', source);
+      console.log('[useVideoPlayer] getStreamUrl called with:', source, 'skip:', skipBackends);
     }
     switch (source.type) {
       case 'dlhd':
-        const dlhdUrl = getTvPlaylistUrl(source.channelId);
+        let dlhdUrl = getTvPlaylistUrl(source.channelId);
+        // Add skip parameter if we have failed backends
+        if (skipBackends.length > 0) {
+          dlhdUrl += `&skip=${skipBackends.join(',')}`;
+        }
         if (process.env.NODE_ENV === 'development') {
           console.log('[useVideoPlayer] DLHD URL:', dlhdUrl);
         }
@@ -105,9 +124,9 @@ export function useVideoPlayer() {
     }
   }, []);
 
-  const loadStream = useCallback(async (source: StreamSource) => {
+  const loadStreamInternal = useCallback(async (source: StreamSource, skipBackends: string[] = []) => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('[useVideoPlayer] loadStream called with:', source);
+      console.log('[useVideoPlayer] loadStreamInternal called with:', source, 'skip:', skipBackends);
     }
     if (!videoRef.current) {
       if (process.env.NODE_ENV === 'development') {
@@ -116,25 +135,37 @@ export function useVideoPlayer() {
       return;
     }
 
-    // Reset and start tracking
-    loadStartTimeRef.current = Date.now();
-    setElapsedTime(0);
-    setActiveBackend(null);
-    
-    // Initialize server statuses based on source type
-    if (source.type === 'dlhd') {
-      setServerStatuses(DLHD_SERVERS.map(s => ({ name: s.name, status: 'pending' as const })));
-    } else if (source.type === 'cdnlive') {
-      setServerStatuses([{ name: 'CDN-Live API', status: 'checking' as const }]);
-    } else if (source.type === 'viprow') {
-      setServerStatuses([{ name: 'VIPRow Proxy', status: 'checking' as const }]);
+    // Only reset tracking on first attempt (not retries)
+    if (skipBackends.length === 0) {
+      loadStartTimeRef.current = Date.now();
+      setElapsedTime(0);
+      setActiveBackend(null);
+      failedBackendsRef.current = [];
+      retryCountRef.current = 0;
+      currentSourceRef.current = source;
+      
+      // Initialize server statuses based on source type
+      if (source.type === 'dlhd') {
+        setServerStatuses(DLHD_BACKENDS.map(id => ({ 
+          name: BACKEND_DISPLAY_NAMES[id], 
+          status: 'pending' as const 
+        })));
+        // Mark first as checking
+        setServerStatuses(prev => prev.map((s, i) => 
+          i === 0 ? { ...s, status: 'checking' as const } : s
+        ));
+      } else if (source.type === 'cdnlive') {
+        setServerStatuses([{ name: 'CDN-Live API', status: 'checking' as const }]);
+      } else if (source.type === 'viprow') {
+        setServerStatuses([{ name: 'VIPRow Proxy', status: 'checking' as const }]);
+      }
+      
+      // Start elapsed time counter (updates every 100ms, stores tenths of seconds)
+      if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
+      elapsedIntervalRef.current = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - loadStartTimeRef.current) / 100));
+      }, 100);
     }
-    
-    // Start elapsed time counter (updates every 100ms, stores tenths of seconds)
-    if (elapsedIntervalRef.current) clearInterval(elapsedIntervalRef.current);
-    elapsedIntervalRef.current = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - loadStartTimeRef.current) / 100));
-    }, 100);
 
     setState(prev => ({ ...prev, isLoading: true, isBuffering: false, loadingStage: 'fetching', error: null }));
     setCurrentSource(source);
@@ -150,7 +181,7 @@ export function useVideoPlayer() {
         hlsRef.current.destroy();
       }
 
-      let streamUrl = getStreamUrl(source);
+      let streamUrl = getStreamUrl(source, skipBackends);
       
       // For CDN Live, fetch the stream URL from API first
       if (source.type === 'cdnlive') {
@@ -225,6 +256,12 @@ export function useVideoPlayer() {
         // The CF worker adds X-DLHD-Backend header
         // We can't access it directly from HLS.js, but we can infer from URL or timing
         if (source.type === 'dlhd') {
+          // Determine which backend succeeded based on how many we skipped
+          const backendIndex = failedBackendsRef.current.length;
+          if (backendIndex < DLHD_BACKENDS.length) {
+            setCurrentBackend(DLHD_BACKENDS[backendIndex]);
+          }
+          
           // Mark all as success since we got a manifest
           setServerStatuses(prev => {
             const updated = [...prev];
@@ -268,29 +305,68 @@ export function useVideoPlayer() {
         }
       });
 
-      hls.on(Hls.Events.ERROR, (_, data) => {
+      hls.on(Hls.Events.ERROR, async (_, data) => {
         console.error('HLS Error:', data);
         
         if (data.fatal) {
-          // Stop elapsed timer
+          const elapsed = Date.now() - loadStartTimeRef.current;
+          
+          // Determine which backend failed based on current index
+          const currentBackend = source.type === 'dlhd' ? DLHD_BACKENDS[failedBackendsRef.current.length] : null;
+          const errorDetails = data.details || 'Unknown error';
+          
+          console.log(`[useVideoPlayer] Fatal error on backend: ${currentBackend}, details: ${errorDetails}`);
+          
+          // For DLHD, try next backend before giving up
+          if (source.type === 'dlhd' && currentBackend && failedBackendsRef.current.length < DLHD_BACKENDS.length - 1) {
+            console.log(`[useVideoPlayer] Trying next backend after ${currentBackend} failed`);
+            
+            // Mark current as failed
+            setServerStatuses(prev => {
+              const updated = [...prev];
+              const idx = failedBackendsRef.current.length;
+              if (idx < updated.length) {
+                updated[idx] = { ...updated[idx], status: 'failed', elapsed, error: errorDetails };
+              }
+              // Mark next as checking
+              if (idx + 1 < updated.length) {
+                updated[idx + 1] = { ...updated[idx + 1], status: 'checking' };
+              }
+              return updated;
+            });
+            
+            // Add to failed list
+            failedBackendsRef.current.push(currentBackend);
+            
+            // Destroy current HLS
+            if (hlsRef.current) {
+              hlsRef.current.destroy();
+              hlsRef.current = null;
+            }
+            
+            // Small delay then retry
+            await new Promise(resolve => setTimeout(resolve, 300));
+            loadStreamInternal(source, [...failedBackendsRef.current]);
+            return;
+          }
+          
+          // Stop elapsed timer - all backends exhausted or non-DLHD source
           if (elapsedIntervalRef.current) {
             clearInterval(elapsedIntervalRef.current);
             elapsedIntervalRef.current = null;
           }
           
-          const elapsed = Date.now() - loadStartTimeRef.current;
-          
           // Mark current server as failed
           if (source.type === 'dlhd') {
             setServerStatuses(prev => {
               const updated = [...prev];
-              const checkingIdx = updated.findIndex(s => s.status === 'checking');
+              const checkingIdx = updated.findIndex(s => s.status === 'checking' || s.status === 'success');
               if (checkingIdx >= 0) {
                 updated[checkingIdx] = { 
                   ...updated[checkingIdx], 
                   status: 'failed', 
                   elapsed,
-                  error: data.details || 'Failed'
+                  error: errorDetails
                 };
               }
               return updated;
@@ -300,7 +376,7 @@ export function useVideoPlayer() {
               ...s, 
               status: 'failed' as const, 
               elapsed,
-              error: data.details || 'Failed'
+              error: errorDetails
             })));
           }
           
@@ -309,17 +385,17 @@ export function useVideoPlayer() {
           // Handle specific error types
           if (data.type === 'networkError') {
             if (data.details === 'manifestLoadError' || data.details === 'manifestParsingError') {
-              errorMessage = 'Channel unavailable. This channel may not exist or is temporarily offline.';
+              errorMessage = 'Channel unavailable. All servers failed to provide this stream.';
             } else if (data.details === 'fragLoadError') {
-              errorMessage = 'Failed to load video segments. Please try again.';
+              errorMessage = 'Failed to load video segments. All servers exhausted.';
             } else if (data.details === 'keyLoadError') {
-              errorMessage = 'Failed to load decryption key. Please try again.';
+              errorMessage = 'Failed to load decryption key. All servers exhausted.';
             } else {
               errorMessage = 'Network error. Please check your connection and try again.';
             }
           } else if (data.type === 'mediaError') {
             if (data.details?.includes('decrypt')) {
-              errorMessage = 'Decryption failed. The stream may have changed. Please refresh.';
+              errorMessage = 'Decryption failed on all servers. The stream may have changed.';
             } else {
               errorMessage = 'Media playback error. Please try again.';
             }
@@ -330,6 +406,11 @@ export function useVideoPlayer() {
             } else {
               errorMessage = `Stream error: ${details}`;
             }
+          }
+          
+          // Add info about backends tried
+          if (source.type === 'dlhd' && failedBackendsRef.current.length > 0) {
+            errorMessage += ` (Tried: ${failedBackendsRef.current.map(b => BACKEND_DISPLAY_NAMES[b as DLHDBackend] || b).join(', ')})`;
           }
           
           setState(prev => ({ 
@@ -384,6 +465,11 @@ export function useVideoPlayer() {
     }
   }, [getStreamUrl, trackLiveTVEvent, startLiveTVSession]);
 
+  // Public loadStream function - resets state and starts fresh
+  const loadStream = useCallback((source: StreamSource) => {
+    loadStreamInternal(source, []);
+  }, [loadStreamInternal]);
+
   const stopStream = useCallback(() => {
     // Clean up elapsed timer
     if (elapsedIntervalRef.current) {
@@ -417,6 +503,9 @@ export function useVideoPlayer() {
     setServerStatuses([]);
     setElapsedTime(0);
     setActiveBackend(null);
+    failedBackendsRef.current = [];
+    retryCountRef.current = 0;
+    currentSourceRef.current = null;
   }, [endLiveTVSession]);
 
   const togglePlay = useCallback(() => {
@@ -500,15 +589,47 @@ export function useVideoPlayer() {
     return () => { stopStream(); };
   }, [stopStream]);
 
-  // Get the current stream URL for copying
+  // Get the current stream URL for copying (with session fingerprint for tracking)
+  // SECURITY: URL includes session fingerprint to help identify leaks
   const getStreamUrlForCopy = useCallback((): string | null => {
     if (!currentSource) return null;
     try {
-      return getStreamUrl(currentSource);
+      const baseUrl = getStreamUrl(currentSource);
+      // Add session fingerprint for anti-leech tracking
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      return `${baseUrl}${separator}_sid=${sessionFingerprintRef.current}`;
     } catch {
       return null;
     }
   }, [currentSource, getStreamUrl]);
+
+  // Switch to a specific backend (for manual server selection)
+  const switchBackend = useCallback((backend: DLHDBackend) => {
+    if (!currentSourceRef.current || currentSourceRef.current.type !== 'dlhd') {
+      console.warn('[useVideoPlayer] Cannot switch backend - no DLHD source active');
+      return;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[useVideoPlayer] Switching to backend:', backend);
+    }
+    
+    // Build skip list: all backends except the one we want
+    const skipBackends = DLHD_BACKENDS.filter(b => b !== backend);
+    
+    // Reset tracking for fresh attempt
+    failedBackendsRef.current = [];
+    setCurrentBackend(null);
+    
+    // Destroy current HLS
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    
+    // Load with skip list to force specific backend
+    loadStreamInternal(currentSourceRef.current, skipBackends);
+  }, [loadStreamInternal]);
 
   return {
     videoRef,
@@ -517,9 +638,11 @@ export function useVideoPlayer() {
     serverStatuses,
     elapsedTime,
     activeBackend,
+    currentBackend,
     getStreamUrlForCopy,
     loadStream,
     stopStream,
+    switchBackend,
     togglePlay,
     toggleMute,
     setVolume,

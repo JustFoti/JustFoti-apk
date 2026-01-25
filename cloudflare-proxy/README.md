@@ -130,12 +130,16 @@ Parameters:
 
 **Endpoints:**
 ```
-GET /tv/?channel=<id>              - Get proxied M3U8 playlist (requires origin)
-GET /tv/cdnlive?url=<encoded_url>  - Proxy nested M3U8 manifests (requires origin)
-GET /segment?url=<encoded_url>     - Proxy video segments (no origin check)
-GET /tv/key?url=<encoded_url>      - Proxy encryption keys (requires origin)
-GET /tv/health                     - Health check
+GET /tv/?channel=<id>&skip=<backends>  - Get proxied M3U8 playlist (requires origin)
+GET /tv/cdnlive?url=<encoded_url>      - Proxy nested M3U8 manifests (requires origin)
+GET /segment?url=<encoded_url>         - Proxy video segments (no origin check)
+GET /tv/key?url=<encoded_url>          - Proxy encryption keys (requires origin)
+GET /tv/health                         - Health check
 ```
+
+**Parameters:**
+- `channel` (required) - DLHD channel ID (numeric)
+- `skip` (optional) - Comma-separated list of backends to skip during fallback (e.g., `moveonjoy,cdnlive`)
 
 **Routing Flow:**
 ```

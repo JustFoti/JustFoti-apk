@@ -1410,7 +1410,8 @@ export default {
       if (path === '/cdnlive') return handleCdnLiveM3U8Proxy(url, logger, origin, proxyBase);
 
       const channel = url.searchParams.get('channel');
-      logger.info('Channel param', { channel, hasChannel: !!channel });
+      const skipBackends = url.searchParams.get('skip')?.split(',').filter(Boolean) || [];
+      logger.info('Channel param', { channel, hasChannel: !!channel, skipBackends });
       
       if (!channel || !/^\d+$/.test(channel)) {
         return jsonResponse({ 
@@ -1420,7 +1421,7 @@ export default {
           receivedChannel: channel 
         }, 400, origin);
       }
-      return handlePlaylistRequest(channel, proxyBase, logger, origin, env, request);
+      return handlePlaylistRequest(channel, proxyBase, logger, origin, env, request, skipBackends);
     } catch (error) {
       logger.error('TV Proxy error', error as Error);
       return jsonResponse({ error: 'Proxy error', details: (error as Error).message }, 500, origin);
@@ -1428,7 +1429,7 @@ export default {
   },
 };
 
-async function handlePlaylistRequest(channel: string, proxyOrigin: string, logger: any, origin: string | null, env?: Env, request?: Request): Promise<Response> {
+async function handlePlaylistRequest(channel: string, proxyOrigin: string, logger: any, origin: string | null, env?: Env, request?: Request, skipBackends: string[] = []): Promise<Response> {
   const errors: string[] = [];
   let usedBackend = '';
 
@@ -1438,6 +1439,8 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // 1. moveonjoy.com (Player 6) - NO AUTH AT ALL! No encryption keys needed!
   // 2. cdn-live-tv.ru (Player 5) - Simple token, NO JWT/PoW!
   // 3. dvalna.ru (Player 3) - Most channels, but requires JWT + PoW for keys
+  // 
+  // skipBackends parameter allows client to skip backends that failed during playback
   // ============================================================================
 
   // ============================================================================
@@ -1446,7 +1449,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // Try moveonjoy FIRST because these streams are UNENCRYPTED - no key fetching needed!
   // ============================================================================
   const moveonjoyUrl = CHANNEL_TO_MOVEONJOY[channel];
-  if (moveonjoyUrl) {
+  if (moveonjoyUrl && !skipBackends.includes('moveonjoy')) {
     logger.info('Trying Backend 1: moveonjoy.com (unencrypted)', { channel, url: moveonjoyUrl.substring(0, 60) });
     
     try {
@@ -1493,7 +1496,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // BACKEND 2: cdn-live-tv.ru (Player 5) - Simple token auth
   // ============================================================================
   const cdnLiveMapping = CHANNEL_TO_CDNLIVE[channel];
-  if (cdnLiveMapping) {
+  if (cdnLiveMapping && !skipBackends.includes('cdnlive')) {
     logger.info('Trying Backend 2: cdn-live-tv.ru', { channel, mapping: cdnLiveMapping });
     
     const cdnResult = await fetchCdnLiveStream(cdnLiveMapping.name, cdnLiveMapping.code, logger);
@@ -1646,15 +1649,18 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // Only try dvalna.ru if other backends failed - it requires JWT + PoW for key decryption
   // IMPORTANT: Skip dvalna.ru if JWT fetch fails - streams will be unplayable without keys
   // ============================================================================
-  logger.info('Trying Backend 3: dvalna.ru', { channel });
+  if (skipBackends.includes('dvalna')) {
+    logger.info('Skipping Backend 3: dvalna.ru (client requested skip)', { channel });
+  } else {
+    logger.info('Trying Backend 3: dvalna.ru', { channel });
   
-  let channelKey = `premium${channel}`;
-  let jwtFetchSucceeded = false;
-  const jwt = await fetchPlayerJWT(channel, logger, env);
+    let channelKey = `premium${channel}`;
+    let jwtFetchSucceeded = false;
+    const jwt = await fetchPlayerJWT(channel, logger, env);
   
-  if (jwt) {
-    jwtFetchSucceeded = true;
-    try {
+    if (jwt) {
+      jwtFetchSucceeded = true;
+      try {
       const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
       const payload = JSON.parse(atob(payloadB64));
       if (payload.sub) {
@@ -1780,6 +1786,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
       }
     }
   }
+  } // End of skipBackends.includes('dvalna') check
 
   // ============================================================================
   // ALL BACKENDS FAILED
