@@ -73,7 +73,13 @@ function getBaseUrl(request: NextRequest): string {
   return `${protocol}://${host}`;
 }
 
-function formatItem(item: any, defaultType: string = 'movie'): any {
+function getProxiedImageUrl(baseUrl: string, posterPath: string | null): string {
+  if (!posterPath) return '';
+  // Use our image proxy instead of direct TMDB URL
+  return `${baseUrl}/api/image-proxy?tmdb=/w342${posterPath}`;
+}
+
+function formatItem(item: any, defaultType: string = 'movie', baseUrl: string = ''): any {
   const type = item.media_type || item.mediaType || defaultType;
   return {
     type,
@@ -81,7 +87,7 @@ function formatItem(item: any, defaultType: string = 'movie'): any {
     title: item.title || item.name || 'Unknown',
     year: (item.release_date || item.first_air_date || '').substring(0, 4),
     rating: (item.vote_average || 0).toFixed(1),
-    poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : '',
+    poster: item.poster_path ? getProxiedImageUrl(baseUrl, item.poster_path) : '',
     seasons: item.number_of_seasons || 0,
   };
 }
@@ -135,7 +141,7 @@ async function handleHome(request: NextRequest): Promise<NextResponse> {
     const total = data.total_results || allItems.length;
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
     
-    const items = allItems.slice(0, ITEMS_PER_PAGE).map((item: any) => formatItem(item));
+    const items = allItems.slice(0, ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'movie', baseUrl));
     
     return jsonResponse({
       status: 'ok',
@@ -172,7 +178,7 @@ async function handleMovies(request: NextRequest): Promise<NextResponse> {
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
     
     const startIdx = (page - 1) * ITEMS_PER_PAGE;
-    const items = allItems.slice(startIdx, startIdx + ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'movie'));
+    const items = allItems.slice(startIdx, startIdx + ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'movie', baseUrl));
     
     return jsonResponse({
       status: 'ok',
@@ -209,7 +215,7 @@ async function handleSeries(request: NextRequest): Promise<NextResponse> {
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
     
     const startIdx = (page - 1) * ITEMS_PER_PAGE;
-    const items = allItems.slice(startIdx, startIdx + ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'tv'));
+    const items = allItems.slice(startIdx, startIdx + ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'tv', baseUrl));
     
     return jsonResponse({
       status: 'ok',
@@ -246,7 +252,7 @@ async function handleAnime(request: NextRequest): Promise<NextResponse> {
     const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
     
     const startIdx = (page - 1) * ITEMS_PER_PAGE;
-    const items = allItems.slice(startIdx, startIdx + ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'tv'));
+    const items = allItems.slice(startIdx, startIdx + ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'tv', baseUrl));
     
     return jsonResponse({
       status: 'ok',
@@ -335,7 +341,7 @@ async function handleSearch(request: NextRequest): Promise<NextResponse> {
     const total = data.total || allItems.length;
     const totalPages = data.totalPages || Math.ceil(total / ITEMS_PER_PAGE);
     
-    const items = allItems.slice(0, ITEMS_PER_PAGE).map((item: any) => formatItem(item));
+    const items = allItems.slice(0, ITEMS_PER_PAGE).map((item: any) => formatItem(item, 'movie', baseUrl));
     
     return jsonResponse({
       status: 'ok',
@@ -379,7 +385,7 @@ async function handleDetails(request: NextRequest): Promise<NextResponse> {
       year: (data.release_date || data.first_air_date || '').substring(0, 4),
       rating: (data.vote_average || 0).toFixed(1),
       overview: data.overview || '',
-      poster: data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : '',
+      poster: data.poster_path ? getProxiedImageUrl(baseUrl, data.poster_path) : '',
       seasons: 0,
     };
     
