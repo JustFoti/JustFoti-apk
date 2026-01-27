@@ -637,7 +637,7 @@ async function fetchPlayerJWT(channel: string, logger: any, env?: Env): Promise<
     logger.info('Trying hitsplay.fun for JWT', { channel });
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 sec - fail fast
     
     const res = await fetch(hitsplayUrl, {
       headers: {
@@ -753,7 +753,7 @@ async function fetchPlayerJWT(channel: string, logger: any, env?: Env): Promise<
     if (!html) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec - fail fast
         
         const res = await fetch(playerUrl, {
           headers: {
@@ -1019,6 +1019,72 @@ async function fetchCdnLiveStream(channelName: string, countryCode: string, logg
       return { success: false, error: 'Response too large' };
     }
     
+    // Method 3a: Try to find HUNTER obfuscation pattern
+    // The pattern is: eval(function(h,u,n,t,e,r){...}("encoded",num,"charset",num,num,num))
+    // We need to find the function body end and then parse the arguments
+    const hunterIdx = html.indexOf('eval(function(h,u,n,t,e,r)');
+    if (hunterIdx !== -1) {
+      const context = html.substring(hunterIdx, hunterIdx + 50000); // Get enough context for the encoded data
+      const bodyStart = context.indexOf('{');
+      
+      if (bodyStart !== -1) {
+        // Count braces to find the end of the function body
+        let depth = 0;
+        let bodyEnd = -1;
+        for (let i = bodyStart; i < context.length; i++) {
+          if (context[i] === '{') depth++;
+          if (context[i] === '}') {
+            depth--;
+            if (depth === 0) {
+              bodyEnd = i;
+              break;
+            }
+          }
+        }
+        
+        if (bodyEnd !== -1) {
+          const afterBody = context.substring(bodyEnd);
+          // Parse arguments: }("encoded",unused,"charset",offset,base,unused))
+          const argsMatch = afterBody.match(/\}\s*\(\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+          
+          if (argsMatch) {
+            const [, encodedData, , charset, offsetStr, baseStr] = argsMatch;
+            const base = parseInt(baseStr, 10);
+            const offset = parseInt(offsetStr, 10);
+            
+            // Security: Validate parsed parameters are within reasonable bounds
+            if (isNaN(base) || isNaN(offset) || base < 2 || base > 64 || offset < 0 || offset > 65536) {
+              logger.warn('cdn-live: invalid decode parameters', { base, offset });
+            } else if (encodedData.length > 100000) {
+              logger.warn('cdn-live: encoded data too large', { size: encodedData.length });
+            } else {
+              logger.info('cdn-live: decoding HUNTER obfuscated script', { 
+                encodedLen: encodedData.length, 
+                charset: charset.substring(0, 20),
+                base, 
+                offset 
+              });
+              
+              const decoded = decodeCdnLiveScript(encodedData, charset, base, base, offset);
+              logger.info('cdn-live: decoded script', { decodedLen: decoded.length, preview: decoded.substring(0, 200) });
+              
+              const decodedM3u8Match = decoded.match(/https:\/\/(?:edge\.)?cdn-live-tv\.ru\/api\/v1\/channels\/[^"'\s]+\.m3u8\?token=[^"'\s&]+/);
+              if (decodedM3u8Match) {
+                const m3u8Url = decodedM3u8Match[0];
+                const tokenMatch = m3u8Url.match(/token=([^&"'\s]+)/);
+                if (tokenMatch) {
+                  cdnLiveTokenCache.set(cacheKey, { token: tokenMatch[1], fetchedAt: Date.now() });
+                }
+                logger.info('cdn-live decoded URL found', { url: m3u8Url.substring(0, 80) });
+                return { success: true, m3u8Url };
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Method 3b: Fallback to old regex pattern (for backwards compatibility)
     const evalMatch = html.match(/\}\s*\(\s*"([^"]+)"\s*,\s*\d+\s*,\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*\d+\s*\)\s*\)/);
     if (evalMatch) {
       const [, encodedData, charset, offsetStr, baseStr] = evalMatch;
@@ -1037,22 +1103,19 @@ async function fetchCdnLiveStream(channelName: string, countryCode: string, logg
         return { success: false, error: 'Encoded data too large' };
       }
       
-      logger.info('cdn-live: decoding obfuscated script', { 
+      logger.info('cdn-live: decoding obfuscated script (fallback)', { 
         encodedLen: encodedData.length, 
-        charset: charset.substring(0, 20), // Don't log full charset
+        charset: charset.substring(0, 20),
         base, 
         offset 
       });
-      // Note: Using 'base' for delimiterIdx parameter - this assumes the delimiter
-      // character is at position 'base' in the charset. If decoding fails for some
-      // channels, the delimiterIdx may need to be extracted separately.
       const decoded = decodeCdnLiveScript(encodedData, charset, base, base, offset);
       logger.info('cdn-live: decoded script', { decodedLen: decoded.length, preview: decoded.substring(0, 200) });
       
-      const decodedM3u8Match = decoded.match(/https:\/\/(?:edge\.)?cdn-live-tv\.ru\/api\/v1\/channels\/[^"'\s]+/);
+      const decodedM3u8Match = decoded.match(/https:\/\/(?:edge\.)?cdn-live-tv\.ru\/api\/v1\/channels\/[^"'\s]+\.m3u8\?token=[^"'\s&]+/);
       if (decodedM3u8Match) {
         const m3u8Url = decodedM3u8Match[0];
-        const tokenMatch = m3u8Url.match(/token=([^&]+)/);
+        const tokenMatch = m3u8Url.match(/token=([^&"'\s]+)/);
         if (tokenMatch) {
           cdnLiveTokenCache.set(cacheKey, { token: tokenMatch[1], fetchedAt: Date.now() });
         }
@@ -1451,7 +1514,7 @@ async function tryMoveonjoyBackend(
   origin: string | null
 ): Promise<Response | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000); // 8 sec timeout
+  const timeout = setTimeout(() => controller.abort(), 5000); // 5 sec timeout - moveonjoy is fast
   
   try {
     const m3u8Res = await fetch(moveonjoyUrl, {
@@ -1499,12 +1562,15 @@ async function tryCdnLiveBackend(
   origin: string | null
 ): Promise<Response | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000); // 10 sec timeout
+  const timeout = setTimeout(() => controller.abort(), 15000); // 15 sec timeout
   
   try {
     const cdnResult = await fetchCdnLiveStream(mapping.name, mapping.code, logger);
     
-    if (!cdnResult.success || !cdnResult.m3u8Url) return null;
+    if (!cdnResult.success || !cdnResult.m3u8Url) {
+      logger.warn('cdn-live stream fetch failed', { channel, error: cdnResult.error });
+      return null;
+    }
     
     const m3u8Res = await fetch(cdnResult.m3u8Url, {
       headers: {
@@ -1516,10 +1582,14 @@ async function tryCdnLiveBackend(
     
     clearTimeout(timeout);
     
-    if (!m3u8Res.ok) return null;
+    if (!m3u8Res.ok) {
+      logger.warn('cdn-live M3U8 fetch failed', { channel, status: m3u8Res.status });
+      return null;
+    }
     
     const content = await m3u8Res.text();
-    if (!content.includes('#EXTM3U') || (!content.includes('#EXTINF') && !content.includes('.ts'))) {
+    if (!content.includes('#EXTM3U') || (!content.includes('#EXTINF') && !content.includes('.ts') && !content.includes('#EXT-X-STREAM-INF'))) {
+      logger.warn('cdn-live M3U8 invalid', { channel, preview: content.substring(0, 100) });
       return null;
     }
     
@@ -1539,6 +1609,7 @@ async function tryCdnLiveBackend(
     });
   } catch (e) {
     clearTimeout(timeout);
+    logger.warn('cdn-live backend error', { channel, error: (e as Error).message });
     return null;
   }
 }
@@ -1626,372 +1697,68 @@ async function tryDvalnaBackend(
 
 async function handlePlaylistRequest(channel: string, proxyOrigin: string, logger: any, origin: string | null, env?: Env, request?: Request, skipBackends: string[] = []): Promise<Response> {
   const errors: string[] = [];
-  let usedBackend = '';
 
   // ============================================================================
-  // FAST PARALLEL BACKEND RACING - January 2026
-  // Race simple backends (moveonjoy, cdnlive) against dvalna (needs JWT)
-  // First successful response wins - dramatically reduces startup time
+  // BACKEND PRIORITY ORDER: moveonjoy → cdn-live → dvalna
+  // Try fastest/simplest backends first, fall back to slower ones
   // ============================================================================
-  
-  const racePromises: Promise<Response | null>[] = [];
-  
-  // Start JWT fetch early (needed for dvalna) - don't await yet
+
+  // Start JWT fetch early in background (needed for dvalna if we get there)
   const jwtPromise = !skipBackends.includes('dvalna') 
     ? fetchPlayerJWT(channel, logger, env) 
     : Promise.resolve(null);
 
-  // FAST PATH 1: moveonjoy.com (NO AUTH - fastest)
+  // ============================================================================
+  // BACKEND 1: moveonjoy.com (NO AUTH - fastest)
+  // ============================================================================
   const moveonjoyUrl = CHANNEL_TO_MOVEONJOY[channel];
   if (moveonjoyUrl && !skipBackends.includes('moveonjoy')) {
-    racePromises.push(
-      tryMoveonjoyBackend(channel, moveonjoyUrl, proxyOrigin, logger, origin)
-        .catch(e => { errors.push(`moveonjoy: ${e.message}`); return null; })
-    );
-  }
-
-  // FAST PATH 2: cdn-live-tv.ru (simple token - fast)
-  const cdnLiveMapping = CHANNEL_TO_CDNLIVE[channel];
-  if (cdnLiveMapping && !skipBackends.includes('cdnlive')) {
-    racePromises.push(
-      tryCdnLiveBackend(channel, cdnLiveMapping, proxyOrigin, logger, origin)
-        .catch(e => { errors.push(`cdnlive: ${e.message}`); return null; })
-    );
-  }
-
-  // SLOW PATH: dvalna.ru (needs JWT + server lookup)
-  if (!skipBackends.includes('dvalna')) {
-    racePromises.push(
-      tryDvalnaBackend(channel, jwtPromise, proxyOrigin, logger, origin, env, errors)
-        .catch(e => { errors.push(`dvalna: ${e.message}`); return null; })
-    );
-  }
-
-  // Race all backends - first successful response wins
-  if (racePromises.length > 0) {
-    const results = await Promise.all(racePromises.map(p => 
-      p.then(r => r, () => null) // Convert rejections to null
-    ));
-    
-    // Return first successful response
-    for (const result of results) {
+    logger.info('Trying Backend 1: moveonjoy.com', { channel });
+    try {
+      const result = await tryMoveonjoyBackend(channel, moveonjoyUrl, proxyOrigin, logger, origin);
       if (result && result.status === 200) {
+        logger.info('Backend 1 SUCCESS: moveonjoy.com', { channel });
         return result;
       }
+    } catch (e) {
+      errors.push(`moveonjoy: ${(e as Error).message}`);
+      logger.warn('Backend 1 FAILED: moveonjoy.com', { error: (e as Error).message });
     }
   }
 
   // ============================================================================
-  // FALLBACK: Sequential backend attempts (original logic)
-  // Only reached if parallel racing failed
+  // BACKEND 2: cdn-live-tv.ru (simple token auth)
   // ============================================================================
+  const cdnLiveMapping = CHANNEL_TO_CDNLIVE[channel];
+  if (cdnLiveMapping && !skipBackends.includes('cdnlive')) {
+    logger.info('Trying Backend 2: cdn-live-tv.ru', { channel, mapping: cdnLiveMapping });
+    try {
+      const result = await tryCdnLiveBackend(channel, cdnLiveMapping, proxyOrigin, logger, origin);
+      if (result && result.status === 200) {
+        logger.info('Backend 2 SUCCESS: cdn-live-tv.ru', { channel });
+        return result;
+      }
+    } catch (e) {
+      errors.push(`cdnlive: ${(e as Error).message}`);
+      logger.warn('Backend 2 FAILED: cdn-live-tv.ru', { error: (e as Error).message });
+    }
+  }
 
   // ============================================================================
-  // BACKEND 1: dvalna.ru via topembed.pw (Player 3) - MOST CHANNELS
+  // BACKEND 3: dvalna.ru (needs JWT + PoW - slowest but most channels)
   // ============================================================================
   if (!skipBackends.includes('dvalna')) {
-    logger.info('Trying Backend 1: dvalna.ru (fallback)', { channel });
-  
-    let channelKey = `premium${channel}`;
-    const jwt = await fetchPlayerJWT(channel, logger, env);
-  
-    if (jwt) {
-      try {
-        const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-        const payload = JSON.parse(atob(payloadB64));
-        if (payload.sub) {
-          channelKey = payload.sub;
-          logger.info('Using channel key from JWT', { channelKey, channel });
-        }
-      } catch (e) {
-        logger.warn('Failed to extract channel key from JWT', { error: (e as Error).message });
-      }
-      
-      const channelKeysToTry: string[] = [];
-      if (channelKey !== `premium${channel}`) {
-        channelKeysToTry.push(channelKey);
-      }
-      channelKeysToTry.push(`premium${channel}`);
-      
-      for (const currentChannelKey of channelKeysToTry) {
-        let serverKey: string;
-        try {
-          serverKey = await getServerKey(currentChannelKey, logger, env);
-        } catch {
-          serverKey = 'zeko';
-        }
-        
-        const serverKeysToTry = [serverKey, ...ALL_SERVER_KEYS.filter(k => k !== serverKey)];
-
-        for (const sk of serverKeysToTry) {
-          const m3u8Url = constructM3U8Url(sk, currentChannelKey);
-          
-          try {
-            let content: string;
-            let fetchedVia = 'direct';
-            
-            try {
-              const directRes = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
-                headers: { 'User-Agent': USER_AGENT, 'Referer': `https://${PLAYER_DOMAIN}/` },
-              });
-              
-              if (!directRes.ok) throw new Error(`HTTP ${directRes.status}`);
-              content = await directRes.text();
-              
-              if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
-                throw new Error(`Not M3U8: ${content.substring(0, 50)}`);
-              }
-            } catch (directError) {
-              if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-                const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(m3u8Url)}&key=${env.RPI_PROXY_KEY}`;
-                const rpiRes = await fetch(rpiUrl);
-                
-                if (!rpiRes.ok) {
-                  errors.push(`dvalna/${currentChannelKey}/${sk}: ${(directError as Error).message}`);
-                  continue;
-                }
-                content = await rpiRes.text();
-                fetchedVia = 'rpi-proxy';
-              } else {
-                errors.push(`dvalna/${currentChannelKey}/${sk}: ${(directError as Error).message}`);
-                continue;
-              }
-            }
-
-            if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
-              const hasSegments = content.includes('#EXTINF') || content.includes('.ts');
-              
-              if (!hasSegments) {
-                errors.push(`dvalna/${currentChannelKey}/${sk}: M3U8 empty (channel offline)`);
-                continue;
-              }
-              
-              serverKeyCache.set(currentChannelKey, { serverKey: sk, fetchedAt: Date.now() });
-              logger.info('Backend 1 SUCCESS: dvalna.ru', { serverKey: sk, channelKey: currentChannelKey });
-              usedBackend = 'dvalna.ru';
-              const proxied = rewriteM3U8(content, proxyOrigin, m3u8Url);
-              return new Response(proxied, {
-                status: 200,
-                headers: {
-                  'Content-Type': 'application/vnd.apple.mpegurl',
-                  ...corsHeaders(origin),
-                  'Cache-Control': 'no-store',
-                  'X-DLHD-Channel': channel,
-                  'X-DLHD-ChannelKey': currentChannelKey,
-                  'X-DLHD-Server': sk,
-                  'X-DLHD-Backend': 'dvalna.ru',
-                  'X-Fetched-Via': fetchedVia,
-                },
-              });
-            }
-          } catch (err) {
-            errors.push(`dvalna/${currentChannelKey}/${sk}: ${(err as Error).message}`);
-          }
-        }
-      }
-    } else {
-      logger.warn('JWT fetch failed for dvalna.ru', { channel });
-      errors.push(`dvalna.ru: JWT fetch failed`);
-    }
-  } else {
-    logger.info('Skipping Backend 1: dvalna.ru (client requested skip)', { channel });
-  }
-
-  // ============================================================================
-  // BACKEND 2: cdn-live-tv.ru (Player 5) - Simple token auth
-  // ============================================================================
-  const cdnLiveMappingFallback = CHANNEL_TO_CDNLIVE[channel];
-  if (cdnLiveMappingFallback && !skipBackends.includes('cdnlive')) {
-    logger.info('Trying Backend 2: cdn-live-tv.ru', { channel, mapping: cdnLiveMappingFallback });
-    
-    const cdnResult = await fetchCdnLiveStream(cdnLiveMappingFallback.name, cdnLiveMappingFallback.code, logger);
-    
-    if (cdnResult.success && cdnResult.m3u8Url) {
-      try {
-        const m3u8Res = await fetch(cdnResult.m3u8Url, {
-          headers: {
-            'User-Agent': USER_AGENT,
-            'Referer': 'https://cdn-live.tv/',
-          },
-        });
-        
-        if (m3u8Res.ok) {
-          const content = await m3u8Res.text();
-          
-          if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('.ts'))) {
-            logger.info('Backend 2 SUCCESS: cdn-live-tv.ru', { channel });
-            usedBackend = 'cdn-live-tv.ru';
-            
-            const proxied = rewriteCdnLiveM3U8(content, proxyOrigin, cdnResult.m3u8Url);
-            return new Response(proxied, {
-              status: 200,
-              headers: {
-                'Content-Type': 'application/vnd.apple.mpegurl',
-                ...corsHeaders(origin),
-                'Cache-Control': 'no-store',
-                'X-DLHD-Channel': channel,
-                'X-DLHD-Backend': 'cdn-live-tv.ru',
-              },
-            });
-          } else {
-            errors.push(`cdn-live-tv.ru: M3U8 empty or invalid`);
-          }
-        } else {
-          errors.push(`cdn-live-tv.ru: HTTP ${m3u8Res.status}`);
-        }
-      } catch (err) {
-        errors.push(`cdn-live-tv.ru: ${(err as Error).message}`);
-      }
-    } else {
-      errors.push(`cdn-live-tv.ru: ${cdnResult.error || 'Failed to get stream URL'}`);
-    }
-  }
-
-  // ============================================================================
-  // BACKEND: Player 5 Dynamic Extraction (ddyplayer.cfd → cdn-live-tv.ru)
-  // ============================================================================
-  logger.info('Trying Backend 2b: Player 5 dynamic extraction', { channel });
-  
-  const player5Result = await extractPlayer5Stream(channel, logger);
-  
-  if (player5Result.success && player5Result.m3u8Url) {
+    logger.info('Trying Backend 3: dvalna.ru', { channel });
     try {
-      const m3u8Res = await fetch(player5Result.m3u8Url, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Referer': 'https://ddyplayer.cfd/',
-        },
-      });
-      
-      if (m3u8Res.ok) {
-        const content = await m3u8Res.text();
-        
-        if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('#EXT-X-STREAM-INF') || content.includes('.ts'))) {
-          logger.info('Backend 2b SUCCESS: Player 5 dynamic', { channel });
-          usedBackend = 'cdn-live-tv.ru (Player 5)';
-          
-          const proxied = rewriteCdnLiveM3U8(content, proxyOrigin, player5Result.m3u8Url);
-          return new Response(proxied, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/vnd.apple.mpegurl',
-              ...corsHeaders(origin),
-              'Cache-Control': 'no-store',
-              'X-DLHD-Channel': channel,
-              'X-DLHD-Backend': 'cdn-live-tv.ru (Player 5)',
-            },
-          });
-        } else {
-          errors.push(`Player 5: M3U8 empty or invalid`);
-        }
-      } else {
-        errors.push(`Player 5: HTTP ${m3u8Res.status}`);
+      const result = await tryDvalnaBackend(channel, jwtPromise, proxyOrigin, logger, origin, env, errors);
+      if (result && result.status === 200) {
+        logger.info('Backend 3 SUCCESS: dvalna.ru', { channel });
+        return result;
       }
-    } catch (err) {
-      errors.push(`Player 5: ${(err as Error).message}`);
+    } catch (e) {
+      errors.push(`dvalna: ${(e as Error).message}`);
+      logger.warn('Backend 3 FAILED: dvalna.ru', { error: (e as Error).message });
     }
-  } else {
-    errors.push(`Player 5: ${player5Result.error || 'Failed to extract stream'}`);
-  }
-
-  // ============================================================================
-  // BACKEND: lovecdn.ru/popcdn.day - Token auth, UNENCRYPTED
-  // ============================================================================
-  // Path: popcdn.day/player/{STREAM_NAME} → beautifulpeople.lovecdn.ru
-  // NO ENCRYPTION - direct M3U8 access with token!
-  // ============================================================================
-  const lovecdnStreamName = CHANNEL_TO_LOVECDN[channel];
-  if (lovecdnStreamName) {
-    logger.info('Trying Backend 2c: lovecdn.ru', { channel, streamName: lovecdnStreamName });
-    
-    const lovecdnResult = await fetchLovecdnStream(channel, logger);
-    
-    if (lovecdnResult.success && lovecdnResult.m3u8Url) {
-      logger.info('Backend 2c SUCCESS: lovecdn.ru', { channel, url: lovecdnResult.m3u8Url.substring(0, 60) });
-      usedBackend = 'lovecdn.ru';
-      
-      // Fetch and rewrite the M3U8
-      try {
-        const m3u8Res = await fetch(lovecdnResult.m3u8Url, {
-          headers: {
-            'User-Agent': USER_AGENT,
-            'Referer': 'https://popcdn.day/',
-          },
-        });
-        
-        if (m3u8Res.ok) {
-          const content = await m3u8Res.text();
-          
-          if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('#EXT-X-STREAM-INF') || content.includes('.ts'))) {
-            const proxied = rewriteLovecdnM3U8(content, proxyOrigin, lovecdnResult.m3u8Url);
-            return new Response(proxied, {
-              status: 200,
-              headers: {
-                'Content-Type': 'application/vnd.apple.mpegurl',
-                ...corsHeaders(origin),
-                'Cache-Control': 'no-store',
-                'X-DLHD-Channel': channel,
-                'X-DLHD-Backend': 'lovecdn.ru',
-              },
-            });
-          } else {
-            errors.push(`lovecdn.ru: M3U8 empty or invalid`);
-          }
-        } else {
-          errors.push(`lovecdn.ru: HTTP ${m3u8Res.status}`);
-        }
-      } catch (err) {
-        errors.push(`lovecdn.ru: ${(err as Error).message}`);
-      }
-    } else {
-      errors.push(`lovecdn.ru: ${lovecdnResult.error || 'Failed to get stream URL'}`);
-    }
-  }
-
-  // ============================================================================
-  // BACKEND 3: moveonjoy.com (Player 6) - NO AUTH AT ALL!
-  // ============================================================================
-  const moveonjoyUrlFallback = CHANNEL_TO_MOVEONJOY[channel];
-  if (moveonjoyUrlFallback && !skipBackends.includes('moveonjoy')) {
-    logger.info('Trying Backend 3: moveonjoy.com', { channel, url: moveonjoyUrlFallback.substring(0, 60) });
-    
-    try {
-      const m3u8Res = await fetch(moveonjoyUrlFallback, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Referer': 'https://tv-bu1.blogspot.com/',
-        },
-      });
-      
-      if (m3u8Res.ok) {
-        const content = await m3u8Res.text();
-        
-        if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('#EXT-X-STREAM-INF') || content.includes('.ts'))) {
-          logger.info('Backend 3 SUCCESS: moveonjoy.com', { channel });
-          usedBackend = 'moveonjoy.com';
-          
-          const proxied = rewriteMoveonjoyM3U8(content, proxyOrigin, moveonjoyUrlFallback);
-          return new Response(proxied, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/vnd.apple.mpegurl',
-              ...corsHeaders(origin),
-              'Cache-Control': 'no-store',
-              'X-DLHD-Channel': channel,
-              'X-DLHD-Backend': 'moveonjoy.com',
-            },
-          });
-        } else {
-          errors.push(`moveonjoy.com: M3U8 empty or invalid`);
-        }
-      } else {
-        errors.push(`moveonjoy.com: HTTP ${m3u8Res.status}`);
-      }
-    } catch (err) {
-      errors.push(`moveonjoy.com: ${(err as Error).message}`);
-    }
-  } else if (!moveonjoyUrlFallback) {
-    logger.info('No moveonjoy mapping for channel', { channel });
   }
 
   // ============================================================================
@@ -2015,7 +1782,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
     channel,
     errors: errors.slice(0, 10),
     backendsTriedCount: 3,
-    hint: 'dvalna.ru, cdn-live-tv.ru, and moveonjoy.com all failed'
+    hint: 'moveonjoy.com, cdn-live-tv.ru, and dvalna.ru all failed'
   }, 502, origin);
 }
 

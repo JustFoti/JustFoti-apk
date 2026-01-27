@@ -52,14 +52,14 @@ export interface StreamSource {
   linkNum?: number;
 }
 
-// Server backends in order of priority (dvalna first - most channels, then cdnlive, then moveonjoy)
-export const DLHD_BACKENDS = ['dvalna', 'cdnlive', 'moveonjoy'] as const;
+// Server backends in order of priority: moveonjoy (fastest) → cdnlive → dvalna (slowest)
+export const DLHD_BACKENDS = ['moveonjoy', 'cdnlive', 'dvalna'] as const;
 export type DLHDBackend = typeof DLHD_BACKENDS[number];
 
 export const BACKEND_DISPLAY_NAMES: Record<DLHDBackend, string> = {
-  dvalna: 'Dvalna.ru',
-  cdnlive: 'CDN-Live',
   moveonjoy: 'MoveonJoy',
+  cdnlive: 'CDN-Live',
+  dvalna: 'Dvalna.ru',
 };
 
 // Generate a simple session fingerprint for anti-leech validation
