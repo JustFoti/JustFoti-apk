@@ -8,6 +8,19 @@ import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { getTvPlaylistUrl, getCdnLiveStreamProxyUrl } from '@/app/lib/proxy-config';
 import { getSavedVolume, getSavedMuteState, saveVolumeSettings } from '@/app/lib/utils/player-preferences';
 
+// Preload hls.js module for faster startup
+let hlsModulePromise: Promise<typeof import('hls.js')> | null = null;
+function preloadHls() {
+  if (!hlsModulePromise) {
+    hlsModulePromise = import('hls.js');
+  }
+  return hlsModulePromise;
+}
+// Start preloading immediately when this module loads
+if (typeof window !== 'undefined') {
+  preloadHls();
+}
+
 export interface PlayerState {
   isPlaying: boolean;
   isMuted: boolean;
@@ -194,7 +207,8 @@ export function useVideoPlayer() {
     setCurrentSource(source);
 
     try {
-      const Hls = (await import('hls.js')).default;
+      const HlsModule = await preloadHls();
+      const Hls = HlsModule.default;
       
       if (!Hls.isSupported()) {
         throw new Error('HLS is not supported in this browser');
@@ -206,32 +220,24 @@ export function useVideoPlayer() {
 
       let streamUrl = getStreamUrl(source, skipBackends);
       
-      // For DLHD sources, pre-fetch to get the X-DLHD-Backend header
-      // This tells us which backend the proxy actually used
-      // Skip if user manually selected a backend (manualBackendRef is set)
+      // For DLHD sources, use HEAD request to get backend header without downloading manifest
+      // This is much faster than a full GET request
       if (source.type === 'dlhd' && !manualBackendRef.current) {
-        try {
-          const preflightRes = await fetch(streamUrl, { method: 'GET' });
-          const backendHeader = preflightRes.headers.get('X-DLHD-Backend');
-          if (backendHeader) {
-            // Map backend header to our backend type
-            if (backendHeader.includes('moveonjoy')) {
-              actualBackendRef.current = 'moveonjoy';
-            } else if (backendHeader.includes('cdn-live') || backendHeader.includes('cdnlive')) {
-              actualBackendRef.current = 'cdnlive';
-            } else if (backendHeader.includes('dvalna')) {
-              actualBackendRef.current = 'dvalna';
+        // Fire and forget - don't block on this, let HLS.js start loading immediately
+        fetch(streamUrl, { method: 'HEAD' })
+          .then(res => {
+            const backendHeader = res.headers.get('X-DLHD-Backend');
+            if (backendHeader) {
+              if (backendHeader.includes('moveonjoy')) {
+                actualBackendRef.current = 'moveonjoy';
+              } else if (backendHeader.includes('cdn-live') || backendHeader.includes('cdnlive')) {
+                actualBackendRef.current = 'cdnlive';
+              } else if (backendHeader.includes('dvalna')) {
+                actualBackendRef.current = 'dvalna';
+              }
             }
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[useVideoPlayer] Backend from header:', backendHeader, '→', actualBackendRef.current);
-            }
-          }
-          // We got the manifest content, but HLS.js needs to load it fresh
-          // The response is cached by the browser so this won't cause a double fetch
-        } catch (e) {
-          // Pre-fetch failed, continue anyway - HLS.js will handle errors
-          console.warn('[useVideoPlayer] Pre-fetch failed:', e);
-        }
+          })
+          .catch(() => {}); // Ignore errors - this is just for UI display
       }
       
       // For CDN Live, fetch the stream URL from API first
@@ -258,34 +264,64 @@ export function useVideoPlayer() {
       
       const hls = new Hls({
         enableWorker: true,
-        // Disable low latency mode - prioritize smooth playback over low latency
-        // DLHD CDN is slow, so we need large buffers
+        // ============================================================
+        // FAST STARTUP CONFIG - Optimized for quick time-to-first-frame
+        // ============================================================
+        
+        // LOW LATENCY MODE: Disabled - we want stability over latency
         lowLatencyMode: false,
-        backBufferLength: 120,
-        // AGGRESSIVE buffer sizes for slow DLHD CDN
-        maxBufferLength: 90,        // Buffer up to 90 seconds ahead
-        maxMaxBufferLength: 180,    // Allow up to 180 seconds buffer (3 min)
-        maxBufferSize: 200 * 1000 * 1000, // 200MB buffer
-        maxBufferHole: 2.0,         // Allow 2 second gaps
-        highBufferWatchdogPeriod: 5, // Check buffer every 5 seconds
-        nudgeOffset: 0.5,           // Larger nudge offset
-        nudgeMaxRetry: 10,          // More retries
-        maxFragLookUpTolerance: 1.0, // More tolerance
-        // Live stream settings - allow MORE latency for stability
-        liveSyncDurationCount: 8,   // Sync to 8 segments behind live (~32 sec)
-        liveMaxLatencyDurationCount: 20, // Allow up to 20 segments latency (~80 sec)
-        // Fragment loading settings - be patient with slow CDN
-        fragLoadingTimeOut: 60000,  // 60 second timeout for fragments
-        fragLoadingMaxRetry: 10,    // Retry fragment loading 10 times
-        fragLoadingRetryDelay: 2000, // 2 seconds between retries
-        // Manifest loading
-        manifestLoadingTimeOut: 30000,
-        manifestLoadingMaxRetry: 4,
-        // Level loading
-        levelLoadingTimeOut: 30000,
-        levelLoadingMaxRetry: 4,
-        // Start from live edge minus buffer
+        
+        // STARTUP OPTIMIZATION: Start playing ASAP with minimal buffer
+        maxBufferLength: 10,           // Only buffer 10 sec initially (was 90)
+        maxMaxBufferLength: 60,        // Expand to 60 sec once playing (was 180)
+        maxBufferSize: 60 * 1000 * 1000, // 60MB max (was 200MB)
+        
+        // BACK BUFFER: Keep less history to reduce memory
+        backBufferLength: 30,          // 30 sec back buffer (was 120)
+        
+        // BUFFER HOLE HANDLING: Be aggressive about skipping gaps
+        maxBufferHole: 0.5,            // Skip 0.5 sec gaps (was 2.0)
+        
+        // LIVE SYNC: Stay closer to live edge for faster start
+        liveSyncDurationCount: 3,      // 3 segments behind live (~12 sec, was 8)
+        liveMaxLatencyDurationCount: 10, // Max 10 segments latency (~40 sec, was 20)
+        liveSyncOnStallIncrease: 1, // Only add 1 segment on stall
+        
+        // FRAGMENT LOADING: Faster timeouts, fewer retries for startup
+        fragLoadingTimeOut: 20000,     // 20 sec timeout (was 60)
+        fragLoadingMaxRetry: 3,        // 3 retries (was 10)
+        fragLoadingRetryDelay: 1000,   // 1 sec between retries (was 2)
+        
+        // MANIFEST LOADING: Quick manifest fetch
+        manifestLoadingTimeOut: 15000, // 15 sec (was 30)
+        manifestLoadingMaxRetry: 2,    // 2 retries (was 4)
+        manifestLoadingRetryDelay: 500,
+        
+        // LEVEL LOADING: Quick level switch
+        levelLoadingTimeOut: 15000,    // 15 sec (was 30)
+        levelLoadingMaxRetry: 2,       // 2 retries (was 4)
+        levelLoadingRetryDelay: 500,
+        
+        // ABR: Start with lowest quality for fast start, then upgrade
+        startLevel: 0,                 // Start at lowest quality
+        abrEwmaDefaultEstimate: 500000, // Assume 500kbps initially
+        abrBandWidthFactor: 0.8,       // Conservative bandwidth estimate
+        abrBandWidthUpFactor: 0.5,     // Slow to upgrade quality
+        
+        // STALL RECOVERY: Quick recovery from stalls
+        highBufferWatchdogPeriod: 2,   // Check every 2 sec (was 5)
+        nudgeOffset: 0.2,              // Small nudge (was 0.5)
+        nudgeMaxRetry: 5,              // 5 retries (was 10)
+        maxFragLookUpTolerance: 0.25,  // Tighter tolerance (was 1.0)
+        
+        // START POSITION: Start from live edge
         startPosition: -1,
+        
+        // PROGRESSIVE LOADING: Load fragments progressively
+        progressive: true,
+        
+        // INITIAL LIVE MANIFEST SIZE: Smaller initial load
+        initialLiveManifestSize: 2,    // Only need 2 segments to start
       });
 
       hlsRef.current = hls;
