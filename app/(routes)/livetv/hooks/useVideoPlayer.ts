@@ -86,6 +86,8 @@ export function useVideoPlayer() {
   const [activeBackend, setActiveBackend] = useState<string | null>(null);
   const [currentBackend, setCurrentBackend] = useState<DLHDBackend | null>(null);
   const elapsedIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Track manually selected backend (when user picks from dropdown)
+  const manualBackendRef = useRef<DLHDBackend | null>(null);
 
   const getStreamUrl = useCallback((source: StreamSource, skipBackends: string[] = []): string => {
     // SECURITY: Only log in development to prevent URL exposure
@@ -143,6 +145,7 @@ export function useVideoPlayer() {
       failedBackendsRef.current = [];
       retryCountRef.current = 0;
       currentSourceRef.current = source;
+      manualBackendRef.current = null; // Clear manual selection on fresh load
       
       // Initialize server statuses based on source type
       if (source.type === 'dlhd') {
@@ -256,10 +259,17 @@ export function useVideoPlayer() {
         // The CF worker adds X-DLHD-Backend header
         // We can't access it directly from HLS.js, but we can infer from URL or timing
         if (source.type === 'dlhd') {
-          // Determine which backend succeeded based on how many we skipped
-          const backendIndex = failedBackendsRef.current.length;
-          if (backendIndex < DLHD_BACKENDS.length) {
-            setCurrentBackend(DLHD_BACKENDS[backendIndex]);
+          // If user manually selected a backend, use that
+          // Otherwise determine which backend succeeded based on how many failed
+          if (manualBackendRef.current) {
+            setCurrentBackend(manualBackendRef.current);
+            // Clear manual selection after successful load
+            manualBackendRef.current = null;
+          } else {
+            const backendIndex = failedBackendsRef.current.length;
+            if (backendIndex < DLHD_BACKENDS.length) {
+              setCurrentBackend(DLHD_BACKENDS[backendIndex]);
+            }
           }
           
           // Mark all as success since we got a manifest
@@ -616,6 +626,9 @@ export function useVideoPlayer() {
     
     // Build skip list: all backends except the one we want
     const skipBackends = DLHD_BACKENDS.filter(b => b !== backend);
+    
+    // Track the manually selected backend so MANIFEST_LOADED knows which one we're using
+    manualBackendRef.current = backend;
     
     // Reset tracking for fresh attempt
     failedBackendsRef.current = [];
