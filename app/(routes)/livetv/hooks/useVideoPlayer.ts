@@ -220,25 +220,8 @@ export function useVideoPlayer() {
 
       let streamUrl = getStreamUrl(source, skipBackends);
       
-      // For DLHD sources, use HEAD request to get backend header without downloading manifest
-      // This is much faster than a full GET request
-      if (source.type === 'dlhd' && !manualBackendRef.current) {
-        // Fire and forget - don't block on this, let HLS.js start loading immediately
-        fetch(streamUrl, { method: 'HEAD' })
-          .then(res => {
-            const backendHeader = res.headers.get('X-DLHD-Backend');
-            if (backendHeader) {
-              if (backendHeader.includes('moveonjoy')) {
-                actualBackendRef.current = 'moveonjoy';
-              } else if (backendHeader.includes('cdn-live') || backendHeader.includes('cdnlive')) {
-                actualBackendRef.current = 'cdnlive';
-              } else if (backendHeader.includes('dvalna')) {
-                actualBackendRef.current = 'dvalna';
-              }
-            }
-          })
-          .catch(() => {}); // Ignore errors - this is just for UI display
-      }
+      // Backend detection will happen via MANIFEST_LOADED event from response headers
+      // No pre-fetch needed - HLS.js will get the manifest and we read headers from there
       
       // For CDN Live, fetch the stream URL from API first
       if (source.type === 'cdnlive') {
