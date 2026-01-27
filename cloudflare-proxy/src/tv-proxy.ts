@@ -2534,20 +2534,15 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
       if (!isValidTS && !isValidFMP4) {
         // Check if it's an error response
         const preview = new TextDecoder().decode(data.slice(0, 500));
-        if (preview.startsWith('{') || preview.startsWith('<') || preview.includes('"error"') || preview.includes('"msg"')) {
-          logger.warn('Segment response is error/HTML', { 
-            size: data.byteLength, 
-            preview: preview.substring(0, 200),
-            firstByte: firstBytes[0].toString(16)
-          });
-          throw new Error(`Invalid segment data: ${preview.substring(0, 100)}`);
-        }
-        // Log warning but continue - might be valid but unusual format
-        logger.warn('Segment has unexpected format', { 
+        logger.warn('Segment response is not valid TS/fMP4', { 
           size: data.byteLength, 
+          preview: preview.substring(0, 200),
           firstByte: firstBytes[0].toString(16),
-          preview: preview.substring(0, 50)
+          url: decodedUrl.substring(0, 80)
         });
+        
+        // Return 502 error so hls.js knows to retry or skip
+        throw new Error(`Invalid segment format (first byte: 0x${firstBytes[0].toString(16)})`);
       }
       
       logger.info('Direct segment fetch succeeded', { size: data.byteLength, isTS: isValidTS, isFMP4: isValidFMP4 });
@@ -2570,6 +2565,26 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
         }
         
         data = await rpiRes.arrayBuffer();
+        
+        // Validate RPI response too
+        const rpiFirstBytes = new Uint8Array(data.slice(0, 8));
+        const rpiIsValidTS = rpiFirstBytes[0] === 0x47;
+        const rpiFirstChars = new TextDecoder().decode(rpiFirstBytes);
+        const rpiIsValidFMP4 = rpiFirstChars.includes('ftyp') || rpiFirstChars.includes('moof') || rpiFirstChars.includes('mdat');
+        
+        if (!rpiIsValidTS && !rpiIsValidFMP4) {
+          const preview = new TextDecoder().decode(data.slice(0, 200));
+          logger.warn('RPI segment response is not valid TS/fMP4', { 
+            size: data.byteLength, 
+            firstByte: rpiFirstBytes[0].toString(16),
+            preview: preview.substring(0, 100)
+          });
+          return jsonResponse({ 
+            error: 'Invalid segment from RPI proxy', 
+            firstByte: rpiFirstBytes[0].toString(16),
+          }, 502, origin);
+        }
+        
         fetchedVia = 'rpi-proxy';
         logger.info('RPI segment fetch succeeded', { size: data.byteLength });
       } else {

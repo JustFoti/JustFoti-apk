@@ -415,14 +415,71 @@ export function useVideoPlayer() {
         }
       });
 
-      hls.on(Hls.Events.ERROR, async (_, data) => {
-        console.error('HLS Error:', data);
+      // Track consecutive fragment errors for recovery
+      let fragErrorCount = 0;
+      const MAX_FRAG_ERRORS = 5;
+
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        // Reset error count on successful fragment buffer
+        fragErrorCount = 0;
         
-        // Handle non-fatal fragParsingError - usually means proxy returned bad data
+        if (videoRef.current) {
+          const buffered = videoRef.current.buffered;
+          if (buffered.length > 0) {
+            const bufferedEnd = buffered.end(buffered.length - 1);
+            const currentTime = videoRef.current.currentTime;
+            setState(prev => ({ 
+              ...prev, 
+              buffered: ((bufferedEnd - currentTime) / 30) * 100 
+            }));
+          }
+        }
+      });
+
+      hls.on(Hls.Events.ERROR, async (_, data) => {
+        // Handle non-fatal fragParsingError - proxy returned bad data
         if (!data.fatal && data.details === 'fragParsingError') {
-          console.warn('[useVideoPlayer] Fragment parsing error - proxy may be returning invalid data');
-          // Don't retry immediately - let hls.js handle it
+          fragErrorCount++;
+          console.warn(`[useVideoPlayer] Fragment parsing error ${fragErrorCount}/${MAX_FRAG_ERRORS}`, {
+            frag: data.frag?.sn,
+            url: data.frag?.url?.substring(0, 80),
+          });
+          
+          // If too many consecutive errors, try to recover
+          if (fragErrorCount >= MAX_FRAG_ERRORS) {
+            console.warn('[useVideoPlayer] Too many fragment errors, attempting recovery');
+            fragErrorCount = 0;
+            
+            // Try to recover by seeking slightly forward
+            if (videoRef.current && hls.media) {
+              const currentTime = videoRef.current.currentTime;
+              const buffered = videoRef.current.buffered;
+              
+              // Find next buffered region
+              for (let i = 0; i < buffered.length; i++) {
+                if (buffered.start(i) > currentTime) {
+                  console.log('[useVideoPlayer] Seeking to next buffered region', buffered.start(i));
+                  videoRef.current.currentTime = buffered.start(i) + 0.1;
+                  return;
+                }
+              }
+              
+              // No buffered region ahead, try recoverMediaError
+              hls.recoverMediaError();
+            }
+          }
           return;
+        }
+        
+        // Log errors for debugging (not all errors, just important ones)
+        if (data.fatal || data.type === 'mediaError') {
+          console.error('HLS Error:', {
+            type: data.type,
+            details: data.details,
+            fatal: data.fatal,
+            url: data.frag?.url?.substring(0, 100),
+            response: data.response?.code,
+          });
         }
         
         if (data.fatal) {
@@ -537,20 +594,6 @@ export function useVideoPlayer() {
             loadingStage: 'idle',
             error: errorMessage 
           }));
-        }
-      });
-
-      hls.on(Hls.Events.FRAG_BUFFERED, () => {
-        if (videoRef.current) {
-          const buffered = videoRef.current.buffered;
-          if (buffered.length > 0) {
-            const bufferedEnd = buffered.end(buffered.length - 1);
-            const currentTime = videoRef.current.currentTime;
-            setState(prev => ({ 
-              ...prev, 
-              buffered: ((bufferedEnd - currentTime) / 30) * 100 
-            }));
-          }
         }
       });
 
