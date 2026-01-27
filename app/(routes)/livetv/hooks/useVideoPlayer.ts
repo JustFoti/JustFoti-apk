@@ -130,9 +130,9 @@ export function useVideoPlayer() {
   // Track the actual backend used (from X-DLHD-Backend header)
   const actualBackendRef = useRef<DLHDBackend | null>(null);
 
-  const loadStreamInternal = useCallback(async (source: StreamSource, skipBackends: string[] = []) => {
+  const loadStreamInternal = useCallback(async (source: StreamSource, skipBackends: string[] = [], isManualSwitch: boolean = false) => {
     if (process.env.NODE_ENV === 'development') {
-      console.log('[useVideoPlayer] loadStreamInternal called with:', source, 'skip:', skipBackends);
+      console.log('[useVideoPlayer] loadStreamInternal called with:', source, 'skip:', skipBackends, 'manual:', isManualSwitch);
     }
     if (!videoRef.current) {
       if (process.env.NODE_ENV === 'development') {
@@ -141,27 +141,42 @@ export function useVideoPlayer() {
       return;
     }
 
-    // Only reset tracking on first attempt (not retries)
-    if (skipBackends.length === 0) {
+    // Reset tracking on first attempt OR manual server switch (not automatic retries)
+    const shouldResetTracking = skipBackends.length === 0 || isManualSwitch;
+    
+    if (shouldResetTracking) {
       loadStartTimeRef.current = Date.now();
       setElapsedTime(0);
       setActiveBackend(null);
-      failedBackendsRef.current = [];
       retryCountRef.current = 0;
       currentSourceRef.current = source;
-      manualBackendRef.current = null; // Clear manual selection on fresh load
-      actualBackendRef.current = null; // Clear actual backend
+      
+      // Only clear manual selection on fresh load, not on manual switch
+      if (!isManualSwitch) {
+        failedBackendsRef.current = [];
+        manualBackendRef.current = null;
+        actualBackendRef.current = null;
+      }
       
       // Initialize server statuses based on source type
       if (source.type === 'dlhd') {
-        setServerStatuses(DLHD_BACKENDS.map(id => ({ 
-          name: BACKEND_DISPLAY_NAMES[id], 
-          status: 'pending' as const 
-        })));
-        // Mark first as checking
-        setServerStatuses(prev => prev.map((s, i) => 
-          i === 0 ? { ...s, status: 'checking' as const } : s
-        ));
+        // For manual switch, show only the selected backend as checking
+        if (isManualSwitch && skipBackends.length > 0) {
+          const selectedBackend = DLHD_BACKENDS.find(b => !skipBackends.includes(b));
+          setServerStatuses(DLHD_BACKENDS.map(id => ({ 
+            name: BACKEND_DISPLAY_NAMES[id], 
+            status: id === selectedBackend ? 'checking' as const : 'pending' as const
+          })));
+        } else {
+          setServerStatuses(DLHD_BACKENDS.map(id => ({ 
+            name: BACKEND_DISPLAY_NAMES[id], 
+            status: 'pending' as const 
+          })));
+          // Mark first as checking
+          setServerStatuses(prev => prev.map((s, i) => 
+            i === 0 ? { ...s, status: 'checking' as const } : s
+          ));
+        }
       } else if (source.type === 'cdnlive') {
         setServerStatuses([{ name: 'CDN-Live API', status: 'checking' as const }]);
       } else if (source.type === 'viprow') {
@@ -711,8 +726,8 @@ export function useVideoPlayer() {
     // Ensure the source ref is set for the new load
     currentSourceRef.current = source;
     
-    // Load with skip list to force specific backend
-    loadStreamInternal(source, skipBackends);
+    // Load with skip list to force specific backend (mark as manual switch)
+    loadStreamInternal(source, skipBackends, true);
   }, [loadStreamInternal, currentSource]);
 
   return {

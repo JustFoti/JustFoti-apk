@@ -3,6 +3,9 @@ name = "media-proxy"
 main = "src/index.ts"
 compatibility_date = "2025-12-07"
 
+# WASM modules are imported directly in ES module workers
+# No [wasm_modules] section needed - just import the .wasm file directly
+
 # Free tier: 100,000 requests/day
 # Workers Paid: $5/month for 10M requests, unlimited bandwidth (much cheaper than Vercel!)
 

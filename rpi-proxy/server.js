@@ -1096,6 +1096,95 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // DLHD Key V4 endpoint - simple passthrough with pre-computed auth headers
+  // CF Worker computes PoW using WASM and passes JWT, timestamp, nonce
+  // This endpoint just forwards the request from residential IP
+  if (reqUrl.pathname === '/dlhd-key-v4') {
+    const targetUrl = reqUrl.searchParams.get('url');
+    const jwt = reqUrl.searchParams.get('jwt');
+    const timestamp = reqUrl.searchParams.get('timestamp');
+    const nonce = reqUrl.searchParams.get('nonce');
+    
+    if (!targetUrl || !jwt || !timestamp || !nonce) {
+      res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ 
+        error: 'Missing parameters',
+        usage: '/dlhd-key-v4?url=<key_url>&jwt=<token>&timestamp=<ts>&nonce=<n>'
+      }));
+    }
+    
+    console.log(`[DLHD-Key-V4] Fetching with pre-computed auth: ${targetUrl.substring(0, 60)}...`);
+    console.log(`[DLHD-Key-V4] ts=${timestamp} nonce=${nonce}`);
+    
+    // Simple fetch with the provided auth headers
+    const url = new URL(targetUrl);
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Origin': 'https://hitsplay.fun',
+        'Referer': 'https://hitsplay.fun/',
+        'Authorization': `Bearer ${jwt}`,
+        'X-Key-Timestamp': timestamp,
+        'X-Key-Nonce': nonce,
+      },
+      timeout: 15000,
+    };
+    
+    const proxyReq = https.request(options, (proxyRes) => {
+      const chunks = [];
+      proxyRes.on('data', chunk => chunks.push(chunk));
+      proxyRes.on('end', () => {
+        const data = Buffer.concat(chunks);
+        const text = data.toString('utf8');
+        
+        console.log(`[DLHD-Key-V4] Response: ${proxyRes.statusCode}, ${data.length} bytes`);
+        
+        // Check for valid 16-byte key
+        if (data.length === 16 && !text.startsWith('{') && !text.startsWith('E')) {
+          console.log(`[DLHD-Key-V4] ✅ Valid key: ${data.toString('hex')}`);
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': data.length,
+            'Access-Control-Allow-Origin': '*',
+            'X-Fetched-By': 'rpi-v4-passthrough',
+          });
+          res.end(data);
+        } else {
+          console.log(`[DLHD-Key-V4] ❌ Invalid response: ${text.substring(0, 100)}`);
+          res.writeHead(proxyRes.statusCode || 502, { 
+            'Content-Type': 'application/json', 
+            'Access-Control-Allow-Origin': '*' 
+          });
+          res.end(JSON.stringify({ 
+            error: 'Invalid key response',
+            status: proxyRes.statusCode,
+            size: data.length,
+            preview: text.substring(0, 200),
+          }));
+        }
+      });
+    });
+    
+    proxyReq.on('error', (err) => {
+      console.error(`[DLHD-Key-V4] Error: ${err.message}`);
+      res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
+    
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      res.writeHead(504, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ error: 'Timeout' }));
+    });
+    
+    proxyReq.end();
+    return;
+  }
+
   // DLHD Key endpoint - fetches encryption key from residential IP
   // The key server (chevy.dvalna.ru) blocks Cloudflare IPs
   // CF Worker calls this when direct key fetch fails

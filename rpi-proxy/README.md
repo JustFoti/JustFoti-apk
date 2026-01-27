@@ -28,7 +28,17 @@ echo "Your API key: $API_KEY"
 export API_KEY="your-secret-key-here"
 ```
 
-### 3. Run the server
+### 3. Install dependencies
+
+The server requires the DLHD auth module:
+
+```bash
+cd rpi-proxy
+# The WASM PoW module will be downloaded automatically on first key request
+# Ensure dlhd-auth-v3.js is present
+```
+
+### 4. Run the server
 
 ```bash
 # Start the server
@@ -41,7 +51,7 @@ pm2 save
 pm2 startup  # Auto-start on boot
 ```
 
-### 4. Expose to the internet (choose one)
+### 5. Expose to the internet (choose one)
 
 #### Option A: Cloudflare Tunnel (Recommended - Free & Secure)
 
@@ -73,7 +83,7 @@ sudo apt update && sudo apt install ngrok
 ngrok http 3001
 ```
 
-### 5. Configure Vercel
+### 6. Configure Vercel
 
 Add these environment variables to your Vercel project:
 
@@ -103,26 +113,70 @@ async function fetchViaRpiProxy(url: string): Promise<Response> {
 | Endpoint | Description |
 |----------|-------------|
 | `GET /proxy?url=<encoded_url>` | Proxy a request through the Pi |
-| `GET /animekai?url=<encoded_url>` | Proxy AnimeKai/MegaUp CDN streams (no Origin/Referer headers) |
-| `GET /iptv/api?url=<url>&mac=<mac>&token=<token>` | Proxy IPTV Stalker portal API calls |
-| `GET /iptv/stream?url=<url>&mac=<mac>&token=<token>` | Proxy IPTV streams |
 | `GET /health` | Health check |
 
-### AnimeKai Proxy
+### DLHD Endpoints
 
-The `/animekai` endpoint is specifically designed for MegaUp CDN streams used by AnimeKai. MegaUp blocks:
-1. Datacenter IPs (Cloudflare, AWS, etc.)
-2. Requests with Origin header
-3. Requests with Referer header (sometimes)
+| Endpoint | Description |
+|----------|-------------|
+| `GET /dlhd-key?url=<key_url>` | Fetch DLHD encryption key with v3 PoW auth |
+| `GET /heartbeat?channel=&server=&domain=` | Establish DLHD heartbeat session |
 
-This endpoint fetches WITHOUT Origin/Referer headers from your residential IP.
+### AnimeKai Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /animekai?url=<url>&ua=<user_agent>&referer=<referer>` | Proxy AnimeKai/MegaUp/Flixer CDN streams |
+| `GET /animekai/extract?embed=<encrypted>` | Full extraction from encrypted embed |
+| `GET /animekai/full-extract?kai_id=<id>&episode=<num>` | Complete extraction from anime ID |
+
+### VIPRow Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /viprow/stream?url=<event_path>&link=<num>&cf_proxy=<proxy_url>` | Extract VIPRow m3u8 stream |
+| `GET /viprow/manifest?url=<url>&cf_proxy=<proxy_url>` | Proxy VIPRow manifest with URL rewriting |
+| `GET /viprow/key?url=<url>` | Proxy VIPRow AES-128 decryption keys |
+| `GET /viprow/segment?url=<url>` | Proxy VIPRow video segments |
+
+### PPV Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /ppv?url=<encoded_url>` | Proxy PPV.to/poocloud.in streams (requires IPv4) |
+
+### IPTV Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /iptv/api?url=<url>&mac=<mac>&token=<token>` | Proxy IPTV Stalker portal API calls |
+| `GET /iptv/stream?url=<url>&mac=<mac>&token=<token>` | Proxy IPTV streams |
+
+## CDN-Specific Behavior
+
+### AnimeKai/MegaUp CDN
+MegaUp blocks datacenter IPs and requests with Origin/Referer headers. The `/animekai` endpoint fetches WITHOUT these headers from your residential IP.
+
+### Flixer CDN (p.XXXXX.workers.dev)
+Flixer CDN blocks datacenter IPs but REQUIRES a Referer header. Pass `?referer=https://flixer.sh/` to include it.
+
+### VIPRow/Casthill (boanki.net)
+VIPRow blocks Cloudflare Workers entirely. The RPI proxy handles full stream extraction including token refresh via boanki.net with Origin: `https://casthill.net`.
+
+### PPV.to (poocloud.in)
+PPV streams require:
+- Residential IP (blocks datacenter IPs)
+- IPv4 connection (blocks IPv6 via Cloudflare)
+- Referer: `https://modistreams.org/`
 
 ## Security
 
-- API key authentication required for all proxy requests
-- Rate limiting: 100 requests/minute per IP
+- API key authentication required for all proxy requests (except /health)
+- Rate limiting: 2000 requests/minute (high limit for CF worker which handles many users)
 - Only GET requests allowed
 - No request body forwarding (safe for read-only proxying)
+- Domain allowlists for VIPRow proxying (peulleieo.net, boanki.net only)
+- No caching for keys, auth tokens, or m3u8 manifests (must be fresh)
 
 ## Systemd Service (Alternative to PM2)
 

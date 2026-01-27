@@ -20,13 +20,13 @@
  * - See: cloudflare-proxy/SECURITY-ANALYSIS-TV-PROXY.md for details
  * 
  * KEY FETCHING (January 2026 Update):
- * - Domain changed from kiko2.ru to dvalna.ru
- * - Key requests now require Proof-of-Work (PoW) authentication
- * - PoW: HMAC-SHA256 + MD5 nonce computation with threshold check
- * - New dvalna.ru domain does NOT block Cloudflare IPs (no RPI needed)
+ * - WASM-based PoW computation (bundled from DLHD's player v2.0.0-hardened)
+ * - PoW runs entirely in CF worker - no external dependencies for nonce computation
+ * - RPI proxy only needed for final key fetch (residential IP required)
  */
 
 import { createLogger, type LogLevel } from './logger';
+import { initDLHDPoW, computeNonce as computeWasmNonce, getVersion as getWasmVersion } from './dlhd-pow';
 
 export interface Env {
   LOG_LEVEL?: string;
@@ -558,16 +558,26 @@ async function hmacSha256(message: string, secret: string): Promise<string> {
 }
 
 // ============================================================================
-// PoW Computation
+// PoW Computation (WASM-based - January 2026)
 // ============================================================================
-async function computePoWNonce(resource: string, keyNumber: string, timestamp: number): Promise<number | null> {
-  const hmac = await hmacSha256(resource, HMAC_SECRET);
-  for (let nonce = 0; nonce < MAX_NONCE_ITERATIONS; nonce++) {
-    const data = `${hmac}${resource}${keyNumber}${timestamp}${nonce}`;
-    const hash = md5(data);
-    if (parseInt(hash.substring(0, 4), 16) < POW_THRESHOLD) return nonce;
+let wasmInitialized = false;
+
+async function computePoWNonce(resource: string, keyNumber: string, timestamp: number): Promise<bigint | null> {
+  try {
+    // Initialize WASM if not already done
+    if (!wasmInitialized) {
+      await initDLHDPoW();
+      wasmInitialized = true;
+      console.log(`[PoW] WASM initialized: ${getWasmVersion()}`);
+    }
+    
+    // Compute nonce using WASM
+    const nonce = computeWasmNonce(resource, keyNumber, timestamp);
+    return nonce;
+  } catch (error) {
+    console.error('[PoW] WASM computation failed:', error);
+    return null;
   }
-  return null;
 }
 
 // ============================================================================
@@ -2101,24 +2111,24 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
   
   logger.info('JWT found', { channelKey, jwtSource });
 
-  // Compute PoW nonce
-  // IMPORTANT: DLHD requires timestamp to be 5-10 seconds in the past (January 2026 security update)
-  const timestamp = Math.floor(Date.now() / 1000) - 7; // Use 7 seconds in the past
+  // Compute PoW nonce using WASM
+  // Use current timestamp (no offset needed with WASM PoW)
+  const timestamp = Math.floor(Date.now() / 1000);
   const nonce = await computePoWNonce(channelKey, keyNumber, timestamp);
   if (nonce === null) {
     return jsonResponse({ error: 'Failed to compute PoW nonce' }, 500, origin);
   }
 
-  logger.info('Key fetch with PoW', { channelKey, keyNumber, timestamp, nonce, jwtSource });
+  logger.info('Key fetch with WASM PoW', { channelKey, keyNumber, timestamp, nonce: nonce.toString(), jwtSource });
 
   const newKeyUrl = `https://chevy.${CDN_DOMAIN}/key/${channelKey}/${keyNumber}`;
 
   try {
     let data: ArrayBuffer;
-    let fetchedVia = 'rpi-proxy';
+    let fetchedVia = 'rpi-proxy-v4';
     
-    // ALWAYS use RPI proxy for keys - direct fetch from CF IPs is blocked
-    // The RPI proxy handles JWT fetch, PoW computation, and key fetch from residential IP
+    // Use RPI proxy for key fetch - DLHD blocks Cloudflare IPs
+    // But now we compute PoW in CF Worker and pass headers to RPI
     if (!env?.RPI_PROXY_URL || !env?.RPI_PROXY_KEY) {
       return jsonResponse({ 
         error: 'RPI proxy not configured', 
@@ -2126,10 +2136,17 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
       }, 502, origin);
     }
     
-    const rpiKeyUrl = `${env.RPI_PROXY_URL}/dlhd-key?url=${encodeURIComponent(newKeyUrl)}&key=${env.RPI_PROXY_KEY}`;
-    logger.info('Fetching key via RPI proxy', { url: rpiKeyUrl.substring(0, 80) });
+    // Use the new /dlhd-key-v4 endpoint that accepts pre-computed auth headers
+    const rpiKeyUrl = new URL(`${env.RPI_PROXY_URL}/dlhd-key-v4`);
+    rpiKeyUrl.searchParams.set('url', newKeyUrl);
+    rpiKeyUrl.searchParams.set('key', env.RPI_PROXY_KEY);
+    rpiKeyUrl.searchParams.set('jwt', jwt);
+    rpiKeyUrl.searchParams.set('timestamp', timestamp.toString());
+    rpiKeyUrl.searchParams.set('nonce', nonce.toString());
     
-    const rpiRes = await fetch(rpiKeyUrl);
+    logger.info('Fetching key via RPI proxy v4', { url: rpiKeyUrl.toString().substring(0, 100) });
+    
+    const rpiRes = await fetch(rpiKeyUrl.toString());
     
     if (!rpiRes.ok) {
       const errText = await rpiRes.text();
