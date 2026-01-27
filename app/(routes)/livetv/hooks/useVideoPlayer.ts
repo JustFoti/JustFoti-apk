@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAnalytics } from '@/components/analytics/AnalyticsProvider';
 import { getTvPlaylistUrl, getCdnLiveStreamProxyUrl } from '@/app/lib/proxy-config';
+import { getSavedVolume, getSavedMuteState, saveVolumeSettings } from '@/app/lib/utils/player-preferences';
 
 export interface PlayerState {
   isPlaying: boolean;
@@ -38,14 +39,14 @@ export interface StreamSource {
   linkNum?: number;
 }
 
-// Server backends in order of priority (matches tv-proxy.ts)
-export const DLHD_BACKENDS = ['moveonjoy', 'cdnlive', 'dvalna'] as const;
+// Server backends in order of priority (dvalna first - most channels, then cdnlive, then moveonjoy)
+export const DLHD_BACKENDS = ['dvalna', 'cdnlive', 'moveonjoy'] as const;
 export type DLHDBackend = typeof DLHD_BACKENDS[number];
 
 export const BACKEND_DISPLAY_NAMES: Record<DLHDBackend, string> = {
-  moveonjoy: 'MoveonJoy',
-  cdnlive: 'CDN-Live',
   dvalna: 'Dvalna.ru',
+  cdnlive: 'CDN-Live',
+  moveonjoy: 'MoveonJoy',
 };
 
 // Generate a simple session fingerprint for anti-leech validation
@@ -66,19 +67,19 @@ export function useVideoPlayer() {
   const retryCountRef = useRef(0);
   const sessionFingerprintRef = useRef<string>(generateSessionFingerprint());
   
-  const [state, setState] = useState<PlayerState>({
+  const [state, setState] = useState<PlayerState>(() => ({
     isPlaying: false,
-    isMuted: true,
+    isMuted: getSavedMuteState(),
     isFullscreen: false,
     isLoading: false,
     isBuffering: false,
     loadingStage: 'idle',
     error: null,
-    volume: 1,
+    volume: getSavedVolume(),
     currentTime: 0,
     duration: 0,
     buffered: 0,
-  });
+  }));
 
   const [currentSource, setCurrentSource] = useState<StreamSource | null>(null);
   const [serverStatuses, setServerStatuses] = useState<ServerStatus[]>([]);
@@ -126,6 +127,9 @@ export function useVideoPlayer() {
     }
   }, []);
 
+  // Track the actual backend used (from X-DLHD-Backend header)
+  const actualBackendRef = useRef<DLHDBackend | null>(null);
+
   const loadStreamInternal = useCallback(async (source: StreamSource, skipBackends: string[] = []) => {
     if (process.env.NODE_ENV === 'development') {
       console.log('[useVideoPlayer] loadStreamInternal called with:', source, 'skip:', skipBackends);
@@ -146,6 +150,7 @@ export function useVideoPlayer() {
       retryCountRef.current = 0;
       currentSourceRef.current = source;
       manualBackendRef.current = null; // Clear manual selection on fresh load
+      actualBackendRef.current = null; // Clear actual backend
       
       // Initialize server statuses based on source type
       if (source.type === 'dlhd') {
@@ -185,6 +190,34 @@ export function useVideoPlayer() {
       }
 
       let streamUrl = getStreamUrl(source, skipBackends);
+      
+      // For DLHD sources, pre-fetch to get the X-DLHD-Backend header
+      // This tells us which backend the proxy actually used
+      // Skip if user manually selected a backend (manualBackendRef is set)
+      if (source.type === 'dlhd' && !manualBackendRef.current) {
+        try {
+          const preflightRes = await fetch(streamUrl, { method: 'GET' });
+          const backendHeader = preflightRes.headers.get('X-DLHD-Backend');
+          if (backendHeader) {
+            // Map backend header to our backend type
+            if (backendHeader.includes('moveonjoy')) {
+              actualBackendRef.current = 'moveonjoy';
+            } else if (backendHeader.includes('cdn-live') || backendHeader.includes('cdnlive')) {
+              actualBackendRef.current = 'cdnlive';
+            } else if (backendHeader.includes('dvalna')) {
+              actualBackendRef.current = 'dvalna';
+            }
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[useVideoPlayer] Backend from header:', backendHeader, '→', actualBackendRef.current);
+            }
+          }
+          // We got the manifest content, but HLS.js needs to load it fresh
+          // The response is cached by the browser so this won't cause a double fetch
+        } catch (e) {
+          // Pre-fetch failed, continue anyway - HLS.js will handle errors
+          console.warn('[useVideoPlayer] Pre-fetch failed:', e);
+        }
+      }
       
       // For CDN Live, fetch the stream URL from API first
       if (source.type === 'cdnlive') {
@@ -256,21 +289,31 @@ export function useVideoPlayer() {
         // Try to get backend info from response
         const elapsed = Date.now() - loadStartTimeRef.current;
         
-        // The CF worker adds X-DLHD-Backend header
-        // We can't access it directly from HLS.js, but we can infer from URL or timing
         if (source.type === 'dlhd') {
-          // If user manually selected a backend, use that
-          // Otherwise determine which backend succeeded based on how many failed
-          if (manualBackendRef.current) {
+          // Priority for determining backend:
+          // 1. actualBackendRef (from X-DLHD-Backend header - most accurate)
+          // 2. manualBackendRef (user manually selected)
+          // 3. Infer from failed backends count (fallback)
+          if (actualBackendRef.current) {
+            setCurrentBackend(actualBackendRef.current);
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[useVideoPlayer] Using actual backend from header:', actualBackendRef.current);
+            }
+          } else if (manualBackendRef.current) {
             setCurrentBackend(manualBackendRef.current);
-            // Clear manual selection after successful load
-            manualBackendRef.current = null;
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[useVideoPlayer] Using manual backend selection:', manualBackendRef.current);
+            }
           } else {
             const backendIndex = failedBackendsRef.current.length;
             if (backendIndex < DLHD_BACKENDS.length) {
               setCurrentBackend(DLHD_BACKENDS[backendIndex]);
             }
           }
+          
+          // Clear refs after use
+          actualBackendRef.current = null;
+          manualBackendRef.current = null;
           
           // Mark all as success since we got a manifest
           setServerStatuses(prev => {
@@ -297,15 +340,21 @@ export function useVideoPlayer() {
         setState(prev => ({ ...prev, loadingStage: 'buffering' }));
         const video = videoRef.current;
         if (video) {
+          // Apply saved volume settings
+          const savedVolume = getSavedVolume();
+          const savedMuted = getSavedMuteState();
+          
+          // Start muted for autoplay policy, then restore saved settings
           video.muted = true;
-          setState(prev => ({ ...prev, isMuted: true }));
+          video.volume = savedVolume;
           
           video.play().then(() => {
             setState(prev => ({ ...prev, isPlaying: true, isLoading: false, loadingStage: 'idle' }));
+            // Restore saved mute state after autoplay succeeds
             setTimeout(() => {
               if (videoRef.current) {
-                videoRef.current.muted = false;
-                setState(prev => ({ ...prev, isMuted: false }));
+                videoRef.current.muted = savedMuted;
+                setState(prev => ({ ...prev, isMuted: savedMuted, volume: savedVolume }));
               }
             }, 100);
           }).catch(err => {
@@ -529,15 +578,24 @@ export function useVideoPlayer() {
 
   const toggleMute = useCallback(() => {
     if (!videoRef.current) return;
-    videoRef.current.muted = !videoRef.current.muted;
-    setState(prev => ({ ...prev, isMuted: !prev.isMuted }));
+    const newMuted = !videoRef.current.muted;
+    videoRef.current.muted = newMuted;
+    setState(prev => {
+      // Save volume settings when mute state changes
+      saveVolumeSettings(prev.volume, newMuted);
+      return { ...prev, isMuted: newMuted };
+    });
   }, []);
 
   const setVolume = useCallback((volume: number) => {
     if (!videoRef.current) return;
     const clampedVolume = Math.max(0, Math.min(1, volume));
     videoRef.current.volume = clampedVolume;
-    setState(prev => ({ ...prev, volume: clampedVolume }));
+    setState(prev => {
+      // Save volume settings when volume changes
+      saveVolumeSettings(clampedVolume, prev.isMuted);
+      return { ...prev, volume: clampedVolume };
+    });
   }, []);
 
   const toggleFullscreen = useCallback(() => {
@@ -615,34 +673,47 @@ export function useVideoPlayer() {
 
   // Switch to a specific backend (for manual server selection)
   const switchBackend = useCallback((backend: DLHDBackend) => {
-    if (!currentSourceRef.current || currentSourceRef.current.type !== 'dlhd') {
-      console.warn('[useVideoPlayer] Cannot switch backend - no DLHD source active');
+    // Use currentSource state as fallback if ref isn't set yet
+    const source = currentSourceRef.current || currentSource;
+    
+    if (!source || source.type !== 'dlhd') {
+      console.warn('[useVideoPlayer] Cannot switch backend - no DLHD source active', { ref: currentSourceRef.current, state: currentSource });
       return;
     }
     
     if (process.env.NODE_ENV === 'development') {
-      console.log('[useVideoPlayer] Switching to backend:', backend);
+      console.log('[useVideoPlayer] Switching to backend:', backend, 'source:', source);
     }
     
     // Build skip list: all backends except the one we want
     const skipBackends = DLHD_BACKENDS.filter(b => b !== backend);
     
-    // Track the manually selected backend so MANIFEST_LOADED knows which one we're using
+    // Track the manually selected backend - this takes priority over header detection
     manualBackendRef.current = backend;
+    actualBackendRef.current = null; // Clear so manual selection takes priority
+    
+    // Stop elapsed timer from previous attempt
+    if (elapsedIntervalRef.current) {
+      clearInterval(elapsedIntervalRef.current);
+      elapsedIntervalRef.current = null;
+    }
     
     // Reset tracking for fresh attempt
     failedBackendsRef.current = [];
     setCurrentBackend(null);
     
-    // Destroy current HLS
+    // Destroy current HLS instance to stop any ongoing loading
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
     
+    // Ensure the source ref is set for the new load
+    currentSourceRef.current = source;
+    
     // Load with skip list to force specific backend
-    loadStreamInternal(currentSourceRef.current, skipBackends);
-  }, [loadStreamInternal]);
+    loadStreamInternal(source, skipBackends);
+  }, [loadStreamInternal, currentSource]);
 
   return {
     videoRef,

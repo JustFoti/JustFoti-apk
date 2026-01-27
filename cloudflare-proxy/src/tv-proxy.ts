@@ -1434,62 +1434,120 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   let usedBackend = '';
 
   // ============================================================================
-  // MULTI-BACKEND FALLBACK SYSTEM - January 2026 (REORDERED!)
-  // Try backends in order of simplicity (least auth required first):
-  // 1. moveonjoy.com (Player 6) - NO AUTH AT ALL! No encryption keys needed!
-  // 2. cdn-live-tv.ru (Player 5) - Simple token, NO JWT/PoW!
-  // 3. dvalna.ru (Player 3) - Most channels, but requires JWT + PoW for keys
-  // 
-  // skipBackends parameter allows client to skip backends that failed during playback
+  // MULTI-BACKEND FALLBACK SYSTEM - January 2026
+  // Order: dvalna (most channels) → cdnlive → moveonjoy (US only)
+  // skipBackends parameter allows client to skip specific backends
   // ============================================================================
 
   // ============================================================================
-  // BACKEND 1: moveonjoy.com (Player 6) - NO AUTH AT ALL!
+  // BACKEND 1: dvalna.ru via topembed.pw (Player 3) - MOST CHANNELS
   // ============================================================================
-  // Try moveonjoy FIRST because these streams are UNENCRYPTED - no key fetching needed!
-  // ============================================================================
-  const moveonjoyUrl = CHANNEL_TO_MOVEONJOY[channel];
-  if (moveonjoyUrl && !skipBackends.includes('moveonjoy')) {
-    logger.info('Trying Backend 1: moveonjoy.com (unencrypted)', { channel, url: moveonjoyUrl.substring(0, 60) });
-    
-    try {
-      const m3u8Res = await fetch(moveonjoyUrl, {
-        headers: {
-          'User-Agent': USER_AGENT,
-          'Referer': 'https://tv-bu1.blogspot.com/',
-        },
-      });
-      
-      if (m3u8Res.ok) {
-        const content = await m3u8Res.text();
-        
-        if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('#EXT-X-STREAM-INF') || content.includes('.ts'))) {
-          logger.info('Backend 1 SUCCESS: moveonjoy.com', { channel });
-          usedBackend = 'moveonjoy.com';
-          
-          // Rewrite M3U8 for moveonjoy (simple - just make URLs absolute)
-          const proxied = rewriteMoveonjoyM3U8(content, proxyOrigin, moveonjoyUrl);
-          return new Response(proxied, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/vnd.apple.mpegurl',
-              ...corsHeaders(origin),
-              'Cache-Control': 'no-store',
-              'X-DLHD-Channel': channel,
-              'X-DLHD-Backend': 'moveonjoy.com',
-            },
-          });
-        } else {
-          errors.push(`moveonjoy.com: M3U8 empty or invalid`);
+  if (!skipBackends.includes('dvalna')) {
+    logger.info('Trying Backend 1: dvalna.ru', { channel });
+  
+    let channelKey = `premium${channel}`;
+    const jwt = await fetchPlayerJWT(channel, logger, env);
+  
+    if (jwt) {
+      try {
+        const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(payloadB64));
+        if (payload.sub) {
+          channelKey = payload.sub;
+          logger.info('Using channel key from JWT', { channelKey, channel });
         }
-      } else {
-        errors.push(`moveonjoy.com: HTTP ${m3u8Res.status}`);
+      } catch (e) {
+        logger.warn('Failed to extract channel key from JWT', { error: (e as Error).message });
       }
-    } catch (err) {
-      errors.push(`moveonjoy.com: ${(err as Error).message}`);
+      
+      const channelKeysToTry: string[] = [];
+      if (channelKey !== `premium${channel}`) {
+        channelKeysToTry.push(channelKey);
+      }
+      channelKeysToTry.push(`premium${channel}`);
+      
+      for (const currentChannelKey of channelKeysToTry) {
+        let serverKey: string;
+        try {
+          serverKey = await getServerKey(currentChannelKey, logger, env);
+        } catch {
+          serverKey = 'zeko';
+        }
+        
+        const serverKeysToTry = [serverKey, ...ALL_SERVER_KEYS.filter(k => k !== serverKey)];
+
+        for (const sk of serverKeysToTry) {
+          const m3u8Url = constructM3U8Url(sk, currentChannelKey);
+          
+          try {
+            let content: string;
+            let fetchedVia = 'direct';
+            
+            try {
+              const directRes = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
+                headers: { 'User-Agent': USER_AGENT, 'Referer': `https://${PLAYER_DOMAIN}/` },
+              });
+              
+              if (!directRes.ok) throw new Error(`HTTP ${directRes.status}`);
+              content = await directRes.text();
+              
+              if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
+                throw new Error(`Not M3U8: ${content.substring(0, 50)}`);
+              }
+            } catch (directError) {
+              if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
+                const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(m3u8Url)}&key=${env.RPI_PROXY_KEY}`;
+                const rpiRes = await fetch(rpiUrl);
+                
+                if (!rpiRes.ok) {
+                  errors.push(`dvalna/${currentChannelKey}/${sk}: ${(directError as Error).message}`);
+                  continue;
+                }
+                content = await rpiRes.text();
+                fetchedVia = 'rpi-proxy';
+              } else {
+                errors.push(`dvalna/${currentChannelKey}/${sk}: ${(directError as Error).message}`);
+                continue;
+              }
+            }
+
+            if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
+              const hasSegments = content.includes('#EXTINF') || content.includes('.ts');
+              
+              if (!hasSegments) {
+                errors.push(`dvalna/${currentChannelKey}/${sk}: M3U8 empty (channel offline)`);
+                continue;
+              }
+              
+              serverKeyCache.set(currentChannelKey, { serverKey: sk, fetchedAt: Date.now() });
+              logger.info('Backend 1 SUCCESS: dvalna.ru', { serverKey: sk, channelKey: currentChannelKey });
+              usedBackend = 'dvalna.ru';
+              const proxied = rewriteM3U8(content, proxyOrigin, m3u8Url);
+              return new Response(proxied, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'application/vnd.apple.mpegurl',
+                  ...corsHeaders(origin),
+                  'Cache-Control': 'no-store',
+                  'X-DLHD-Channel': channel,
+                  'X-DLHD-ChannelKey': currentChannelKey,
+                  'X-DLHD-Server': sk,
+                  'X-DLHD-Backend': 'dvalna.ru',
+                  'X-Fetched-Via': fetchedVia,
+                },
+              });
+            }
+          } catch (err) {
+            errors.push(`dvalna/${currentChannelKey}/${sk}: ${(err as Error).message}`);
+          }
+        }
+      }
+    } else {
+      logger.warn('JWT fetch failed for dvalna.ru', { channel });
+      errors.push(`dvalna.ru: JWT fetch failed`);
     }
   } else {
-    logger.info('No moveonjoy mapping for channel, trying other backends', { channel });
+    logger.info('Skipping Backend 1: dvalna.ru (client requested skip)', { channel });
   }
 
   // ============================================================================
@@ -1543,7 +1601,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   }
 
   // ============================================================================
-  // BACKEND 2b: Player 5 Dynamic Extraction (ddyplayer.cfd → cdn-live-tv.ru)
+  // BACKEND: Player 5 Dynamic Extraction (ddyplayer.cfd → cdn-live-tv.ru)
   // ============================================================================
   logger.info('Trying Backend 2b: Player 5 dynamic extraction', { channel });
   
@@ -1590,7 +1648,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   }
 
   // ============================================================================
-  // BACKEND 2c: lovecdn.ru/popcdn.day - Token auth, UNENCRYPTED
+  // BACKEND: lovecdn.ru/popcdn.day - Token auth, UNENCRYPTED
   // ============================================================================
   // Path: popcdn.day/player/{STREAM_NAME} → beautifulpeople.lovecdn.ru
   // NO ENCRYPTION - direct M3U8 access with token!
@@ -1644,159 +1702,57 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   }
 
   // ============================================================================
-  // BACKEND 3: dvalna.ru via topembed.pw (Player 3) - LAST RESORT
+  // BACKEND 3: moveonjoy.com (Player 6) - NO AUTH AT ALL!
   // ============================================================================
-  // Only try dvalna.ru if other backends failed - it requires JWT + PoW for key decryption
-  // IMPORTANT: Skip dvalna.ru if JWT fetch fails - streams will be unplayable without keys
-  // ============================================================================
-  if (skipBackends.includes('dvalna')) {
-    logger.info('Skipping Backend 3: dvalna.ru (client requested skip)', { channel });
-  } else {
-    logger.info('Trying Backend 3: dvalna.ru', { channel });
-  
-    let channelKey = `premium${channel}`;
-    let jwtFetchSucceeded = false;
-    const jwt = await fetchPlayerJWT(channel, logger, env);
-  
-    if (jwt) {
-      jwtFetchSucceeded = true;
-      try {
-      const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(atob(payloadB64));
-      if (payload.sub) {
-        channelKey = payload.sub;
-        logger.info('Using channel key from JWT', { channelKey, channel });
-      }
-    } catch (e) {
-      logger.warn('Failed to extract channel key from JWT', { error: (e as Error).message });
-    }
-  } else {
-    // JWT fetch failed - skip dvalna.ru entirely since streams will be unplayable
-    // The M3U8 might be accessible, but key decryption will fail
-    logger.warn('JWT fetch failed, skipping dvalna.ru (streams would be unplayable)', { channel });
-    errors.push(`dvalna.ru: JWT fetch failed - stream would be unplayable without key decryption`);
+  const moveonjoyUrl = CHANNEL_TO_MOVEONJOY[channel];
+  if (moveonjoyUrl && !skipBackends.includes('moveonjoy')) {
+    logger.info('Trying Backend 3: moveonjoy.com', { channel, url: moveonjoyUrl.substring(0, 60) });
     
-    // Skip to ALL BACKENDS FAILED section
-    const offlineErrors = errors.filter(e => e.includes('offline') || e.includes('empty'));
-    const hasOfflineChannel = offlineErrors.length > 0;
-    
-    if (hasOfflineChannel) {
-      return jsonResponse({ 
-        error: 'Channel offline', 
-        message: 'This channel exists but is not currently streaming.',
-        channel,
-        offlineOn: offlineErrors.map(e => e.split(':')[0]),
-        hint: 'US broadcast channels are often only available during live sports events. Try again later.'
-      }, 503, origin);
-    }
-    
-    return jsonResponse({ 
-      error: 'All backends failed', 
-      channel,
-      errors: errors.slice(0, 10),
-      backendsTriedCount: 3,
-      hint: 'No unencrypted stream available for this channel. moveonjoy, cdn-live-tv, and dvalna.ru all failed.'
-    }, 502, origin);
-  }
-  
-  // JWT available - proceed with dvalna.ru
-  const channelKeysToTry: string[] = [];
-  if (channelKey !== `premium${channel}`) {
-    channelKeysToTry.push(channelKey); // JWT-derived key first
-  }
-  channelKeysToTry.push(`premium${channel}`); // Always try premium{channel}
-  
-  {
-    // Scope block for dvalna.ru attempts
-    
-    for (const currentChannelKey of channelKeysToTry) {
-      let serverKey: string;
-      try {
-        serverKey = await getServerKey(currentChannelKey, logger, env);
-      } catch {
-        serverKey = 'zeko';
-      }
+    try {
+      const m3u8Res = await fetch(moveonjoyUrl, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          'Referer': 'https://tv-bu1.blogspot.com/',
+        },
+      });
       
-      const serverKeysToTry = [serverKey, ...ALL_SERVER_KEYS.filter(k => k !== serverKey)];
-
-      for (const sk of serverKeysToTry) {
-        const m3u8Url = constructM3U8Url(sk, currentChannelKey);
+      if (m3u8Res.ok) {
+        const content = await m3u8Res.text();
         
-        try {
-          let content: string;
-          let fetchedVia = 'direct';
+        if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('#EXT-X-STREAM-INF') || content.includes('.ts'))) {
+          logger.info('Backend 3 SUCCESS: moveonjoy.com', { channel });
+          usedBackend = 'moveonjoy.com';
           
-          try {
-            const directRes = await fetch(`${m3u8Url}?_t=${Date.now()}`, {
-              headers: { 'User-Agent': USER_AGENT, 'Referer': `https://${PLAYER_DOMAIN}/` },
-            });
-            
-            if (!directRes.ok) throw new Error(`HTTP ${directRes.status}`);
-            content = await directRes.text();
-            
-            if (!content.includes('#EXTM3U') && !content.includes('#EXT-X-')) {
-              throw new Error(`Not M3U8: ${content.substring(0, 50)}`);
-            }
-          } catch (directError) {
-            if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-              const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(m3u8Url)}&key=${env.RPI_PROXY_KEY}`;
-              const rpiRes = await fetch(rpiUrl);
-              
-              if (!rpiRes.ok) {
-                errors.push(`dvalna/${currentChannelKey}/${sk}: ${(directError as Error).message}`);
-                continue;
-              }
-              content = await rpiRes.text();
-              fetchedVia = 'rpi-proxy';
-            } else {
-              errors.push(`dvalna/${currentChannelKey}/${sk}: ${(directError as Error).message}`);
-              continue;
-            }
-          }
-
-          if (content.includes('#EXTM3U') || content.includes('#EXT-X-')) {
-            const hasSegments = content.includes('#EXTINF') || content.includes('.ts');
-            
-            if (!hasSegments) {
-              errors.push(`dvalna/${currentChannelKey}/${sk}: M3U8 empty (channel offline)`);
-              continue;
-            }
-            
-            serverKeyCache.set(currentChannelKey, { serverKey: sk, fetchedAt: Date.now() });
-            logger.info('Backend 1 SUCCESS: dvalna.ru', { serverKey: sk, channelKey: currentChannelKey });
-            usedBackend = 'dvalna.ru';
-            const proxied = rewriteM3U8(content, proxyOrigin, m3u8Url);
-            return new Response(proxied, {
-              status: 200,
-              headers: {
-                'Content-Type': 'application/vnd.apple.mpegurl',
-                ...corsHeaders(origin),
-                'Cache-Control': 'no-store',
-                'X-DLHD-Channel': channel,
-                'X-DLHD-ChannelKey': currentChannelKey,
-                'X-DLHD-Server': sk,
-                'X-DLHD-Backend': 'dvalna.ru',
-                'X-Fetched-Via': fetchedVia,
-              },
-            });
-          }
-        } catch (err) {
-          errors.push(`dvalna/${currentChannelKey}/${sk}: ${(err as Error).message}`);
+          const proxied = rewriteMoveonjoyM3U8(content, proxyOrigin, moveonjoyUrl);
+          return new Response(proxied, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/vnd.apple.mpegurl',
+              ...corsHeaders(origin),
+              'Cache-Control': 'no-store',
+              'X-DLHD-Channel': channel,
+              'X-DLHD-Backend': 'moveonjoy.com',
+            },
+          });
+        } else {
+          errors.push(`moveonjoy.com: M3U8 empty or invalid`);
         }
+      } else {
+        errors.push(`moveonjoy.com: HTTP ${m3u8Res.status}`);
       }
+    } catch (err) {
+      errors.push(`moveonjoy.com: ${(err as Error).message}`);
     }
+  } else if (!moveonjoyUrl) {
+    logger.info('No moveonjoy mapping for channel', { channel });
   }
-  } // End of skipBackends.includes('dvalna') check
 
   // ============================================================================
   // ALL BACKENDS FAILED
   // ============================================================================
   const offlineErrors = errors.filter(e => e.includes('offline') || e.includes('empty'));
   const hasOfflineChannel = offlineErrors.length > 0;
-  const allOffline = errors.length > 0 && errors.every(e => e.includes('offline') || e.includes('empty'));
   
-  // If at least one backend found the channel but it was offline, return 503 (Service Unavailable)
-  // This is different from 502 (Bad Gateway) which means we couldn't reach any backend
   if (hasOfflineChannel) {
     return jsonResponse({ 
       error: 'Channel offline', 
@@ -1810,7 +1766,7 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   return jsonResponse({ 
     error: 'All backends failed', 
     channel,
-    errors: errors.slice(0, 10), // Limit error list
+    errors: errors.slice(0, 10),
     backendsTriedCount: 3,
     hint: 'dvalna.ru, cdn-live-tv.ru, and moveonjoy.com all failed'
   }, 502, origin);
