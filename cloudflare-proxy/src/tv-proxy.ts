@@ -2287,16 +2287,33 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
       
       data = await directRes.arrayBuffer();
       
-      // Check if response is an error (JSON) - small responses are suspicious
-      if (data.byteLength < 1000) {
-        const text = new TextDecoder().decode(data);
-        if (text.startsWith('{') || text.includes('"error"') || text.includes('"msg"')) {
-          logger.warn('Segment response is error JSON', { response: text.substring(0, 200) });
-          throw new Error(`Server error: ${text}`);
+      // Check if response is an error - look for JSON/HTML in first bytes
+      // Valid TS segments start with 0x47 (sync byte) or fMP4 starts with 'ftyp'/'moof'
+      const firstBytes = new Uint8Array(data.slice(0, 8));
+      const isValidTS = firstBytes[0] === 0x47; // TS sync byte
+      const firstChars = new TextDecoder().decode(firstBytes);
+      const isValidFMP4 = firstChars.includes('ftyp') || firstChars.includes('moof') || firstChars.includes('mdat');
+      
+      if (!isValidTS && !isValidFMP4) {
+        // Check if it's an error response
+        const preview = new TextDecoder().decode(data.slice(0, 500));
+        if (preview.startsWith('{') || preview.startsWith('<') || preview.includes('"error"') || preview.includes('"msg"')) {
+          logger.warn('Segment response is error/HTML', { 
+            size: data.byteLength, 
+            preview: preview.substring(0, 200),
+            firstByte: firstBytes[0].toString(16)
+          });
+          throw new Error(`Invalid segment data: ${preview.substring(0, 100)}`);
         }
+        // Log warning but continue - might be valid but unusual format
+        logger.warn('Segment has unexpected format', { 
+          size: data.byteLength, 
+          firstByte: firstBytes[0].toString(16),
+          preview: preview.substring(0, 50)
+        });
       }
       
-      logger.info('Direct segment fetch succeeded', { size: data.byteLength });
+      logger.info('Direct segment fetch succeeded', { size: data.byteLength, isTS: isValidTS, isFMP4: isValidFMP4 });
     } catch (directError) {
       // Only use RPI for DLHD domains when direct fails
       if (isDlhd && env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {

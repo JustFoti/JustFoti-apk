@@ -382,6 +382,13 @@ export function useVideoPlayer() {
       hls.on(Hls.Events.ERROR, async (_, data) => {
         console.error('HLS Error:', data);
         
+        // Handle non-fatal fragParsingError - usually means proxy returned bad data
+        if (!data.fatal && data.details === 'fragParsingError') {
+          console.warn('[useVideoPlayer] Fragment parsing error - proxy may be returning invalid data');
+          // Don't retry immediately - let hls.js handle it
+          return;
+        }
+        
         if (data.fatal) {
           const elapsed = Date.now() - loadStartTimeRef.current;
           
