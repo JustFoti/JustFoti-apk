@@ -132,9 +132,6 @@ export function useVideoPlayer() {
     }
   }, []);
 
-  // Track the actual backend used (from X-DLHD-Backend header)
-  const actualBackendRef = useRef<DLHDBackend | null>(null);
-
   const loadStreamInternal = useCallback(async (source: StreamSource, skipBackends: string[] = [], isManualSwitch: boolean = false) => {
     if (process.env.NODE_ENV === 'development') {
       console.log('[useVideoPlayer] loadStreamInternal called with:', source, 'skip:', skipBackends, 'manual:', isManualSwitch);
