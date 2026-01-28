@@ -3,6 +3,7 @@
  * 
  * Native HLS.js player for DLHD, CDN Live, and VIPRow streams.
  * NO EMBEDS - direct m3u8 playback with full controls.
+ * Includes channel selector for events with multiple channels.
  */
 
 'use client';
@@ -36,32 +37,34 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
   const [currentQuality, setCurrentQuality] = useState<number>(-1);
   const [qualities, setQualities] = useState<Array<{ height: number; index: number }>>([]);
   const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [showChannelMenu, setShowChannelMenu] = useState(false);
+  const [selectedChannelIndex, setSelectedChannelIndex] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+
+  // Get current channel from event
+  const currentEventChannel = event?.channels?.[selectedChannelIndex];
 
   // Get stream URL based on source
   const getStreamUrl = useCallback((): string | null => {
     // Channel playback (DLHD or CDN Live)
     if (channel) {
       if (channel.source === 'dlhd') {
-        // Use CF Worker proxy - throws if not configured
         return getTvPlaylistUrl(channel.channelId);
       }
       if (channel.source === 'cdnlive') {
-        // CDN Live uses channel name|country format
         const [name, country] = channel.channelId.split('|');
         return `/api/livetv/cdnlive-stream?channel=${encodeURIComponent(name)}&code=${country || ''}`;
       }
     }
 
-    // Event playback
+    // Event playback - use selected channel
     if (event) {
-      // DLHD event - use first channel
       if (event.source === 'dlhd' && event.channels.length > 0) {
-        const channelId = event.channels[0].channelId;
-        return getTvPlaylistUrl(channelId);
+        const ch = event.channels[selectedChannelIndex] || event.channels[0];
+        console.log('[LiveTV Player] Using channel:', ch.channelId, ch.name);
+        return getTvPlaylistUrl(ch.channelId);
       }
 
-      // VIPRow event - use CF proxy
       if (event.source === 'viprow' && event.viprowUrl) {
         const cfProxy = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
         if (cfProxy) {
@@ -73,14 +76,82 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     }
 
     return null;
-  }, [event, channel]);
+  }, [event, channel, selectedChannelIndex]);
 
-  // Initialize HLS player
+  // Load HLS stream
+  const loadHlsStream = useCallback((video: HTMLVideoElement, url: string) => {
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 1000,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 1000,
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        const levels = data.levels.map((level, index) => ({
+          height: level.height,
+          index,
+        })).filter(l => l.height > 0);
+        
+        setQualities(levels);
+        setIsLoading(false);
+        video.play().catch(() => {});
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+        setCurrentQuality(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < 3) {
+            setRetryCount(prev => prev + 1);
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          } else {
+            setError('Stream playback failed');
+            setIsLoading(false);
+            hls.destroy();
+          }
+        }
+      });
+
+      hlsRef.current = hls;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => {
+        setIsLoading(false);
+        video.play().catch(() => {});
+      });
+      video.addEventListener('error', () => {
+        setError('Failed to load stream');
+        setIsLoading(false);
+      });
+    } else {
+      setError('HLS not supported');
+      setIsLoading(false);
+    }
+  }, [retryCount]);
+
+  // Initialize player
   const initPlayer = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Cleanup previous instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -96,153 +167,45 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
       return;
     }
 
-    console.log('[LiveTV Player] Loading stream:', streamUrl);
-
-    // For CDN Live API responses, we need to fetch the actual m3u8 URL
-    if (streamUrl.includes('/api/livetv/cdnlive-stream')) {
+    // Handle API endpoints that return JSON
+    if (streamUrl.includes('/api/livetv/')) {
       try {
         const response = await fetch(streamUrl);
         const data = await response.json();
-        
-        if (!data.success || !data.streamUrl) {
-          setError(data.error || 'Failed to get CDN Live stream');
-          setIsLoading(false);
-          return;
-        }
-        
-        // Use the actual stream URL
-        loadHlsStream(video, data.streamUrl);
-      } catch (err) {
-        setError('Failed to fetch CDN Live stream');
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // For VIPRow API responses
-    if (streamUrl.includes('/api/livetv/viprow-stream')) {
-      try {
-        const response = await fetch(streamUrl);
-        const data = await response.json();
-        
-        if (!data.success) {
-          setError(data.error || 'Failed to get VIPRow stream');
-          setIsLoading(false);
-          return;
-        }
-        
-        // VIPRow returns either streamUrl (m3u8) or playerUrl (embed)
         if (data.streamUrl) {
           loadHlsStream(video, data.streamUrl);
         } else {
-          setError('VIPRow stream not available - try another link');
+          setError(data.error || 'Failed to get stream');
           setIsLoading(false);
         }
-      } catch (err) {
-        setError('Failed to fetch VIPRow stream');
+      } catch {
+        setError('Failed to fetch stream');
         setIsLoading(false);
       }
       return;
     }
 
-    // Direct m3u8 URL (DLHD proxy or CF proxy)
     loadHlsStream(video, streamUrl);
-  }, [getStreamUrl]);
+  }, [getStreamUrl, loadHlsStream]);
 
-  // Load HLS stream
-  const loadHlsStream = (video: HTMLVideoElement, url: string) => {
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 30,
-        maxBufferLength: 30,
-        maxMaxBufferLength: 60,
-        liveSyncDurationCount: 3,
-        liveMaxLatencyDurationCount: 10,
-        // Retry configuration
-        manifestLoadingMaxRetry: 4,
-        manifestLoadingRetryDelay: 1000,
-        levelLoadingMaxRetry: 4,
-        levelLoadingRetryDelay: 1000,
-        fragLoadingMaxRetry: 6,
-        fragLoadingRetryDelay: 1000,
-      });
+  // Switch channel
+  const switchChannel = useCallback((index: number) => {
+    setSelectedChannelIndex(index);
+    setShowChannelMenu(false);
+    setRetryCount(0);
+  }, []);
 
-      hls.loadSource(url);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
-        console.log('[LiveTV Player] Manifest parsed, levels:', data.levels.length);
-        
-        // Extract quality levels
-        const levels = data.levels.map((level, index) => ({
-          height: level.height,
-          index,
-        })).filter(l => l.height > 0);
-        
-        setQualities(levels);
-        setIsLoading(false);
-        
-        // Auto-play
-        video.play().catch(err => {
-          console.warn('[LiveTV Player] Autoplay blocked:', err);
-        });
-      });
-
-      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
-        setCurrentQuality(data.level);
-      });
-
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        console.error('[LiveTV Player] HLS error:', data.type, data.details);
-        
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[LiveTV Player] Network error, attempting recovery...');
-              if (retryCount < 3) {
-                setRetryCount(prev => prev + 1);
-                hls.startLoad();
-              } else {
-                setError('Network error - stream may be offline');
-                setIsLoading(false);
-              }
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[LiveTV Player] Media error, attempting recovery...');
-              hls.recoverMediaError();
-              break;
-            default:
-              setError('Stream playback failed');
-              setIsLoading(false);
-              hls.destroy();
-              break;
-          }
-        }
-      });
-
-      hlsRef.current = hls;
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari native HLS
-      video.src = url;
-      video.addEventListener('loadedmetadata', () => {
-        setIsLoading(false);
-        video.play().catch(() => {});
-      });
-      video.addEventListener('error', () => {
-        setError('Failed to load stream');
-        setIsLoading(false);
-      });
-    } else {
-      setError('HLS playback not supported in this browser');
-      setIsLoading(false);
+  // Re-init when channel changes
+  useEffect(() => {
+    if (isOpen && (event || channel)) {
+      initPlayer();
     }
-  };
+  }, [selectedChannelIndex]);
 
   // Initialize when opened
   useEffect(() => {
     if (isOpen && (event || channel)) {
+      setSelectedChannelIndex(0);
       setRetryCount(0);
       initPlayer();
     }
@@ -253,56 +216,64 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
         hlsRef.current = null;
       }
     };
-  }, [isOpen, event, channel, initPlayer]);
+  }, [isOpen, event, channel]);
 
-  // Video event handlers - sync state with actual video element
+  // Video event handlers
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handlePlay = () => {
-      setIsPlaying(true);
-      setIsLoading(false);
-    };
-    const handlePause = () => setIsPlaying(false);
-    const handleWaiting = () => setIsLoading(true);
-    const handlePlaying = () => {
-      setIsPlaying(true);
-      setIsLoading(false);
-    };
-    const handleCanPlay = () => setIsLoading(false);
-    const handleVolumeChange = () => {
+    const onPlay = () => { setIsPlaying(true); setIsLoading(false); };
+    const onPause = () => setIsPlaying(false);
+    const onWaiting = () => setIsLoading(true);
+    const onPlaying = () => { setIsPlaying(true); setIsLoading(false); };
+    const onCanPlay = () => setIsLoading(false);
+    const onVolumeChange = () => {
       setVolume(video.volume);
       setIsMuted(video.muted);
     };
 
-    video.addEventListener('play', handlePlay);
-    video.addEventListener('pause', handlePause);
-    video.addEventListener('waiting', handleWaiting);
-    video.addEventListener('playing', handlePlaying);
-    video.addEventListener('canplay', handleCanPlay);
-    video.addEventListener('volumechange', handleVolumeChange);
+    video.addEventListener('play', onPlay);
+    video.addEventListener('pause', onPause);
+    video.addEventListener('waiting', onWaiting);
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('volumechange', onVolumeChange);
 
     return () => {
-      video.removeEventListener('play', handlePlay);
-      video.removeEventListener('pause', handlePause);
-      video.removeEventListener('waiting', handleWaiting);
-      video.removeEventListener('playing', handlePlaying);
-      video.removeEventListener('canplay', handleCanPlay);
-      video.removeEventListener('volumechange', handleVolumeChange);
+      video.removeEventListener('play', onPlay);
+      video.removeEventListener('pause', onPause);
+      video.removeEventListener('waiting', onWaiting);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('volumechange', onVolumeChange);
     };
   }, []);
 
-  // Controls visibility
+  // Auto-hide controls
   const showControlsTemporarily = useCallback(() => {
     setShowControls(true);
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
     controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) setShowControls(false);
+      if (isPlaying && !showQualityMenu && !showChannelMenu) {
+        setShowControls(false);
+      }
     }, 3000);
-  }, [isPlaying]);
+  }, [isPlaying, showQualityMenu, showChannelMenu]);
+
+  // Hide controls when menus close
+  useEffect(() => {
+    if (!showQualityMenu && !showChannelMenu && isPlaying) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        setShowControls(false);
+      }, 2000);
+    }
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [showQualityMenu, showChannelMenu, isPlaying]);
 
   // Keyboard controls
   useEffect(() => {
@@ -316,8 +287,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
         case ' ':
         case 'k':
           e.preventDefault();
-          if (video.paused) video.play();
-          else video.pause();
+          video.paused ? video.play() : video.pause();
           break;
         case 'f':
           e.preventDefault();
@@ -336,11 +306,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
           video.volume = Math.max(0, video.volume - 0.1);
           break;
         case 'Escape':
-          if (isFullscreen) {
-            document.exitFullscreen?.();
-          } else {
-            onClose();
-          }
+          isFullscreen ? document.exitFullscreen?.() : onClose();
           break;
       }
       showControlsTemporarily();
@@ -350,44 +316,32 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, isFullscreen, onClose, showControlsTemporarily]);
 
-  // Fullscreen handling
+  // Fullscreen
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    if (!document.fullscreenElement) {
-      container.requestFullscreen?.();
-    } else {
-      document.exitFullscreen?.();
-    }
+    document.fullscreenElement ? document.exitFullscreen?.() : container.requestFullscreen?.();
   }, []);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
   }, []);
 
-  // Play/Pause toggle
   const togglePlay = () => {
     const video = videoRef.current;
-    if (!video) return;
-    if (video.paused) video.play();
-    else video.pause();
+    if (video) video.paused ? video.play() : video.pause();
   };
 
-  // Volume control
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const video = videoRef.current;
     if (!video) return;
-    const newVolume = parseFloat(e.target.value);
-    video.volume = newVolume;
-    if (newVolume > 0) video.muted = false;
+    const val = parseFloat(e.target.value);
+    video.volume = val;
+    if (val > 0) video.muted = false;
   };
 
-  // Quality selection
   const selectQuality = (index: number) => {
     if (hlsRef.current) {
       hlsRef.current.currentLevel = index;
@@ -396,20 +350,18 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     setShowQualityMenu(false);
   };
 
-  // Retry stream
-  const retryStream = () => {
-    setRetryCount(0);
-    initPlayer();
-  };
-
-  // Get title
   const getTitle = () => {
     if (channel) return channel.name;
-    if (event) return event.title;
+    if (event) {
+      const ch = event.channels[selectedChannelIndex];
+      return ch ? `${event.title} • ${ch.name}` : event.title;
+    }
     return 'Live TV';
   };
 
   if (!isOpen) return null;
+
+  const hasMultipleChannels = event && event.channels.length > 1;
 
   return (
     <div className={styles.playerOverlay}>
@@ -417,11 +369,9 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
         ref={containerRef}
         className={styles.playerContainer}
         onMouseMove={showControlsTemporarily}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) togglePlay();
-        }}
+        onMouseLeave={() => isPlaying && setShowControls(false)}
+        onClick={(e) => e.target === e.currentTarget && togglePlay()}
       >
-        {/* Video Element */}
         <video
           ref={videoRef}
           className={styles.video}
@@ -429,7 +379,6 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
           onClick={togglePlay}
         />
 
-        {/* Loading Spinner */}
         {isLoading && (
           <div className={styles.loadingOverlay}>
             <div className={styles.spinner} />
@@ -437,24 +386,19 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
           </div>
         )}
 
-        {/* Error Display */}
         {error && (
           <div className={styles.errorOverlay}>
             <div className={styles.errorIcon}>⚠️</div>
             <p className={styles.errorMessage}>{error}</p>
-            <button onClick={retryStream} className={styles.retryButton}>
+            <button onClick={() => { setRetryCount(0); initPlayer(); }} className={styles.retryButton}>
               Retry
             </button>
           </div>
         )}
 
-        {/* Controls */}
         <div className={`${styles.controls} ${showControls ? styles.visible : ''}`}>
-          {/* Top Bar */}
           <div className={styles.topBar}>
-            <button onClick={onClose} className={styles.closeButton}>
-              ✕
-            </button>
+            <button onClick={onClose} className={styles.closeButton}>✕</button>
             <div className={styles.titleSection}>
               <h2 className={styles.title}>{getTitle()}</h2>
               {event?.isLive && (
@@ -466,9 +410,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
             </div>
           </div>
 
-          {/* Bottom Bar */}
           <div className={styles.bottomBar}>
-            {/* Play/Pause */}
             <button onClick={togglePlay} className={styles.controlButton}>
               {isPlaying ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -481,13 +423,9 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
               )}
             </button>
 
-            {/* Volume */}
             <div className={styles.volumeControl}>
               <button 
-                onClick={() => {
-                  const video = videoRef.current;
-                  if (video) video.muted = !video.muted;
-                }}
+                onClick={() => { if (videoRef.current) videoRef.current.muted = !videoRef.current.muted; }}
                 className={styles.controlButton}
               >
                 {isMuted || volume === 0 ? (
@@ -513,16 +451,43 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
 
             <div className={styles.spacer} />
 
+            {/* Channel Selector */}
+            {hasMultipleChannels && (
+              <div className={styles.channelSelector}>
+                <button 
+                  onClick={() => { setShowChannelMenu(!showChannelMenu); setShowQualityMenu(false); }}
+                  className={styles.controlButton}
+                >
+                  📺
+                  <span className={styles.channelLabel}>
+                    {currentEventChannel?.name || 'Channel'}
+                  </span>
+                </button>
+                
+                {showChannelMenu && (
+                  <div className={styles.channelMenu}>
+                    {event.channels.map((ch, idx) => (
+                      <button
+                        key={ch.channelId}
+                        onClick={() => switchChannel(idx)}
+                        className={`${styles.channelOption} ${idx === selectedChannelIndex ? styles.active : ''}`}
+                      >
+                        {ch.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Quality Selector */}
             {qualities.length > 0 && (
               <div className={styles.qualitySelector}>
                 <button 
-                  onClick={() => setShowQualityMenu(!showQualityMenu)}
+                  onClick={() => { setShowQualityMenu(!showQualityMenu); setShowChannelMenu(false); }}
                   className={styles.controlButton}
                 >
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-                  </svg>
+                  ⚙️
                   <span className={styles.qualityLabel}>
                     {currentQuality === -1 ? 'Auto' : `${qualities.find(q => q.index === currentQuality)?.height || ''}p`}
                   </span>
@@ -550,7 +515,6 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
               </div>
             )}
 
-            {/* Fullscreen */}
             <button onClick={toggleFullscreen} className={styles.controlButton}>
               {isFullscreen ? (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
