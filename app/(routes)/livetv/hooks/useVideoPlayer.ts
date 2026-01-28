@@ -460,7 +460,7 @@ export function useVideoPlayer() {
         
         // Handle non-fatal fragParsingError - the key issue
         if (!data.fatal && data.details === 'fragParsingError') {
-          const currentFragSn = data.frag?.sn ?? -1;
+          const currentFragSn = typeof data.frag?.sn === 'number' ? data.frag.sn : -1;
           
           // If this is a new fragment, reset count
           if (currentFragSn !== lastBadFragSn) {
