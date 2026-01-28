@@ -3,8 +3,8 @@ const CF_URL = 'https://media-proxy.vynx.workers.dev';
 async function test() {
   console.log('Testing channel 425 (beIN Sports USA)...');
   
-  // Use the correct path formatprefix
-  const url = `${CF_URL}/tv/?channel=42
+  // Use the correct path format with /tv/ prefix
+  const url = `${CF_URL}/tv/?channel=425`;
   console.log('URL:', url);
   
   const start = Date.now();
