@@ -126,7 +126,7 @@ async function fetchViaRpiProxy(url: string): Promise<Response> {
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /animekai?url=<url>&ua=<user_agent>&referer=<referer>` | Proxy AnimeKai/MegaUp/Flixer CDN streams |
+| `GET /animekai?url=<url>&ua=<user_agent>&referer=<referer>&origin=<origin>` | Proxy AnimeKai/MegaUp/Flixer/dvalna CDN streams |
 | `GET /animekai/extract?embed=<encrypted>` | Full extraction from encrypted embed |
 | `GET /animekai/full-extract?kai_id=<id>&episode=<num>` | Complete extraction from anime ID |
 
@@ -159,6 +159,9 @@ MegaUp blocks datacenter IPs and requests with Origin/Referer headers. The `/ani
 
 ### Flixer CDN (p.XXXXX.workers.dev)
 Flixer CDN blocks datacenter IPs but REQUIRES a Referer header. Pass `?referer=https://flixer.sh/` to include it.
+
+### dvalna.ru (DLHD CDN)
+dvalna.ru blocks datacenter IPs and REQUIRES both Referer AND Origin headers. Pass `?referer=https://topembed.pw/&origin=https://topembed.pw` to include them.
 
 ### VIPRow/Casthill (boanki.net)
 VIPRow blocks Cloudflare Workers entirely. The RPI proxy handles full stream extraction including token refresh via boanki.net with Origin: `https://casthill.net`.

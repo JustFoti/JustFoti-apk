@@ -215,35 +215,6 @@ export function useVideoPlayer() {
 
       let streamUrl = getStreamUrl(source, skipBackends);
       
-      // For DLHD, pre-fetch to detect which backend was used
-      // This lets us show the correct backend in the server picker
-      if (source.type === 'dlhd') {
-        try {
-          const preRes = await fetch(streamUrl, { method: 'GET' });
-          const backendHeader = preRes.headers.get('X-DLHD-Backend');
-          if (backendHeader) {
-            // Map header value to our backend type
-            if (backendHeader.includes('moveonjoy')) {
-              actualBackendRef.current = 'moveonjoy';
-            } else if (backendHeader.includes('cdn-live')) {
-              actualBackendRef.current = 'cdnlive';
-            } else if (backendHeader.includes('dvalna')) {
-              actualBackendRef.current = 'dvalna';
-            }
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[useVideoPlayer] Detected backend from header:', backendHeader, '->', actualBackendRef.current);
-            }
-          }
-          // We already have the response, use it
-          const m3u8Text = await preRes.text();
-          // Create a blob URL for HLS.js to use
-          const blob = new Blob([m3u8Text], { type: 'application/vnd.apple.mpegurl' });
-          streamUrl = URL.createObjectURL(blob);
-        } catch (e) {
-          console.warn('[useVideoPlayer] Pre-fetch failed, continuing with direct load:', e);
-        }
-      }
-      
       // For CDN Live, fetch the stream URL from API first
       if (source.type === 'cdnlive') {
         const apiResponse = await fetch(streamUrl);
@@ -345,13 +316,9 @@ export function useVideoPlayer() {
         const elapsed = Date.now() - loadStartTimeRef.current;
         
         if (source.type === 'dlhd') {
-          // Use the backend we detected from pre-fetch, or default to 'auto'
-          if (actualBackendRef.current) {
-            setCurrentBackend(actualBackendRef.current);
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[useVideoPlayer] Using detected backend:', actualBackendRef.current);
-            }
-          } else if (manualBackendRef.current && manualBackendRef.current !== 'auto') {
+          // We can't easily get the backend header from HLS.js
+          // Just show 'auto' - the important thing is the stream works
+          if (manualBackendRef.current && manualBackendRef.current !== 'auto') {
             setCurrentBackend(manualBackendRef.current);
           } else {
             setCurrentBackend('auto');

@@ -149,6 +149,8 @@ const DLHD_CHANNEL_MAP: Record<string, DLHDChannelInfo> = {
   '386': { channelKey: 'espn2nl', serverKey: 'top1', name: 'ESPN2[Netherlands]' },
   '387': { channelKey: 'arg_espn_premium', serverKey: null, name: 'ESPNPremium[Argentina]' },
   '388': { channelKey: 'argtntsports', serverKey: 'wiki', name: 'TNTSports[Argentina]' },
+  // NOTE: Channel 388 also works with premium388 on ddy6 server (fallback from hitsplay.fun)
+  // Server lookup: argtntsports → wiki, premium388 → ddy6
   '392': { channelKey: 'winsportsplus', serverKey: 'wiki', name: 'WINSports[Colombia]' },
   '393': { channelKey: 'ZiggoSportNL', serverKey: 'wiki', name: 'ZiggoSport[Netherlands]' },
   '396': { channelKey: 'Ziggosport4NL', serverKey: null, name: 'ZiggoSport4[Netherlands]' },
@@ -677,8 +679,24 @@ const CHANNEL_TO_TOPEMBED: Record<string, string> = {
   '664': 'ACCNetwork[USA]',
 };
 
-// UPDATED January 2026: Added 'wiki', 'hzt', 'x4', and 'dokko1' servers used by topembed.pw
-const ALL_SERVER_KEYS = ['wiki', 'hzt', 'x4', 'dokko1', 'zeko', 'wind', 'nfs', 'ddy6', 'chevy', 'top1/cdn'];
+// UPDATED January 2026: Complete list of ALL known dvalna.ru servers
+// Order matters - most common/reliable servers first for faster discovery
+const ALL_SERVER_KEYS = [
+  'wiki',     // Most common for topembed.pw channels
+  'hzt',      // Common for US sports
+  'x4',       // Common for European channels
+  'top2',     // Common for UK Sky Sports
+  'top1',     // Alternative top server
+  'top1/cdn', // CDN variant
+  'ddy6',     // Used by hitsplay.fun premium keys
+  'dokko1',   // Romanian channels
+  'nfs',      // Romanian channels
+  'zeko',     // Fallback server
+  'chevy',    // Server lookup endpoint host
+  'azo',      // New Zealand Sky Sports
+  'max2',     // Serbian channels
+  'wind',     // Alternative server
+];
 const CDN_DOMAIN = 'dvalna.ru';
 
 // CORRECT SECRET - extracted from WASM module (January 2026)
@@ -1949,7 +1967,8 @@ async function fetchViaRpiProxy(
   referer: string,
   env: Env | undefined,
   logger: any,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  origin?: string
 ): Promise<Response> {
   if (!env?.RPI_PROXY_URL || !env?.RPI_PROXY_KEY) {
     // Fallback to direct fetch if RPI not configured
@@ -1958,12 +1977,15 @@ async function fetchViaRpiProxy(
       headers: {
         'User-Agent': USER_AGENT,
         'Referer': referer,
+        ...(origin ? { 'Origin': origin } : {}),
       },
       signal,
     });
   }
   
-  const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(url)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent(referer)}`;
+  // Pass both referer AND origin for dvalna.ru requests
+  const originParam = origin ? `&origin=${encodeURIComponent(origin)}` : '';
+  const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(url)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent(referer)}${originParam}`;
   return fetch(rpiUrl, { signal });
 }
 
@@ -2031,32 +2053,30 @@ async function tryCdnLiveBackend(
     const cdnResult = await fetchCdnLiveStream(mapping.name, mapping.code, logger, env);
     
     if (!cdnResult.success || !cdnResult.m3u8Url) {
-      logger.warn('cdn-live stream fetch failed', { channel, error: cdnResult.error });
       return null;
     }
     
+    // Pass both referer AND origin - cdn-live-tv.ru may require both like dvalna.ru
     const m3u8Res = await fetchViaRpiProxy(
       cdnResult.m3u8Url,
       'https://cdn-live.tv/',
       env,
       logger,
-      controller.signal
+      controller.signal,
+      'https://cdn-live.tv' // Origin header
     );
     
     clearTimeout(timeout);
     
     if (!m3u8Res.ok) {
-      logger.warn('cdn-live M3U8 fetch failed', { channel, status: m3u8Res.status });
       return null;
     }
     
     const content = await m3u8Res.text();
     if (!content.includes('#EXTM3U') || (!content.includes('#EXTINF') && !content.includes('.ts') && !content.includes('#EXT-X-STREAM-INF'))) {
-      logger.warn('cdn-live M3U8 invalid', { channel, preview: content.substring(0, 100) });
       return null;
     }
     
-    logger.info('FAST: cdn-live-tv.ru succeeded', { channel });
     const proxied = rewriteCdnLiveM3U8(content, proxyOrigin, cdnResult.m3u8Url);
     
     return new Response(proxied, {
@@ -2072,7 +2092,49 @@ async function tryCdnLiveBackend(
     });
   } catch (e) {
     clearTimeout(timeout);
-    logger.warn('cdn-live backend error', { channel, error: (e as Error).message });
+    return null;
+  }
+}
+
+/**
+ * Try to fetch M3U8 from a specific server/channelKey combination
+ * Returns the content if successful, null otherwise
+ */
+async function tryDvalnaServer(
+  serverKey: string,
+  channelKey: string,
+  env: Env | undefined,
+  logger: any,
+  timeoutMs: number = 8000
+): Promise<{ content: string; m3u8Url: string } | null> {
+  const m3u8Url = constructM3U8Url(serverKey, channelKey);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const m3u8Res = await fetchViaRpiProxy(
+      `${m3u8Url}?_t=${Date.now()}`,
+      `https://${PLAYER_DOMAIN}/`,
+      env,
+      logger,
+      controller.signal,
+      `https://${PLAYER_DOMAIN}`
+    );
+    
+    clearTimeout(timeout);
+    
+    if (!m3u8Res.ok) return null;
+    
+    const content = await m3u8Res.text();
+    
+    // Validate it's a real M3U8 with actual content
+    if (!content.includes('#EXTM3U') || (!content.includes('#EXTINF') && !content.includes('.ts'))) {
+      return null;
+    }
+    
+    return { content, m3u8Url };
+  } catch {
+    clearTimeout(timeout);
     return null;
   }
 }
@@ -2087,98 +2149,107 @@ async function tryDvalnaBackend(
   errors?: string[]
 ): Promise<Response | null> {
   const jwt = await jwtPromise;
-  if (!jwt) return null;
-  
-  // PRIORITY: Use our channel mapping first (has correct keys from topembed.pw)
-  // Fall back to JWT 'sub' field, then default to premium{id}
-  const mappedInfo = getChannelInfo(channel);
-  let channelKey = mappedInfo.channelKey;
-  let serverKey: string | undefined = mappedInfo.serverKey || undefined;
-  
-  // If we don't have a mapping (channelKey starts with 'premium'), try to extract from JWT
-  if (channelKey.startsWith('premium')) {
-    try {
-      const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const payload = JSON.parse(atob(payloadB64));
-      if (payload.sub) channelKey = payload.sub;
-    } catch {}
-  }
-  
-  logger.info('dvalna channel resolution', { 
-    channel, 
-    channelKey, 
-    hasMappedServer: !!mappedInfo.serverKey,
-    mappedServer: mappedInfo.serverKey 
-  });
-  
-  // Try to get server key from: 1) mapping, 2) cache, 3) lookup endpoint, 4) default
-  if (!serverKey) {
-    const cached = serverKeyCache.get(channelKey);
-    serverKey = cached?.serverKey;
-  }
-  
-  if (!serverKey) {
-    // Try server_lookup endpoint to get the correct server
-    const lookupResult = await fetchServerKeyFromLookup(channelKey, logger, env);
-    if (lookupResult) serverKey = lookupResult;
-  }
-  
-  // Fall back to default server if lookup failed
-  if (!serverKey) {
-    serverKey = 'zeko';
-  }
-  
-  const m3u8Url = constructM3U8Url(serverKey, channelKey);
-  
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000); // 45 sec timeout for slow dvalna
-  
-  try {
-    let content: string;
-    
-    // Always use RPI proxy for dvalna - they block CF IPs
-    const m3u8Res = await fetchViaRpiProxy(
-      `${m3u8Url}?_t=${Date.now()}`,
-      `https://${PLAYER_DOMAIN}/`,
-      env,
-      logger,
-      controller.signal
-    );
-    
-    if (!m3u8Res.ok) {
-      throw new Error(`HTTP ${m3u8Res.status}`);
-    }
-    content = await m3u8Res.text();
-    
-    clearTimeout(timeout);
-    
-    if (!content.includes('#EXTM3U') || (!content.includes('#EXTINF') && !content.includes('.ts'))) {
-      return null;
-    }
-    
-    logger.info('FAST: dvalna.ru succeeded', { channel, serverKey, channelKey });
-    serverKeyCache.set(channelKey, { serverKey, fetchedAt: Date.now() });
-    
-    const proxied = rewriteM3U8(content, proxyOrigin, m3u8Url);
-    
-    return new Response(proxied, {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.apple.mpegurl',
-        ...corsHeaders(origin),
-        'Cache-Control': 'no-store',
-        'X-DLHD-Channel': channel,
-        'X-DLHD-ChannelKey': channelKey,
-        'X-DLHD-Server': serverKey,
-        'X-DLHD-Backend': 'dvalna.ru',
-        'X-Fast-Path': 'true',
-      },
-    });
-  } catch (e) {
-    clearTimeout(timeout);
-    if (errors) errors.push(`dvalna/${channelKey}/${serverKey}: ${(e as Error).message}`);
+  if (!jwt) {
+    if (errors) errors.push('dvalna: No JWT available');
     return null;
   }
+  
+  // Build list of channel keys to try
+  const channelKeysToTry: string[] = [];
+  
+  // 1. Mapped channel key (from topembed.pw)
+  const mappedInfo = getChannelInfo(channel);
+  if (!mappedInfo.channelKey.startsWith('premium')) {
+    channelKeysToTry.push(mappedInfo.channelKey);
+  }
+  
+  // 2. Channel key from JWT 'sub' field
+  try {
+    const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(payloadB64));
+    if (payload.sub && !channelKeysToTry.includes(payload.sub)) {
+      channelKeysToTry.push(payload.sub);
+    }
+  } catch {}
+  
+  // 3. Premium fallback (from hitsplay.fun)
+  const premiumKey = `premium${channel}`;
+  if (!channelKeysToTry.includes(premiumKey)) {
+    channelKeysToTry.push(premiumKey);
+  }
+  
+  logger.info('dvalna: trying channel keys', { channel, keys: channelKeysToTry });
+  
+  // For each channel key, try server_lookup first, then brute force all servers
+  for (const channelKey of channelKeysToTry) {
+    // First try server_lookup to get the "correct" server
+    const lookupServer = await fetchServerKeyFromLookup(channelKey, logger, env);
+    
+    // Build server list: lookup result first (if any), then all others
+    const serversToTry = [...ALL_SERVER_KEYS];
+    if (lookupServer) {
+      // Move lookup result to front
+      const idx = serversToTry.indexOf(lookupServer);
+      if (idx > 0) {
+        serversToTry.splice(idx, 1);
+        serversToTry.unshift(lookupServer);
+      } else if (idx === -1) {
+        serversToTry.unshift(lookupServer);
+      }
+    }
+    
+    logger.info('dvalna: trying servers for key', { channelKey, servers: serversToTry, lookupServer });
+    
+    // Try servers in parallel batches for speed (3 at a time)
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < serversToTry.length; i += BATCH_SIZE) {
+      const batch = serversToTry.slice(i, i + BATCH_SIZE);
+      
+      const results = await Promise.all(
+        batch.map(server => tryDvalnaServer(server, channelKey, env, logger, 10000))
+      );
+      
+      // Check if any succeeded
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j];
+        if (result) {
+          const serverKey = batch[j];
+          logger.info('dvalna: SUCCESS', { channel, channelKey, serverKey });
+          
+          // Cache the working server
+          serverKeyCache.set(channelKey, { serverKey, fetchedAt: Date.now() });
+          
+          const proxied = rewriteM3U8(result.content, proxyOrigin, result.m3u8Url);
+          
+          return new Response(proxied, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/vnd.apple.mpegurl',
+              ...corsHeaders(origin),
+              'Cache-Control': 'no-store',
+              'X-DLHD-Channel': channel,
+              'X-DLHD-ChannelKey': channelKey,
+              'X-DLHD-Server': serverKey,
+              'X-DLHD-Backend': 'dvalna.ru',
+              'X-Fast-Path': 'true',
+            },
+          });
+        }
+      }
+      
+      // Log failed batch
+      batch.forEach((server, idx) => {
+        if (!results[idx] && errors) {
+          errors.push(`dvalna/${channelKey}/${server}: failed`);
+        }
+      });
+    }
+    
+    logger.warn('dvalna: all servers failed for key', { channelKey });
+  }
+  
+  if (errors) errors.push(`dvalna: all ${channelKeysToTry.length} channel keys failed on all ${ALL_SERVER_KEYS.length} servers`);
+  return null;
 }
 
 async function handlePlaylistRequest(channel: string, proxyOrigin: string, logger: any, origin: string | null, env?: Env, request?: Request, skipBackends: string[] = []): Promise<Response> {
@@ -2199,16 +2270,13 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // ============================================================================
   const moveonjoyUrl = CHANNEL_TO_MOVEONJOY[channel];
   if (moveonjoyUrl && !skipBackends.includes('moveonjoy')) {
-    logger.info('Trying Backend 1: moveonjoy.com', { channel });
     try {
       const result = await tryMoveonjoyBackend(channel, moveonjoyUrl, proxyOrigin, logger, origin, env);
       if (result && result.status === 200) {
-        logger.info('Backend 1 SUCCESS: moveonjoy.com', { channel });
         return result;
       }
     } catch (e) {
       errors.push(`moveonjoy: ${(e as Error).message}`);
-      logger.warn('Backend 1 FAILED: moveonjoy.com', { error: (e as Error).message });
     }
   }
 
@@ -2217,16 +2285,13 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // ============================================================================
   const cdnLiveMapping = CHANNEL_TO_CDNLIVE[channel];
   if (cdnLiveMapping && !skipBackends.includes('cdnlive')) {
-    logger.info('Trying Backend 2: cdn-live-tv.ru', { channel, mapping: cdnLiveMapping });
     try {
       const result = await tryCdnLiveBackend(channel, cdnLiveMapping, proxyOrigin, logger, origin, env);
       if (result && result.status === 200) {
-        logger.info('Backend 2 SUCCESS: cdn-live-tv.ru', { channel });
         return result;
       }
     } catch (e) {
       errors.push(`cdnlive: ${(e as Error).message}`);
-      logger.warn('Backend 2 FAILED: cdn-live-tv.ru', { error: (e as Error).message });
     }
   }
 
@@ -2234,16 +2299,13 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   // BACKEND 3: dvalna.ru (needs JWT + PoW - slowest but most channels)
   // ============================================================================
   if (!skipBackends.includes('dvalna')) {
-    logger.info('Trying Backend 3: dvalna.ru', { channel });
     try {
       const result = await tryDvalnaBackend(channel, jwtPromise, proxyOrigin, logger, origin, env, errors);
       if (result && result.status === 200) {
-        logger.info('Backend 3 SUCCESS: dvalna.ru', { channel });
         return result;
       }
     } catch (e) {
       errors.push(`dvalna: ${(e as Error).message}`);
-      logger.warn('Backend 3 FAILED: dvalna.ru', { error: (e as Error).message });
     }
   }
 
