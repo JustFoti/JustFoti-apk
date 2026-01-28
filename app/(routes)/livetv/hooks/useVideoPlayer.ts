@@ -239,16 +239,16 @@ export function useVideoPlayer() {
         backBufferLength: 60,          // 60 sec back buffer
         
         // BUFFER HOLE HANDLING: More tolerant of gaps in live streams
-        maxBufferHole: 1.0,            // Allow 1 sec gaps before seeking
+        maxBufferHole: 2.0,            // Allow 2 sec gaps before seeking
         
         // LIVE SYNC: Stay further from live edge for stability
-        liveSyncDurationCount: 4,      // 4 segments behind live (~16 sec)
-        liveMaxLatencyDurationCount: 15, // Max 15 segments latency (~60 sec)
+        liveSyncDurationCount: 5,      // 5 segments behind live (~20 sec)
+        liveMaxLatencyDurationCount: 20, // Max 20 segments latency (~80 sec)
         liveSyncOnStallIncrease: 2,    // Add 2 segments on stall for recovery
         
         // FRAGMENT LOADING: More patient with live streams
         fragLoadingTimeOut: 20000,     // 20 sec timeout for slow segments
-        fragLoadingMaxRetry: 3,        // 3 retries before giving up
+        fragLoadingMaxRetry: 2,        // 2 retries then skip
         fragLoadingRetryDelay: 1000,   // 1 sec between retries
         fragLoadingMaxRetryTimeout: 30000, // Max 30 sec total retry time
         
@@ -284,7 +284,11 @@ export function useVideoPlayer() {
         initialLiveManifestSize: 3,    // 3 segments to start
         
         // ERROR RECOVERY: More tolerant of errors
-        appendErrorMaxRetry: 5,        // Retry buffer append 5 times
+        appendErrorMaxRetry: 3,        // Retry buffer append 3 times
+        
+        // CRITICAL: Enable automatic fragment error skipping
+        // This tells HLS.js to skip fragments that fail to parse
+        testBandwidth: false,          // Don't test bandwidth on start
       });
 
       hlsRef.current = hls;
@@ -396,13 +400,21 @@ export function useVideoPlayer() {
       let fragErrorCount = 0;
       let mediaErrorRecoveryAttempts = 0;
       let lastErrorTime = 0;
-      const MAX_FRAG_ERRORS = 5; // Allow more errors before skipping
+      let lastBadFragSn = -1; // Track which fragment caused errors
+      let totalSeekAttempts = 0;
+      let lastSeekTime = 0; // Debounce seeks
+      const MAX_FRAG_ERRORS = 3;
       const MAX_MEDIA_ERROR_RECOVERY = 5;
-      const ERROR_RESET_INTERVAL = 15000; // Reset error count after 15s of success
+      const MAX_SEEK_ATTEMPTS = 5;
+      const ERROR_RESET_INTERVAL = 10000;
+      const SEEK_DEBOUNCE_MS = 2000; // Don't seek more than once per 2 seconds
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         // Reset error counts on successful fragment buffer
         fragErrorCount = 0;
+        mediaErrorRecoveryAttempts = 0;
+        totalSeekAttempts = 0;
+        lastBadFragSn = -1;
         lastErrorTime = 0;
         
         if (videoRef.current) {
@@ -425,62 +437,73 @@ export function useVideoPlayer() {
         if (now - lastErrorTime > ERROR_RESET_INTERVAL) {
           fragErrorCount = 0;
           mediaErrorRecoveryAttempts = 0;
+          totalSeekAttempts = 0;
+          lastBadFragSn = -1;
         }
         lastErrorTime = now;
         
-        // Handle buffer stalled error - skip ahead to live edge
+        // Handle buffer stalled error - DON'T seek, just let it recover
         if (!data.fatal && data.details === 'bufferStalledError') {
-          console.warn('[useVideoPlayer] Buffer stalled, seeking to live edge');
-          if (hls.liveSyncPosition && videoRef.current) {
-            videoRef.current.currentTime = hls.liveSyncPosition;
-          }
+          console.warn('[useVideoPlayer] Buffer stalled, waiting for recovery...');
+          // Don't seek - HLS.js will handle this
           return;
         }
         
-        // Handle fragment loading errors - skip the broken segment
+        // Handle fragment loading errors - let HLS.js skip automatically
         if (!data.fatal && (data.details === 'fragLoadError' || data.details === 'fragLoadTimeOut')) {
-          console.warn('[useVideoPlayer] Fragment load error, skipping segment', {
+          console.warn('[useVideoPlayer] Fragment load error, HLS.js will skip', {
             frag: data.frag?.sn,
             error: data.details,
           });
-          // HLS.js will automatically retry/skip, just log it
           return;
         }
         
-        // Handle non-fatal fragParsingError - proxy returned bad data
+        // Handle non-fatal fragParsingError - the key issue
         if (!data.fatal && data.details === 'fragParsingError') {
-          fragErrorCount++;
+          const currentFragSn = data.frag?.sn ?? -1;
+          
+          // If this is a new fragment, reset count
+          if (currentFragSn !== lastBadFragSn) {
+            fragErrorCount = 1;
+            lastBadFragSn = currentFragSn;
+          } else {
+            fragErrorCount++;
+          }
+          
           console.warn(`[useVideoPlayer] Fragment parsing error ${fragErrorCount}/${MAX_FRAG_ERRORS}`, {
-            frag: data.frag?.sn,
-            url: data.frag?.url?.substring(0, 80),
+            frag: currentFragSn,
           });
           
-          // Don't skip immediately - let HLS.js try to recover first
-          // Only intervene after multiple consecutive errors
+          // After a few errors on the same fragment, tell HLS.js to skip it
           if (fragErrorCount >= MAX_FRAG_ERRORS) {
-            console.warn('[useVideoPlayer] Too many fragment errors, seeking to live edge');
             fragErrorCount = 0;
             
-            if (videoRef.current && hls.media) {
-              // Flush the buffer to clear any corrupted data
-              try {
-                hls.trigger(Hls.Events.BUFFER_FLUSHING, {
-                  startOffset: 0,
-                  endOffset: Number.POSITIVE_INFINITY,
-                  type: 'video'
-                });
-              } catch (e) {
-                // Ignore flush errors
-              }
-              
-              // Seek to live sync position
-              if (hls.liveSyncPosition) {
-                videoRef.current.currentTime = hls.liveSyncPosition;
-              } else {
-                // Otherwise skip forward 10 seconds
-                const newTime = videoRef.current.currentTime + 10;
-                videoRef.current.currentTime = newTime;
-              }
+            // Debounce seeks to prevent rapid-fire seeking
+            const now = Date.now();
+            if (now - lastSeekTime < SEEK_DEBOUNCE_MS) {
+              console.warn('[useVideoPlayer] Skipping seek - too soon after last seek');
+              return;
+            }
+            
+            totalSeekAttempts++;
+            lastSeekTime = now;
+            
+            if (totalSeekAttempts > MAX_SEEK_ATTEMPTS) {
+              // Too many seek attempts - stop trying, show error
+              console.error('[useVideoPlayer] Too many recovery attempts, giving up');
+              setState(prev => ({ 
+                ...prev, 
+                error: 'Stream playback failed. Please try again.' 
+              }));
+              return;
+            }
+            
+            // Skip forward past the bad segment
+            if (videoRef.current) {
+              const skipAmount = 4 + (totalSeekAttempts * 2); // Skip more each time
+              const newTime = videoRef.current.currentTime + skipAmount;
+              console.warn(`[useVideoPlayer] Skipping forward ${skipAmount}s to ${newTime}`);
+              videoRef.current.currentTime = newTime;
             }
           }
           return;
@@ -499,11 +522,11 @@ export function useVideoPlayer() {
               // Ignore recovery errors
             }
             
-            // After a few attempts, also seek to live edge
-            if (mediaErrorRecoveryAttempts >= 3 && videoRef.current && hls.liveSyncPosition) {
+            // After a few attempts, skip forward
+            if (mediaErrorRecoveryAttempts >= 3 && videoRef.current) {
               setTimeout(() => {
-                if (videoRef.current && hls.liveSyncPosition) {
-                  videoRef.current.currentTime = hls.liveSyncPosition;
+                if (videoRef.current) {
+                  videoRef.current.currentTime = videoRef.current.currentTime + 5;
                 }
               }, 500);
             }
