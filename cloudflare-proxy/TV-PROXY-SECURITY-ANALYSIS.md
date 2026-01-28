@@ -1,7 +1,23 @@
 # TV Proxy Security Analysis - January 2026
 
-## Change Summary
-**Status**: ✅ IMPLEMENTED (January 2026)
+## Latest Changes (January 27, 2026)
+
+**Status**: ✅ IMPLEMENTED
+
+**Changes**:
+1. **Removed multiple backend support** - Only dvalna.ru/ddy6 remains
+2. **Simplified JWT fetching** - Only hitsplay.fun (removed topembed.pw and dynamic scraping)
+3. **Removed backends**: moveonjoy.com, cdn-live-tv.ru, lovecdn.ru
+
+**Security Impact**:
+- ✅ Reduced attack surface (fewer JWT sources)
+- ✅ Eliminated cache poisoning risk from dynamic scraping
+- ✅ Simpler authentication flow
+- ⚠️ Single point of failure (ddy6 server only)
+
+---
+
+## Previous Changes (January 2026)
 
 **Change**: Simplified DLHD server configuration from 15 servers to 1 (`ddy6` only)
 
@@ -124,43 +140,36 @@ function checkRateLimit(ip: string): boolean {
 }
 ```
 
-#### 4. **MEDIUM: JWT Caching Complexity**
-**Risk Level**: MEDIUM
+#### 4. **RESOLVED: JWT Fetching Simplified**
+**Risk Level**: MEDIUM → RESOLVED (January 27, 2026)
 
-**Issue**: Multiple JWT lookup methods create potential for cache poisoning:
-1. Reverse mapping (channelKey → topembed)
-2. Direct fetch for premium{id}
-3. Cache search across all entries
-4. Dynamic DLHD page scraping
+**Previous Issue**: Multiple JWT lookup methods created potential for cache poisoning:
+1. ~~Reverse mapping (channelKey → topembed)~~ - REMOVED
+2. Direct fetch for premium{id} from hitsplay.fun - KEPT (only method)
+3. ~~Cache search across all entries~~ - REMOVED
+4. ~~Dynamic DLHD page scraping~~ - REMOVED
 
-**Attack Vector**:
-- Attacker requests channel with malicious topembed name
-- Dynamic scraping extracts attacker-controlled URL
-- JWT fetched from attacker's domain
-- Cached and reused for legitimate requests
+**Resolution**: Simplified to single JWT source (hitsplay.fun only):
+- Removed topembed.pw fetching (METHOD 1)
+- Removed dynamic DLHD page scraping (METHOD 3)
+- Only uses hitsplay.fun with premium{id} format
+- Eliminates cache poisoning attack vector
 
-**Current Protection**:
+**Current Implementation**:
 ```typescript
-// SECURITY: Validate extracted channel name
-if (!/^[A-Za-z0-9_\-\[\]()]{1,64}$/.test(dynamicTopembedName)) {
-  logger.warn('Invalid dynamic topembed name format');
+// SIMPLIFIED: Only hitsplay.fun JWT fetching
+async function fetchPlayerJWT(channel: string, logger: any, env?: Env): Promise<string | null> {
+  // Try hitsplay.fun - uses premium{id} format
+  const hitsplayUrl = `https://hitsplay.fun/premiumtv/daddyhd.php?id=${channel}`;
+  // ... fetch and cache JWT
 }
 ```
 
-**Recommendation**: Add domain validation:
-```typescript
-// Only allow topembed.pw and hitsplay.fun domains
-const ALLOWED_JWT_DOMAINS = ['topembed.pw', 'hitsplay.fun', 'dlhd.link'];
-
-function validateJWTSource(url: string): boolean {
-  try {
-    const hostname = new URL(url).hostname;
-    return ALLOWED_JWT_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
-  } catch {
-    return false;
-  }
-}
-```
+**Security Benefits**:
+- ✅ Single trusted JWT source
+- ✅ No dynamic URL extraction
+- ✅ No cache poisoning risk
+- ✅ Simpler validation logic
 
 #### 5. **LOW: CORS Configuration**
 **Risk Level**: LOW
@@ -206,16 +215,20 @@ The `anti-leech-proxy.ts` implements stronger protection:
 
 ### Server Simplification Trade-offs
 
-**Before (15 servers)**: 
-- ✅ Redundancy if one server fails
+**Before (Multiple backends - removed Jan 27, 2026)**: 
+- ~~moveonjoy.com (no auth)~~
+- ~~cdn-live-tv.ru (token auth)~~
+- ~~lovecdn.ru (token auth)~~
+- dvalna.ru with 15 servers
+- ✅ Multiple fallback options
 - ❌ Complex fallback logic
-- ❌ More failure modes (auth differences between servers)
+- ❌ More failure modes (auth differences between backends)
 - ❌ Harder to debug issues
-- ❌ Frontend showed 4 backend options (auto, moveonjoy, cdnlive, dvalna)
 
-**After (1 server - ddy6)**:
+**After (Single backend - ddy6 only)**:
+- ✅ dvalna.ru/ddy6 server only
 - ✅ Simple, predictable behavior
-- ✅ Single authentication path
+- ✅ Single authentication path (hitsplay.fun JWT + PoW)
 - ✅ Easier to maintain and debug
 - ✅ Frontend simplified to single backend option
 - ✅ Clear user messaging ("Dvalna (ddy6)")

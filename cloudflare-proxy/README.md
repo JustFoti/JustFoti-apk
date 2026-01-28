@@ -130,7 +130,7 @@ Parameters:
 
 **Endpoints:**
 ```
-GET /tv/?channel=<id>&skip=<backends>  - Get proxied M3U8 playlist (requires origin)
+GET /tv/?channel=<id>                  - Get proxied M3U8 playlist (requires origin)
 GET /tv/cdnlive?url=<encoded_url>      - Proxy nested M3U8 manifests (requires origin)
 GET /segment?url=<encoded_url>         - Proxy video segments (no origin check)
 GET /tv/key?url=<encoded_url>          - Proxy encryption keys (requires origin)
@@ -139,16 +139,22 @@ GET /tv/health                         - Health check
 
 **Parameters:**
 - `channel` (required) - DLHD channel ID (numeric)
-- `skip` (optional) - Comma-separated list of backends to skip during fallback (e.g., `moveonjoy,cdnlive`)
+
+**Backend (January 2026 Simplification):**
+- Uses **dvalna.ru (ddy6 server only)** for all DLHD streams
+- JWT authentication via hitsplay.fun
+- WASM-based PoW (Proof of Work) for key requests
+- All other backends removed for reliability
 
 **Routing Flow:**
 ```
 1. User requests /tv/?channel=31
-2. Worker fetches M3U8 from cdn-live-tv.ru (requires Origin/Referer)
-3. Worker rewrites URLs in manifest:
+2. Worker fetches JWT from hitsplay.fun
+3. Worker fetches M3U8 from dvalna.ru/ddy6 (requires Origin/Referer + JWT)
+4. Worker rewrites URLs in manifest:
    - .m3u8 files → /tv/cdnlive?url=... (through Next.js, requires origin)
    - .ts segments → /segment?url=...   (DIRECT to worker, no origin check)
-4. Video player fetches segments directly from worker
+5. Video player fetches segments directly from worker
 ```
 
 **Security Notes:**
