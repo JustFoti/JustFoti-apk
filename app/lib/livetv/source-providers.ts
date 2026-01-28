@@ -46,16 +46,9 @@ export const LIVE_TV_SOURCES: StreamSource[] = [
  */
 export async function getDLHDStream(channelId: string, _cfProxyUrl?: string): Promise<StreamResult> {
   try {
-    let streamUrl: string;
-    
-    try {
-      // Use getTvPlaylistUrl helper for consistent proxy routing
-      // Route is determined by NEXT_PUBLIC_USE_DLHD_PROXY: /tv or /dlhd
-      streamUrl = getTvPlaylistUrl(channelId);
-    } catch {
-      // Fallback to Vercel API if CF proxy not configured
-      streamUrl = `/api/dlhd-proxy?channel=${channelId}`;
-    }
+    // Use getTvPlaylistUrl helper for consistent proxy routing
+    // Route is determined by NEXT_PUBLIC_USE_DLHD_PROXY: /tv or /dlhd
+    const streamUrl = getTvPlaylistUrl(channelId);
     
     return {
       success: true,

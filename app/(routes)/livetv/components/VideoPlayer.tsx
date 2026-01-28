@@ -43,11 +43,8 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     // Channel playback (DLHD or CDN Live)
     if (channel) {
       if (channel.source === 'dlhd') {
-        try {
-          return getTvPlaylistUrl(channel.channelId);
-        } catch {
-          return `/api/dlhd-proxy?channel=${channel.channelId}`;
-        }
+        // Use CF Worker proxy - throws if not configured
+        return getTvPlaylistUrl(channel.channelId);
       }
       if (channel.source === 'cdnlive') {
         // CDN Live uses channel name|country format
@@ -61,11 +58,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
       // DLHD event - use first channel
       if (event.source === 'dlhd' && event.channels.length > 0) {
         const channelId = event.channels[0].channelId;
-        try {
-          return getTvPlaylistUrl(channelId);
-        } catch {
-          return `/api/dlhd-proxy?channel=${channelId}`;
-        }
+        return getTvPlaylistUrl(channelId);
       }
 
       // VIPRow event - use CF proxy
@@ -262,15 +255,22 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     };
   }, [isOpen, event, channel, initPlayer]);
 
-  // Video event handlers
+  // Video event handlers - sync state with actual video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const handlePlay = () => setIsPlaying(true);
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+    };
     const handlePause = () => setIsPlaying(false);
     const handleWaiting = () => setIsLoading(true);
-    const handlePlaying = () => setIsLoading(false);
+    const handlePlaying = () => {
+      setIsPlaying(true);
+      setIsLoading(false);
+    };
+    const handleCanPlay = () => setIsLoading(false);
     const handleVolumeChange = () => {
       setVolume(video.volume);
       setIsMuted(video.muted);
@@ -280,6 +280,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     video.addEventListener('pause', handlePause);
     video.addEventListener('waiting', handleWaiting);
     video.addEventListener('playing', handlePlaying);
+    video.addEventListener('canplay', handleCanPlay);
     video.addEventListener('volumechange', handleVolumeChange);
 
     return () => {
@@ -287,6 +288,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
       video.removeEventListener('pause', handlePause);
       video.removeEventListener('waiting', handleWaiting);
       video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('canplay', handleCanPlay);
       video.removeEventListener('volumechange', handleVolumeChange);
     };
   }, []);
@@ -451,9 +453,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
           {/* Top Bar */}
           <div className={styles.topBar}>
             <button onClick={onClose} className={styles.closeButton}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
+              ✕
             </button>
             <div className={styles.titleSection}>
               <h2 className={styles.title}>{getTitle()}</h2>
