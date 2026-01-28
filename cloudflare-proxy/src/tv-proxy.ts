@@ -1904,7 +1904,12 @@ export default {
         return jsonResponse({ status: 'healthy', domain: CDN_DOMAIN, method: 'pow-auth' }, 200, origin);
       }
       if (path === '/key') return handleKeyProxy(url, logger, origin, env);
-      if (path === '/segment') return handleSegmentProxy(url, logger, origin, env);
+      if (path === '/segment') {
+        // Pass client IP for rate limiting
+        const clientIP = request.headers.get('cf-connecting-ip') || request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
+        url.searchParams.set('_ip', clientIP);
+        return handleSegmentProxy(url, logger, origin, env);
+      }
       
       // CRITICAL: When accessed via /tv route from index.ts, url.origin is the media-proxy domain
       // but we need to include /tv in the proxy URLs so they route back to this worker
@@ -2281,7 +2286,8 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
  * ROUTING STRATEGY (January 2026 Fix):
  * - .m3u8 manifests → /tv/cdnlive?url=... (through Next.js /tv route)
  * - .ts segments → /segment?url=... (DIRECTLY to worker, bypassing /tv)
- * - Keys (URI=) → /segment?url=... (DIRECTLY to worker, bypassing /tv)
+ * - Keys (URI= in EXT-X-KEY) → /segment?url=... (DIRECTLY to worker)
+ * - Audio/subtitle tracks (URI= in EXT-X-MEDIA) → /tv/cdnlive?url=... (m3u8 manifests)
  * 
  * This ensures segments are served from edge worker for performance,
  * while manifests can be processed through Next.js if needed.
@@ -2294,17 +2300,24 @@ function rewriteCdnLiveM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: s
   const lines = content.split('\n').map(line => {
     const trimmed = line.trim();
     
-    // Handle EXT-X-KEY URI - proxy key URLs DIRECTLY to worker
+    // Handle URI attributes (EXT-X-KEY for keys, EXT-X-MEDIA for audio/subtitle tracks)
     if (trimmed.includes('URI="')) {
       return trimmed.replace(/URI="([^"]+)"/, (_, uri: string) => {
         // Skip if already proxied
-        if (uri.includes('/segment?url=') || uri.includes('/key?url=')) {
+        if (uri.includes('/segment?url=') || uri.includes('/key?url=') || uri.includes('/cdnlive?url=')) {
           return `URI="${uri}"`;
         }
         const fullUrl = uri.startsWith('http') ? uri : `${baseUrl.origin}${basePath}${uri}`;
-        // Keys go DIRECTLY to worker /segment endpoint (bypassing /tv route)
         const workerOrigin = proxyOrigin.replace(/\/tv$/, '');
-        return `URI="${workerOrigin}/segment?url=${encodeURIComponent(fullUrl)}"`;
+        
+        // Route based on file type:
+        // - .m3u8 files (audio/subtitle tracks) → /tv/cdnlive for manifest handling
+        // - Keys and other files → /segment for direct proxying
+        if (fullUrl.includes('.m3u8')) {
+          return `URI="${proxyOrigin}/cdnlive?url=${encodeURIComponent(fullUrl)}"`;
+        } else {
+          return `URI="${workerOrigin}/segment?url=${encodeURIComponent(fullUrl)}"`;
+        }
       });
     }
     
@@ -2394,28 +2407,41 @@ async function handleCdnLiveM3U8Proxy(url: URL, logger: any, origin: string | nu
 
     // SECURITY: Add timeout to prevent slow-loris attacks
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for RPI
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
 
-    // CRITICAL: Use RPI proxy - cdn-live blocks Cloudflare IPs
+    // Try RPI proxy first, then fallback to direct fetch
     const referer = 'https://cdn-live.tv/';
-    let response: Response;
+    let response: Response | null = null;
     let fetchedVia = 'direct';
     
     if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-      logger.info('Using RPI proxy for CDN-Live M3U8');
-      const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent(referer)}`;
-      response = await fetch(rpiUrl, { signal: controller.signal });
-      fetchedVia = 'rpi';
-    } else {
-      // Fallback to direct fetch if RPI not configured
-      logger.warn('RPI proxy not configured, falling back to direct fetch');
+      logger.info('Trying RPI proxy for CDN-Live M3U8');
+      try {
+        const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent(referer)}`;
+        const rpiRes = await fetch(rpiUrl, { signal: controller.signal });
+        if (rpiRes.ok) {
+          response = rpiRes;
+          fetchedVia = 'rpi';
+        } else {
+          logger.warn('RPI M3U8 fetch failed, trying direct', { status: rpiRes.status });
+        }
+      } catch (rpiErr) {
+        logger.warn('RPI proxy error, trying direct', { error: (rpiErr as Error).message });
+      }
+    }
+    
+    // Direct fetch (either as fallback or if RPI not configured)
+    if (!response) {
+      logger.info('Using direct fetch for CDN-Live M3U8');
       response = await fetch(decodedUrl, {
         headers: {
           'User-Agent': USER_AGENT,
           'Referer': referer,
+          'Origin': 'https://cdn-live.tv',
         },
         signal: controller.signal,
       });
+      fetchedVia = 'direct';
     }
     
     clearTimeout(timeoutId);
@@ -2729,6 +2755,23 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
   const segmentUrl = url.searchParams.get('url');
   if (!segmentUrl) return jsonResponse({ error: 'Missing url parameter' }, 400, origin);
 
+  // SECURITY: Rate limiting to prevent bandwidth abuse
+  // Each IP gets limited requests per minute
+  const clientIP = url.searchParams.get('_ip') || 'unknown'; // Set by CF worker
+  if (env?.RATE_LIMIT_KV) {
+    const rateLimitKey = `segment_rate:${clientIP}`;
+    const currentCount = parseInt(await env.RATE_LIMIT_KV.get(rateLimitKey) || '0');
+    const SEGMENT_RATE_LIMIT = 300; // 300 segments per minute (5 per second)
+    
+    if (currentCount >= SEGMENT_RATE_LIMIT) {
+      logger.warn('Rate limit exceeded for segment requests', { ip: clientIP, count: currentCount });
+      return jsonResponse({ error: 'Rate limit exceeded' }, 429, origin);
+    }
+    
+    // Increment counter with 60 second TTL
+    await env.RATE_LIMIT_KV.put(rateLimitKey, String(currentCount + 1), { expirationTtl: 60 });
+  }
+
   // SECURITY: Strict URL validation to prevent SSRF attacks
   let decodedUrl: string;
   try {
@@ -2770,12 +2813,19 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
 
   // Determine correct Referer based on domain
   let referer = `https://${PLAYER_DOMAIN}/`;
+  let requestOrigin = `https://${PLAYER_DOMAIN}`;
   try {
     const urlHost = new URL(decodedUrl).hostname;
     if (urlHost.includes('cdn-live-tv.ru') || urlHost.includes('cdn-live-tv.cfd') || urlHost.includes('cdn-live.tv')) {
       referer = 'https://cdn-live.tv/';
+      requestOrigin = 'https://cdn-live.tv';
     } else if (urlHost.includes('moveonjoy.com')) {
       referer = 'https://tv-bu1.blogspot.com/';
+      requestOrigin = 'https://tv-bu1.blogspot.com';
+    } else if (urlHost.includes('dvalna.ru') || urlHost.includes('kiko2.ru') || urlHost.includes('giokko.ru')) {
+      // DLHD CDN requires topembed.pw referer
+      referer = `https://${PLAYER_DOMAIN}/`;
+      requestOrigin = `https://${PLAYER_DOMAIN}`;
     }
   } catch {}
   
@@ -2785,29 +2835,46 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
     let data: ArrayBuffer;
     let fetchedVia = 'direct';
     
-    // CRITICAL: ALL segment fetches go through RPI proxy
-    // These CDNs block Cloudflare IPs, so we MUST use residential IP
+    // Try RPI proxy first, then fallback to direct fetch
+    // cdn-live-tv.ru may work from CF IPs, so we try both
+    // dvalna.ru REQUIRES residential IP - direct fetch will fail
     if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-      logger.info('Using RPI proxy for segment');
-      const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent(referer)}`;
-      const rpiRes = await fetch(rpiUrl);
-      
-      if (!rpiRes.ok) {
-        const errText = await rpiRes.text();
-        logger.warn('RPI segment fetch failed', { status: rpiRes.status, error: errText.substring(0, 100) });
-        return jsonResponse({ 
-          error: 'Segment fetch failed via RPI', 
-          status: rpiRes.status,
-        }, 502, origin);
+      logger.info('Trying RPI proxy for segment');
+      try {
+        // Pass both referer AND origin for dvalna.ru segments
+        const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(decodedUrl)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent(referer)}&origin=${encodeURIComponent(requestOrigin)}`;
+        logger.info('RPI URL', { rpiUrl: rpiUrl.substring(0, 150) });
+        
+        const rpiRes = await fetch(rpiUrl, {
+          signal: AbortSignal.timeout(25000), // 25 second timeout
+        });
+        
+        logger.info('RPI response', { status: rpiRes.status, contentType: rpiRes.headers.get('content-type') });
+        
+        if (rpiRes.ok) {
+          data = await rpiRes.arrayBuffer();
+          fetchedVia = 'rpi';
+          logger.info('RPI segment fetched', { size: data.byteLength });
+        } else {
+          const errText = await rpiRes.text();
+          logger.warn('RPI segment fetch failed, trying direct', { status: rpiRes.status, error: errText.substring(0, 200) });
+          // Fall through to direct fetch
+        }
+      } catch (rpiErr) {
+        logger.warn('RPI proxy error, trying direct', { error: (rpiErr as Error).message });
+        // Fall through to direct fetch
       }
-      
-      data = await rpiRes.arrayBuffer();
-      fetchedVia = 'rpi';
-    } else {
-      // Fallback to direct fetch if RPI not configured (will likely fail for most CDNs)
-      logger.warn('RPI proxy not configured, falling back to direct fetch');
+    }
+    
+    // Direct fetch (either as fallback or if RPI not configured)
+    if (!data!) {
+      logger.info('Using direct fetch for segment');
       const directRes = await fetch(decodedUrl, {
-        headers: { 'User-Agent': USER_AGENT, 'Referer': referer },
+        headers: { 
+          'User-Agent': USER_AGENT, 
+          'Referer': referer,
+          'Origin': requestOrigin,
+        },
       });
       
       if (!directRes.ok) {
@@ -2817,36 +2884,37 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
           url: decodedUrl.substring(0, 100)
         });
         return jsonResponse({ 
-          error: 'Segment fetch failed (direct)', 
+          error: 'Segment fetch failed', 
           status: directRes.status,
         }, 502, origin);
       }
       
       data = await directRes.arrayBuffer();
+      fetchedVia = 'direct';
     }
     
-    // Check if response is an error - look for JSON/HTML in first bytes
-    // Valid TS segments start with 0x47 (sync byte) or fMP4 starts with 'ftyp'/'moof'
+    // Log segment info but DON'T reject based on format
+    // dvalna.ru segments may be encrypted or have non-standard headers
     const firstBytes = new Uint8Array(data.slice(0, 8));
     const isValidTS = firstBytes[0] === 0x47; // TS sync byte
     const firstChars = new TextDecoder().decode(firstBytes);
     const isValidFMP4 = firstChars.includes('ftyp') || firstChars.includes('moof') || firstChars.includes('mdat');
     
-    if (!isValidTS && !isValidFMP4) {
-      // Check if it's an error response
+    // Only reject if it looks like an error response (JSON/HTML)
+    if (!isValidTS && !isValidFMP4 && data.byteLength < 1000) {
       const preview = new TextDecoder().decode(data.slice(0, 500));
-      logger.warn('Segment response is not valid TS/fMP4', { 
-        size: data.byteLength, 
-        preview: preview.substring(0, 200),
-        firstByte: firstBytes[0].toString(16),
-        url: decodedUrl.substring(0, 80)
-      });
-      
-      // Return 502 error so hls.js knows to retry or skip
-      return jsonResponse({ 
-        error: 'Invalid segment format', 
-        firstByte: `0x${firstBytes[0].toString(16)}`,
-      }, 502, origin);
+      // Check if it's actually an error response
+      if (preview.startsWith('{') || preview.startsWith('<') || preview.includes('"error"')) {
+        logger.warn('Segment response looks like error', { 
+          size: data.byteLength, 
+          preview: preview.substring(0, 200),
+          url: decodedUrl.substring(0, 80)
+        });
+        return jsonResponse({ 
+          error: 'Segment fetch returned error response', 
+          preview: preview.substring(0, 100),
+        }, 502, origin);
+      }
     }
     
     logger.info('Segment fetch succeeded', { size: data.byteLength, isTS: isValidTS, isFMP4: isValidFMP4, via: fetchedVia });
@@ -2931,14 +2999,20 @@ function rewriteM3U8(content: string, proxyOrigin: string, m3u8BaseUrl: string):
     joinedLines.push(currentLine);
   }
 
-  // DON'T proxy segment URLs - let browser fetch directly from CDN
-  // This is MUCH faster than going through CF Worker -> RPI Proxy
-  // Segments don't require authentication, only keys do
+  // Proxy segment URLs through our worker
+  // dvalna.ru blocks direct browser requests (CORS/geo-blocking)
+  // so we MUST proxy segments through the worker
   const lines = joinedLines.map(line => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) return line;
-    // Keep segment URLs as-is (direct to CDN)
-    return line;
+    
+    // Skip if already proxied
+    if (trimmed.includes('/segment?url=') || trimmed.includes('/key?url=')) return line;
+    
+    // Proxy segment URLs through our worker
+    // Strip /tv from proxyOrigin to get the worker origin for /segment endpoint
+    const workerOrigin = proxyOrigin.replace(/\/tv$/, '');
+    return `${workerOrigin}/segment?url=${encodeURIComponent(trimmed)}`;
   });
 
   return lines.join('\n');
@@ -2985,10 +3059,27 @@ function isAllowedOrigin(origin: string | null, referer: string | null): boolean
 }
 
 function corsHeaders(origin?: string | null): Record<string, string> {
+  // SECURITY: Only return specific origin if it's in our allowed list
+  // Using '*' allows any site to embed our streams
+  const allowedOrigin = origin && ALLOWED_ORIGINS.some(a => {
+    if (a.includes('localhost')) return origin.includes('localhost');
+    if (a.startsWith('.')) {
+      try {
+        return new URL(origin).hostname.endsWith(a);
+      } catch { return false; }
+    }
+    try {
+      const allowedHost = new URL(a).hostname;
+      const originHost = new URL(origin).hostname;
+      return originHost === allowedHost || originHost.endsWith(`.${allowedHost}`);
+    } catch { return false; }
+  }) ? origin : null;
+  
   return {
-    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Origin': allowedOrigin || 'https://flyx.tv', // Default to main domain, not '*'
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
     'Access-Control-Allow-Headers': 'Range, Content-Type',
+    'Access-Control-Allow-Credentials': 'true',
   };
 }
 

@@ -665,7 +665,7 @@ function proxyIPTVStream(targetUrl, mac, token, res, redirectCount = 0) {
 }
 
 /**
- * AnimeKai/Flixer stream proxy - fetches CDN streams from residential IP
+ * AnimeKai/Flixer/DLHD stream proxy - fetches CDN streams from residential IP
  * 
  * MegaUp CDN (AnimeKai) blocks:
  *   1. Datacenter IPs (Cloudflare, AWS, etc.)
@@ -676,13 +676,18 @@ function proxyIPTVStream(targetUrl, mac, token, res, redirectCount = 0) {
  *   1. Datacenter IPs (Cloudflare, AWS, etc.)
  *   2. Requests WITHOUT Referer header (requires https://flixer.sh/)
  * 
+ * dvalna.ru (DLHD) blocks:
+ *   1. Datacenter IPs (Cloudflare, AWS, etc.)
+ *   2. Requests WITHOUT proper Referer AND Origin headers
+ * 
  * This proxy fetches from a residential IP with appropriate headers.
  * 
  * IMPORTANT: The User-Agent MUST be consistent with what's sent to enc-dec.app
  * for decryption. Pass ?ua=<user-agent> to use a custom User-Agent.
- * Pass ?referer=<url> to include a Referer header (needed for Flixer CDN).
+ * Pass ?referer=<url> to include a Referer header (needed for Flixer CDN and dvalna.ru).
+ * Pass ?origin=<url> to include an Origin header (needed for dvalna.ru).
  */
-function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
+function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, customOrigin, res) {
   // NO CACHING - always fetch fresh
 
   const url = new URL(targetUrl);
@@ -690,6 +695,9 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
   
   // Check if this is Flixer CDN (p.XXXXX.workers.dev)
   const isFlixerCdn = url.hostname.match(/^p\.\d+\.workers\.dev$/);
+  
+  // Check if this is dvalna.ru (DLHD CDN)
+  const isDvalnaCdn = url.hostname.includes('dvalna.ru') || url.hostname.includes('kiko2.ru') || url.hostname.includes('giokko.ru');
   
   // IMPORTANT: User-Agent MUST match the keystream used for decryption
   // Use the SHORT UA that matches MEGAUP_USER_AGENT constant
@@ -704,14 +712,23 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
     'Connection': 'keep-alive',
   };
   
+  // dvalna.ru REQUIRES both Referer AND Origin headers
+  if (isDvalnaCdn) {
+    headers['Referer'] = customReferer || 'https://topembed.pw/';
+    headers['Origin'] = customOrigin || 'https://topembed.pw';
+    console.log(`[AnimeKai] dvalna.ru CDN detected - adding Referer: ${headers['Referer']}, Origin: ${headers['Origin']}`);
+  }
   // Flixer CDN REQUIRES Referer header, MegaUp CDN BLOCKS it
-  if (isFlixerCdn) {
+  else if (isFlixerCdn) {
     // Flixer CDN needs Referer header
     headers['Referer'] = customReferer || 'https://flixer.sh/';
     console.log(`[AnimeKai] Flixer CDN detected - adding Referer: ${headers['Referer']}`);
   } else if (customReferer) {
     // Only add Referer if explicitly provided for non-Flixer CDNs
     headers['Referer'] = customReferer;
+    if (customOrigin) {
+      headers['Origin'] = customOrigin;
+    }
   }
   // For MegaUp CDN (AnimeKai), do NOT send Origin or Referer headers
   
@@ -721,7 +738,7 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
     path: url.pathname + url.search,
     method: 'GET',
     headers,
-    timeout: 10000, // 10 second timeout (reduced from 30)
+    timeout: 30000, // 30 second timeout for video segments
     rejectUnauthorized: false, // Some CDNs have cert issues
   };
 
@@ -730,7 +747,6 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
 
   const proxyReq = client.request(options, (proxyRes) => {
     const contentType = proxyRes.headers['content-type'] || 'application/octet-stream';
-    const chunks = [];
     
     console.log(`[AnimeKai Response] ${proxyRes.statusCode} - ${contentType}`);
     
@@ -744,27 +760,28 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
         ? redirectUrl 
         : new URL(redirectUrl, targetUrl).toString();
       
-      // Follow the redirect (preserve custom User-Agent and Referer)
-      proxyAnimeKaiStream(absoluteUrl, customUserAgent, customReferer, res);
+      // Follow the redirect (preserve custom User-Agent, Referer, and Origin)
+      proxyAnimeKaiStream(absoluteUrl, customUserAgent, customReferer, customOrigin, res);
       return;
     }
     
-    proxyRes.on('data', chunk => chunks.push(chunk));
+    // STREAM directly instead of buffering - much faster for video segments!
+    res.writeHead(proxyRes.statusCode, {
+      'Content-Type': contentType,
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+      'X-Proxied-By': 'rpi-residential',
+    });
     
-    proxyRes.on('end', () => {
-      const data = Buffer.concat(chunks);
-      
-      console.log(`[AnimeKai] ${proxyRes.statusCode} - ${data.length} bytes`);
-      
-      // NO CACHING
-      res.writeHead(proxyRes.statusCode, {
-        'Content-Type': contentType,
-        'Content-Length': data.length,
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
-        'X-Proxied-By': 'rpi-residential',
-      });
-      res.end(data);
+    // Pipe the response directly to client
+    proxyRes.pipe(res);
+    
+    proxyRes.on('error', (err) => {
+      console.error(`[AnimeKai Stream Error] ${err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(502);
+      }
+      res.end();
     });
   });
 
@@ -782,6 +799,11 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
       res.writeHead(504, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ error: 'AnimeKai stream timeout' }));
     }
+  });
+  
+  // Handle client disconnect
+  res.on('close', () => {
+    proxyReq.destroy();
   });
 
   proxyReq.end();
@@ -1126,8 +1148,8 @@ const server = http.createServer(async (req, res) => {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
-        'Origin': 'https://hitsplay.fun',
-        'Referer': 'https://hitsplay.fun/',
+        'Origin': 'https://topembed.pw',
+        'Referer': 'https://topembed.pw/',
         'Authorization': `Bearer ${jwt}`,
         'X-Key-Timestamp': timestamp,
         'X-Key-Nonce': nonce,
@@ -1310,13 +1332,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // AnimeKai proxy endpoint - proxies MegaUp/Flixer CDN streams from residential IP
+  // AnimeKai proxy endpoint - proxies MegaUp/Flixer/DLHD CDN streams from residential IP
   // MegaUp blocks datacenter IPs and requests with Origin/Referer headers
   // Flixer CDN blocks datacenter IPs but REQUIRES Referer header
+  // dvalna.ru (DLHD) blocks datacenter IPs and REQUIRES both Referer AND Origin headers
   if (reqUrl.pathname === '/animekai') {
     const targetUrl = reqUrl.searchParams.get('url');
     const customUserAgent = reqUrl.searchParams.get('ua');
     const customReferer = reqUrl.searchParams.get('referer');
+    const customOrigin = reqUrl.searchParams.get('origin');
     
     if (!targetUrl) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -1327,7 +1351,8 @@ const server = http.createServer(async (req, res) => {
       const decoded = decodeURIComponent(targetUrl);
       const decodedUa = customUserAgent ? decodeURIComponent(customUserAgent) : null;
       const decodedReferer = customReferer ? decodeURIComponent(customReferer) : null;
-      proxyAnimeKaiStream(decoded, decodedUa, decodedReferer, res);
+      const decodedOrigin = customOrigin ? decodeURIComponent(customOrigin) : null;
+      proxyAnimeKaiStream(decoded, decodedUa, decodedReferer, decodedOrigin, res);
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ error: 'Invalid URL' }));

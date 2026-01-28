@@ -201,8 +201,16 @@ export function useVideoPlayer() {
         throw new Error('HLS is not supported in this browser');
       }
 
+      // CRITICAL: Properly clean up existing HLS instance before creating new one
       if (hlsRef.current) {
-        hlsRef.current.destroy();
+        try {
+          hlsRef.current.stopLoad();
+          hlsRef.current.detachMedia();
+          hlsRef.current.destroy();
+        } catch (e) {
+          console.warn('[useVideoPlayer] Error destroying previous HLS:', e);
+        }
+        hlsRef.current = null;
       }
 
       let streamUrl = getStreamUrl(source, skipBackends);
@@ -283,10 +291,10 @@ export function useVideoPlayer() {
         liveMaxLatencyDurationCount: 10, // Max 10 segments latency (~40 sec, was 20)
         liveSyncOnStallIncrease: 1, // Only add 1 segment on stall
         
-        // FRAGMENT LOADING: Faster timeouts, fewer retries for startup
-        fragLoadingTimeOut: 20000,     // 20 sec timeout (was 60)
-        fragLoadingMaxRetry: 3,        // 3 retries (was 10)
-        fragLoadingRetryDelay: 1000,   // 1 sec between retries (was 2)
+        // FRAGMENT LOADING: Faster timeouts, fewer retries - SKIP BAD SEGMENTS FAST
+        fragLoadingTimeOut: 10000,     // 10 sec timeout - skip slow segments
+        fragLoadingMaxRetry: 1,        // Only 1 retry - skip broken segments fast
+        fragLoadingRetryDelay: 500,    // 0.5 sec between retries
         
         // MANIFEST LOADING: Quick manifest fetch
         manifestLoadingTimeOut: 15000, // 15 sec (was 30)
@@ -307,7 +315,7 @@ export function useVideoPlayer() {
         // STALL RECOVERY: Quick recovery from stalls
         highBufferWatchdogPeriod: 2,   // Check every 2 sec (was 5)
         nudgeOffset: 0.2,              // Small nudge (was 0.5)
-        nudgeMaxRetry: 5,              // 5 retries (was 10)
+        nudgeMaxRetry: 3,              // 3 retries then skip (was 10)
         maxFragLookUpTolerance: 0.25,  // Tighter tolerance (was 1.0)
         
         // START POSITION: Start from live edge
@@ -392,11 +400,16 @@ export function useVideoPlayer() {
 
       // Track consecutive fragment errors for recovery
       let fragErrorCount = 0;
-      const MAX_FRAG_ERRORS = 5;
+      let mediaErrorRecoveryAttempts = 0;
+      let lastErrorTime = 0;
+      const MAX_FRAG_ERRORS = 3; // Reduced - skip faster
+      const MAX_MEDIA_ERROR_RECOVERY = 3;
+      const ERROR_RESET_INTERVAL = 10000; // Reset error count after 10s of success
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
-        // Reset error count on successful fragment buffer
+        // Reset error counts on successful fragment buffer
         fragErrorCount = 0;
+        lastErrorTime = 0;
         
         if (videoRef.current) {
           const buffered = videoRef.current.buffered;
@@ -412,6 +425,34 @@ export function useVideoPlayer() {
       });
 
       hls.on(Hls.Events.ERROR, async (_, data) => {
+        const now = Date.now();
+        
+        // Reset error counts if we've had success for a while
+        if (now - lastErrorTime > ERROR_RESET_INTERVAL) {
+          fragErrorCount = 0;
+          mediaErrorRecoveryAttempts = 0;
+        }
+        lastErrorTime = now;
+        
+        // Handle buffer stalled error - skip ahead to live edge
+        if (!data.fatal && data.details === 'bufferStalledError') {
+          console.warn('[useVideoPlayer] Buffer stalled, seeking to live edge');
+          if (hls.liveSyncPosition && videoRef.current) {
+            videoRef.current.currentTime = hls.liveSyncPosition;
+          }
+          return;
+        }
+        
+        // Handle fragment loading errors - skip the broken segment
+        if (!data.fatal && (data.details === 'fragLoadError' || data.details === 'fragLoadTimeOut')) {
+          console.warn('[useVideoPlayer] Fragment load error, skipping segment', {
+            frag: data.frag?.sn,
+            error: data.details,
+          });
+          // HLS.js will automatically retry/skip, just log it
+          return;
+        }
+        
         // Handle non-fatal fragParsingError - proxy returned bad data
         if (!data.fatal && data.details === 'fragParsingError') {
           fragErrorCount++;
@@ -420,28 +461,56 @@ export function useVideoPlayer() {
             url: data.frag?.url?.substring(0, 80),
           });
           
-          // If too many consecutive errors, try to recover
+          // Skip ahead immediately on parsing errors
           if (fragErrorCount >= MAX_FRAG_ERRORS) {
-            console.warn('[useVideoPlayer] Too many fragment errors, attempting recovery');
+            console.warn('[useVideoPlayer] Too many fragment errors, skipping ahead');
             fragErrorCount = 0;
             
-            // Try to recover by seeking slightly forward
             if (videoRef.current && hls.media) {
-              const currentTime = videoRef.current.currentTime;
-              const buffered = videoRef.current.buffered;
-              
-              // Find next buffered region
-              for (let i = 0; i < buffered.length; i++) {
-                if (buffered.start(i) > currentTime) {
-                  console.log('[useVideoPlayer] Seeking to next buffered region', buffered.start(i));
-                  videoRef.current.currentTime = buffered.start(i) + 0.1;
-                  return;
-                }
+              // Try to skip to live sync position first
+              if (hls.liveSyncPosition) {
+                console.log('[useVideoPlayer] Seeking to live sync position', hls.liveSyncPosition);
+                videoRef.current.currentTime = hls.liveSyncPosition;
+                return;
               }
               
-              // No buffered region ahead, try recoverMediaError
-              hls.recoverMediaError();
+              // Otherwise skip forward 5 seconds
+              const newTime = videoRef.current.currentTime + 5;
+              console.log('[useVideoPlayer] Seeking forward 5 seconds to', newTime);
+              videoRef.current.currentTime = newTime;
             }
+          }
+          return;
+        }
+        
+        // Handle buffer append errors - usually means corrupted segment data
+        if (!data.fatal && data.details === 'bufferAppendError') {
+          console.warn('[useVideoPlayer] Buffer append error, attempting recovery');
+          mediaErrorRecoveryAttempts++;
+          
+          if (mediaErrorRecoveryAttempts <= MAX_MEDIA_ERROR_RECOVERY) {
+            // Try to recover
+            hls.recoverMediaError();
+            
+            // Also skip ahead to avoid the bad segment
+            if (videoRef.current && hls.liveSyncPosition) {
+              setTimeout(() => {
+                if (videoRef.current && hls.liveSyncPosition) {
+                  videoRef.current.currentTime = hls.liveSyncPosition;
+                }
+              }, 500);
+            }
+          }
+          return;
+        }
+        
+        // Handle other non-fatal media errors
+        if (!data.fatal && data.type === 'mediaError') {
+          console.warn('[useVideoPlayer] Media error, attempting recovery', data.details);
+          mediaErrorRecoveryAttempts++;
+          
+          if (mediaErrorRecoveryAttempts <= MAX_MEDIA_ERROR_RECOVERY) {
+            hls.recoverMediaError();
           }
           return;
         }
@@ -612,14 +681,32 @@ export function useVideoPlayer() {
       elapsedIntervalRef.current = null;
     }
     
+    // CRITICAL: Destroy HLS instance FIRST to stop all network requests
     if (hlsRef.current) {
-      hlsRef.current.destroy();
+      try {
+        // Stop loading immediately
+        hlsRef.current.stopLoad();
+        // Detach from media element
+        hlsRef.current.detachMedia();
+        // Destroy the instance
+        hlsRef.current.destroy();
+      } catch (e) {
+        console.warn('[useVideoPlayer] Error destroying HLS:', e);
+      }
       hlsRef.current = null;
     }
 
+    // Then clean up video element
     if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.src = '';
+      try {
+        videoRef.current.pause();
+        // Remove src to stop any pending requests
+        videoRef.current.removeAttribute('src');
+        // Force load to clear any buffered data
+        videoRef.current.load();
+      } catch (e) {
+        console.warn('[useVideoPlayer] Error cleaning up video:', e);
+      }
     }
 
     endLiveTVSession();
@@ -638,9 +725,12 @@ export function useVideoPlayer() {
     setServerStatuses([]);
     setElapsedTime(0);
     setActiveBackend(null);
+    setCurrentBackend(null);
     failedBackendsRef.current = [];
     retryCountRef.current = 0;
     currentSourceRef.current = null;
+    manualBackendRef.current = null;
+    actualBackendRef.current = null;
   }, [endLiveTVSession]);
 
   const togglePlay = useCallback(() => {
