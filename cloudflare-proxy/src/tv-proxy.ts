@@ -29,296 +29,15 @@ import { createLogger, type LogLevel } from './logger';
 import { initDLHDPoW, computeNonce as computeWasmNonce, getVersion as getWasmVersion } from './dlhd-pow';
 
 // ============================================================================
-// DLHD Channel Key Mapping - January 2026
-// CRITICAL: topembed.pw uses DIFFERENT channel keys than hitsplay.fun!
-// - hitsplay.fun uses 'premium{id}' keys (e.g., 'premium35')
-// - topembed.pw uses correct keys (e.g., 'eplayerskyfoot' for Sky Sports Football)
+// DLHD Channel Configuration - January 2026
+// FORCED: Using ddy6 server ONLY for all DLHD live TV streams
+// All other servers (wiki, hzt, x4, etc.) are disabled for reliability
 // ============================================================================
-interface DLHDChannelInfo {
-  channelKey: string;
-  serverKey: string | null;
-  name?: string;
-}
+const DLHD_SERVER = 'ddy6';  // Only server we use
 
-// COMPLETE DLHD Channel Mapping - Auto-generated from data/dlhd-channels.json
-// Total topembed channels: 266
-// COMPLETE DLHD Channel Mapping - Auto-generated from data/dlhd-channels.json
-// Total topembed channels: 266
-const DLHD_CHANNEL_MAP: Record<string, DLHDChannelInfo> = {
-  '31': { channelKey: 'eplayerdigitvbt1', serverKey: 'top1', name: 'TNTSports1[UK]' },
-  '32': { channelKey: 'eplayerdigitvbt2', serverKey: 'top1', name: 'TNTSports2[UK]' },
-  '33': { channelKey: 'eplayerdigitvbt3', serverKey: 'top1', name: 'TNTSports3[UK]' },
-  '34': { channelKey: 'eplayerdigitvbt4', serverKey: 'top1', name: 'TNTSports4[UK]' },
-  '35': { channelKey: 'eplayerskyfoot', serverKey: 'top2', name: 'SkySportsFootball[UK]' },
-  '36': { channelKey: 'skyarena', serverKey: 'top1', name: 'SkySportsArena[UK]' },
-  '37': { channelKey: 'skyaction', serverKey: 'top2', name: 'SkySportsAction[UK]' },
-  '38': { channelKey: 'eplayerskymain2', serverKey: 'top2', name: 'SkySportsMainEvent[UK]' },
-  '39': { channelKey: 'eplayerfs1', serverKey: 'wiki', name: 'FOXSports1[USA]' },
-  '40': { channelKey: 'tennisch', serverKey: 'wiki', name: 'TennisChannel[USA]' },
-  '43': { channelKey: 'pdctv', serverKey: null, name: 'PDCTV[USA]' },
-  '44': { channelKey: 'eplayerespn_usa', serverKey: 'hzt', name: 'ESPN[USA]' },
-  '45': { channelKey: 'eplayerespn2_usa', serverKey: 'hzt', name: 'ESPN2[USA]' },
-  '46': { channelKey: 'skytennis', serverKey: null, name: 'SkySportsTennis[UK]' },
-  '48': { channelKey: 'CanalPlusSportPL', serverKey: null, name: 'CanalSport[Poland]' },
-  '49': { channelKey: 'eplayerSPORTTV1', serverKey: 'top2', name: 'SportTV1[Portugal]' },
-  '51': { channelKey: 'ustvabc', serverKey: 'wiki', name: 'AbcTv[USA]' },
-  '52': { channelKey: 'ustvcbs', serverKey: 'x4', name: 'CBS[USA]' },
-  '53': { channelKey: 'ustvnbc', serverKey: 'wiki', name: 'NBC[USA]' },
-  '54': { channelKey: 'ustvfox', serverKey: null, name: 'Fox[USA]' },
-  '56': { channelKey: 'eplayerSuperSportFootball', serverKey: 'wiki', name: 'SuperSportFootball[SouthAfrica]' },
-  '57': { channelKey: 'Eurosport1PL', serverKey: 'x4', name: 'Eurosport1[Poland]' },
-  '58': { channelKey: 'Eurosport2PL', serverKey: null, name: 'Eurosport2[Poland]' },
-  '60': { channelKey: 'eplayerskyf1', serverKey: 'top2', name: 'SkySportsF1[UK]' },
-  '61': { channelKey: 'beinsports1EN', serverKey: null, name: 'BeinSportsMena1[UK]' },
-  '65': { channelKey: 'eplayerskycric', serverKey: 'top2', name: 'SkySportsCricket[UK]' },
-  '66': { channelKey: 'tudnusa', serverKey: 'top2', name: 'TUDN[USA]' },
-  '70': { channelKey: 'skygolf', serverKey: 'top2', name: 'SkySportsGolf[UK]' },
-  '71': { channelKey: 'elevensports1pl', serverKey: 'x4', name: 'ElevenSports1[Poland]' },
-  '74': { channelKey: 'eplayerSPORTTV2', serverKey: 'top2', name: 'SportTV2[Portugal]' },
-  '75': { channelKey: 'Canalplus5pl', serverKey: null, name: 'CanalPlusSport5[Poland]' },
-  '81': { channelKey: 'espnbrazil', serverKey: 'x4', name: 'ESPNBrazil[Brazil]' },
-  '84': { channelKey: 'mlaligahd', serverKey: null, name: 'MLaliga[Spain]' },
-  '88': { channelKey: 'premierebr', serverKey: null, name: 'Premiere1[Brasil]' },
-  '89': { channelKey: 'combatbra', serverKey: null, name: 'Combate[Brazil]' },
-  '91': { channelKey: 'beinsports1arb', serverKey: 'x4', name: 'BeinSports1[Arab]' },
-  '92': { channelKey: 'beinsports2arb', serverKey: 'x4', name: 'BeinSports2[Arab]' },
-  '101': { channelKey: 'primasportklub1', serverKey: 'max2', name: 'Sportklub1[Serbia]' },
-  '102': { channelKey: 'primasportklub2', serverKey: 'max2', name: 'Sportklub2[Serbia]' },
-  '103': { channelKey: 'primasportklub3', serverKey: 'max2', name: 'Sportklub3[Serbia]' },
-  '104': { channelKey: 'primasportklub4', serverKey: 'max2', name: 'Sportklub4[Serbia]' },
-  '111': { channelKey: 'eplayerTSN_1_HD', serverKey: 'x4', name: 'TSN1[Canada]' },
-  '112': { channelKey: 'eplayerTSN_2_HD', serverKey: null, name: 'TSN2[Canada]' },
-  '113': { channelKey: 'eplayerTSN_3_HD', serverKey: 'x4', name: 'TSN3[Canada]' },
-  '114': { channelKey: 'eplayerTSN_4_HD', serverKey: 'x4', name: 'TSN4[Canada]' },
-  '115': { channelKey: 'eplayerTSN_5_HD', serverKey: 'x4', name: 'TSN5[Canada]' },
-  '116': { channelKey: 'beinsport1fr', serverKey: 'wiki', name: 'BeINSport1[France]' },
-  '117': { channelKey: 'beinsport2fr', serverKey: 'wiki', name: 'BeINSport2[France]' },
-  '118': { channelKey: 'beinsport3fr', serverKey: 'wiki', name: 'BeINSport3[France]' },
-  '119': { channelKey: 'rmc1france', serverKey: 'wiki', name: 'RMCSport1[France]' },
-  '121': { channelKey: 'frcanalplus', serverKey: 'top1', name: 'CanalPlus[France]' },
-  '122': { channelKey: 'canalplusfrance', serverKey: 'wiki', name: 'CanalSport[France]' },
-  '130': { channelKey: 'eplayerSKYPL', serverKey: 'top2', name: 'SkySportsPremierLeague[UK]' },
-  '134': { channelKey: 'primarena1premiuserbia', serverKey: 'max2', name: 'ArenaPremium1[Serbia]' },
-  '135': { channelKey: 'arena2premiumserbia', serverKey: 'x4', name: 'ArenaPremium2[Serbia]' },
-  '139': { channelKey: 'arena3premiumserbia', serverKey: 'x4', name: 'ArenaPremium3[Serbia]' },
-  '149': { channelKey: 'argespn', serverKey: 'x4', name: 'ESPN[Argentina]' },
-  '150': { channelKey: 'arg_espn2', serverKey: 'top1', name: 'ESPN2[Argentina]' },
-  '230': { channelKey: 'dazn1uk', serverKey: 'x4', name: 'DAZN1UK[UK]' },
-  '267': { channelKey: 'starsports1', serverKey: 'wiki', name: 'StarSports1[India]' },
-  '274': { channelKey: 'skysportsf1germany', serverKey: null, name: 'SkySportsF1[Germany]' },
-  '276': { channelKey: 'laligatvuk', serverKey: 'azo', name: 'LaLigaTV[UK]' },
-  '288': { channelKey: 'ustvespnews', serverKey: 'wiki', name: 'ESPNNews[USA]' },
-  '289': { channelKey: 'eplayerSPORTTV5', serverKey: 'top2', name: 'SportTV4[Portugal]' },
-  '290': { channelKey: 'eplayerSPORTTV5', serverKey: 'top2', name: 'SportTV5[Portugal]' },
-  '291': { channelKey: 'eplayerSPORTTV6', serverKey: null, name: 'SportTV6[Portugal]' },
-  '298': { channelKey: 'fxx', serverKey: 'wiki', name: 'FXX[USA]' },
-  '300': { channelKey: 'ustvcw', serverKey: 'hzt', name: 'CW[USA]' },
-  '308': { channelKey: 'ustvcbssn', serverKey: 'wiki', name: 'CBSSN[USA]' },
-  '313': { channelKey: 'ustvdiscoverychannel', serverKey: 'wiki', name: 'DiscoveryChannel[USA]' },
-  '316': { channelKey: 'eplayerespn_u', serverKey: 'hzt', name: 'ESPNU[USA]' },
-  '318': { channelKey: 'ustvgolfchanel', serverKey: 'hzt', name: 'GOLFChannel[USA]' },
-  '319': { channelKey: 'gameshow', serverKey: 'hzt', name: 'GameShowNetwork[USA]' },
-  '336': { channelKey: 'tbs', serverKey: 'wiki', name: 'TBS[USA]' },
-  '338': { channelKey: 'ustvtnt', serverKey: 'wiki', name: 'TNT[USA]' },
-  '339': { channelKey: 'calciocartoonnetwork', serverKey: null, name: 'CartoonNetwork[Italy]' },
-  '343': { channelKey: 'usanetwork', serverKey: 'hzt', name: 'USANetwork[USA]' },
-  '346': { channelKey: 'willowtvcricket', serverKey: 'wiki', name: 'WillowTV[USA]' },
-  '347': { channelKey: 'ustvfoxnnews', serverKey: 'top1', name: 'FoxNews[USA]' },
-  '349': { channelKey: 'bbcnews', serverKey: 'x4', name: 'BBCNEWS24[UK]' },
-  '350': { channelKey: 'itv1uk', serverKey: 'wiki', name: 'ITV1[UK]' },
-  '351': { channelKey: 'itv2uk', serverKey: 'wiki', name: 'ITV2[UK]' },
-  '352': { channelKey: 'itv3uk', serverKey: 'wiki', name: 'ITV3[UK]' },
-  '353': { channelKey: 'itv4uk', serverKey: 'wiki', name: 'ITV4[UK]' },
-  '354': { channelKey: 'channel4uk', serverKey: 'top1', name: 'Channel4[UK]' },
-  '355': { channelKey: 'Channel5uk', serverKey: 'x4', name: 'Channel5[UK]' },
-  '356': { channelKey: 'xbbc1', serverKey: 'x4', name: 'BBCOne[UK]' },
-  '357': { channelKey: 'xbbc2', serverKey: 'x4', name: 'BBCTwo[UK]' },
-  '358': { channelKey: 'xbbc3', serverKey: 'wiki', name: 'BBCThree[UK]' },
-  '359': { channelKey: 'xbbc4', serverKey: 'wiki', name: 'BBCFour[UK]' },
-  '364': { channelKey: 'rteoneir', serverKey: 'wiki', name: 'RTEOne[Ireland]' },
-  '365': { channelKey: 'rtetwoir', serverKey: 'wiki', name: 'RTETwo[Ireland]' },
-  '366': { channelKey: 'skysportsnews', serverKey: 'top1', name: 'SkySportsNews[UK]' },
-  '368': { channelKey: 'eplayerSuperSportCricket', serverKey: null, name: 'SuperSportCricket[SouthAfrica]' },
-  '369': { channelKey: 'fox501', serverKey: 'x4', name: 'Fox501[Australia]' },
-  '370': { channelKey: 'astrocricket', serverKey: null, name: 'AstroCricket[Malaysia]' },
-  '375': { channelKey: 'eplayerespn_dep', serverKey: 'wiki', name: 'ESPNDeportes[USA]' },
-  '376': { channelKey: 'ustvwwe', serverKey: 'hzt', name: 'WweNetwork[USA]' },
-  '377': { channelKey: 'mutv', serverKey: 'top1', name: 'MUTV[UK]' },
-  '379': { channelKey: 'espn1nl', serverKey: 'top1', name: 'ESPN1[Netherlands]' },
-  '385': { channelKey: 'eplayerSECNetwork', serverKey: 'wiki', name: 'SECNetwork[USA]' },
-  '386': { channelKey: 'espn2nl', serverKey: 'top1', name: 'ESPN2[Netherlands]' },
-  '387': { channelKey: 'arg_espn_premium', serverKey: null, name: 'ESPNPremium[Argentina]' },
-  '388': { channelKey: 'argtntsports', serverKey: 'wiki', name: 'TNTSports[Argentina]' },
-  // NOTE: Channel 388 also works with premium388 on ddy6 server (fallback from hitsplay.fun)
-  // Server lookup: argtntsports → wiki, premium388 → ddy6
-  '392': { channelKey: 'winsportsplus', serverKey: 'wiki', name: 'WINSports[Colombia]' },
-  '393': { channelKey: 'ZiggoSportNL', serverKey: 'wiki', name: 'ZiggoSport[Netherlands]' },
-  '396': { channelKey: 'Ziggosport4NL', serverKey: null, name: 'ZiggoSport4[Netherlands]' },
-  '397': { channelKey: 'ustvbtn', serverKey: 'wiki', name: 'BTN[USA]' },
-  '398': { channelKey: 'Ziggosport2NL', serverKey: 'wiki', name: 'ZiggoSport2[Netherlands]' },
-  '399': { channelKey: 'ustvmlbnetwork', serverKey: 'hzt', name: 'MLBNetwork[USA]' },
-  '400': { channelKey: 'premium400', serverKey: 'nfs', name: 'DigiSport1[Romania]' },
-  '401': { channelKey: 'premium401', serverKey: 'nfs', name: 'DigiSport2[Romania]' },
-  '402': { channelKey: 'premium402', serverKey: 'nfs', name: 'DigiSport3[Romania]' },
-  '403': { channelKey: 'premium403', serverKey: 'nfs', name: 'DigiSport4[Romania]' },
-  '405': { channelKey: 'eplayerNFLNetwork', serverKey: 'hzt', name: 'NFLNetwork[USA]' },
-  '406': { channelKey: 'sportsnetont', serverKey: 'wiki', name: 'SportsnetOntario[Canada]' },
-  '407': { channelKey: 'primasportsnetwest', serverKey: 'wiki', name: 'SportsnetWest[Canada]' },
-  '408': { channelKey: 'sportsneteast', serverKey: 'wiki', name: 'SportsnetEast[Canada]' },
-  '409': { channelKey: 'primasportsnet360', serverKey: 'wiki', name: 'Sportsnet360[Canada]' },
-  '410': { channelKey: 'primasportsnetworld', serverKey: 'wiki', name: 'SportsnetWorld[Canada]' },
-  '411': { channelKey: 'primasportsnetone', serverKey: 'wiki', name: 'SportsnetOne[Canada]' },
-  '412': { channelKey: 'eplayerSupersportGrandstand', serverKey: null, name: 'SuperSportGrandstand[SouthAfrica]' },
-  '413': { channelKey: 'eplayerSuperSportPSL', serverKey: 'wiki', name: 'SuperSportPSL[SouthAfrica]' },
-  '414': { channelKey: 'eplayerSuperSportPL', serverKey: 'x4', name: 'SuperSportPremierLeague[SouthAfrica]' },
-  '415': { channelKey: 'eplayerSuperSportLaLiga', serverKey: null, name: 'SuperSportLaLiga[SouthAfrica]' },
-  '416': { channelKey: 'eplayerSuperSportVariety1', serverKey: null, name: 'SuperSportVariety1[SouthAfrica]' },
-  '417': { channelKey: 'eplayerSuperSportVariety2', serverKey: null, name: 'SuperSportVariety2[SouthAfrica]' },
-  '418': { channelKey: 'eplayerSuperSportVariety3', serverKey: 'x4', name: 'SuperSportVariety3[SouthAfrica]' },
-  '419': { channelKey: 'eplayerSuperSportVariety4', serverKey: null, name: 'SuperSportVariety4[SouthAfrica]' },
-  '420': { channelKey: 'eplayerSuperSportAction', serverKey: 'x4', name: 'SuperSportAction[SouthAfrica]' },
-  '421': { channelKey: 'eplayerSuperSportRugby', serverKey: 'wiki', name: 'SuperSportRugby[SouthAfrica]' },
-  '422': { channelKey: 'eplayerSuperSportGolf', serverKey: null, name: 'SuperSportGolf[SouthAfrica]' },
-  '423': { channelKey: 'eplayerSuperSportTennis', serverKey: null, name: 'SuperSportTennis[SouthAfrica]' },
-  '424': { channelKey: 'eplayerSuperSportMotorsport', serverKey: 'wiki', name: 'SuperSportMotorsport[SouthAfrica]' },
-  '425': { channelKey: 'beinsportsusa', serverKey: 'top2', name: 'beINSPORTSUSA[USA]' },
-  '426': { channelKey: 'dazn1de', serverKey: 'x4', name: 'DAZN1Deutschland[Germany]' },
-  '427': { channelKey: 'dazn2de', serverKey: 'x4', name: 'DAZN2Deutschland[Germany]' },
-  '429': { channelKey: 'arenasport1serbia', serverKey: 'x4', name: 'ArenaSport1[Serbia]' },
-  '430': { channelKey: 'arenasport2serbia', serverKey: 'x4', name: 'ArenaSport2[Serbia]' },
-  '431': { channelKey: 'arenasport3serbia', serverKey: 'x4', name: 'ArenaSport3[Serbia]' },
-  '435': { channelKey: 'movistarligadecampeones1', serverKey: 'wiki', name: 'MovistarLigadeCampeones1[Spain]' },
-  '436': { channelKey: 'movistardeportes', serverKey: 'wiki', name: 'MovistarDeportes[Spain]' },
-  '445': { channelKey: 'dazn1es', serverKey: 'top2', name: 'DAZN1[Spain]' },
-  '446': { channelKey: 'dazn2es', serverKey: 'top2', name: 'DAZN2[Spain]' },
-  '449': { channelKey: 'skymix', serverKey: 'x4', name: 'SkySportsMix[UK]' },
-  '450': { channelKey: 'ptvsportspk', serverKey: 'x4', name: 'PTVSports[Pakistan]' },
-  '451': { channelKey: 'newpremier1uk', serverKey: 'top2', name: 'ViaplaySports1[UK]' },
-  '453': { channelKey: 'sportklubserbia', serverKey: null, name: 'Sportklub[Serbia]' },
-  '454': { channelKey: 'eplayerSPORTTV3', serverKey: 'top2', name: 'SportTV3[Portugal]' },
-  '455': { channelKey: 'eplayereleven1', serverKey: 'wiki', name: 'ElevenSports1[Portugal]' },
-  '456': { channelKey: 'eplayereleven2', serverKey: 'wiki', name: 'ElevenSports2[Portugal]' },
-  '457': { channelKey: 'eplayereleven3', serverKey: 'wiki', name: 'ElevenSports3[Portugal]' },
-  '458': { channelKey: 'eplayereleven4', serverKey: 'wiki', name: 'ElevenSports4[Portugal]' },
-  '459': { channelKey: 'eplayereleven5', serverKey: 'wiki', name: 'ElevenSports5[Portugal]' },
-  '461': { channelKey: 'Skysportsunoit', serverKey: null, name: 'SkySportsUno[Italy]' },
-  '464': { channelKey: 'canalplus360', serverKey: 'wiki', name: 'CanalSport360[France]' },
-  '465': { channelKey: 'diemasport', serverKey: 'wiki', name: 'DiemaSport[Bulgaria]' },
-  '466': { channelKey: 'diemasport2', serverKey: 'wiki', name: 'DiemaSport2[Bulgaria]' },
-  '494': { channelKey: 'Beinsport4maxfr', serverKey: 'x4', name: 'BeINSport4max[France]' },
-  '521': { channelKey: 'movistarvamos', serverKey: 'wiki', name: 'EllasVamos[Spain]' },
-  '524': { channelKey: 'eplayermovistarEurosport1_ES', serverKey: 'wiki', name: 'Eurosport1[Spain]' },
-  '525': { channelKey: 'eplayermovistarEurosport2_ES', serverKey: 'wiki', name: 'Eurosport2[Spain]' },
-  '532': { channelKey: 'telecincosp', serverKey: 'top1', name: 'TeleCinco[Spain]' },
-  '537': { channelKey: 'daznf1', serverKey: 'top1', name: 'DAZNF1[Spain]' },
-  '538': { channelKey: 'daznlaliga', serverKey: 'wiki', name: 'DAZNLaliga[Spain]' },
-  '539': { channelKey: 'Laligahypermotion', serverKey: null, name: 'Laligahypermotion[Spain]' },
-  '540': { channelKey: 'canal11', serverKey: 'wiki', name: 'Canal11[Portugal]' },
-  '554': { channelKey: 'skysportsracing', serverKey: null, name: 'SkySportsRacing[UK]' },
-  '555': { channelKey: 'racingtv', serverKey: 'wiki', name: 'RacingTV[UK]' },
-  '556': { channelKey: 'eplayerSky_Sport_Top_Event_HD', serverKey: 'wiki', name: 'SkySportTopEvent[Germany]' },
-  '558': { channelKey: 'eplayerSky_Sport_Bundesliga_1_HD', serverKey: 'x4', name: 'SkyBundesliga1[Germany]' },
-  '563': { channelKey: 'motowizjapl', serverKey: null, name: 'Motowizja[Poland]' },
-  '577': { channelKey: 'skysportsf1italy', serverKey: 'x4', name: 'SkySportsF1[Italy]' },
-  '581': { channelKey: 'arenasport4serbia', serverKey: 'x4', name: 'ArenaSport4[Serbia]' },
-  '583': { channelKey: 'premium583', serverKey: 'nfs', name: 'PrimaSport1[Romania]' },
-  '584': { channelKey: 'premium584', serverKey: 'dokko1', name: 'PrimaSport2[Romania]' },
-  '585': { channelKey: 'premium585', serverKey: 'nfs', name: 'PrimaSport3[Romania]' },
-  '586': { channelKey: 'premium586', serverKey: null, name: 'PrimaSport4[Romania]' },
-  '587': { channelKey: 'skynz_select', serverKey: null, name: 'SkySportSelect[NewZealand]' },
-  '588': { channelKey: 'skynz1', serverKey: 'azo', name: 'SkySport1[NewZealand]' },
-  '589': { channelKey: 'skynz2', serverKey: 'azo', name: 'SkySport2[NewZealand]' },
-  '590': { channelKey: 'skynz3', serverKey: 'azo', name: 'SkySport3[NewZealand]' },
-  '591': { channelKey: 'skynz4', serverKey: 'azo', name: 'SkySport4[NewZealand]' },
-  '592': { channelKey: 'skynz5', serverKey: 'azo', name: 'SkySport5[NewZealand]' },
-  '593': { channelKey: 'skynz6', serverKey: 'azo', name: 'SkySport6[NewZealand]' },
-  '594': { channelKey: 'skynz7', serverKey: 'azo', name: 'SkySport7[NewZealand]' },
-  '595': { channelKey: 'skynz8', serverKey: 'azo', name: 'SkySport8[NewZealand]' },
-  '596': { channelKey: 'skynz9', serverKey: 'azo', name: 'SkySport9[NewZealand]' },
-  '598': { channelKey: 'willowxtra', serverKey: 'x4', name: 'WillowXtra[USA]' },
-  '607': { channelKey: 'eplayerrallytv_uk', serverKey: 'top1', name: 'RallyTV[UK]' },
-  '622': { channelKey: 'ftkcosmote1', serverKey: 'top1', name: 'CosmoteSport1[Greece]' },
-  '623': { channelKey: 'ftkcosmote2', serverKey: 'top1', name: 'CosmoteSport2[Greece]' },
-  '624': { channelKey: 'ftkcosmote3', serverKey: 'top1', name: 'CosmoteSport3[Greece]' },
-  '625': { channelKey: 'ftkcosmote4', serverKey: 'top1', name: 'CosmoteSport4[Greece]' },
-  '626': { channelKey: 'ftkcosmote5', serverKey: 'top1', name: 'CosmoteSport5[Greece]' },
-  '627': { channelKey: 'ftkcosmote6', serverKey: 'top1', name: 'CosmoteSport6[Greece]' },
-  '628': { channelKey: 'ftkcosmote7', serverKey: 'top1', name: 'CosmoteSport7[Greece]' },
-  '629': { channelKey: 'ftkcosmote8', serverKey: 'top1', name: 'CosmoteSport8[Greece]' },
-  '630': { channelKey: 'ftkcosmote9', serverKey: 'top1', name: 'CosmoteSport9[Greece]' },
-  '631': { channelKey: 'ftknovasport1', serverKey: 'top1', name: 'NovaSports1[Greece]' },
-  '632': { channelKey: 'ftknovasport2', serverKey: 'top1', name: 'NovaSports2[Greece]' },
-  '633': { channelKey: 'ftknovasport3', serverKey: 'top1', name: 'NovaSports3[Greece]' },
-  '634': { channelKey: 'ftknovasport4', serverKey: 'top1', name: 'NovaSports4[Greece]' },
-  '635': { channelKey: 'ftknovasport5', serverKey: null, name: 'NovaSports5[Greece]' },
-  '636': { channelKey: 'ftknovasport6', serverKey: 'top1', name: 'NovaSports6[Greece]' },
-  '637': { channelKey: 'ftknovasportstart', serverKey: 'x4', name: 'NovaSportsStart[Greece]' },
-  '641': { channelKey: 'Sport1DE', serverKey: 'wiki', name: 'Sport1[Germany]' },
-  '645': { channelKey: 'frlequipe', serverKey: 'top1', name: 'Lequipe[France]' },
-  '646': { channelKey: 'mavtv', serverKey: null, name: 'MAVTV[USA]' },
-  '663': { channelKey: 'nhlnet', serverKey: 'top1', name: 'NHLNetwork[USA]' },
-  '664': { channelKey: 'accn', serverKey: 'wiki', name: 'ACCNetwork[USA]' },
-  '670': { channelKey: 's4c', serverKey: 'top1', name: 'S4C[UK]' },
-  '688': { channelKey: 'film4', serverKey: null, name: 'Film4[UK]' },
-  '742': { channelKey: 'ustvaxs', serverKey: null, name: 'AxsTv[USA]' },
-  '746': { channelKey: 'tyc_sports', serverKey: 'top1', name: 'TYCSports[Argentina]' },
-  '753': { channelKey: 'nbcsa', serverKey: null, name: 'NBCSportsBayArea[USA]' },
-  '754': { channelKey: 'nbcsboston', serverKey: 'wiki', name: 'NBCSBoston[USA]' },
-  '755': { channelKey: 'nbcscali', serverKey: 'wiki', name: 'NBCSCalifornia[USA]' },
-  '758': { channelKey: 'eplayerfs2', serverKey: 'wiki', name: 'FOXSports2[USA]' },
-  '762': { channelKey: 'nesn', serverKey: 'wiki', name: 'NESN[USA]' },
-  '763': { channelKey: 'yesnet', serverKey: 'wiki', name: 'YES[USA]' },
-  '767': { channelKey: 'cbsny', serverKey: 'wiki', name: 'CBSNY[USA]' },
-  '771': { channelKey: 'prem1ire', serverKey: null, name: 'Premiersport1[Ireland]' },
-  '772': { channelKey: 'eurosport1fr', serverKey: 'wiki', name: 'Eurosport1[France]' },
-  '773': { channelKey: 'eurosport2fr', serverKey: 'wiki', name: 'Eurosport2[France]' },
-  '777': { channelKey: 'nbcphiladelphia', serverKey: 'hzt', name: 'NBCSPhiladelphia[USA]' },
-  '787': { channelKey: 'argfoxsports1', serverKey: null, name: 'FOXSports1[Argentina]' },
-  '788': { channelKey: 'argfoxsports2', serverKey: null, name: 'FOXSports2[Argentina]' },
-  '798': { channelKey: 'arg_espn3', serverKey: null, name: 'ESPN3[Argentina]' },
-  '809': { channelKey: 'tv3dk', serverKey: 'top2', name: 'TV3[Denmark]' },
-  '820': { channelKey: 'fox502', serverKey: 'x4', name: 'Fox502[Australia]' },
-  '821': { channelKey: 'fox503', serverKey: 'top2', name: 'Fox503[Australia]' },
-  '822': { channelKey: 'fox504', serverKey: null, name: 'Fox504[Australia]' },
-  '823': { channelKey: 'fox505', serverKey: null, name: 'Fox505[Australia]' },
-  '824': { channelKey: 'fox506', serverKey: 'x4', name: 'Fox506[Australia]' },
-  '825': { channelKey: 'fox507', serverKey: 'x4', name: 'Fox507[Australia]' },
-  '829': { channelKey: 'masn', serverKey: 'wiki', name: 'MASN[USA]' },
-  '843': { channelKey: 'premium843', serverKey: 'wiki', name: 'PrimaTV[Romania]' },
-  '848': { channelKey: 'outdoorchannel', serverKey: 'wiki', name: 'OutdoorChannel[USA]' },
-  '870': { channelKey: 'skysportscalcioIT', serverKey: 'x4', name: 'SkySportsCalcio[Italy]' },
-  '871': { channelKey: 'skysports251IT', serverKey: 'x4', name: 'SkySports251[Italy]' },
-  '884': { channelKey: 'eplayerSky_Sport_Tennis_HD', serverKey: 'wiki', name: 'SkySportTennis[Germany]' },
-  '888': { channelKey: 'espn3nl', serverKey: 'top1', name: 'ESPN3[Netherlands]' },
-  '891': { channelKey: 'Fanduelsportsdetroit', serverKey: null, name: 'FanDuelSportsDetroit[USA]' },
-  '892': { channelKey: 'fanduelflorida', serverKey: 'top2', name: 'FanDuelSportsFlorida[USA]' },
-  '895': { channelKey: 'Fanduelsportskansascity', serverKey: null, name: 'FanDuelSportKansasCity[USA]' },
-  '896': { channelKey: 'Fanduelsportsmidwest', serverKey: null, name: 'FanDuelSportsMidwest[USA]' },
-  '898': { channelKey: 'ballysportsnorth', serverKey: 'wiki', name: 'BallySportsNorth[USA]' },
-  '899': { channelKey: 'fanduelohio', serverKey: null, name: 'FanDuelSportsOhio[USA]' },
-  '900': { channelKey: 'ballysportsoklahoma', serverKey: null, name: 'BallySportsOklahoma[USA]' },
-  '904': { channelKey: 'fanduelsoutheast', serverKey: 'wiki', name: 'FanDuelSportsSoutheast[USA]' },
-  '905': { channelKey: 'ballysportssun', serverKey: null, name: 'BallySportsSun[USA]' },
-  '906': { channelKey: 'ballysportssouthwest', serverKey: null, name: 'BallySportsWest[USA]' },
-  '907': { channelKey: 'fanduelwis', serverKey: 'wiki', name: 'FanDuelSportsWisconsin[USA]' },
-  '929': { channelKey: 'mexfs1', serverKey: 'azo', name: 'FOXSports1[Mexico]' },
-  '930': { channelKey: 'mexfs2', serverKey: 'azo', name: 'FOXSports2[Mexico]' },
-  '931': { channelKey: 'mexfs3', serverKey: 'azo', name: 'FOXSports3[Mexico]' },
-  '935': { channelKey: 'mxtudn', serverKey: null, name: 'TUDN[Mexico]' },
-  '940': { channelKey: 'arenasport5serbia', serverKey: 'x4', name: 'ArenaSport5[Serbia]' },
-  '941': { channelKey: 'arenasport6serbia', serverKey: 'x4', name: 'ArenaSport6[Serbia]' },
-  '942': { channelKey: 'arenasport7serbia', serverKey: 'x4', name: 'ArenaSport7[Serbia]' },
-  '943': { channelKey: 'arenasport8serbia', serverKey: 'x4', name: 'ArenaSport8[Serbia]' },
-  '946': { channelKey: 'eplayerSky_Sport_Bundesliga_2_HD', serverKey: 'x4', name: 'SkyBundesliga2[Germany]' },
-  '947': { channelKey: 'eplayerSky_Sport_Bundesliga_3_HD', serverKey: 'x4', name: 'SkyBundesliga3[Germany]' },
-  '948': { channelKey: 'eplayerSky_Sport_Bundesliga_4_HD', serverKey: 'x4', name: 'SkyBundesliga4[Germany]' },
-  '949': { channelKey: 'eplayerSky_Sport_Bundesliga_5_HD', serverKey: 'x4', name: 'SkyBundesliga5[Germany]' },
-};
-
-function getChannelInfo(channelId: string): DLHDChannelInfo {
-  const mapped = DLHD_CHANNEL_MAP[channelId];
-  if (mapped) return mapped;
-  return { channelKey: `premium${channelId}`, serverKey: null };
+// Simple helper - always returns premium{id} for ddy6 server
+function getChannelKey(channelId: string): string {
+  return `premium${channelId}`;
 }
 
 export interface Env {
@@ -342,360 +61,14 @@ const ALLOWED_ORIGINS = [
 ];
 
 // UPDATED January 2026: epicplayplay.cfd is DEAD! Using topembed.pw instead
-const PLAYER_DOMAIN = 'topembed.pw';
+const PLAYER_DOMAIN = 'hitsplay.fun';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-// ============================================================================
-// MULTI-BACKEND SYSTEM - January 2026
-// ============================================================================
-// DLHD has 6 players, each using different backends. We implement fallback:
-// 1. Player 3 (topembed.pw → dvalna.ru) - Requires JWT + PoW
-// 2. Player 5 (cdn-live.tv → cdn-live-tv.ru) - Simple token, NO JWT/PoW!
-// 3. Player 6 (moveonjoy.com) - NO AUTH AT ALL!
-// ============================================================================
 
-// Channel ID to cdn-live.tv channel name mapping
-// COMPLETE MAPPING - Extracted from ALL DLHD channels via Player 5 (ddyplayer.cfd)
-// Format: { channelId: { name: 'channel-name', code: 'country-code' } }
-// These are dynamically extracted - the proxy will fetch fresh tokens from ddyplayer.cfd
-const CHANNEL_TO_CDNLIVE: Record<string, { name: string; code: string }> = {
-  // UK Sports
-  '31': { name: 'tnt sports 1', code: 'gb' },
-  '32': { name: 'tnt sports 2', code: 'gb' },
-  '33': { name: 'tnt sports 3', code: 'gb' },
-  '34': { name: 'tnt sports 4', code: 'gb' },
-  '35': { name: 'sky sports football', code: 'gb' },
-  '36': { name: 'sky sports arena', code: 'gb' },
-  '37': { name: 'sky sports action', code: 'gb' },
-  '38': { name: 'sky sports main event', code: 'gb' },
-  '46': { name: 'sky sports tennis', code: 'gb' },
-  '60': { name: 'sky sports f1', code: 'gb' },
-  '65': { name: 'sky sports cricket', code: 'gb' },
-  '70': { name: 'sky sports golf', code: 'gb' },
-  '130': { name: 'sky sports premier league', code: 'gb' },
-  '230': { name: 'dazn 1', code: 'gb' },
-  '276': { name: 'laliga tv', code: 'gb' },
-  '449': { name: 'sky sports mix', code: 'gb' },
-  '451': { name: 'viaplay sports 1', code: 'gb' },
-  '550': { name: 'viaplay sports 2', code: 'gb' },
-  '554': { name: 'sky sports racing', code: 'gb' },
-  '576': { name: 'sky sports news', code: 'gb' },
-  '350': { name: 'itv 1', code: 'gb' },
-  '351': { name: 'itv 2', code: 'gb' },
-  '352': { name: 'itv 3', code: 'gb' },
-  '353': { name: 'itv 4', code: 'gb' },
-  '354': { name: 'channel 4', code: 'gb' },
-  '355': { name: 'channel 5', code: 'gb' },
-  '356': { name: 'bbc one', code: 'gb' },
-  '357': { name: 'bbc two', code: 'gb' },
-  '358': { name: 'bbc three', code: 'gb' },
-  '359': { name: 'bbc four', code: 'gb' },
-  '41': { name: 'euro sport 1', code: 'gb' },
-  '42': { name: 'euro sport 2', code: 'gb' },
-  // US Sports
-  '39': { name: 'fox sports 1', code: 'us' },
-  '40': { name: 'tennis channel', code: 'us' },
-  '44': { name: 'espn', code: 'us' },
-  '45': { name: 'espn 2', code: 'us' },
-  '51': { name: 'abc', code: 'us' },
-  '52': { name: 'cbs', code: 'us' },
-  '54': { name: 'fox', code: 'us' },
-  '66': { name: 'tudn', code: 'us' },
-  '131': { name: 'telemundo', code: 'us' },
-  '132': { name: 'univision', code: 'us' },
-  '288': { name: 'espn news', code: 'us' },
-  '305': { name: 'bbc', code: 'us' },
-  '306': { name: 'bet', code: 'us' },
-  '308': { name: 'cbs sports network', code: 'us' },
-  '309': { name: 'cnbc', code: 'us' },
-  '312': { name: 'disney channel', code: 'us' },
-  '313': { name: 'discovery channel', code: 'us' },
-  '316': { name: 'espn u', code: 'us' },
-  '318': { name: 'golf tv', code: 'us' },
-  '320': { name: 'hallmark', code: 'us' },
-  '321': { name: 'hbo', code: 'us' },
-  '322': { name: 'history', code: 'us' },
-  '326': { name: 'lifetime', code: 'us' },
-  '328': { name: 'national geographic', code: 'us' },
-  '330': { name: 'nickelodeon tv', code: 'us' },
-  '333': { name: 'showtime', code: 'us' },
-  '336': { name: 'tbs', code: 'us' },
-  '337': { name: 'tlc', code: 'us' },
-  '338': { name: 'tnt', code: 'us' },
-  '340': { name: 'travel channel', code: 'us' },
-  '343': { name: 'usa network', code: 'us' },
-  '345': { name: 'cnn', code: 'us' },
-  '346': { name: 'willow cricket', code: 'us' },
-  '347': { name: 'fox news', code: 'us' },
-  '369': { name: 'fox cricket', code: 'us' },
-  '374': { name: 'cinemax', code: 'us' },
-  '375': { name: 'espn deportes', code: 'us' },
-  '376': { name: 'wwe', code: 'us' },
-  '385': { name: 'sec network', code: 'us' },
-  '397': { name: 'btn', code: 'us' },
-  '399': { name: 'mlb network', code: 'us' },
-  '404': { name: 'nba tv', code: 'us' },
-  '405': { name: 'nfl network', code: 'us' },
-  '425': { name: 'bein sports', code: 'us' },
-  '597': { name: 'goltv', code: 'us' },
-  '598': { name: 'willow 2 cricket', code: 'us' },
-  '123': { name: 'astro grandstand', code: 'us' },
-  '124': { name: 'astro football', code: 'us' },
-  '125': { name: 'astro premier league', code: 'us' },
-  '126': { name: 'astro premier league 2', code: 'us' },
-  '370': { name: 'astro cricket', code: 'us' },
-  // South Africa
-  '56': { name: 'supersport football', code: 'za' },
-  '368': { name: 'supersport cricket', code: 'za' },
-  '412': { name: 'supersport grandstand', code: 'za' },
-  '413': { name: 'supersport psl', code: 'za' },
-  '414': { name: 'supersport premier league', code: 'za' },
-  '415': { name: 'supersport laliga', code: 'za' },
-  '416': { name: 'supersport variety 1', code: 'za' },
-  '417': { name: 'supersport variety 2', code: 'za' },
-  '418': { name: 'supersport variety 3', code: 'za' },
-  '419': { name: 'supersport variety 4', code: 'za' },
-  '420': { name: 'supersport action', code: 'za' },
-  '421': { name: 'supersport rugby', code: 'za' },
-  '422': { name: 'supersport golf', code: 'za' },
-  '423': { name: 'supersport tennis', code: 'za' },
-  '424': { name: 'supersport motorsport', code: 'za' },
-  '572': { name: 'supersport maximo 1', code: 'za' },
-  // Poland
-  '50': { name: 'polsat sport 2', code: 'pl' },
-  '71': { name: 'eleven sports 1', code: 'pl' },
-  '72': { name: 'eleven sports 2', code: 'pl' },
-  '259': { name: 'canal sport 2', code: 'pl' },
-  // France
-  '116': { name: 'bein sports 1', code: 'fr' },
-  '117': { name: 'bein sports 2', code: 'fr' },
-  '118': { name: 'bein sports 3', code: 'fr' },
-  '121': { name: 'canal', code: 'fr' },
-  '122': { name: 'canal sport', code: 'fr' },
-  '494': { name: 'bein sports max 4', code: 'fr' },
-  // Germany
-  '274': { name: 'sky sport f1', code: 'de' },
-  '427': { name: 'dazn 2', code: 'de' },
-  // Italy
-  '461': { name: 'sky sport uno', code: 'it' },
-  '462': { name: 'sky sport arena', code: 'it' },
-  // Spain
-  '84': { name: 'm laliga', code: 'es' },
-  // Brazil
-  '81': { name: 'espn', code: 'br' },
-  // Portugal
-  '380': { name: 'benfica tv', code: 'pt' },
-  // Saudi Arabia / Arab
-  '92': { name: 'bein sports 2', code: 'sa' },
-  // Serbia
-  '134': { name: 'arena 1 premium', code: 'rs' },
-  // Netherlands
-  '393': { name: 'ziggo sport 1', code: 'nl' },
-  '398': { name: 'ziggo sport 2', code: 'nl' },
-  // Canada
-  '406': { name: 'sportsnet ontario', code: 'ca' },
-  '408': { name: 'sportsnet east', code: 'ca' },
-  '409': { name: 'sportsnet 360', code: 'ca' },
-  // Australia
-  '491': { name: 'bein sports 1', code: 'au' },
-  '492': { name: 'bein sports 2', code: 'au' },
-  '493': { name: 'bein sports 3', code: 'au' },
-  // New Zealand
-  '587': { name: 'sky sport select', code: 'nz' },
-  '588': { name: 'sky sport 1', code: 'nz' },
-  '589': { name: 'sky sport 2', code: 'nz' },
-  '590': { name: 'sky sport 3', code: 'nz' },
-  '591': { name: 'sky sport 4', code: 'nz' },
-  '592': { name: 'sky sport 5', code: 'nz' },
-  '593': { name: 'sky sport 6', code: 'nz' },
-  '594': { name: 'sky sport 7', code: 'nz' },
-  '595': { name: 'sky sport 8', code: 'nz' },
-  '596': { name: 'sky sport 9', code: 'nz' },
-  // Uruguay
-  '391': { name: 'vtv', code: 'uy' },
-  // Greece
-  '599': { name: 'nova sports premier league', code: 'gr' },
-};
-
-// Channel ID to moveonjoy stream URL mapping
-// Extracted from Player 6 (tv-bu1.blogspot.com → moveonjoy.com)
-// Format: { channelId: 'https://fl{N}.moveonjoy.com/{STREAM_NAME}/index.m3u8' }
-// NO AUTH REQUIRED - direct M3U8 access!
-const CHANNEL_TO_MOVEONJOY: Record<string, string> = {
-  // Sports - USA
-  '11': 'https://fl7.moveonjoy.com/UFC/index.m3u8',
-  '19': 'https://fl31.moveonjoy.com/MLB_NETWORK/index.m3u8',
-  '39': 'https://fl7.moveonjoy.com/FOX_Sports_1/index.m3u8',
-  '45': 'https://fl2.moveonjoy.com/ESPN_2/index.m3u8',
-  '90': 'https://fl1.moveonjoy.com/SEC_NETWORK/index.m3u8',
-  '91': 'https://fl31.moveonjoy.com/ACC_NETWORK/index.m3u8',
-  '92': 'https://fl31.moveonjoy.com/ESPN_U/index.m3u8',
-  '93': 'https://fl31.moveonjoy.com/ESPN_NEWS/index.m3u8',
-  '94': 'https://fl7.moveonjoy.com/BIG_TEN_NETWORK/index.m3u8',
-  '98': 'https://fl31.moveonjoy.com/NBA_TV/index.m3u8',
-  '127': 'https://fl31.moveonjoy.com/CBS_SPORTS_NETWORK/index.m3u8',
-  '129': 'https://fl31.moveonjoy.com/YES_NETWORK/index.m3u8',
-  '146': 'https://fl7.moveonjoy.com/WWE/index.m3u8',
-  // Broadcast Networks - USA
-  '51': 'https://fl1.moveonjoy.com/AL_BIRMINGHAM_ABC/index.m3u8',
-  '52': 'https://fl1.moveonjoy.com/FL_West_Palm_Beach_CBS/index.m3u8',
-  '53': 'https://fl61.moveonjoy.com/FL_Tampa_NBC/index.m3u8',
-  // Entertainment - USA
-  '20': 'https://fl61.moveonjoy.com/MTV/index.m3u8',
-  '21': 'https://fl31.moveonjoy.com/SYFY/index.m3u8',
-  '303': 'https://fl61.moveonjoy.com/AMC_NETWORK/index.m3u8',
-  '304': 'https://fl1.moveonjoy.com/Animal_Planet/index.m3u8',
-  '306': 'https://fl1.moveonjoy.com/TRU_TV/index.m3u8',
-  '307': 'https://fl7.moveonjoy.com/BRAVO/index.m3u8',
-  '310': 'https://fl61.moveonjoy.com/Comedy_Central/index.m3u8',
-  '312': 'https://fl31.moveonjoy.com/DISNEY/index.m3u8',
-  '313': 'https://fl31.moveonjoy.com/DISCOVERY_FAMILY_CHANNEL/index.m3u8',
-  '315': 'https://fl61.moveonjoy.com/E_ENTERTAINMENT_TELEVISION/index.m3u8',
-  '317': 'https://fl61.moveonjoy.com/FX/index.m3u8',
-  '320': 'https://fl61.moveonjoy.com/HALLMARK_CHANNEL/index.m3u8',
-  '321': 'https://fl61.moveonjoy.com/HBO/index.m3u8',
-  '328': 'https://fl31.moveonjoy.com/National_Geographic/index.m3u8',
-  '333': 'https://fl31.moveonjoy.com/SHOWTIME/index.m3u8',
-  '334': 'https://fl31.moveonjoy.com/PARAMOUNT_NETWORK/index.m3u8',
-  '337': 'https://fl1.moveonjoy.com/TLC/index.m3u8',
-  '339': 'https://fl1.moveonjoy.com/CARTOON_NETWORK/index.m3u8',
-  '360': 'https://fl1.moveonjoy.com/BBC_AMERICA/index.m3u8',
-};
-
-// ============================================================================
-// BACKEND: lovecdn.ru/popcdn.day - Token auth, UNENCRYPTED
-// ============================================================================
-// Path: popcdn.day/player/{STREAM_NAME} → beautifulpeople.lovecdn.ru
-// Token is generated dynamically by popcdn.day
-// NO ENCRYPTION - direct M3U8 access with token!
-// ============================================================================
-const CHANNEL_TO_LOVECDN: Record<string, string> = {
-  // Sports - USA
-  '44': 'ESPN',
-  '45': 'ESPN2',
-  '39': 'FOXSPORTS1',
-  '146': 'WWE',        // WWE Network
-  // Note: ABC, CBS, NBC, FOX, UFC not available on popcdn.day
-};
-
-// Channel ID to topembed.pw channel name mapping
-// Extracted from DLHD /watch/ pages which use topembed.pw
-const CHANNEL_TO_TOPEMBED: Record<string, string> = {
-  // USA Sports
-  '31': 'TNTSports1[UK]',
-  '32': 'TNTSports2[UK]',
-  '33': 'TNTSports3[UK]',
-  '34': 'TNTSports4[UK]',
-  '35': 'SkySportsFootball[UK]',
-  '36': 'SkySportsArena[UK]',
-  '37': 'SkySportsAction[UK]',
-  '38': 'SkySportsMainEvent[UK]',
-  '39': 'FOXSports1[USA]',
-  '40': 'TennisChannel[USA]',
-  '43': 'PDCTV[USA]',
-  '44': 'ESPN[USA]',
-  '45': 'ESPN2[USA]',
-  '46': 'SkySportsTennis[UK]',
-  '48': 'CanalSport[Poland]',
-  '49': 'SportTV1[Portugal]',
-  '51': 'AbcTv[USA]',
-  '52': 'CBS[USA]',
-  '53': 'NBC[USA]',
-  '54': 'Fox[USA]',
-  '56': 'SuperSportFootball[SouthAfrica]',
-  '57': 'Eurosport1[Poland]',
-  '58': 'Eurosport2[Poland]',
-  '60': 'SkySportsF1[UK]',
-  '61': 'BeinSportsMena1[UK]',
-  '65': 'SkySportsCricket[UK]',
-  '66': 'TUDN[USA]',
-  '70': 'SkySportsGolf[UK]',
-  '71': 'ElevenSports1[Poland]',
-  '74': 'SportTV2[Portugal]',
-  '75': 'CanalPlusSport5[Poland]',
-  '81': 'ESPNBrazil[Brazil]',
-  '84': 'MLaliga[Spain]',
-  '88': 'Premiere1[Brasil]',
-  '89': 'Combate[Brazil]',
-  '91': 'BeinSports1[Arab]',
-  '92': 'BeinSports2[Arab]',
-  // beIN Sports
-  '93': 'BeinSports3[Arab]',
-  '94': 'BeinSports4[Arab]',
-  '95': 'BeinSports5[Arab]',
-  '96': 'BeinSports6[Arab]',
-  '97': 'BeinSports7[Arab]',
-  '98': 'BeinSports8[Arab]',
-  '99': 'BeinSports9[Arab]',
-  '100': 'BeinSportsXtra1',
-  // Sky Sports UK (additional)
-  '130': 'SkySportsPremierLeague[UK]',
-  '449': 'SkySportsMix[UK]',
-  '554': 'SkySportsRacing[UK]',
-  '576': 'SkySportsNews[UK]',
-  // beIN France
-  '116': 'BeinSports1[France]',
-  '117': 'BeinSports2[France]',
-  '118': 'BeinSports3[France]',
-  // beIN Turkey
-  '62': 'BeinSports1[Turkey]',
-  '63': 'BeinSports2[Turkey]',
-  '64': 'BeinSports3[Turkey]',
-  '67': 'BeinSports4[Turkey]',
-  // Canal+ France
-  '121': 'CanalPlus[France]',
-  '122': 'CanalPlusSport[France]',
-  // USA Networks
-  '300': 'CW[USA]',
-  '308': 'CBSSN[USA]',
-  '345': 'CNN[USA]',
-  '397': 'BTN[USA]',
-  '425': 'beINSPORTSUSA[USA]',
-  // UK Channels
-  '354': 'Channel4[UK]',
-  '355': 'Channel5[UK]',
-  '356': 'BBCOne[UK]',
-  '357': 'BBCTwo[UK]',
-  '358': 'BBCThree[UK]',
-  '359': 'BBCFour[UK]',
-  '349': 'BBCNEWS24[UK]',
-  '366': 'SkySportsNews[UK]',
-  // DAZN
-  '230': 'DAZN1[UK]',
-  '426': 'DAZN1Bar[Germany]',
-  '427': 'DAZN2Bar[Germany]',
-  '445': 'DAZN1[Spain]',
-  '446': 'DAZN2[Spain]',
-  '447': 'DAZN3[Spain]',
-  '448': 'DAZN4[Spain]',
-  // Poland
-  '565': 'TVNHD[Poland]',
-  '566': 'CanalPlusPremium[Poland]',
-  '567': 'CanalPlusFamily[Poland]',
-  '570': 'CanalPlusSeriale[Poland]',
-  // USA Regional Sports
-  '770': 'MarqueeSportsNetwork[USA]',
-  '776': 'ChicagoSportsNetwork[USA]',
-  '664': 'ACCNetwork[USA]',
-};
-
-// UPDATED January 2026: Complete list of ALL known dvalna.ru servers
-// Order matters - most common/reliable servers first for faster discovery
+// UPDATED January 2026: ONLY USE ddy6 server for DLHD live TV
+// All other servers disabled - ddy6 is the most reliable for our use case
 const ALL_SERVER_KEYS = [
-  'wiki',     // Most common for topembed.pw channels
-  'hzt',      // Common for US sports
-  'x4',       // Common for European channels
-  'top2',     // Common for UK Sky Sports
-  'top1',     // Alternative top server
-  'top1/cdn', // CDN variant
-  'ddy6',     // Used by hitsplay.fun premium keys
-  'dokko1',   // Romanian channels
-  'nfs',      // Romanian channels
-  'zeko',     // Fallback server
-  'chevy',    // Server lookup endpoint host
-  'azo',      // New Zealand Sky Sports
-  'max2',     // Serbian channels
-  'wind',     // Alternative server
+  'ddy6',     // ONLY server we use - most reliable with hitsplay.fun premium keys
 ];
 const CDN_DOMAIN = 'dvalna.ru';
 
@@ -944,88 +317,6 @@ async function fetchPlayerJWT(channel: string, logger: any, env?: Env): Promise<
   logger.info('Fetching fresh JWT', { channel });
   
   // ============================================================================
-  // METHOD 1: Try topembed.pw FIRST - it provides CORRECT channel keys!
-  // hitsplay.fun uses 'premium{id}' which doesn't work on all dvalna servers
-  // topembed.pw uses correct keys like 'skyaction', 'eplayerskyfoot', etc.
-  // ============================================================================
-  const topembedName = CHANNEL_TO_TOPEMBED[channel];
-  if (topembedName) {
-    try {
-      const playerUrl = `https://${PLAYER_DOMAIN}/channel/${topembedName}`;
-      logger.info('Trying topembed.pw for JWT (preferred)', { channel, topembedName });
-      
-      let html: string | undefined;
-      
-      // Try RPI proxy first if configured (topembed may block CF IPs)
-      if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-        const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(playerUrl)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent('https://dlhd.link/')}`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        
-        try {
-          const res = await fetch(rpiUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          if (res.ok) {
-            html = await res.text();
-          }
-        } catch (e) {
-          clearTimeout(timeoutId);
-        }
-      }
-      
-      // Direct fetch fallback
-      if (!html) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        try {
-          const res = await fetch(playerUrl, {
-            headers: {
-              'User-Agent': USER_AGENT,
-              'Referer': 'https://dlhd.link/',
-            },
-            signal: controller.signal,
-          });
-          clearTimeout(timeoutId);
-          if (res.ok) {
-            html = await res.text();
-          }
-        } catch (e) {
-          clearTimeout(timeoutId);
-        }
-      }
-      
-      if (html) {
-        const jwtMatch = html.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
-        if (jwtMatch) {
-          const jwt = jwtMatch[0];
-          let channelKey = `premium${channel}`;
-          let exp = Math.floor(Date.now() / 1000) + 18000;
-          
-          try {
-            const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-            const payload = JSON.parse(atob(payloadB64));
-            channelKey = payload.sub || channelKey;
-            exp = payload.exp || exp;
-            logger.info('JWT from topembed.pw', { channelKey, exp, expiresIn: exp - Math.floor(Date.now() / 1000) });
-          } catch (e) {
-            logger.warn('JWT decode failed');
-          }
-          
-          // Cache it
-          jwtCache.set(cacheKey, { jwt, channelKey, exp, fetchedAt: Date.now() });
-          channelKeyToTopembed.set(channelKey, topembedName);
-          dlhdIdToChannelKey.set(channel, channelKey);
-          
-          return jwt;
-        }
-      }
-    } catch (e) {
-      logger.warn('topembed.pw JWT fetch failed', { error: (e as Error).message });
-    }
-  }
-  
-  // ============================================================================
   // METHOD 2: Try hitsplay.fun - fallback for channels without topembed mapping
   // NOTE: hitsplay uses 'premium{id}' keys which may not work on all servers
   // Route through RPI proxy since hitsplay.fun may block CF IPs
@@ -1109,121 +400,7 @@ async function fetchPlayerJWT(channel: string, logger: any, env?: Env): Promise<
     logger.warn('hitsplay.fun JWT fetch failed', { error: (e as Error).message });
   }
   
-  // ============================================================================
-  // METHOD 3: Try to dynamically fetch topembed name from DLHD page
-  // This is for channels not in our static mapping
-  // SECURITY: Validate channel ID format and sanitize extracted names
-  // ============================================================================
-  if (!topembedName) {
-    // SECURITY: Only allow numeric channel IDs to prevent injection
-    if (!/^\d{1,4}$/.test(channel)) {
-      logger.warn('Invalid channel ID format, skipping dynamic fetch', { channel });
-    } else {
-      try {
-        logger.info('Channel not in mapping, fetching from DLHD', { channel });
-        const dlhdUrl = `https://dlhd.link/watch/stream-${channel}.php`;
-        
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
-        
-        const dlhdRes = await fetch(dlhdUrl, {
-          headers: {
-            'User-Agent': USER_AGENT,
-            'Referer': 'https://dlhd.link/',
-          },
-          signal: controller.signal,
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (dlhdRes.ok) {
-          const dlhdHtml = await dlhdRes.text();
-          const topembedMatch = dlhdHtml.match(/topembed\.pw\/channel\/([^"'\s]+)/);
-          if (topembedMatch) {
-            const dynamicTopembedName = topembedMatch[1];
-            
-            // SECURITY: Validate extracted channel name - only allow alphanumeric, brackets, and limited special chars
-            if (!/^[A-Za-z0-9_\-\[\]()]{1,64}$/.test(dynamicTopembedName)) {
-              logger.warn('Invalid dynamic topembed name format', { channel, dynamicTopembedName: dynamicTopembedName.substring(0, 20) });
-            } else {
-              logger.info('Found topembed name from DLHD', { channel, topembedName: dynamicTopembedName });
-              
-              // Now fetch JWT from this topembed URL
-              const playerUrl = `https://${PLAYER_DOMAIN}/channel/${encodeURIComponent(dynamicTopembedName)}`;
-              
-              let html: string | undefined;
-              if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
-                // SECURITY: Use timeout for RPI proxy requests
-                const rpiController = new AbortController();
-                const rpiTimeoutId = setTimeout(() => rpiController.abort(), 8000);
-                
-                try {
-                  const rpiUrl = `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(playerUrl)}&referer=${encodeURIComponent('https://dlhd.link/')}`;
-                  const res = await fetch(rpiUrl, {
-                    headers: { 'X-API-Key': env.RPI_PROXY_KEY },
-                    signal: rpiController.signal,
-                  });
-                  clearTimeout(rpiTimeoutId);
-                  if (res.ok) html = await res.text();
-                } catch (e) {
-                  clearTimeout(rpiTimeoutId);
-                  logger.warn('RPI proxy timeout/error', { error: (e as Error).message });
-                }
-              }
-              
-              if (!html) {
-                const directController = new AbortController();
-                const directTimeoutId = setTimeout(() => directController.abort(), 5000);
-                
-                try {
-                  const res = await fetch(playerUrl, {
-                    headers: { 'User-Agent': USER_AGENT, 'Referer': 'https://dlhd.link/' },
-                    signal: directController.signal,
-                  });
-                  clearTimeout(directTimeoutId);
-                  if (res.ok) html = await res.text();
-                } catch (e) {
-                  clearTimeout(directTimeoutId);
-                }
-              }
-              
-              if (html) {
-                const jwtMatch = html.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
-                if (jwtMatch) {
-                  const jwt = jwtMatch[0];
-                  let channelKey = `premium${channel}`;
-                  let exp = Math.floor(Date.now() / 1000) + 18000;
-                  
-                  try {
-                    const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-                    const payload = JSON.parse(atob(payloadB64));
-                    channelKey = payload.sub || channelKey;
-                    exp = payload.exp || exp;
-                    logger.info('JWT from dynamic topembed', { channelKey, exp });
-                  } catch {}
-                  
-                  jwtCache.set(cacheKey, { jwt, channelKey, exp, fetchedAt: Date.now() });
-                  channelKeyToTopembed.set(channelKey, dynamicTopembedName);
-                  dlhdIdToChannelKey.set(channel, channelKey);
-                  
-                  logger.info('JWT cached with mappings', { 
-                    channel, 
-                    topembedName: dynamicTopembedName, 
-                    channelKey,
-                    source: 'dynamic-dlhd'
-                  });
-                  
-                  return jwt;
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {
-        logger.warn('Dynamic topembed fetch failed', { error: (e as Error).message });
-      }
-    }
-  }
+
   
   logger.warn('All JWT fetch methods failed', { channel });
   return null;
@@ -1763,123 +940,6 @@ interface MoveonjoyResult {
   error?: string;
 }
 
-/**
- * Get stream from moveonjoy.com (NO AUTH NEEDED!)
- * Uses pre-mapped URLs from CHANNEL_TO_MOVEONJOY
- */
-async function fetchMoveonjoyStream(channel: string, logger: any): Promise<MoveonjoyResult> {
-  const m3u8Url = CHANNEL_TO_MOVEONJOY[channel];
-  
-  if (!m3u8Url) {
-    return { success: false, error: `No moveonjoy mapping for channel ${channel}` };
-  }
-  
-  logger.info('Trying moveonjoy.com', { channel, url: m3u8Url.substring(0, 60) });
-  
-  try {
-    const res = await fetch(m3u8Url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Referer': 'https://tv-bu1.blogspot.com/',
-      },
-    });
-    
-    if (!res.ok) {
-      return { success: false, error: `HTTP ${res.status}` };
-    }
-    
-    const content = await res.text();
-    if (content.includes('#EXTM3U') && (content.includes('#EXTINF') || content.includes('#EXT-X-STREAM-INF'))) {
-      logger.info('moveonjoy stream found', { channel });
-      return { success: true, m3u8Url };
-    }
-    
-    return { success: false, error: 'Invalid M3U8 content' };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
-  }
-}
-
-// ============================================================================
-// BACKEND 4: lovecdn.ru/popcdn.day (Token auth, UNENCRYPTED)
-// ============================================================================
-// Path: popcdn.day/player/{STREAM_NAME} → beautifulpeople.lovecdn.ru
-// Token is generated dynamically by popcdn.day
-// NO ENCRYPTION - direct M3U8 access with token!
-// ============================================================================
-
-interface LovecdnResult {
-  success: boolean;
-  m3u8Url?: string;
-  error?: string;
-}
-
-/**
- * Get stream from lovecdn.ru via popcdn.day
- * Fetches token dynamically from popcdn.day player page
- */
-async function fetchLovecdnStream(channel: string, logger: any): Promise<LovecdnResult> {
-  const streamName = CHANNEL_TO_LOVECDN[channel];
-  
-  if (!streamName) {
-    return { success: false, error: `No lovecdn mapping for channel ${channel}` };
-  }
-  
-  logger.info('Trying lovecdn.ru', { channel, streamName });
-  
-  try {
-    // Fetch popcdn.day player page to get token
-    const popcdnUrl = `https://popcdn.day/player/${streamName}`;
-    const res = await fetch(popcdnUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Referer': 'https://lovecdn.ru/',
-      },
-    });
-    
-    if (!res.ok) {
-      return { success: false, error: `popcdn.day returned ${res.status}` };
-    }
-    
-    const html = await res.text();
-    
-    if (html.includes('Channel not found')) {
-      return { success: false, error: 'Channel not found on popcdn.day' };
-    }
-    
-    // Extract M3U8 URL (escaped in JSON)
-    const m3u8Match = html.match(/https?:\\\/\\\/[^"'\s]*lovecdn\.ru[^"'\s]*\.m3u8[^"'\s]*/);
-    if (!m3u8Match) {
-      return { success: false, error: 'No M3U8 URL found in popcdn.day response' };
-    }
-    
-    // Unescape the URL
-    const m3u8Url = m3u8Match[0].replace(/\\\//g, '/');
-    
-    // Verify the stream works
-    const m3u8Res = await fetch(m3u8Url, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Referer': 'https://popcdn.day/',
-      },
-    });
-    
-    if (!m3u8Res.ok) {
-      return { success: false, error: `lovecdn.ru returned ${m3u8Res.status}` };
-    }
-    
-    const content = await m3u8Res.text();
-    if (content.includes('#EXTM3U')) {
-      logger.info('lovecdn stream found', { channel, streamName });
-      return { success: true, m3u8Url };
-    }
-    
-    return { success: false, error: 'Invalid M3U8 content from lovecdn.ru' };
-  } catch (err) {
-    return { success: false, error: (err as Error).message };
-  }
-}
-
 
 // ============================================================================
 // MAIN HANDLER
@@ -1909,12 +969,16 @@ export default {
     }
 
     if (!isAllowedOrigin(origin, referer)) {
-      // EXCEPTION: Allow segment requests without strict origin check
-      // HLS.js makes XHR requests for segments which may not include proper headers
-      // Segments are public data (not auth-protected), so this is safe
-      if (path !== '/segment') {
-        return jsonResponse({ error: 'Access denied' }, 403, origin);
-      }
+      // SECURITY: Strict origin validation for all endpoints
+      // Segments MUST also be protected - they consume bandwidth and are the main leech target
+      // Modern HLS.js DOES send proper Referer headers
+      logger.warn('Origin validation failed', { 
+        origin, 
+        referer, 
+        path,
+        ip: request.headers.get('cf-connecting-ip') 
+      });
+      return jsonResponse({ error: 'Access denied' }, 403, origin);
     }
 
     try {
@@ -2099,10 +1163,16 @@ async function tryCdnLiveBackend(
 /**
  * Try to fetch M3U8 from a specific server/channelKey combination
  * Returns the content if successful, null otherwise
+ * 
+ * CRITICAL: dvalna.ru requires:
+ * - Origin: https://dlhd.link
+ * - Referer: https://dlhd.link/
+ * - Authorization: Bearer <JWT> (for encrypted streams)
  */
 async function tryDvalnaServer(
   serverKey: string,
   channelKey: string,
+  jwt: string,
   env: Env | undefined,
   logger: any,
   timeoutMs: number = 8000
@@ -2112,20 +1182,33 @@ async function tryDvalnaServer(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   
   try {
-    const m3u8Res = await fetchViaRpiProxy(
-      `${m3u8Url}?_t=${Date.now()}`,
-      `https://${PLAYER_DOMAIN}/`,
-      env,
-      logger,
-      controller.signal,
-      `https://${PLAYER_DOMAIN}`
-    );
+    // CRITICAL: Use dlhd.link as origin/referer AND include JWT in Authorization header
+    const rpiUrl = env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY
+      ? `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(m3u8Url + '?_t=' + Date.now())}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent('https://dlhd.link/')}&origin=${encodeURIComponent('https://dlhd.link')}&auth=${encodeURIComponent('Bearer ' + jwt)}`
+      : null;
+    
+    if (!rpiUrl) {
+      logger.warn('RPI proxy not configured for dvalna');
+      return null;
+    }
+    
+    const m3u8Res = await fetch(rpiUrl, { signal: controller.signal });
     
     clearTimeout(timeout);
     
-    if (!m3u8Res.ok) return null;
+    if (!m3u8Res.ok) {
+      const text = await m3u8Res.text().catch(() => '');
+      logger.debug('dvalna server failed', { serverKey, channelKey, status: m3u8Res.status, body: text.substring(0, 100) });
+      return null;
+    }
     
     const content = await m3u8Res.text();
+    
+    // Check for error responses (E9 = missing headers, E2 = no session, etc.)
+    if (content.includes('"error"') || content.includes('"E') || content.startsWith('{')) {
+      logger.debug('dvalna returned error', { serverKey, channelKey, error: content.substring(0, 100) });
+      return null;
+    }
     
     // Validate it's a real M3U8 with actual content
     if (!content.includes('#EXTM3U') || (!content.includes('#EXTINF') && !content.includes('.ts'))) {
@@ -2133,8 +1216,9 @@ async function tryDvalnaServer(
     }
     
     return { content, m3u8Url };
-  } catch {
+  } catch (e) {
     clearTimeout(timeout);
+    logger.debug('dvalna server exception', { serverKey, channelKey, error: (e as Error).message });
     return null;
   }
 }
@@ -2157,13 +1241,7 @@ async function tryDvalnaBackend(
   // Build list of channel keys to try
   const channelKeysToTry: string[] = [];
   
-  // 1. Mapped channel key (from topembed.pw)
-  const mappedInfo = getChannelInfo(channel);
-  if (!mappedInfo.channelKey.startsWith('premium')) {
-    channelKeysToTry.push(mappedInfo.channelKey);
-  }
-  
-  // 2. Channel key from JWT 'sub' field
+  // 1. Channel key from JWT 'sub' field (if available)
   try {
     const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(atob(payloadB64));
@@ -2172,83 +1250,56 @@ async function tryDvalnaBackend(
     }
   } catch {}
   
-  // 3. Premium fallback (from hitsplay.fun)
-  const premiumKey = `premium${channel}`;
+  // 2. Premium key format (from hitsplay.fun - simplified Jan 2026)
+  const premiumKey = getChannelKey(channel);
   if (!channelKeysToTry.includes(premiumKey)) {
     channelKeysToTry.push(premiumKey);
   }
   
   logger.info('dvalna: trying channel keys', { channel, keys: channelKeysToTry });
   
-  // For each channel key, try server_lookup first, then brute force all servers
+  // For each channel key, ONLY use ddy6 server (skip server lookup)
   for (const channelKey of channelKeysToTry) {
-    // First try server_lookup to get the "correct" server
-    const lookupServer = await fetchServerKeyFromLookup(channelKey, logger, env);
+    // FORCED: Always use ddy6 server, skip server_lookup entirely
+    const serversToTry = ['ddy6'];
     
-    // Build server list: lookup result first (if any), then all others
-    const serversToTry = [...ALL_SERVER_KEYS];
-    if (lookupServer) {
-      // Move lookup result to front
-      const idx = serversToTry.indexOf(lookupServer);
-      if (idx > 0) {
-        serversToTry.splice(idx, 1);
-        serversToTry.unshift(lookupServer);
-      } else if (idx === -1) {
-        serversToTry.unshift(lookupServer);
-      }
-    }
+    logger.info('dvalna: using ddy6 server only', { channelKey, server: 'ddy6' });
     
-    logger.info('dvalna: trying servers for key', { channelKey, servers: serversToTry, lookupServer });
+    // Try ddy6 server only (no batching needed since it's just one server)
+    const result = await tryDvalnaServer('ddy6', channelKey, jwt, env, logger, 10000);
     
-    // Try servers in parallel batches for speed (3 at a time)
-    const BATCH_SIZE = 3;
-    for (let i = 0; i < serversToTry.length; i += BATCH_SIZE) {
-      const batch = serversToTry.slice(i, i + BATCH_SIZE);
+    if (result) {
+      logger.info('dvalna: SUCCESS with ddy6', { channel, channelKey, server: 'ddy6' });
       
-      const results = await Promise.all(
-        batch.map(server => tryDvalnaServer(server, channelKey, env, logger, 10000))
-      );
+      // Cache the working server
+      serverKeyCache.set(channelKey, { serverKey: 'ddy6', fetchedAt: Date.now() });
       
-      // Check if any succeeded
-      for (let j = 0; j < results.length; j++) {
-        const result = results[j];
-        if (result) {
-          const serverKey = batch[j];
-          logger.info('dvalna: SUCCESS', { channel, channelKey, serverKey });
-          
-          // Cache the working server
-          serverKeyCache.set(channelKey, { serverKey, fetchedAt: Date.now() });
-          
-          const proxied = rewriteM3U8(result.content, proxyOrigin, result.m3u8Url);
-          
-          return new Response(proxied, {
-            status: 200,
-            headers: {
-              'Content-Type': 'application/vnd.apple.mpegurl',
-              ...corsHeaders(origin),
-              'Cache-Control': 'no-store',
-              'X-DLHD-Channel': channel,
-              'X-DLHD-ChannelKey': channelKey,
-              'X-DLHD-Server': serverKey,
-              'X-DLHD-Backend': 'dvalna.ru',
-              'X-Fast-Path': 'true',
-            },
-          });
-        }
-      }
+      const proxied = rewriteM3U8(result.content, proxyOrigin, result.m3u8Url);
       
-      // Log failed batch
-      batch.forEach((server, idx) => {
-        if (!results[idx] && errors) {
-          errors.push(`dvalna/${channelKey}/${server}: failed`);
-        }
+      return new Response(proxied, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.apple.mpegurl',
+          ...corsHeaders(origin),
+          'Cache-Control': 'no-store',
+          'X-DLHD-Channel': channel,
+          'X-DLHD-ChannelKey': channelKey,
+          'X-DLHD-Server': 'ddy6',
+          'X-DLHD-Backend': 'dvalna.ru',
+          'X-Fast-Path': 'true',
+        },
       });
     }
     
-    logger.warn('dvalna: all servers failed for key', { channelKey });
+    // Log failure
+    if (errors) {
+      errors.push(`dvalna/${channelKey}/ddy6: failed`);
+    }
+    
+    logger.warn('dvalna: ddy6 server failed for key', { channelKey });
   }
   
-  if (errors) errors.push(`dvalna: all ${channelKeysToTry.length} channel keys failed on all ${ALL_SERVER_KEYS.length} servers`);
+  if (errors) errors.push(`dvalna: all ${channelKeysToTry.length} channel keys failed on ddy6 server`);
   return null;
 }
 
@@ -2264,36 +1315,6 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
   const jwtPromise = !skipBackends.includes('dvalna') 
     ? fetchPlayerJWT(channel, logger, env) 
     : Promise.resolve(null);
-
-  // ============================================================================
-  // BACKEND 1: moveonjoy.com (NO AUTH - fastest)
-  // ============================================================================
-  const moveonjoyUrl = CHANNEL_TO_MOVEONJOY[channel];
-  if (moveonjoyUrl && !skipBackends.includes('moveonjoy')) {
-    try {
-      const result = await tryMoveonjoyBackend(channel, moveonjoyUrl, proxyOrigin, logger, origin, env);
-      if (result && result.status === 200) {
-        return result;
-      }
-    } catch (e) {
-      errors.push(`moveonjoy: ${(e as Error).message}`);
-    }
-  }
-
-  // ============================================================================
-  // BACKEND 2: cdn-live-tv.ru (simple token auth)
-  // ============================================================================
-  const cdnLiveMapping = CHANNEL_TO_CDNLIVE[channel];
-  if (cdnLiveMapping && !skipBackends.includes('cdnlive')) {
-    try {
-      const result = await tryCdnLiveBackend(channel, cdnLiveMapping, proxyOrigin, logger, origin, env);
-      if (result && result.status === 200) {
-        return result;
-      }
-    } catch (e) {
-      errors.push(`cdnlive: ${(e as Error).message}`);
-    }
-  }
 
   // ============================================================================
   // BACKEND 3: dvalna.ru (needs JWT + PoW - slowest but most channels)
@@ -2671,18 +1692,16 @@ async function handleKeyProxy(url: URL, logger: any, origin: string | null, env?
     }
   }
   
-  // Method 4: Try to find DLHD channel ID from channelKey using DLHD_CHANNEL_MAP
-  // This is a fast lookup - no network requests needed
+  // Method 4: Extract DLHD channel ID from premium{id} format key
+  // Simplified Jan 2026 - all keys use premium{id} format now
   if (!jwt) {
-    // Search DLHD_CHANNEL_MAP for a channel with matching channelKey
-    for (const [dlhdId, info] of Object.entries(DLHD_CHANNEL_MAP)) {
-      if (info.channelKey === channelKey) {
-        logger.info('Found DLHD ID for channelKey', { channelKey, dlhdId });
-        jwt = await fetchPlayerJWT(dlhdId, logger, env);
-        if (jwt) {
-          jwtSource = `dlhd-map:${dlhdId}`;
-          break;
-        }
+    const premiumMatch = channelKey.match(/^premium(\d+)$/);
+    if (premiumMatch) {
+      const dlhdId = premiumMatch[1];
+      logger.info('Extracted DLHD ID from premium key', { channelKey, dlhdId });
+      jwt = await fetchPlayerJWT(dlhdId, logger, env);
+      if (jwt) {
+        jwtSource = `premium-key:${dlhdId}`;
       }
     }
   }
@@ -2832,6 +1851,10 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
     
     // Increment counter with 60 second TTL
     await env.RATE_LIMIT_KV.put(rateLimitKey, String(currentCount + 1), { expirationTtl: 60 });
+  } else {
+    // SECURITY WARNING: Rate limiting disabled - KV namespace not configured
+    // This allows unlimited bandwidth consumption per IP
+    logger.warn('RATE_LIMIT_KV not configured - bandwidth abuse possible');
   }
 
   // SECURITY: Strict URL validation to prevent SSRF attacks

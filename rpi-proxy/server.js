@@ -23,7 +23,103 @@
 
 const http = require('http');
 const https = require('https');
+const crypto = require('crypto');
 const { URL } = require('url');
+
+// ============================================================================
+// SECURITY: Origin Validation
+// Only allow requests from known origins (CF Worker, frontend apps)
+// ============================================================================
+const ALLOWED_ORIGINS = [
+  'https://tv.vynx.cc',
+  'https://flyx.tv',
+  'https://www.flyx.tv',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
+const ALLOWED_ORIGIN_PATTERNS = [
+  /\.vercel\.app$/,
+  /\.pages\.dev$/,
+  /\.workers\.dev$/,
+];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  
+  // Check exact matches
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  
+  // Check patterns
+  try {
+    const hostname = new URL(origin).hostname;
+    return ALLOWED_ORIGIN_PATTERNS.some(p => p.test(hostname));
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// SECURITY: URL Domain Allowlist
+// Only proxy requests to known/trusted domains
+// ============================================================================
+const PROXY_ALLOWED_DOMAINS = [
+  // DLHD key servers
+  'kiko2.ru',
+  'giokko.ru',
+  'dvalna.ru',
+  'topembed.pw',
+  'epicplayplay.cfd',
+  'dlhd.link',
+  // AnimeKai/MegaUp
+  'megaup.net',
+  'animekai.to',
+  'enc-dec.app',
+  // VIPRow
+  'boanki.net',
+  'peulleieo.net',
+  'casthill.net',
+  'viprow.nu',
+  // PPV
+  'poocloud.in',
+  'modistreams.org',
+  // Flixer
+  'flixer.sh',
+  'workers.dev', // Flixer CDN uses p.XXXXX.workers.dev
+];
+
+function isAllowedProxyDomain(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    return PROXY_ALLOWED_DOMAINS.some(d => 
+      hostname === d || hostname.endsWith('.' + d)
+    );
+  } catch {
+    return false;
+  }
+}
+
+// ============================================================================
+// SECURITY: Timing-safe API key comparison
+// Prevents timing attacks on API key validation
+// ============================================================================
+function timingSafeApiKeyCheck(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string') return false;
+  
+  // Pad to same length to prevent length-based timing leaks
+  const maxLen = Math.max(provided.length, expected.length);
+  const paddedProvided = provided.padEnd(maxLen, '\0');
+  const paddedExpected = expected.padEnd(maxLen, '\0');
+  
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(paddedProvided),
+      Buffer.from(paddedExpected)
+    ) && provided.length === expected.length;
+  } catch {
+    return false;
+  }
+}
 
 // ============================================================================
 // DLHD Auth Token Management
@@ -679,6 +775,7 @@ function proxyIPTVStream(targetUrl, mac, token, res, redirectCount = 0) {
  * dvalna.ru (DLHD) blocks:
  *   1. Datacenter IPs (Cloudflare, AWS, etc.)
  *   2. Requests WITHOUT proper Referer AND Origin headers
+ *   3. M3U8 requests WITHOUT Authorization: Bearer <JWT> header (returns E9 error)
  * 
  * This proxy fetches from a residential IP with appropriate headers.
  * 
@@ -686,8 +783,9 @@ function proxyIPTVStream(targetUrl, mac, token, res, redirectCount = 0) {
  * for decryption. Pass ?ua=<user-agent> to use a custom User-Agent.
  * Pass ?referer=<url> to include a Referer header (needed for Flixer CDN and dvalna.ru).
  * Pass ?origin=<url> to include an Origin header (needed for dvalna.ru).
+ * Pass ?auth=<value> to include an Authorization header (needed for dvalna.ru M3U8).
  */
-function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, customOrigin, res) {
+function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, customOrigin, customAuth, res) {
   // NO CACHING - always fetch fresh
 
   const url = new URL(targetUrl);
@@ -712,11 +810,16 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, customOr
     'Connection': 'keep-alive',
   };
   
-  // dvalna.ru REQUIRES both Referer AND Origin headers
+  // dvalna.ru REQUIRES Referer, Origin, AND Authorization headers for M3U8
   if (isDvalnaCdn) {
-    headers['Referer'] = customReferer || 'https://topembed.pw/';
-    headers['Origin'] = customOrigin || 'https://topembed.pw';
-    console.log(`[AnimeKai] dvalna.ru CDN detected - adding Referer: ${headers['Referer']}, Origin: ${headers['Origin']}`);
+    headers['Referer'] = customReferer || 'https://dlhd.link/';
+    headers['Origin'] = customOrigin || 'https://dlhd.link';
+    // Add Authorization header if provided (required for M3U8 requests)
+    if (customAuth) {
+      headers['Authorization'] = customAuth;
+      console.log(`[AnimeKai] dvalna.ru - adding Auth header: ${customAuth.substring(0, 30)}...`);
+    }
+    console.log(`[AnimeKai] dvalna.ru CDN detected - Referer: ${headers['Referer']}, Origin: ${headers['Origin']}, Auth: ${customAuth ? 'YES' : 'NO'}`);
   }
   // Flixer CDN REQUIRES Referer header, MegaUp CDN BLOCKS it
   else if (isFlixerCdn) {
@@ -760,8 +863,8 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, customOr
         ? redirectUrl 
         : new URL(redirectUrl, targetUrl).toString();
       
-      // Follow the redirect (preserve custom User-Agent, Referer, and Origin)
-      proxyAnimeKaiStream(absoluteUrl, customUserAgent, customReferer, customOrigin, res);
+      // Follow the redirect (preserve custom User-Agent, Referer, Origin, and Auth)
+      proxyAnimeKaiStream(absoluteUrl, customUserAgent, customReferer, customOrigin, customAuth, res);
       return;
     }
     
@@ -1062,21 +1165,46 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Check API key (header or query param) for all other endpoints
+  // SECURITY: Use timing-safe comparison to prevent timing attacks
   const apiKey = req.headers['x-api-key'] || reqUrl.searchParams.get('key');
-  if (apiKey !== API_KEY) {
+  if (!timingSafeApiKeyCheck(apiKey, API_KEY)) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Unauthorized' }));
   }
 
-  // Rate limiting DISABLED for authenticated requests
-  // API key authentication is sufficient protection
-  // CF Workers share IPs, so IP-based rate limiting doesn't work for them
-  // The API key itself provides access control
-  // 
-  // If you need rate limiting, use the API key as the identifier instead of IP:
-  // if (!checkRateLimit(apiKey)) { ... }
-  //
-  // For now, skip rate limiting entirely for authenticated requests
+  // SECURITY: Validate origin for non-health endpoints
+  // CF Worker should send X-Forwarded-Origin header
+  const origin = req.headers['origin'];
+  const referer = req.headers['referer'];
+  const forwardedOrigin = req.headers['x-forwarded-origin'];
+  
+  let originAllowed = isAllowedOrigin(origin) || isAllowedOrigin(forwardedOrigin);
+  if (!originAllowed && referer) {
+    try {
+      originAllowed = isAllowedOrigin(new URL(referer).origin);
+    } catch {}
+  }
+  
+  // Allow requests without origin header if they have valid API key
+  // (for server-to-server calls from CF Worker)
+  // But log for monitoring
+  if (!originAllowed && !origin && !forwardedOrigin) {
+    console.log(`[Security] Request without origin from ${clientIp} - allowed via API key`);
+    originAllowed = true; // Allow server-to-server with valid API key
+  }
+  
+  if (!originAllowed) {
+    console.log(`[Security] Blocked request from unauthorized origin: ${origin || forwardedOrigin || referer}`);
+    res.writeHead(403, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Origin not allowed' }));
+  }
+
+  // Rate limiting by API key (re-enabled with higher limit)
+  // This protects against leaked API keys being abused
+  if (!checkRateLimit(apiKey || clientIp)) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ error: 'Rate limited', retryAfter: 60 }));
+  }
 
   // DLHD Heartbeat endpoint - establishes session for key fetching
   // This is needed because heartbeat endpoint blocks datacenter IPs
@@ -1140,6 +1268,7 @@ const server = http.createServer(async (req, res) => {
     console.log(`[DLHD-Key-V4] ts=${timestamp} nonce=${nonce}`);
     
     // Simple fetch with the provided auth headers
+    // CRITICAL: Use dlhd.link as Origin/Referer (not topembed.pw)
     const url = new URL(targetUrl);
     const options = {
       hostname: url.hostname,
@@ -1148,8 +1277,8 @@ const server = http.createServer(async (req, res) => {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
-        'Origin': 'https://topembed.pw',
-        'Referer': 'https://topembed.pw/',
+        'Origin': 'https://dlhd.link',
+        'Referer': 'https://dlhd.link/',
         'Authorization': `Bearer ${jwt}`,
         'X-Key-Timestamp': timestamp,
         'X-Key-Nonce': nonce,
@@ -1221,6 +1350,14 @@ const server = http.createServer(async (req, res) => {
         error: 'Missing url parameter',
         usage: '/dlhd-key?url=<key_url>'
       }));
+    }
+    
+    // SECURITY: Validate target domain is a known DLHD key server
+    const decoded = decodeURIComponent(targetUrl);
+    if (!isAllowedProxyDomain(decoded)) {
+      console.log(`[Security] Blocked DLHD key request to unauthorized domain: ${decoded.substring(0, 80)}`);
+      res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      return res.end(JSON.stringify({ error: 'Domain not allowed' }));
     }
     
     console.log(`[DLHD-Key] Fetching key via v4 WASM auth: ${targetUrl.substring(0, 80)}...`);
@@ -1324,6 +1461,14 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const decoded = decodeURIComponent(targetUrl);
+      
+      // SECURITY: Validate target domain is in allowlist
+      if (!isAllowedProxyDomain(decoded)) {
+        console.log(`[Security] Blocked proxy to unauthorized domain: ${decoded.substring(0, 80)}`);
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: 'Domain not allowed' }));
+      }
+      
       proxyRequest(decoded, res);
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1335,12 +1480,13 @@ const server = http.createServer(async (req, res) => {
   // AnimeKai proxy endpoint - proxies MegaUp/Flixer/DLHD CDN streams from residential IP
   // MegaUp blocks datacenter IPs and requests with Origin/Referer headers
   // Flixer CDN blocks datacenter IPs but REQUIRES Referer header
-  // dvalna.ru (DLHD) blocks datacenter IPs and REQUIRES both Referer AND Origin headers
+  // dvalna.ru (DLHD) blocks datacenter IPs and REQUIRES Referer, Origin, AND Authorization headers
   if (reqUrl.pathname === '/animekai') {
     const targetUrl = reqUrl.searchParams.get('url');
     const customUserAgent = reqUrl.searchParams.get('ua');
     const customReferer = reqUrl.searchParams.get('referer');
     const customOrigin = reqUrl.searchParams.get('origin');
+    const customAuth = reqUrl.searchParams.get('auth');
     
     if (!targetUrl) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
@@ -1349,10 +1495,19 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const decoded = decodeURIComponent(targetUrl);
+      
+      // SECURITY: Validate target domain is in allowlist
+      if (!isAllowedProxyDomain(decoded)) {
+        console.log(`[Security] Blocked animekai proxy to unauthorized domain: ${decoded.substring(0, 80)}`);
+        res.writeHead(403, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ error: 'Domain not allowed' }));
+      }
+      
       const decodedUa = customUserAgent ? decodeURIComponent(customUserAgent) : null;
       const decodedReferer = customReferer ? decodeURIComponent(customReferer) : null;
       const decodedOrigin = customOrigin ? decodeURIComponent(customOrigin) : null;
-      proxyAnimeKaiStream(decoded, decodedUa, decodedReferer, decodedOrigin, res);
+      const decodedAuth = customAuth ? decodeURIComponent(customAuth) : null;
+      proxyAnimeKaiStream(decoded, decodedUa, decodedReferer, decodedOrigin, decodedAuth, res);
     } catch (err) {
       res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ error: 'Invalid URL' }));

@@ -238,7 +238,8 @@ async function fetchKeyWithAuthV4(keyUrl, authData) {
   
   return new Promise((resolve) => {
     const url = new URL(keyUrl);
-    const origin = 'https://hitsplay.fun';
+    // CRITICAL: Use dlhd.link as Origin/Referer (not hitsplay.fun or topembed.pw)
+    const origin = 'https://dlhd.link';
     
     const req = https.request({
       hostname: url.hostname,
