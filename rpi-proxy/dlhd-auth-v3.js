@@ -29,8 +29,9 @@
 const crypto = require('crypto');
 const https = require('https');
 
-// Master secret for HMAC - extracted from obfuscated player JS (January 2026)
-const MASTER_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+// CORRECT SECRET - extracted from WASM module (January 2026)
+// The old 64-char hex secret is WRONG! This is the real one from the WASM.
+const MASTER_SECRET = '444c44cc8888888844444444';
 
 // PoW threshold - hash prefix must be less than this value
 const POW_THRESHOLD = 0x1000;

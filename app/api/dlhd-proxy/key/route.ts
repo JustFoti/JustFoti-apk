@@ -12,9 +12,10 @@ import { createHmac, createHash } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
-const PLAYER_DOMAIN = 'epicplayplay.cfd';
+const PLAYER_DOMAIN = 'hitsplay.fun'; // UPDATED: epicplayplay.cfd is DEAD
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
-const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+// CORRECT SECRET - extracted from WASM module (January 2026)
+const HMAC_SECRET = '444c44cc8888888844444444';
 const POW_THRESHOLD = 0x1000;
 
 /**

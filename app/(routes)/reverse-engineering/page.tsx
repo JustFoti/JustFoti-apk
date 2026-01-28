@@ -426,7 +426,8 @@ export default function ReverseEngineeringPage() {
                 id="dlhd-pow"
                 copiedCode={copiedCode}
                 onCopy={copyCode}
-                code={`const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+                code={`// CORRECT SECRET - extracted from WASM module (January 2026)
+const HMAC_SECRET = '444c44cc8888888844444444';
 const POW_THRESHOLD = 0x1000;
 
 function computePoWNonce(resource, keyNumber, timestamp) {

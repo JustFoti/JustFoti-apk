@@ -35,7 +35,7 @@ The server requires the DLHD auth module:
 ```bash
 cd rpi-proxy
 # The WASM PoW module will be downloaded automatically on first key request
-# Ensure dlhd-auth-v3.js is present
+# Ensure dlhd-auth-v4.js is present
 ```
 
 ### 4. Run the server
@@ -119,7 +119,7 @@ async function fetchViaRpiProxy(url: string): Promise<Response> {
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /dlhd-key?url=<key_url>` | Fetch DLHD encryption key with v3 PoW auth |
+| `GET /dlhd-key?url=<key_url>` | Fetch DLHD encryption key with v4 WASM PoW auth |
 | `GET /heartbeat?channel=&server=&domain=` | Establish DLHD heartbeat session |
 
 ### AnimeKai Endpoints

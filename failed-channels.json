@@ -1,0 +1,1757 @@
+[
+  {
+    "channel": "41",
+    "name": "eurosport 1 greece",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "43",
+    "name": "pdc tv",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 7771
+  },
+  {
+    "channel": "48",
+    "name": "canal+ sport poland",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 8666
+  },
+  {
+    "channel": "50",
+    "name": "polsat sport 2 poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "58",
+    "name": "eurosport 2 poland",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10329
+  },
+  {
+    "channel": "61",
+    "name": "bein sports mena english 1",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10253
+  },
+  {
+    "channel": "75",
+    "name": "canal+ sport 5 poland",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 2413
+  },
+  {
+    "channel": "82",
+    "name": "espn2 brasil",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "88",
+    "name": "premier brasil",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 7620
+  },
+  {
+    "channel": "89",
+    "name": "combate brasil",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 8786
+  },
+  {
+    "channel": "95",
+    "name": "bein sports 5 arabic",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "99",
+    "name": "bein sports 9 arabic",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 14040
+  },
+  {
+    "channel": "100",
+    "name": "bein sports xtra 1",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "103",
+    "name": "sport klub 3 croatia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "112",
+    "name": "tsn2",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "113",
+    "name": "tsn3",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "115",
+    "name": "tsn5",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "120",
+    "name": "rmc sport 2 france",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "123",
+    "name": "astro supersport 1",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "131",
+    "name": "telemundo",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "134",
+    "name": "arena sport 1 premium",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "136",
+    "name": "match football 1 russia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "138",
+    "name": "match football 3 russia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "150",
+    "name": "espn2 argentina",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "206",
+    "name": "ahc (american heroes channel)",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "223",
+    "name": "tv3 max denmark",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "267",
+    "name": "star sports 1 in",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "275",
+    "name": "bandsports brasil",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "277",
+    "name": "nbc10 philadelphia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "284",
+    "name": "starzplay criclife 1 hd",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "285",
+    "name": "discovery velocity ca",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 1545
+  },
+  {
+    "channel": "286",
+    "name": "ytv ca",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "291",
+    "name": "sport tv6 portugal",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 12946
+  },
+  {
+    "channel": "292",
+    "name": "newsnation usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "296",
+    "name": "hallmark movies &amp; mysterie",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "297",
+    "name": "fox business",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "301",
+    "name": "freeform",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "332",
+    "name": "oxygen true crime",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "342",
+    "name": "tvland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "348",
+    "name": "dave",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "361",
+    "name": "sky witness hd",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "362",
+    "name": "sky atlantic",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "368",
+    "name": "supersport cricket",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 17693
+  },
+  {
+    "channel": "370",
+    "name": "astro cricket",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11258
+  },
+  {
+    "channel": "387",
+    "name": "espn premium argentina",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 982
+  },
+  {
+    "channel": "388",
+    "name": "tnt sports argentina",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "390",
+    "name": "rtl7 netherland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "394",
+    "name": "the weather channel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "396",
+    "name": "ziggo sport 4 nl",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13029
+  },
+  {
+    "channel": "412",
+    "name": "supersport grandstand",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "417",
+    "name": "supersport variety 2",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "419",
+    "name": "supersport variety 4",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 18799
+  },
+  {
+    "channel": "426",
+    "name": "dazn 1 bar de",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "436",
+    "name": "movistar deportes spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "439",
+    "name": "orange sport 1 romania",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "441",
+    "name": "orange sport 3 romania",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 12927
+  },
+  {
+    "channel": "442",
+    "name": "orange sport 4 romania",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13812
+  },
+  {
+    "channel": "444",
+    "name": "tvn24 poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "447",
+    "name": "dazn 3 spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "453",
+    "name": "sport klub hd croatia",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13245
+  },
+  {
+    "channel": "470",
+    "name": "m6 france",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "476",
+    "name": "bnt 1 bulgaria",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "477",
+    "name": "bnt 2 bulgaria",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "480",
+    "name": "nova tv bulgaria",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "486",
+    "name": "canal+ sport 1 afrique",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "491",
+    "name": "bein sports australia 1",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "492",
+    "name": "bein sports australia 2",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 17690
+  },
+  {
+    "channel": "493",
+    "name": "bein sports australia 3",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "502",
+    "name": "18+ (player-02)",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "507",
+    "name": "18+ (player-07)",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "510",
+    "name": "18+ (player-10)",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "525",
+    "name": "eurosport 2 spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "526",
+    "name": "movistar deportes 3 spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "527",
+    "name": "movistar deportes 4 spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "532",
+    "name": "telecinco spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "533",
+    "name": "tve la 1 spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "534",
+    "name": "la sexta spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "536",
+    "name": "tve la 2 spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "537",
+    "name": "dazn f1 es",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "539",
+    "name": "laliga smartbank tv",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10363
+  },
+  {
+    "channel": "542",
+    "name": "one 2 hd israel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "545",
+    "name": "yes movies comedy israel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "546",
+    "name": "channel 9 israel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "547",
+    "name": "channel 10 israe",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "548",
+    "name": "channel 11 israel",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13643
+  },
+  {
+    "channel": "549",
+    "name": "channel 12 israel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "551",
+    "name": "channel 13 israel",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11222
+  },
+  {
+    "channel": "552",
+    "name": "channel 14 israel",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13603
+  },
+  {
+    "channel": "553",
+    "name": "hot3 israel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "556",
+    "name": "sky sport top event de",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "559",
+    "name": "sky sport austria 1 hd",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "563",
+    "name": "motowizja poland",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11444
+  },
+  {
+    "channel": "565",
+    "name": "tvn hd poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "568",
+    "name": "filmbox premium poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "571",
+    "name": "sportdigital fussball",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "577",
+    "name": "sky sport f1 italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "579",
+    "name": "arena sport 1 bih",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "582",
+    "name": "nova sport serbia",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 12918
+  },
+  {
+    "channel": "585",
+    "name": "prima sport 3",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "586",
+    "name": "prima sport 4",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13578
+  },
+  {
+    "channel": "587",
+    "name": "sky sport select nz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 18242
+  },
+  {
+    "channel": "601",
+    "name": "abu dhabi sports 2 uae",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "603",
+    "name": "smithsonian channel",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "607",
+    "name": "rally tv",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "614",
+    "name": "ssc sport 1",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13530
+  },
+  {
+    "channel": "615",
+    "name": "ssc sport 2",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "616",
+    "name": "ssc sport 3",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13143
+  },
+  {
+    "channel": "617",
+    "name": "ssc sport 4",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "618",
+    "name": "ssc sport 5",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13445
+  },
+  {
+    "channel": "619",
+    "name": "ssc sport extra 1",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13145
+  },
+  {
+    "channel": "620",
+    "name": "ssc sport extra 2",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "621",
+    "name": "ssc sport extra 3",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13426
+  },
+  {
+    "channel": "624",
+    "name": "cosmote sport 3 hd",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "626",
+    "name": "cosmote sport 5 hd",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "628",
+    "name": "cosmote sport 7 hd",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 4044
+  },
+  {
+    "channel": "631",
+    "name": "nova sports 1 greece",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "635",
+    "name": "nova sports 5 greece",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10977
+  },
+  {
+    "channel": "639",
+    "name": "nova sports news greece",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13389
+  },
+  {
+    "channel": "643",
+    "name": "fox deportes usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "644",
+    "name": "tcm usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "646",
+    "name": "racer tv usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "653",
+    "name": "pop tv usa",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 5632
+  },
+  {
+    "channel": "655",
+    "name": "wetv usa",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 7572
+  },
+  {
+    "channel": "663",
+    "name": "nhl network usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "665",
+    "name": "fyi",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "666",
+    "name": "nick music",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 5284
+  },
+  {
+    "channel": "668",
+    "name": "universal kids usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "674",
+    "name": "sky cinema greats uk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "677",
+    "name": "sky cinema action uk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "682",
+    "name": "sky showcase uk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "688",
+    "name": "film4 uk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "695",
+    "name": "showtime shoxbet usa",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13395
+  },
+  {
+    "channel": "696",
+    "name": "comet usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "700",
+    "name": "tv4 hockey",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "701",
+    "name": "tv4 tennis",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11412
+  },
+  {
+    "channel": "702",
+    "name": "tv4 motor",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "707",
+    "name": "tv4 sportkanalen",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "710",
+    "name": "sport klub golf croatia",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10375
+  },
+  {
+    "channel": "711",
+    "name": "tennis+ 12",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13257
+  },
+  {
+    "channel": "714",
+    "name": "bein sports 3 malaysia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "717",
+    "name": "axn movies portugal",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "720",
+    "name": "rtp 2 portugal",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "724",
+    "name": "tvi reality portugal",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "728",
+    "name": "zdf info de",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "738",
+    "name": "super rtl de",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "741",
+    "name": "ten sports pk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "742",
+    "name": "axs tv usa",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 12047
+  },
+  {
+    "channel": "744",
+    "name": "fashion tv",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "745",
+    "name": "nat geo wild usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "748",
+    "name": "cozi tv usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "749",
+    "name": "mundotoro tv spain",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "753",
+    "name": "nbc sports bay area",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 7362
+  },
+  {
+    "channel": "757",
+    "name": "fight network",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "761",
+    "name": "globo rio",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "767",
+    "name": "cbsny usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "770",
+    "name": "marquee sports network",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "771",
+    "name": "premier sports ireland 1",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 5058
+  },
+  {
+    "channel": "778",
+    "name": "monumental sports network",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "779",
+    "name": "max sport 1 croatia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "783",
+    "name": "alkass three",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "785",
+    "name": "sky sports golf de",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "786",
+    "name": "dstv mzansi magic",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13927
+  },
+  {
+    "channel": "787",
+    "name": "fox sports argentina",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11548
+  },
+  {
+    "channel": "788",
+    "name": "fox sports 2 argentina",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10300
+  },
+  {
+    "channel": "792",
+    "name": "showtime 2 usa (sho2) usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "796",
+    "name": "showtime next (sho next) usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "797",
+    "name": "showtime women usa",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "798",
+    "name": "espn3 argentina",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11192
+  },
+  {
+    "channel": "812",
+    "name": "c more first sweden",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13733
+  },
+  {
+    "channel": "814",
+    "name": "c more series sweden",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "815",
+    "name": "v film premiere",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "816",
+    "name": "v film family",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "817",
+    "name": "tv2 denmark",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "818",
+    "name": "tv2 zulu",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "820",
+    "name": "fox sports 502 au",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "822",
+    "name": "fox sports 504 au",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13213
+  },
+  {
+    "channel": "823",
+    "name": "fox sports 505 au",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13824
+  },
+  {
+    "channel": "830",
+    "name": "fox sports premium mx",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 4741
+  },
+  {
+    "channel": "838",
+    "name": "ctv 2 canada",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "839",
+    "name": "rds ca",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "843",
+    "name": "prima tv ro",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "844",
+    "name": "azteca 7 mx",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "846",
+    "name": "happy tv serbia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "851",
+    "name": "rai 2 italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "854",
+    "name": "italia 1 italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "857",
+    "name": "20 mediaset italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "859",
+    "name": "sky cinema collection italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "863",
+    "name": "sky cinema uno +24 italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "875",
+    "name": "sky sport basket italy",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "876",
+    "name": "itv quiz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "883",
+    "name": "sbs6 nl",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "884",
+    "name": "sky sports tennis de",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "890",
+    "name": "fanduel sports network arizona",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 12976
+  },
+  {
+    "channel": "891",
+    "name": "fanduel sports network detroit",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "892",
+    "name": "fanduel sports network florida",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "894",
+    "name": "fanduel sports network indiana",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "895",
+    "name": "fanduel sports network kansas city",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "896",
+    "name": "fanduel sports network midwest",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10682
+  },
+  {
+    "channel": "899",
+    "name": "fanduel sports network ohio",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11230
+  },
+  {
+    "channel": "900",
+    "name": "fanduel sports network oklahoma",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13404
+  },
+  {
+    "channel": "901",
+    "name": "ziggo sport 6 nl",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "905",
+    "name": "fanduel sports network sun",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10979
+  },
+  {
+    "channel": "906",
+    "name": "fanduel sports network west",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11233
+  },
+  {
+    "channel": "914",
+    "name": "cytavision sports 4 cyprus",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "917",
+    "name": "cytavision sports 7 cyprus",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "918",
+    "name": "dazn portugal fifa mundial de clubes",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10890
+  },
+  {
+    "channel": "924",
+    "name": "las estrellas",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13041
+  },
+  {
+    "channel": "925",
+    "name": "espn 1 mx",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "930",
+    "name": "fox sports 2 mx",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "935",
+    "name": "tudn mx",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "940",
+    "name": "arena sport 5 serbia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "941",
+    "name": "arena sport 6 serbia",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "953",
+    "name": "france 5",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13563
+  },
+  {
+    "channel": "954",
+    "name": "rmc story france",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "957",
+    "name": "bfm tv france",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "958",
+    "name": "arte france",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "960",
+    "name": "dazn ligue 1 france",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13063
+  },
+  {
+    "channel": "961",
+    "name": "automoto la chaîne",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11248
+  },
+  {
+    "channel": "962",
+    "name": "lci france",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11487
+  },
+  {
+    "channel": "963",
+    "name": "6ter france",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13609
+  },
+  {
+    "channel": "964",
+    "name": "cnews france",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11013
+  },
+  {
+    "channel": "970",
+    "name": "starz cinema",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "974",
+    "name": "starz kids &amp; family",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 5252
+  },
+  {
+    "channel": "979",
+    "name": "starz encore family",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "983",
+    "name": "canal+ extra 1 poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "985",
+    "name": "canal+ extra 3 poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "989",
+    "name": "canal+ extra 7 poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "994",
+    "name": "polsat sport extra 2 hd poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "998",
+    "name": "polsat sport news hd poland",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1010",
+    "name": "bein sports 5 turkey",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1020",
+    "name": "canal+ sport cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1021",
+    "name": "nova sport 1 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10529
+  },
+  {
+    "channel": "1022",
+    "name": "nova sport 2 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11332
+  },
+  {
+    "channel": "1023",
+    "name": "nova sport 3 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11106
+  },
+  {
+    "channel": "1024",
+    "name": "nova sport 4 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10871
+  },
+  {
+    "channel": "1025",
+    "name": "nova sport 5 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 7646
+  },
+  {
+    "channel": "1026",
+    "name": "nova sport 6 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1027",
+    "name": "oneplay sport 1 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13078
+  },
+  {
+    "channel": "1028",
+    "name": "oneplay sport 2 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1029",
+    "name": "oneplay sport 3 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1030",
+    "name": "premier sport 1 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1031",
+    "name": "premier sport 2 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11133
+  },
+  {
+    "channel": "1032",
+    "name": "premier sport 3 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1034",
+    "name": "nova hd cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1035",
+    "name": "ct1 hd cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1036",
+    "name": "ct2 hd cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10724
+  },
+  {
+    "channel": "1037",
+    "name": "tn live cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1038",
+    "name": "oneplay sport 4 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13516
+  },
+  {
+    "channel": "1039",
+    "name": "oneplay md2 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13374
+  },
+  {
+    "channel": "1040",
+    "name": "oneplay md3 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10578
+  },
+  {
+    "channel": "1041",
+    "name": "oneplay md4 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10698
+  },
+  {
+    "channel": "1042",
+    "name": "sport 1 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11162
+  },
+  {
+    "channel": "1043",
+    "name": "canal+ sport 2 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1044",
+    "name": "canal+ sport 3 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13274
+  },
+  {
+    "channel": "1045",
+    "name": "canal+ sport 4 cz",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1046",
+    "name": "canal+ sport 5 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11179
+  },
+  {
+    "channel": "1047",
+    "name": "canal+ sport 6 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11149
+  },
+  {
+    "channel": "1048",
+    "name": "canal+ sport 7 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11271
+  },
+  {
+    "channel": "1049",
+    "name": "canal+ sport 8 cz",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11127
+  },
+  {
+    "channel": "1050",
+    "name": "joj sk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1051",
+    "name": "dajto sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10601
+  },
+  {
+    "channel": "1052",
+    "name": "joj Šport sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13346
+  },
+  {
+    "channel": "1053",
+    "name": "voyo special 1 sk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1054",
+    "name": "voyo special 2 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13731
+  },
+  {
+    "channel": "1055",
+    "name": "voyo special 3 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10887
+  },
+  {
+    "channel": "1056",
+    "name": "voyo special 4 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11496
+  },
+  {
+    "channel": "1057",
+    "name": "voyo special 7 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13595
+  },
+  {
+    "channel": "1058",
+    "name": "voyo special 8 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13911
+  },
+  {
+    "channel": "1059",
+    "name": "voyo special 9 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11532
+  },
+  {
+    "channel": "1060",
+    "name": "nova sport 3 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13482
+  },
+  {
+    "channel": "1061",
+    "name": "nova sport 4 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 10915
+  },
+  {
+    "channel": "1062",
+    "name": "nova sport 5 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 11443
+  },
+  {
+    "channel": "1063",
+    "name": "canal+ sport sk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1064",
+    "name": "canal+ sport 2 sk",
+    "success": false,
+    "error": "Timeout"
+  },
+  {
+    "channel": "1065",
+    "name": "canal+ sport 3 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13262
+  },
+  {
+    "channel": "1066",
+    "name": "canal+ sport 4 sk",
+    "success": false,
+    "error": "HTTP 502",
+    "elapsed": 13274
+  }
+]

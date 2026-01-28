@@ -48,7 +48,8 @@ npx wrangler deploy
 | Domain: kiko2.ru, giokko.ru | Domain: dvalna.ru |
 | Auth: Bearer token + heartbeat | Auth: Proof-of-Work (PoW) |
 | Key server blocked CF IPs | **ALL servers block CF IPs** |
-| Required RPI proxy for keys only | **RPI proxy required for M3U8 AND keys** |
+| Required RPI proxy for keys only | **RPI proxy required for JWT, M3U8, AND keys** |
+| hitsplay.fun accessible from CF | **hitsplay.fun blocks CF IPs** |
 
 ## How It Works
 
@@ -80,7 +81,8 @@ Response: HLS playlist with encrypted segments
 The PoW algorithm finds a nonce where MD5 hash prefix < 0x1000:
 
 ```javascript
-const HMAC_SECRET = '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+// CORRECT SECRET - extracted from WASM module (January 2026)
+const HMAC_SECRET = '444c44cc8888888844444444';
 const POW_THRESHOLD = 0x1000;
 
 function computePoWNonce(resource, keyNumber, timestamp) {
@@ -133,12 +135,13 @@ Response: 16-byte AES-128 key
 
 ## What Requires What?
 
-| Component | PoW Auth | Notes |
-|-----------|----------|-------|
-| Server Lookup | ❌ | Public endpoint |
-| M3U8 Playlist | ❌ | Public CDN |
-| **Encryption Key** | ✅ | Requires PoW JWT |
-| Video Segments | ❌ | Public CDN |
+| Component | PoW Auth | RPI Proxy | Notes |
+|-----------|----------|-----------|-------|
+| Server Lookup | ❌ | ❌ | Public endpoint |
+| **JWT from hitsplay.fun** | ❌ | ✅ | Blocks CF IPs |
+| M3U8 Playlist | ❌ | ❌ | Public CDN |
+| **Encryption Key** | ✅ | ✅ | Requires PoW JWT + residential IP |
+| Video Segments | ❌ | ❌ | Public CDN |
 
 ## Routes
 
@@ -186,6 +189,27 @@ curl "https://your-worker.workers.dev/tv?channel=51"
 
 # Check health
 curl "https://your-worker.workers.dev/tv/health"
+```
+
+## Testing
+
+### Test CF Worker Flow
+
+Use the test script to validate the full flow (CF Worker → WASM PoW → RPI → Key Server):
+
+```bash
+node scripts/test-cf-dlhd.js
+```
+
+This tests 10 channels across different server types (top1, top2, wiki, hzt, x4, azo, max2) and validates:
+- M3U8 playlist fetch
+- Key URL extraction  
+- Key fetch with PoW authentication
+
+**Sample output:**
+```
+Testing  35 Sky Sports Football [UK]      [top2]... ✅ 1234ms ✅ key-valid
+Testing  44 ESPN [USA]                    [hzt]...  ✅ 987ms  ✅ key-valid
 ```
 
 ## Troubleshooting

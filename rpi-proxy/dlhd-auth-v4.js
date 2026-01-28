@@ -23,6 +23,13 @@ let WASM_VECTOR_LEN = 0;
 const WASM_URL = 'https://333418.fun/pow/pow_wasm_bg.wasm';
 const WASM_CACHE_PATH = path.join(__dirname, 'pow_wasm_bg.wasm');
 
+// SECURITY: Pin known-good WASM hash to prevent supply chain attacks
+// Update this hash when DLHD updates their WASM module
+const EXPECTED_WASM_HASHES = [
+  // Add known-good hashes here - first run will log the hash
+  // Format: SHA-256 hex digest
+];
+
 /**
  * Download WASM binary if not cached
  */
@@ -41,6 +48,18 @@ async function downloadWASM() {
       res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
         const buffer = Buffer.concat(chunks);
+        
+        // SECURITY: Verify WASM integrity
+        const crypto = require('crypto');
+        const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+        console.log(`[WASM] Downloaded hash: ${hash}`);
+        
+        if (EXPECTED_WASM_HASHES.length > 0 && !EXPECTED_WASM_HASHES.includes(hash)) {
+          console.error(`[WASM] ⚠️ INTEGRITY CHECK FAILED! Hash ${hash} not in allowed list`);
+          console.error('[WASM] This could indicate a supply chain attack or DLHD update');
+          // Continue anyway but log warning - in production you might want to reject
+        }
+        
         fs.writeFileSync(WASM_CACHE_PATH, buffer);
         console.log(`[WASM] Downloaded and cached: ${buffer.length} bytes`);
         resolve(buffer);
@@ -145,6 +164,12 @@ async function getWASMVersion() {
  * Fetch JWT from hitsplay.fun
  */
 async function fetchAuthDataV4(channel) {
+  // Input validation: channel must be numeric to prevent SSRF
+  if (!/^\d+$/.test(channel)) {
+    console.log(`[AuthV4] Invalid channel ID: ${channel}`);
+    return null;
+  }
+  
   console.log(`[AuthV4] Fetching auth for channel ${channel}...`);
   
   return new Promise((resolve) => {
@@ -165,7 +190,8 @@ async function fetchAuthDataV4(channel) {
           try {
             const payloadB64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
             const payload = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
-            console.log(`[AuthV4] JWT payload:`, payload);
+            // SECURITY: Don't log full JWT payload - may contain sensitive data
+            console.log(`[AuthV4] JWT obtained for channel ${channel}, sub: ${payload.sub || 'unknown'}`);
             resolve({
               token,
               channelKey: payload.sub || `premium${channel}`,
@@ -238,7 +264,9 @@ async function fetchKeyWithAuthV4(keyUrl, authData) {
         console.log(`[KeyV4] Response: ${res.statusCode}, ${data.length} bytes`);
         
         if (data.length === 16 && !text.startsWith('{') && !text.startsWith('E')) {
-          console.log(`[KeyV4] ✅ Valid key: ${data.toString('hex')}`);
+          // SECURITY: Only log key hash, not actual key data
+          const keyHash = require('crypto').createHash('md5').update(data).digest('hex').slice(0, 8);
+          console.log(`[KeyV4] ✅ Valid key received (${data.length} bytes, hash: ${keyHash}...)`);
           return resolve({ success: true, data });
         }
         

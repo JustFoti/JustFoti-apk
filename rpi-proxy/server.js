@@ -31,8 +31,9 @@ const { URL } = require('url');
 // Token is fetched from the player page - NO CACHING to avoid stale token issues
 // ============================================================================
 
-// Import v3 auth module for PoW-based key authentication (Jan 2026)
-const dlhdAuthV3 = require('./dlhd-auth-v3');
+// Import v4 auth module for WASM-based PoW authentication (Jan 2026)
+// V4 uses the actual WASM module from DLHD for correct nonce computation
+const dlhdAuthV4 = require('./dlhd-auth-v4');
 
 // ============================================================================
 // DLHD Heartbeat Session Management  
@@ -335,25 +336,25 @@ async function fetchKeyWithAuth(keyUrl, res) {
     return;
   }
   
-  console.log(`[Key] Fetching key for channel ${channel} from ${serverInfo.server}.${serverInfo.domain} (using v3 PoW auth)`);
+  console.log(`[Key] Fetching key for channel ${channel} from ${serverInfo.server}.${serverInfo.domain} (using v4 WASM PoW auth)`);
   
-  // Use v3 auth with Proof-of-Work nonce (Jan 2026 update)
-  const result = await dlhdAuthV3.fetchDLHDKeyV3(keyUrl);
+  // Use v4 auth with WASM-based PoW nonce (Jan 2026 update)
+  const result = await dlhdAuthV4.fetchDLHDKeyV4(keyUrl);
   
   if (result.success) {
-    console.log(`[Key] ✅ Valid key via v3 PoW auth: ${result.data.toString('hex')}`);
+    console.log(`[Key] ✅ Valid key via v4 WASM auth: ${result.data.toString('hex')}`);
     res.writeHead(200, {
       'Content-Type': 'application/octet-stream',
       'Content-Length': result.data.length,
       'Access-Control-Allow-Origin': '*',
-      'X-Fetched-By': 'v3-pow-auth',
+      'X-Fetched-By': 'v4-wasm-auth',
     });
     res.end(result.data);
     return;
   }
   
-  // V3 auth failed - return error
-  console.log(`[Key] ❌ V3 auth failed: ${result.error}`);
+  // V4 auth failed - return error
+  console.log(`[Key] ❌ V4 auth failed: ${result.error}`);
   
   // Map error codes to HTTP status
   let status = 502;
@@ -720,7 +721,7 @@ function proxyAnimeKaiStream(targetUrl, customUserAgent, customReferer, res) {
     path: url.pathname + url.search,
     method: 'GET',
     headers,
-    timeout: 30000,
+    timeout: 10000, // 10 second timeout (reduced from 30)
     rejectUnauthorized: false, // Some CDNs have cert issues
   };
 
@@ -1200,22 +1201,22 @@ const server = http.createServer(async (req, res) => {
       }));
     }
     
-    console.log(`[DLHD-Key] Fetching key via v3 auth: ${targetUrl.substring(0, 80)}...`);
+    console.log(`[DLHD-Key] Fetching key via v4 WASM auth: ${targetUrl.substring(0, 80)}...`);
     
-    // Use v3 auth module which handles full flow (JWT fetch, PoW, key fetch)
-    const result = await dlhdAuthV3.fetchDLHDKeyV3(targetUrl);
+    // Use v4 auth module which handles full flow (JWT fetch, WASM PoW, key fetch)
+    const result = await dlhdAuthV4.fetchDLHDKeyV4(targetUrl);
     
     if (result.success && result.data) {
-      console.log(`[DLHD-Key] ✅ Valid key via v3 auth: ${result.data.toString('hex')}`);
+      console.log(`[DLHD-Key] ✅ Valid key via v4 auth: ${result.data.toString('hex')}`);
       res.writeHead(200, {
         'Content-Type': 'application/octet-stream',
         'Content-Length': result.data.length,
         'Access-Control-Allow-Origin': '*',
-        'X-Fetched-By': 'rpi-v3-auth',
+        'X-Fetched-By': 'rpi-v4-wasm-auth',
       });
       res.end(result.data);
     } else {
-      console.log(`[DLHD-Key] ❌ v3 auth failed: ${result.error}`);
+      console.log(`[DLHD-Key] ❌ v4 auth failed: ${result.error}`);
       res.writeHead(502, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify({ 
         error: result.error || 'Key fetch failed',

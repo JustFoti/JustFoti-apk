@@ -52,11 +52,13 @@ export interface StreamSource {
   linkNum?: number;
 }
 
-// Server backends in order of priority: moveonjoy (fastest) → cdnlive → dvalna (slowest)
-export const DLHD_BACKENDS = ['moveonjoy', 'cdnlive', 'dvalna'] as const;
+// Server backends - CF Worker handles selection automatically
+// These are just for display in the server picker
+export const DLHD_BACKENDS = ['auto', 'moveonjoy', 'cdnlive', 'dvalna'] as const;
 export type DLHDBackend = typeof DLHD_BACKENDS[number];
 
 export const BACKEND_DISPLAY_NAMES: Record<DLHDBackend, string> = {
+  auto: 'Auto (Best)',
   moveonjoy: 'MoveonJoy',
   cdnlive: 'CDN-Live',
   dvalna: 'Dvalna.ru',
@@ -173,23 +175,8 @@ export function useVideoPlayer() {
       
       // Initialize server statuses based on source type
       if (source.type === 'dlhd') {
-        // For manual switch, show only the selected backend as checking
-        if (isManualSwitch && skipBackends.length > 0) {
-          const selectedBackend = DLHD_BACKENDS.find(b => !skipBackends.includes(b));
-          setServerStatuses(DLHD_BACKENDS.map(id => ({ 
-            name: BACKEND_DISPLAY_NAMES[id], 
-            status: id === selectedBackend ? 'checking' as const : 'pending' as const
-          })));
-        } else {
-          setServerStatuses(DLHD_BACKENDS.map(id => ({ 
-            name: BACKEND_DISPLAY_NAMES[id], 
-            status: 'pending' as const 
-          })));
-          // Mark first as checking
-          setServerStatuses(prev => prev.map((s, i) => 
-            i === 0 ? { ...s, status: 'checking' as const } : s
-          ));
-        }
+        // Just show a single "Connecting" status - CF Worker handles backend selection
+        setServerStatuses([{ name: 'Connecting to stream...', status: 'checking' as const }]);
       } else if (source.type === 'cdnlive') {
         setServerStatuses([{ name: 'CDN-Live API', status: 'checking' as const }]);
       } else if (source.type === 'viprow') {
@@ -220,8 +207,34 @@ export function useVideoPlayer() {
 
       let streamUrl = getStreamUrl(source, skipBackends);
       
-      // Backend detection will happen via MANIFEST_LOADED event from response headers
-      // No pre-fetch needed - HLS.js will get the manifest and we read headers from there
+      // For DLHD, pre-fetch to detect which backend was used
+      // This lets us show the correct backend in the server picker
+      if (source.type === 'dlhd') {
+        try {
+          const preRes = await fetch(streamUrl, { method: 'GET' });
+          const backendHeader = preRes.headers.get('X-DLHD-Backend');
+          if (backendHeader) {
+            // Map header value to our backend type
+            if (backendHeader.includes('moveonjoy')) {
+              actualBackendRef.current = 'moveonjoy';
+            } else if (backendHeader.includes('cdn-live')) {
+              actualBackendRef.current = 'cdnlive';
+            } else if (backendHeader.includes('dvalna')) {
+              actualBackendRef.current = 'dvalna';
+            }
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[useVideoPlayer] Detected backend from header:', backendHeader, '->', actualBackendRef.current);
+            }
+          }
+          // We already have the response, use it
+          const m3u8Text = await preRes.text();
+          // Create a blob URL for HLS.js to use
+          const blob = new Blob([m3u8Text], { type: 'application/vnd.apple.mpegurl' });
+          streamUrl = URL.createObjectURL(blob);
+        } catch (e) {
+          console.warn('[useVideoPlayer] Pre-fetch failed, continuing with direct load:', e);
+        }
+      }
       
       // For CDN Live, fetch the stream URL from API first
       if (source.type === 'cdnlive') {
@@ -324,41 +337,20 @@ export function useVideoPlayer() {
         const elapsed = Date.now() - loadStartTimeRef.current;
         
         if (source.type === 'dlhd') {
-          // Priority for determining backend:
-          // 1. actualBackendRef (from X-DLHD-Backend header - most accurate)
-          // 2. manualBackendRef (user manually selected)
-          // 3. Infer from failed backends count (fallback)
+          // Use the backend we detected from pre-fetch, or default to 'auto'
           if (actualBackendRef.current) {
             setCurrentBackend(actualBackendRef.current);
             if (process.env.NODE_ENV === 'development') {
-              console.log('[useVideoPlayer] Using actual backend from header:', actualBackendRef.current);
+              console.log('[useVideoPlayer] Using detected backend:', actualBackendRef.current);
             }
-          } else if (manualBackendRef.current) {
+          } else if (manualBackendRef.current && manualBackendRef.current !== 'auto') {
             setCurrentBackend(manualBackendRef.current);
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[useVideoPlayer] Using manual backend selection:', manualBackendRef.current);
-            }
           } else {
-            const backendIndex = failedBackendsRef.current.length;
-            if (backendIndex < DLHD_BACKENDS.length) {
-              setCurrentBackend(DLHD_BACKENDS[backendIndex]);
-            }
+            setCurrentBackend('auto');
           }
           
-          // Clear refs after use
-          actualBackendRef.current = null;
-          manualBackendRef.current = null;
-          
-          // Mark all as success since we got a manifest
-          setServerStatuses(prev => {
-            const updated = [...prev];
-            // Find first pending/checking and mark as success
-            const checkingIdx = updated.findIndex(s => s.status === 'checking' || s.status === 'pending');
-            if (checkingIdx >= 0) {
-              updated[checkingIdx] = { ...updated[checkingIdx], status: 'success', elapsed };
-            }
-            return updated;
-          });
+          // Mark loading as success
+          setServerStatuses([{ name: 'Connected', status: 'success' as const, elapsed }]);
         } else {
           setServerStatuses(prev => prev.map(s => ({ ...s, status: 'success' as const, elapsed })));
         }
@@ -769,12 +761,17 @@ export function useVideoPlayer() {
       console.log('[useVideoPlayer] Switching to backend:', backend, 'source:', source);
     }
     
-    // Build skip list: all backends except the one we want
-    const skipBackends = DLHD_BACKENDS.filter(b => b !== backend);
+    // Build skip list based on selection
+    // 'auto' = no skip (let CF Worker choose)
+    // specific backend = skip all others
+    let skipBackends: string[] = [];
+    if (backend !== 'auto') {
+      skipBackends = DLHD_BACKENDS.filter(b => b !== backend && b !== 'auto');
+    }
     
-    // Track the manually selected backend - this takes priority over header detection
+    // Track the manually selected backend
     manualBackendRef.current = backend;
-    actualBackendRef.current = null; // Clear so manual selection takes priority
+    actualBackendRef.current = null;
     
     // Stop elapsed timer from previous attempt
     if (elapsedIntervalRef.current) {

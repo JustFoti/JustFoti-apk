@@ -163,7 +163,8 @@ const getHmacSecret = (env?: Env): string => {
     console.warn('[DLHD] WARNING: DLHD_HMAC_SECRET not configured - using insecure fallback');
   }
   // In production, ALWAYS set DLHD_HMAC_SECRET in Cloudflare Worker secrets
-  return secret || '7f9e2a8b3c5d1e4f6a0b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d9e8f7';
+  // CORRECT SECRET - extracted from WASM module (January 2026)
+  return secret || '444c44cc8888888844444444';
 };
 
 /** PoW threshold - hash prefix must be less than this */
