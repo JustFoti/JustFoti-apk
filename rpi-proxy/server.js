@@ -71,6 +71,7 @@ const PROXY_ALLOWED_DOMAINS = [
   'topembed.pw',
   'epicplayplay.cfd',
   'dlhd.link',
+  'hitsplay.fun', // JWT source for DLHD streams
   // AnimeKai/MegaUp
   'megaup.net',
   'animekai.to',

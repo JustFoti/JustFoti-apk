@@ -44,6 +44,8 @@ export interface Env {
   LOG_LEVEL?: string;
   RPI_PROXY_URL?: string;
   RPI_PROXY_KEY?: string;
+  HETZNER_PROXY_URL?: string;
+  HETZNER_PROXY_KEY?: string;
   RATE_LIMIT_KV?: KVNamespace; // For rate limiting segment requests
   SEGMENT_TOKEN_SECRET?: string; // For signed segment URLs
 }
@@ -270,7 +272,7 @@ async function computePoWNonce(resource: string, keyNumber: string, timestamp: n
 // Caches
 // ============================================================================
 const serverKeyCache = new Map<string, { serverKey: string; fetchedAt: number }>();
-const SERVER_KEY_CACHE_TTL_MS = 10 * 60 * 1000;
+const SERVER_KEY_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes - servers change frequently!
 
 // JWT cache - stores JWT tokens fetched from player page
 // Key is the topembed channel name (e.g., 'AbcTv[USA]')
@@ -1167,12 +1169,12 @@ async function tryCdnLiveBackend(
  * CRITICAL: dvalna.ru requires:
  * - Origin: https://dlhd.link
  * - Referer: https://dlhd.link/
- * - Authorization: Bearer <JWT> (for encrypted streams)
+ * - Authorization: Bearer <JWT> (optional - not always needed)
  */
 async function tryDvalnaServer(
   serverKey: string,
   channelKey: string,
-  jwt: string,
+  jwt: string | null,
   env: Env | undefined,
   logger: any,
   timeoutMs: number = 8000
@@ -1182,9 +1184,9 @@ async function tryDvalnaServer(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   
   try {
-    // CRITICAL: Use dlhd.link as origin/referer AND include JWT in Authorization header
-    const rpiUrl = env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY
-      ? `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(m3u8Url + '?_t=' + Date.now())}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent('https://dlhd.link/')}&origin=${encodeURIComponent('https://dlhd.link')}&auth=${encodeURIComponent('Bearer ' + jwt)}`
+    // Use RPI proxy with dlhd.link referer - JWT is optional
+    let rpiUrl = env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY
+      ? `${env.RPI_PROXY_URL}/animekai?url=${encodeURIComponent(m3u8Url)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent('https://dlhd.link/')}`
       : null;
     
     if (!rpiUrl) {
@@ -1205,8 +1207,16 @@ async function tryDvalnaServer(
     const content = await m3u8Res.text();
     
     // Check for error responses (E9 = missing headers, E2 = no session, etc.)
-    if (content.includes('"error"') || content.includes('"E') || content.startsWith('{')) {
+    // dvalna.ru returns JSON errors like: {"error":"E9","message":"Missing headers"}
+    // Be more specific to avoid false positives with valid M3U8 content
+    if (content.startsWith('{') && (content.includes('"error"') || content.includes('"E'))) {
       logger.debug('dvalna returned error', { serverKey, channelKey, error: content.substring(0, 100) });
+      return null;
+    }
+    
+    // Also check for plain text error codes (E2, E9, etc.)
+    if (/^E\d+$/.test(content.trim())) {
+      logger.debug('dvalna returned error code', { serverKey, channelKey, error: content.trim() });
       return null;
     }
     
@@ -1232,23 +1242,22 @@ async function tryDvalnaBackend(
   env?: Env,
   errors?: string[]
 ): Promise<Response | null> {
+  // JWT is optional now - M3U8 works without it through RPI proxy
   const jwt = await jwtPromise;
-  if (!jwt) {
-    if (errors) errors.push('dvalna: No JWT available');
-    return null;
-  }
   
   // Build list of channel keys to try
   const channelKeysToTry: string[] = [];
   
   // 1. Channel key from JWT 'sub' field (if available)
-  try {
-    const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(payloadB64));
-    if (payload.sub && !channelKeysToTry.includes(payload.sub)) {
-      channelKeysToTry.push(payload.sub);
-    }
-  } catch {}
+  if (jwt) {
+    try {
+      const payloadB64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(payloadB64));
+      if (payload.sub && !channelKeysToTry.includes(payload.sub)) {
+        channelKeysToTry.push(payload.sub);
+      }
+    } catch {}
+  }
   
   // 2. Premium key format (from hitsplay.fun - simplified Jan 2026)
   const premiumKey = getChannelKey(channel);
@@ -1258,48 +1267,58 @@ async function tryDvalnaBackend(
   
   logger.info('dvalna: trying channel keys', { channel, keys: channelKeysToTry });
   
-  // For each channel key, ONLY use ddy6 server (skip server lookup)
+  // Common servers to try as fallback if lookup fails
+  const FALLBACK_SERVERS = ['nfs', 'zeko', 'wiki', 'hzt', 'x4', 'dokko1', 'top2'];
+  
+  // For each channel key, use server_lookup to get the correct server
   for (const channelKey of channelKeysToTry) {
-    // FORCED: Always use ddy6 server, skip server_lookup entirely
-    const serversToTry = ['ddy6'];
+    // Use server_lookup API to get the correct server for this channel
+    const serverKey = await getServerKey(channelKey, logger, env);
     
-    logger.info('dvalna: using ddy6 server only', { channelKey, server: 'ddy6' });
+    logger.info('dvalna: using server from lookup', { channelKey, server: serverKey });
     
-    // Try ddy6 server only (no batching needed since it's just one server)
-    const result = await tryDvalnaServer('ddy6', channelKey, jwt, env, logger, 10000);
+    // Build list of servers to try: lookup result first, then fallbacks
+    const serversToTry = [serverKey, ...FALLBACK_SERVERS.filter(s => s !== serverKey)];
     
-    if (result) {
-      logger.info('dvalna: SUCCESS with ddy6', { channel, channelKey, server: 'ddy6' });
+    for (const server of serversToTry) {
+      // Try the server
+      const result = await tryDvalnaServer(server, channelKey, jwt, env, logger, 8000);
       
-      // Cache the working server
-      serverKeyCache.set(channelKey, { serverKey: 'ddy6', fetchedAt: Date.now() });
+      if (result) {
+        logger.info('dvalna: SUCCESS', { channel, channelKey, server });
+        
+        // Cache the working server
+        serverKeyCache.set(channelKey, { serverKey: server, fetchedAt: Date.now() });
+        
+        const proxied = rewriteM3U8(result.content, proxyOrigin, result.m3u8Url);
+        
+        return new Response(proxied, {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/vnd.apple.mpegurl',
+            ...corsHeaders(origin),
+            'Cache-Control': 'no-store',
+            'X-DLHD-Channel': channel,
+            'X-DLHD-ChannelKey': channelKey,
+            'X-DLHD-Server': server,
+            'X-DLHD-Backend': 'dvalna.ru',
+            'X-Fast-Path': 'true',
+          },
+        });
+      }
       
-      const proxied = rewriteM3U8(result.content, proxyOrigin, result.m3u8Url);
-      
-      return new Response(proxied, {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/vnd.apple.mpegurl',
-          ...corsHeaders(origin),
-          'Cache-Control': 'no-store',
-          'X-DLHD-Channel': channel,
-          'X-DLHD-ChannelKey': channelKey,
-          'X-DLHD-Server': 'ddy6',
-          'X-DLHD-Backend': 'dvalna.ru',
-          'X-Fast-Path': 'true',
-        },
-      });
+      logger.debug('dvalna: server failed', { channelKey, server });
     }
     
-    // Log failure
+    // Log failure for this channel key
     if (errors) {
-      errors.push(`dvalna/${channelKey}/ddy6: failed`);
+      errors.push(`dvalna/${channelKey}: all servers failed`);
     }
     
-    logger.warn('dvalna: ddy6 server failed for key', { channelKey });
+    logger.warn('dvalna: all servers failed for key', { channelKey });
   }
   
-  if (errors) errors.push(`dvalna: all ${channelKeysToTry.length} channel keys failed on ddy6 server`);
+  if (errors) errors.push(`dvalna: all ${channelKeysToTry.length} channel keys failed`);
   return null;
 }
 
@@ -1316,8 +1335,10 @@ async function handlePlaylistRequest(channel: string, proxyOrigin: string, logge
     ? fetchPlayerJWT(channel, logger, env) 
     : Promise.resolve(null);
 
+
+
   // ============================================================================
-  // BACKEND 3: dvalna.ru (needs JWT + PoW - slowest but most channels)
+  // BACKEND 3: dvalna.ru (needs JWT + PoW - uses ddy6 server ONLY)
   // ============================================================================
   if (!skipBackends.includes('dvalna')) {
     try {

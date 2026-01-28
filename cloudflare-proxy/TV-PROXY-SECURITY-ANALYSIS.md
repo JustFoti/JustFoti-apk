@@ -203,7 +203,8 @@ The `anti-leech-proxy.ts` implements stronger protection:
 | **Fingerprint Binding** | ❌ None | ✅ Browser fingerprint |
 | **Rate Limiting** | ⚠️ KV-only | ⚠️ KV-only |
 | **Playlist Rewriting** | ✅ Proxied | ❌ Original URLs |
-| **Server Redundancy** | ❌ Single (ddy6) | N/A |
+| **Backend Redundancy** | ❌ Single (dvalna/ddy6) | N/A |
+| **JWT Sources** | ✅ Single (hitsplay.fun) | N/A |
 
 ### Why tv-proxy.ts Doesn't Use Signed Tokens
 

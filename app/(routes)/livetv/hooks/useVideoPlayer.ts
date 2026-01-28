@@ -77,6 +77,8 @@ export function useVideoPlayer() {
   const currentSourceRef = useRef<StreamSource | null>(null);
   const retryCountRef = useRef(0);
   const sessionFingerprintRef = useRef<string>(generateSessionFingerprint());
+  const playRequestIdRef = useRef<number>(0); // Track play requests to cancel stale ones
+  const isDestroyingRef = useRef<boolean>(false); // Prevent operations during cleanup
   
   const [state, setState] = useState<PlayerState>(() => ({
     isPlaying: false,
@@ -133,6 +135,9 @@ export function useVideoPlayer() {
   }, []);
 
   const loadStreamInternal = useCallback(async (source: StreamSource, skipBackends: string[] = [], isManualSwitch: boolean = false) => {
+    // Reset destroying flag - we're starting a new load
+    isDestroyingRef.current = false;
+    
     if (process.env.NODE_ENV === 'development') {
       console.log('[useVideoPlayer] loadStreamInternal called with:', source, 'skip:', skipBackends, 'manual:', isManualSwitch);
     }
@@ -219,54 +224,55 @@ export function useVideoPlayer() {
       const hls = new Hls({
         enableWorker: true,
         // ============================================================
-        // FAST STARTUP CONFIG - Optimized for quick time-to-first-frame
+        // LIVE TV STABILITY CONFIG - Prioritize stable playback
         // ============================================================
         
-        // LOW LATENCY MODE: Disabled - we want stability over latency
+        // LOW LATENCY MODE: Disabled - stability over latency
         lowLatencyMode: false,
         
-        // STARTUP OPTIMIZATION: Start playing ASAP with minimal buffer
-        maxBufferLength: 10,           // Only buffer 10 sec initially (was 90)
-        maxMaxBufferLength: 60,        // Expand to 60 sec once playing (was 180)
-        maxBufferSize: 60 * 1000 * 1000, // 60MB max (was 200MB)
+        // BUFFER SETTINGS: More generous for live stream stability
+        maxBufferLength: 30,           // Buffer 30 sec for stability
+        maxMaxBufferLength: 120,       // Allow up to 2 min buffer
+        maxBufferSize: 100 * 1000 * 1000, // 100MB max
         
-        // BACK BUFFER: Keep less history to reduce memory
-        backBufferLength: 30,          // 30 sec back buffer (was 120)
+        // BACK BUFFER: Keep some history for seeking back
+        backBufferLength: 60,          // 60 sec back buffer
         
-        // BUFFER HOLE HANDLING: Be aggressive about skipping gaps
-        maxBufferHole: 0.5,            // Skip 0.5 sec gaps (was 2.0)
+        // BUFFER HOLE HANDLING: More tolerant of gaps in live streams
+        maxBufferHole: 1.0,            // Allow 1 sec gaps before seeking
         
-        // LIVE SYNC: Stay closer to live edge for faster start
-        liveSyncDurationCount: 3,      // 3 segments behind live (~12 sec, was 8)
-        liveMaxLatencyDurationCount: 10, // Max 10 segments latency (~40 sec, was 20)
-        liveSyncOnStallIncrease: 1, // Only add 1 segment on stall
+        // LIVE SYNC: Stay further from live edge for stability
+        liveSyncDurationCount: 4,      // 4 segments behind live (~16 sec)
+        liveMaxLatencyDurationCount: 15, // Max 15 segments latency (~60 sec)
+        liveSyncOnStallIncrease: 2,    // Add 2 segments on stall for recovery
         
-        // FRAGMENT LOADING: Faster timeouts, fewer retries - SKIP BAD SEGMENTS FAST
-        fragLoadingTimeOut: 10000,     // 10 sec timeout - skip slow segments
-        fragLoadingMaxRetry: 1,        // Only 1 retry - skip broken segments fast
-        fragLoadingRetryDelay: 500,    // 0.5 sec between retries
+        // FRAGMENT LOADING: More patient with live streams
+        fragLoadingTimeOut: 20000,     // 20 sec timeout for slow segments
+        fragLoadingMaxRetry: 3,        // 3 retries before giving up
+        fragLoadingRetryDelay: 1000,   // 1 sec between retries
+        fragLoadingMaxRetryTimeout: 30000, // Max 30 sec total retry time
         
-        // MANIFEST LOADING: Quick manifest fetch
-        manifestLoadingTimeOut: 15000, // 15 sec (was 30)
-        manifestLoadingMaxRetry: 2,    // 2 retries (was 4)
-        manifestLoadingRetryDelay: 500,
+        // MANIFEST LOADING: Patient manifest fetch
+        manifestLoadingTimeOut: 20000, // 20 sec
+        manifestLoadingMaxRetry: 3,    // 3 retries
+        manifestLoadingRetryDelay: 1000,
         
-        // LEVEL LOADING: Quick level switch
-        levelLoadingTimeOut: 15000,    // 15 sec (was 30)
-        levelLoadingMaxRetry: 2,       // 2 retries (was 4)
-        levelLoadingRetryDelay: 500,
+        // LEVEL LOADING: Patient level switch
+        levelLoadingTimeOut: 20000,    // 20 sec
+        levelLoadingMaxRetry: 3,       // 3 retries
+        levelLoadingRetryDelay: 1000,
         
-        // ABR: Start with lowest quality for fast start, then upgrade
-        startLevel: 0,                 // Start at lowest quality
-        abrEwmaDefaultEstimate: 500000, // Assume 500kbps initially
-        abrBandWidthFactor: 0.8,       // Conservative bandwidth estimate
-        abrBandWidthUpFactor: 0.5,     // Slow to upgrade quality
+        // ABR: Start with auto quality selection
+        startLevel: -1,                // Auto select based on bandwidth
+        abrEwmaDefaultEstimate: 1000000, // Assume 1Mbps initially
+        abrBandWidthFactor: 0.9,       // Use 90% of measured bandwidth
+        abrBandWidthUpFactor: 0.7,     // Conservative upgrade
         
-        // STALL RECOVERY: Quick recovery from stalls
-        highBufferWatchdogPeriod: 2,   // Check every 2 sec (was 5)
-        nudgeOffset: 0.2,              // Small nudge (was 0.5)
-        nudgeMaxRetry: 3,              // 3 retries then skip (was 10)
-        maxFragLookUpTolerance: 0.25,  // Tighter tolerance (was 1.0)
+        // STALL RECOVERY: Patient recovery from stalls
+        highBufferWatchdogPeriod: 3,   // Check every 3 sec
+        nudgeOffset: 0.1,              // Small nudge
+        nudgeMaxRetry: 5,              // 5 retries before skip
+        maxFragLookUpTolerance: 0.5,   // More tolerant lookup
         
         // START POSITION: Start from live edge
         startPosition: -1,
@@ -274,8 +280,11 @@ export function useVideoPlayer() {
         // PROGRESSIVE LOADING: Load fragments progressively
         progressive: true,
         
-        // INITIAL LIVE MANIFEST SIZE: Smaller initial load
-        initialLiveManifestSize: 2,    // Only need 2 segments to start
+        // INITIAL LIVE MANIFEST SIZE: Need enough segments to start
+        initialLiveManifestSize: 3,    // 3 segments to start
+        
+        // ERROR RECOVERY: More tolerant of errors
+        appendErrorMaxRetry: 5,        // Retry buffer append 5 times
       });
 
       hlsRef.current = hls;
@@ -314,28 +323,72 @@ export function useVideoPlayer() {
         
         setState(prev => ({ ...prev, loadingStage: 'buffering' }));
         const video = videoRef.current;
-        if (video) {
+        if (video && !isDestroyingRef.current) {
           // Apply saved volume settings
           const savedVolume = getSavedVolume();
           const savedMuted = getSavedMuteState();
           
-          // Start muted for autoplay policy, then restore saved settings
-          video.muted = true;
+          // Set volume before playing
           video.volume = savedVolume;
+          // Start muted for autoplay policy compliance
+          video.muted = true;
           
-          video.play().then(() => {
-            setState(prev => ({ ...prev, isPlaying: true, isLoading: false, loadingStage: 'idle' }));
-            // Restore saved mute state after autoplay succeeds
-            setTimeout(() => {
-              if (videoRef.current) {
-                videoRef.current.muted = savedMuted;
-                setState(prev => ({ ...prev, isMuted: savedMuted, volume: savedVolume }));
-              }
-            }, 100);
-          }).catch(err => {
-            console.warn('Autoplay failed:', err);
-            setState(prev => ({ ...prev, isPlaying: false, isLoading: false, loadingStage: 'idle' }));
-          });
+          // Track this play request
+          const currentPlayRequest = ++playRequestIdRef.current;
+          
+          // Wait for enough data before attempting play
+          const attemptPlay = () => {
+            // Abort if this request is stale or we're destroying
+            if (playRequestIdRef.current !== currentPlayRequest || isDestroyingRef.current) {
+              return;
+            }
+            
+            if (!videoRef.current) return;
+            
+            // Check if we have enough buffered data
+            const buffered = videoRef.current.buffered;
+            const hasBuffer = buffered.length > 0 && buffered.end(0) > videoRef.current.currentTime;
+            
+            if (!hasBuffer && videoRef.current.readyState < 3) {
+              // Not enough data yet, wait a bit
+              setTimeout(attemptPlay, 200);
+              return;
+            }
+            
+            // Final check before play
+            if (playRequestIdRef.current !== currentPlayRequest || isDestroyingRef.current) {
+              return;
+            }
+            
+            videoRef.current.play()
+              .then(() => {
+                // Only update state if this is still the current request
+                if (playRequestIdRef.current === currentPlayRequest && !isDestroyingRef.current) {
+                  setState(prev => ({ ...prev, isPlaying: true, isLoading: false, loadingStage: 'idle' }));
+                  // Restore saved mute state after autoplay succeeds
+                  setTimeout(() => {
+                    if (videoRef.current && playRequestIdRef.current === currentPlayRequest && !isDestroyingRef.current) {
+                      videoRef.current.muted = savedMuted;
+                      setState(prev => ({ ...prev, isMuted: savedMuted, volume: savedVolume }));
+                    }
+                  }, 100);
+                }
+              })
+              .catch(err => {
+                // Only handle if this is still the current request
+                if (playRequestIdRef.current !== currentPlayRequest || isDestroyingRef.current) {
+                  return; // Silently ignore - this was cancelled
+                }
+                // Only log if it's not an abort error (which happens on source change)
+                if (err.name !== 'AbortError') {
+                  console.warn('Autoplay failed:', err);
+                }
+                setState(prev => ({ ...prev, isPlaying: false, isLoading: false, loadingStage: 'idle' }));
+              });
+          };
+          
+          // Start play attempt
+          attemptPlay();
         }
       });
 
@@ -343,9 +396,9 @@ export function useVideoPlayer() {
       let fragErrorCount = 0;
       let mediaErrorRecoveryAttempts = 0;
       let lastErrorTime = 0;
-      const MAX_FRAG_ERRORS = 3; // Reduced - skip faster
-      const MAX_MEDIA_ERROR_RECOVERY = 3;
-      const ERROR_RESET_INTERVAL = 10000; // Reset error count after 10s of success
+      const MAX_FRAG_ERRORS = 5; // Allow more errors before skipping
+      const MAX_MEDIA_ERROR_RECOVERY = 5;
+      const ERROR_RESET_INTERVAL = 15000; // Reset error count after 15s of success
 
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         // Reset error counts on successful fragment buffer
@@ -402,23 +455,32 @@ export function useVideoPlayer() {
             url: data.frag?.url?.substring(0, 80),
           });
           
-          // Skip ahead immediately on parsing errors
+          // Don't skip immediately - let HLS.js try to recover first
+          // Only intervene after multiple consecutive errors
           if (fragErrorCount >= MAX_FRAG_ERRORS) {
-            console.warn('[useVideoPlayer] Too many fragment errors, skipping ahead');
+            console.warn('[useVideoPlayer] Too many fragment errors, seeking to live edge');
             fragErrorCount = 0;
             
             if (videoRef.current && hls.media) {
-              // Try to skip to live sync position first
-              if (hls.liveSyncPosition) {
-                console.log('[useVideoPlayer] Seeking to live sync position', hls.liveSyncPosition);
-                videoRef.current.currentTime = hls.liveSyncPosition;
-                return;
+              // Flush the buffer to clear any corrupted data
+              try {
+                hls.trigger(Hls.Events.BUFFER_FLUSHING, {
+                  startOffset: 0,
+                  endOffset: Number.POSITIVE_INFINITY,
+                  type: 'video'
+                });
+              } catch (e) {
+                // Ignore flush errors
               }
               
-              // Otherwise skip forward 5 seconds
-              const newTime = videoRef.current.currentTime + 5;
-              console.log('[useVideoPlayer] Seeking forward 5 seconds to', newTime);
-              videoRef.current.currentTime = newTime;
+              // Seek to live sync position
+              if (hls.liveSyncPosition) {
+                videoRef.current.currentTime = hls.liveSyncPosition;
+              } else {
+                // Otherwise skip forward 10 seconds
+                const newTime = videoRef.current.currentTime + 10;
+                videoRef.current.currentTime = newTime;
+              }
             }
           }
           return;
@@ -426,15 +488,19 @@ export function useVideoPlayer() {
         
         // Handle buffer append errors - usually means corrupted segment data
         if (!data.fatal && data.details === 'bufferAppendError') {
-          console.warn('[useVideoPlayer] Buffer append error, attempting recovery');
           mediaErrorRecoveryAttempts++;
+          console.warn(`[useVideoPlayer] Buffer append error ${mediaErrorRecoveryAttempts}/${MAX_MEDIA_ERROR_RECOVERY}`);
           
           if (mediaErrorRecoveryAttempts <= MAX_MEDIA_ERROR_RECOVERY) {
-            // Try to recover
-            hls.recoverMediaError();
+            // Try to recover by flushing and reloading
+            try {
+              hls.recoverMediaError();
+            } catch (e) {
+              // Ignore recovery errors
+            }
             
-            // Also skip ahead to avoid the bad segment
-            if (videoRef.current && hls.liveSyncPosition) {
+            // After a few attempts, also seek to live edge
+            if (mediaErrorRecoveryAttempts >= 3 && videoRef.current && hls.liveSyncPosition) {
               setTimeout(() => {
                 if (videoRef.current && hls.liveSyncPosition) {
                   videoRef.current.currentTime = hls.liveSyncPosition;
@@ -568,6 +634,10 @@ export function useVideoPlayer() {
   }, [loadStreamInternal]);
 
   const stopStream = useCallback(() => {
+    // Mark as destroying to cancel any pending play requests
+    isDestroyingRef.current = true;
+    playRequestIdRef.current++; // Invalidate any pending play requests
+    
     // Clean up elapsed timer
     if (elapsedIntervalRef.current) {
       clearInterval(elapsedIntervalRef.current);
@@ -620,6 +690,9 @@ export function useVideoPlayer() {
     setCurrentBackend(null);
     retryCountRef.current = 0;
     currentSourceRef.current = null;
+    
+    // Reset destroying flag after cleanup
+    isDestroyingRef.current = false;
   }, [endLiveTVSession]);
 
   const togglePlay = useCallback(() => {

@@ -218,10 +218,22 @@ export const VideoPlayer = memo(function VideoPlayer({
     }, 3000);
   }, [isPlaying, isLoading, isBuffering]);
 
+  // Track what we've loaded to prevent duplicate loads
+  const loadedSourceRef = useRef<string | null>(null);
+  
   // Load stream when event or channel changes
   useEffect(() => {
     if (!isOpen) {
+      loadedSourceRef.current = null;
       stopStream();
+      return;
+    }
+    
+    // Build a unique key for this source to prevent duplicate loads
+    const sourceKey = event?.id || channel?.id || null;
+    
+    // Skip if we've already loaded this source
+    if (sourceKey && loadedSourceRef.current === sourceKey) {
       return;
     }
     
@@ -231,6 +243,7 @@ export const VideoPlayer = memo(function VideoPlayer({
       
       if (event.source === 'viprow') {
         // VIPRow uses direct URL, not channel ID
+        loadedSourceRef.current = sourceKey;
         loadStream({
           type: 'viprow',
           channelId: event.viprowUrl || event.id,
@@ -247,6 +260,7 @@ export const VideoPlayer = memo(function VideoPlayer({
         channelId = event.id;
       }
       
+      loadedSourceRef.current = sourceKey;
       loadStream({
         type: streamType,
         channelId,
@@ -256,6 +270,7 @@ export const VideoPlayer = memo(function VideoPlayer({
     } else if (channel) {
       // Use the channel's source and channelId
       const streamType = channel.source || 'dlhd';
+      loadedSourceRef.current = sourceKey;
       loadStream({
         type: streamType,
         channelId: channel.channelId || channel.id,
@@ -263,9 +278,10 @@ export const VideoPlayer = memo(function VideoPlayer({
         poster: channel.logo,
       });
     } else {
+      loadedSourceRef.current = null;
       stopStream();
     }
-  }, [event?.id, channel?.id, isOpen, event, channel, loadStream, stopStream]);
+  }, [event?.id, channel?.id, isOpen, loadStream, stopStream]);
 
   useEffect(() => {
     if (isPlaying && !isLoading && !isBuffering) {

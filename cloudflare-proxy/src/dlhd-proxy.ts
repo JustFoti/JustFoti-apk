@@ -402,8 +402,9 @@ async function computePoWNonce(resource: string, keyNumber: string, timestamp: n
  * - epicplayplay.cfd is DEAD! 
  * - hitsplay.fun provides JWT directly for ALL channels (including 1-30)
  * - topembed.pw is fallback for channels with specific mappings
+ * - MUST use RPI proxy for hitsplay.fun - it blocks Cloudflare IPs!
  */
-async function fetchAuthData(channel: string, logger: any): Promise<SessionData | null> {
+async function fetchAuthData(channel: string, logger: any, env?: Env): Promise<SessionData | null> {
   // Check cache first
   const cached = sessionCache.get(channel);
   if (cached && Date.now() - cached.fetchedAt < SESSION_CACHE_TTL_MS) {
@@ -414,29 +415,67 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
   logger.info('Fetching fresh JWT', { channel });
 
   // ============================================================================
-  // METHOD 1: Try hitsplay.fun first - it provides JWT directly for ALL channels
+  // METHOD 1: Try hitsplay.fun via RPI proxy - it blocks Cloudflare IPs!
   // This is essential for channels 1-30 which don't have topembed mappings
   // ============================================================================
   try {
     const hitsplayUrl = `https://hitsplay.fun/premiumtv/daddyhd.php?id=${channel}`;
-    logger.info('Trying hitsplay.fun for JWT', { channel });
+    logger.info('Trying hitsplay.fun for JWT via RPI proxy', { channel });
     
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    let html: string | undefined;
     
-    const res = await fetch(hitsplayUrl, {
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Referer': 'https://dlhd.link/',
-      },
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (res.ok) {
-      const html = await res.text();
+    // MUST use RPI proxy - hitsplay.fun blocks Cloudflare IPs
+    if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
+      let rpiBase = env.RPI_PROXY_URL;
+      if (!rpiBase.startsWith('http://') && !rpiBase.startsWith('https://')) {
+        rpiBase = `https://${rpiBase}`;
+      }
+      rpiBase = rpiBase.replace(/\/+$/, '');
       
+      const rpiUrl = `${rpiBase}/animekai?url=${encodeURIComponent(hitsplayUrl)}&key=${env.RPI_PROXY_KEY}&referer=${encodeURIComponent('https://dlhd.link/')}`;
+      logger.info('Fetching hitsplay via RPI', { rpiUrl: rpiUrl.substring(0, 150) });
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      try {
+        const res = await fetch(rpiUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          html = await res.text();
+          logger.info('RPI hitsplay fetch success', { htmlLen: html.length });
+        } else {
+          logger.warn('RPI hitsplay fetch failed', { status: res.status });
+        }
+      } catch (e) {
+        clearTimeout(timeoutId);
+        logger.warn('RPI hitsplay fetch error', { error: (e as Error).message });
+      }
+    } else {
+      logger.warn('RPI proxy not configured, trying direct (will likely fail)');
+      // Fallback to direct fetch (will likely fail due to CF IP blocking)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      try {
+        const res = await fetch(hitsplayUrl, {
+          headers: {
+            'User-Agent': USER_AGENT,
+            'Referer': 'https://dlhd.link/',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          html = await res.text();
+        }
+      } catch (e) {
+        clearTimeout(timeoutId);
+        logger.warn('Direct hitsplay fetch failed', { error: (e as Error).message });
+      }
+    }
+    
+    if (html) {
       // hitsplay.fun embeds JWT directly in the page
       const jwtMatch = html.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
       if (jwtMatch) {
@@ -472,6 +511,8 @@ async function fetchAuthData(channel: string, logger: any): Promise<SessionData 
         
         addToSessionCache(channel, session);
         return session;
+      } else {
+        logger.warn('No JWT found in hitsplay response', { htmlPreview: html.substring(0, 200) });
       }
     }
   } catch (e) {
@@ -577,11 +618,13 @@ const FALLBACK_SERVER_KEYS = ['wiki', 'hzt', 'x4', 'zeko', 'wind', 'nfs', 'ddy6'
 
 /**
  * Fetch server key from lookup endpoint
+ * Uses RPI proxy as fallback since dvalna.ru may block CF IPs
  */
-async function fetchServerKey(channelKey: string, logger: any): Promise<string | null> {
+async function fetchServerKey(channelKey: string, logger: any, env?: Env): Promise<string | null> {
+  const url = `https://chevy.${CDN_DOMAIN}/server_lookup?channel_id=${channelKey}`;
+  
+  // Try direct fetch first
   try {
-    const url = `https://chevy.${CDN_DOMAIN}/server_lookup?channel_id=${channelKey}`;
-    
     const response = await fetch(url, {
       headers: {
         'User-Agent': USER_AGENT,
@@ -590,34 +633,56 @@ async function fetchServerKey(channelKey: string, logger: any): Promise<string |
       },
     });
 
-    if (!response.ok) {
-      logger.warn('Server lookup failed, using fallback', { status: response.status });
-      return FALLBACK_SERVER_KEYS[0]; // Return first fallback
-    }
-
-    const text = await response.text();
-    
-    // Check if response is JSON
-    if (text.startsWith('{')) {
-      const data = JSON.parse(text) as { server_key?: string };
-      if (data.server_key) {
-        logger.info('Server lookup success', { channelKey, serverKey: data.server_key });
-        return data.server_key;
+    if (response.ok) {
+      const text = await response.text();
+      if (text.startsWith('{')) {
+        const data = JSON.parse(text) as { server_key?: string };
+        if (data.server_key) {
+          logger.info('Server lookup success (direct)', { channelKey, serverKey: data.server_key });
+          return data.server_key;
+        }
       }
     }
-    
-    // Fallback if no server_key in response
-    logger.warn('No server_key in response, using fallback', { response: text.substring(0, 100) });
-    return FALLBACK_SERVER_KEYS[0];
+    logger.warn('Direct server lookup failed', { status: response.status });
   } catch (error) {
-    logger.error('Server lookup error, using fallback', { error: (error as Error).message });
-    return FALLBACK_SERVER_KEYS[0]; // Return fallback instead of null
+    logger.warn('Direct server lookup error', { error: (error as Error).message });
   }
+  
+  // Try RPI proxy as fallback
+  if (env?.RPI_PROXY_URL && env?.RPI_PROXY_KEY) {
+    try {
+      let rpiBase = env.RPI_PROXY_URL;
+      if (!rpiBase.startsWith('http://') && !rpiBase.startsWith('https://')) {
+        rpiBase = `https://${rpiBase}`;
+      }
+      rpiBase = rpiBase.replace(/\/+$/, '');
+      
+      const rpiUrl = `${rpiBase}/animekai?url=${encodeURIComponent(url)}&key=${env.RPI_PROXY_KEY}`;
+      logger.info('Trying server lookup via RPI', { channelKey });
+      
+      const rpiRes = await fetch(rpiUrl);
+      if (rpiRes.ok) {
+        const text = await rpiRes.text();
+        if (text.startsWith('{')) {
+          const data = JSON.parse(text) as { server_key?: string };
+          if (data.server_key) {
+            logger.info('Server lookup success (RPI)', { channelKey, serverKey: data.server_key });
+            return data.server_key;
+          }
+        }
+      }
+    } catch (error) {
+      logger.warn('RPI server lookup error', { error: (error as Error).message });
+    }
+  }
+  
+  logger.warn('All server lookup methods failed, using fallback', { channelKey });
+  return FALLBACK_SERVER_KEYS[0];
 }
 
 /**
  * Construct M3U8 URL for a channel
- * UPDATED January 2026: Added 'wiki', 'hzt', and 'x4' servers used by topembed.pw
+ * UPDATED January 2026: Added 'wiki', 'hzt', 'x4', 'top1' servers used by topembed.pw
  */
 function constructM3U8Url(serverKey: string, channelKey: string): string {
   if (serverKey === 'wiki') {
@@ -631,6 +696,9 @@ function constructM3U8Url(serverKey: string, channelKey: string): string {
   }
   if (serverKey === 'top1/cdn') {
     return `https://top1.${CDN_DOMAIN}/top1/cdn/${channelKey}/mono.css`;
+  }
+  if (serverKey === 'top1') {
+    return `https://top1new.${CDN_DOMAIN}/top1/${channelKey}/mono.css`;
   }
   return `https://${serverKey}new.${CDN_DOMAIN}/${serverKey}/${channelKey}/mono.css`;
 }
@@ -769,8 +837,8 @@ function handleHealthCheck(origin: string | null, env?: Env): Response {
 /**
  * Handle auth request - returns fresh JWT for a channel
  */
-async function handleAuthRequest(channel: string, logger: any, origin: string | null): Promise<Response> {
-  const session = await fetchAuthData(channel, logger);
+async function handleAuthRequest(channel: string, logger: any, origin: string | null, env?: Env): Promise<Response> {
+  const session = await fetchAuthData(channel, logger, env);
   
   if (!session) {
     return jsonResponse({ error: 'Failed to fetch auth data' }, 502, origin);
@@ -858,14 +926,14 @@ async function handlePlaylistRequest(
     logger.info('Unauthenticated request (allowed)', { channel });
   }
 
-  // Step 1: Get auth data (player page doesn't block CF IPs)
-  const session = await fetchAuthData(channel, logger);
+  // Step 1: Get auth data via RPI proxy (hitsplay.fun blocks CF IPs!)
+  const session = await fetchAuthData(channel, logger, env);
   if (!session) {
-    return jsonResponse({ error: 'Failed to fetch auth data' }, 502, origin);
+    return jsonResponse({ error: 'Failed to fetch auth data - hitsplay.fun may be blocking requests' }, 502, origin);
   }
 
-  // Step 2: Get server key (server lookup doesn't block CF IPs)
-  const serverKey = await fetchServerKey(session.channelKey, logger);
+  // Step 2: Get server key (try direct, fallback to RPI proxy)
+  const serverKey = await fetchServerKey(session.channelKey, logger, env);
   if (!serverKey) {
     return jsonResponse({ error: 'Failed to fetch server key' }, 502, origin);
   }
@@ -892,14 +960,13 @@ async function handlePlaylistRequest(
     }
     rpiBase = rpiBase.replace(/\/+$/, '');
     
-    // Use /proxy endpoint for generic URL proxying
-    const rpiUrl = `${rpiBase}/proxy?key=${env.RPI_PROXY_KEY}&url=${encodeURIComponent(m3u8Url)}`;
-    logger.info('Calling RPI /proxy for M3U8', { 
+    // Use /animekai endpoint with referer header - dvalna.ru requires it
+    const rpiUrl = `${rpiBase}/animekai?key=${env.RPI_PROXY_KEY}&url=${encodeURIComponent(m3u8Url)}&referer=${encodeURIComponent('https://dlhd.link/')}`;
+    logger.info('Calling RPI /animekai for M3U8', { 
       rpiBase,
       rpiUrl: rpiUrl.substring(0, 200),
       m3u8Url,
       hasKey: !!env.RPI_PROXY_KEY,
-      // Don't log key length - security risk
     });
     
     const rpiResponse = await fetch(rpiUrl, {
@@ -1247,7 +1314,7 @@ export async function handleDLHDRequest(request: Request, env: Env): Promise<Res
       if (!channel || !isValidChannel(channel)) {
         return jsonResponse({ error: 'Invalid channel parameter' }, 400, origin);
       }
-      return handleAuthRequest(channel, logger, origin);
+      return handleAuthRequest(channel, logger, origin, env);
     }
 
     if (path === '/key') {
