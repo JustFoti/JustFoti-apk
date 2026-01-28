@@ -63,7 +63,7 @@ const ALLOWED_ORIGINS = [
 ];
 
 // UPDATED January 2026: epicplayplay.cfd is DEAD! Using topembed.pw instead
-const PLAYER_DOMAIN = 'hitsplay.fun';
+const PLAYER_DOMAIN = 'topembed.pw';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 
@@ -1929,9 +1929,9 @@ async function handleSegmentProxy(url: URL, logger: any, origin: string | null, 
       referer = 'https://tv-bu1.blogspot.com/';
       requestOrigin = 'https://tv-bu1.blogspot.com';
     } else if (urlHost.includes('dvalna.ru') || urlHost.includes('kiko2.ru') || urlHost.includes('giokko.ru')) {
-      // DLHD CDN requires topembed.pw referer
-      referer = `https://${PLAYER_DOMAIN}/`;
-      requestOrigin = `https://${PLAYER_DOMAIN}`;
+      // DLHD CDN requires dlhd.link referer (NOT topembed.pw)
+      referer = 'https://dlhd.link/';
+      requestOrigin = 'https://dlhd.link';
     }
   } catch {}
   

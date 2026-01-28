@@ -1,736 +1,570 @@
 /**
- * Video Player Component
- * Full-featured video player with HLS support for DLHD and CDN Live
+ * Live TV Video Player
+ * 
+ * Native HLS.js player for DLHD, CDN Live, and VIPRow streams.
+ * NO EMBEDS - direct m3u8 playback with full controls.
  */
 
 'use client';
 
-import { memo, useEffect, useState, useRef, useCallback } from 'react';
-import { useVideoPlayer, DLHD_BACKENDS, BACKEND_DISPLAY_NAMES } from '../hooks/useVideoPlayer';
-import { useCast, CastMedia } from '@/hooks/useCast';
+import { useRef, useState, useEffect, useCallback } from 'react';
+import Hls from 'hls.js';
 import { LiveEvent, TVChannel } from '../hooks/useLiveTVData';
-import styles from '../LiveTV.module.css';
-
-// Copy URL button with feedback
-function CopyUrlButton({ getUrl }: { getUrl: () => string | null }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async () => {
-    const url = getUrl();
-    if (!url) return;
-    
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy URL:', err);
-    }
-  };
-
-  return (
-    <button 
-      onClick={handleCopy} 
-      className={styles.copyUrlButton}
-      title="Copy stream URL for external player"
-    >
-      {copied ? (
-        <>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          <span>Copied!</span>
-        </>
-      ) : (
-        <>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-          </svg>
-          <span>URL</span>
-        </>
-      )}
-    </button>
-  );
-}
-
-const SPORT_ICONS: Record<string, string> = {
-  soccer: '⚽', football: '⚽', basketball: '🏀', tennis: '🎾',
-  cricket: '🏏', hockey: '🏒', baseball: '⚾', golf: '⛳',
-  rugby: '🏉', motorsport: '🏎️', f1: '🏎️', boxing: '🥊',
-  mma: '🥊', ufc: '🥊', wwe: '🤼', volleyball: '🏐',
-  nfl: '🏈', darts: '🎯',
-};
-
-function getSportIcon(sport: string): string {
-  const lower = sport.toLowerCase();
-  for (const [key, icon] of Object.entries(SPORT_ICONS)) {
-    if (lower.includes(key)) return icon;
-  }
-  return '📺';
-}
+import { getTvPlaylistUrl } from '@/app/lib/proxy-config';
+import styles from './VideoPlayer.module.css';
 
 interface VideoPlayerProps {
-  event?: LiveEvent | null;
-  channel?: TVChannel | null;
+  event: LiveEvent | null;
+  channel: TVChannel | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const VideoPlayer = memo(function VideoPlayer({
-  event,
-  channel,
-  isOpen,
-  onClose,
-}: VideoPlayerProps) {
-  const {
-    videoRef,
-    isPlaying,
-    isMuted,
-    isFullscreen,
-    isLoading,
-    isBuffering,
-    loadingStage,
-    error,
-    volume,
-    currentSource,
-    serverStatuses,
-    elapsedTime,
-    currentBackend,
-    getStreamUrlForCopy,
-    loadStream,
-    stopStream,
-    switchBackend,
-    togglePlay,
-    toggleMute,
-    setVolume,
-    toggleFullscreen,
-  } = useVideoPlayer();
-
-  const [showControls, setShowControls] = useState(true);
-  const [showServerPicker, setShowServerPicker] = useState(false);
-  const [castError, setCastError] = useState<string | null>(null);
-  const castErrorTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Get the stream URL for casting
-  const streamUrl = getStreamUrlForCopy();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentQuality, setCurrentQuality] = useState<number>(-1);
+  const [qualities, setQualities] = useState<Array<{ height: number; index: number }>>([]);
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
-  // Cast/AirPlay support
-  const handleCastConnect = useCallback(() => {
-    console.log('[LiveTV Player] Cast/AirPlay connected');
-    setCastError(null);
-  }, []);
-
-  const handleCastDisconnect = useCallback(() => {
-    console.log('[LiveTV Player] Cast/AirPlay disconnected');
-  }, []);
-
-  const handleCastError = useCallback((error: string) => {
-    console.error('[LiveTV Player] Cast error:', error);
-    setCastError(error);
-    if (castErrorTimeoutRef.current) {
-      clearTimeout(castErrorTimeoutRef.current);
-    }
-    // Don't auto-dismiss help messages
-    const isHelpMessage = error.includes('LG') || error.includes('Samsung') || 
-                          error.includes('Cast tab') || error.includes('screen mirroring');
-    if (!isHelpMessage) {
-      castErrorTimeoutRef.current = setTimeout(() => {
-        setCastError(null);
-      }, 5000);
-    }
-  }, []);
-
-  const cast = useCast({
-    videoRef,
-    streamUrl: streamUrl || undefined,
-    onConnect: handleCastConnect,
-    onDisconnect: handleCastDisconnect,
-    onError: handleCastError,
-  });
-
-  // Build cast media object for live TV
-  const getCastMedia = useCallback((): CastMedia | undefined => {
-    if (!streamUrl) return undefined;
-    
-    const displayTitle = event?.title || channel?.name || 'Live TV';
-    
-    // Convert relative URLs to absolute URLs for Chromecast
-    let castUrl = streamUrl;
-    if (streamUrl.startsWith('/')) {
-      castUrl = `${window.location.origin}${streamUrl}`;
-    }
-    
-    return {
-      url: castUrl,
-      title: displayTitle,
-      subtitle: event?.sport || channel?.category || 'Live Stream',
-      contentType: 'application/x-mpegURL',
-      isLive: true,
-    };
-  }, [streamUrl, event, channel]);
-
-  // Handle cast button click
-  const handleCastClick = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    // If already casting, stop
-    if (cast.isCasting || cast.isAirPlayActive) {
-      cast.stop();
-      return;
-    }
-    
-    // If already connected, load media
-    if (cast.isConnected) {
-      const media = getCastMedia();
-      if (media) {
-        videoRef.current?.pause();
-        await cast.loadMedia(media);
+  // Get stream URL based on source
+  const getStreamUrl = useCallback((): string | null => {
+    // Channel playback (DLHD or CDN Live)
+    if (channel) {
+      if (channel.source === 'dlhd') {
+        try {
+          return getTvPlaylistUrl(channel.channelId);
+        } catch {
+          return `/api/dlhd-proxy?channel=${channel.channelId}`;
+        }
       }
-      return;
-    }
-    
-    // Try to start a cast session
-    const connected = await cast.requestSession();
-    
-    if (connected) {
-      const media = getCastMedia();
-      if (media) {
-        videoRef.current?.pause();
-        await cast.loadMedia(media);
+      if (channel.source === 'cdnlive') {
+        // CDN Live uses channel name|country format
+        const [name, country] = channel.channelId.split('|');
+        return `/api/livetv/cdnlive-stream?channel=${encodeURIComponent(name)}&code=${country || ''}`;
       }
     }
-  }, [cast, getCastMedia, videoRef]);
 
-  const resetHideTimer = useCallback(() => {
-    setShowControls(true);
-    
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-    }
-    
-    hideTimeoutRef.current = setTimeout(() => {
-      if (isPlaying && !isLoading && !isBuffering) {
-        setShowControls(false);
-      }
-    }, 3000);
-  }, [isPlaying, isLoading, isBuffering]);
-
-  // Track what we've loaded to prevent duplicate loads
-  const loadedSourceRef = useRef<string | null>(null);
-  
-  // Load stream when event or channel changes
-  useEffect(() => {
-    if (!isOpen) {
-      loadedSourceRef.current = null;
-      stopStream();
-      return;
-    }
-    
-    // Build a unique key for this source to prevent duplicate loads
-    const sourceKey = event?.id || channel?.id || null;
-    
-    // Skip if we've already loaded this source
-    if (sourceKey && loadedSourceRef.current === sourceKey) {
-      return;
-    }
-    
+    // Event playback
     if (event) {
-      let channelId: string;
-      let streamType = event.source;
-      
-      if (event.source === 'viprow') {
-        // VIPRow uses direct URL, not channel ID
-        loadedSourceRef.current = sourceKey;
-        loadStream({
-          type: 'viprow',
-          channelId: event.viprowUrl || event.id,
-          viprowUrl: event.viprowUrl,
-          title: event.title,
-          poster: event.poster,
+      // DLHD event - use first channel
+      if (event.source === 'dlhd' && event.channels.length > 0) {
+        const channelId = event.channels[0].channelId;
+        try {
+          return getTvPlaylistUrl(channelId);
+        } catch {
+          return `/api/dlhd-proxy?channel=${channelId}`;
+        }
+      }
+
+      // VIPRow event - use CF proxy
+      if (event.source === 'viprow' && event.viprowUrl) {
+        const cfProxy = process.env.NEXT_PUBLIC_CF_STREAM_PROXY_URL;
+        if (cfProxy) {
+          const baseUrl = cfProxy.replace(/\/stream\/?$/, '');
+          return `${baseUrl}/viprow/stream?url=${encodeURIComponent(event.viprowUrl)}&link=1`;
+        }
+        return `/api/livetv/viprow-stream?url=${encodeURIComponent(event.viprowUrl)}&link=1`;
+      }
+    }
+
+    return null;
+  }, [event, channel]);
+
+  // Initialize HLS player
+  const initPlayer = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Cleanup previous instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    const streamUrl = getStreamUrl();
+    if (!streamUrl) {
+      setError('No stream URL available');
+      setIsLoading(false);
+      return;
+    }
+
+    console.log('[LiveTV Player] Loading stream:', streamUrl);
+
+    // For CDN Live API responses, we need to fetch the actual m3u8 URL
+    if (streamUrl.includes('/api/livetv/cdnlive-stream')) {
+      try {
+        const response = await fetch(streamUrl);
+        const data = await response.json();
+        
+        if (!data.success || !data.streamUrl) {
+          setError(data.error || 'Failed to get CDN Live stream');
+          setIsLoading(false);
+          return;
+        }
+        
+        // Use the actual stream URL
+        loadHlsStream(video, data.streamUrl);
+      } catch (err) {
+        setError('Failed to fetch CDN Live stream');
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // For VIPRow API responses
+    if (streamUrl.includes('/api/livetv/viprow-stream')) {
+      try {
+        const response = await fetch(streamUrl);
+        const data = await response.json();
+        
+        if (!data.success) {
+          setError(data.error || 'Failed to get VIPRow stream');
+          setIsLoading(false);
+          return;
+        }
+        
+        // VIPRow returns either streamUrl (m3u8) or playerUrl (embed)
+        if (data.streamUrl) {
+          loadHlsStream(video, data.streamUrl);
+        } else {
+          setError('VIPRow stream not available - try another link');
+          setIsLoading(false);
+        }
+      } catch (err) {
+        setError('Failed to fetch VIPRow stream');
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // Direct m3u8 URL (DLHD proxy or CF proxy)
+    loadHlsStream(video, streamUrl);
+  }, [getStreamUrl]);
+
+  // Load HLS stream
+  const loadHlsStream = (video: HTMLVideoElement, url: string) => {
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+        maxBufferLength: 30,
+        maxMaxBufferLength: 60,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        // Retry configuration
+        manifestLoadingMaxRetry: 4,
+        manifestLoadingRetryDelay: 1000,
+        levelLoadingMaxRetry: 4,
+        levelLoadingRetryDelay: 1000,
+        fragLoadingMaxRetry: 6,
+        fragLoadingRetryDelay: 1000,
+      });
+
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
+        console.log('[LiveTV Player] Manifest parsed, levels:', data.levels.length);
+        
+        // Extract quality levels
+        const levels = data.levels.map((level, index) => ({
+          height: level.height,
+          index,
+        })).filter(l => l.height > 0);
+        
+        setQualities(levels);
+        setIsLoading(false);
+        
+        // Auto-play
+        video.play().catch(err => {
+          console.warn('[LiveTV Player] Autoplay blocked:', err);
         });
-        return;
-      } else if (event.source === 'dlhd' && event.channels?.length > 0) {
-        channelId = event.channels[0].channelId;
-      } else if (event.source === 'cdnlive' && event.channels?.length > 0) {
-        channelId = event.channels[0].channelId;
-      } else {
-        channelId = event.id;
-      }
-      
-      loadedSourceRef.current = sourceKey;
-      loadStream({
-        type: streamType,
-        channelId,
-        title: event.title,
-        poster: event.poster,
       });
-    } else if (channel) {
-      // Use the channel's source and channelId
-      const streamType = channel.source || 'dlhd';
-      loadedSourceRef.current = sourceKey;
-      loadStream({
-        type: streamType,
-        channelId: channel.channelId || channel.id,
-        title: channel.name,
-        poster: channel.logo,
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+        setCurrentQuality(data.level);
+      });
+
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error('[LiveTV Player] HLS error:', data.type, data.details);
+        
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log('[LiveTV Player] Network error, attempting recovery...');
+              if (retryCount < 3) {
+                setRetryCount(prev => prev + 1);
+                hls.startLoad();
+              } else {
+                setError('Network error - stream may be offline');
+                setIsLoading(false);
+              }
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('[LiveTV Player] Media error, attempting recovery...');
+              hls.recoverMediaError();
+              break;
+            default:
+              setError('Stream playback failed');
+              setIsLoading(false);
+              hls.destroy();
+              break;
+          }
+        }
+      });
+
+      hlsRef.current = hls;
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari native HLS
+      video.src = url;
+      video.addEventListener('loadedmetadata', () => {
+        setIsLoading(false);
+        video.play().catch(() => {});
+      });
+      video.addEventListener('error', () => {
+        setError('Failed to load stream');
+        setIsLoading(false);
       });
     } else {
-      loadedSourceRef.current = null;
-      stopStream();
+      setError('HLS playback not supported in this browser');
+      setIsLoading(false);
     }
-  }, [event?.id, channel?.id, isOpen, loadStream, stopStream]);
+  };
 
+  // Initialize when opened
   useEffect(() => {
-    if (isPlaying && !isLoading && !isBuffering) {
-      resetHideTimer();
-    } else {
-      setShowControls(true);
-      if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current);
-      }
+    if (isOpen && (event || channel)) {
+      setRetryCount(0);
+      initPlayer();
     }
-  }, [isPlaying, isLoading, isBuffering, resetHideTimer]);
 
-  useEffect(() => {
     return () => {
-      if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current);
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
+    };
+  }, [isOpen, event, channel, initPlayer]);
+
+  // Video event handlers
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleWaiting = () => setIsLoading(true);
+    const handlePlaying = () => setIsLoading(false);
+    const handleVolumeChange = () => {
+      setVolume(video.volume);
+      setIsMuted(video.muted);
+    };
+
+    video.addEventListener('play', handlePlay);
+    video.addEventListener('pause', handlePause);
+    video.addEventListener('waiting', handleWaiting);
+    video.addEventListener('playing', handlePlaying);
+    video.addEventListener('volumechange', handleVolumeChange);
+
+    return () => {
+      video.removeEventListener('play', handlePlay);
+      video.removeEventListener('pause', handlePause);
+      video.removeEventListener('waiting', handleWaiting);
+      video.removeEventListener('playing', handlePlaying);
+      video.removeEventListener('volumechange', handleVolumeChange);
     };
   }, []);
 
-  // Close server picker when clicking outside
-  useEffect(() => {
-    if (!showServerPicker) return;
-    
-    const handleClickOutside = () => {
-      setShowServerPicker(false);
-    };
-    
-    // Delay to avoid immediate close from the button click
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClickOutside);
-    }, 0);
-    
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('click', handleClickOutside);
-    };
-  }, [showServerPicker]);
+  // Controls visibility
+  const showControlsTemporarily = useCallback(() => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) setShowControls(false);
+    }, 3000);
+  }, [isPlaying]);
 
-  const handleInteraction = useCallback(() => {
-    resetHideTimer();
-  }, [resetHideTimer]);
-
-  // Keyboard shortcuts
+  // Keyboard controls
   useEffect(() => {
     if (!isOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      handleInteraction();
-      
-      switch (e.code) {
-        case 'Space':
+      const video = videoRef.current;
+      if (!video) return;
+
+      switch (e.key) {
+        case ' ':
+        case 'k':
           e.preventDefault();
-          togglePlay();
+          if (video.paused) video.play();
+          else video.pause();
           break;
-        case 'KeyM':
-          e.preventDefault();
-          toggleMute();
-          break;
-        case 'KeyF':
+        case 'f':
           e.preventDefault();
           toggleFullscreen();
           break;
-        case 'Escape':
+        case 'm':
           e.preventDefault();
-          if (!isFullscreen) onClose();
+          video.muted = !video.muted;
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setVolume(Math.min(1, volume + 0.1));
+          video.volume = Math.min(1, video.volume + 0.1);
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setVolume(Math.max(0, volume - 0.1));
+          video.volume = Math.max(0, video.volume - 0.1);
+          break;
+        case 'Escape':
+          if (isFullscreen) {
+            document.exitFullscreen?.();
+          } else {
+            onClose();
+          }
           break;
       }
+      showControlsTemporarily();
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isFullscreen, volume, togglePlay, toggleMute, toggleFullscreen, setVolume, onClose, handleInteraction]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isFullscreen, onClose, showControlsTemporarily]);
 
-  if (!isOpen || (!event && !channel)) return null;
+  // Fullscreen handling
+  const toggleFullscreen = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-  const displayTitle = event?.title || channel?.name || 'Stream';
-  const displaySport = event?.sport || channel?.category || '';
-  const isLive = event?.isLive ?? true;
-
-  // Loading stage messages
-  const getLoadingMessage = () => {
-    switch (loadingStage) {
-      case 'fetching':
-        return 'Fetching stream info...';
-      case 'connecting':
-        return 'Connecting to stream...';
-      case 'buffering':
-        return 'Buffering...';
-      default:
-        return 'Loading stream...';
+    if (!document.fullscreenElement) {
+      container.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
     }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Play/Pause toggle
+  const togglePlay = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) video.play();
+    else video.pause();
   };
 
+  // Volume control
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const video = videoRef.current;
+    if (!video) return;
+    const newVolume = parseFloat(e.target.value);
+    video.volume = newVolume;
+    if (newVolume > 0) video.muted = false;
+  };
+
+  // Quality selection
+  const selectQuality = (index: number) => {
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = index;
+      setCurrentQuality(index);
+    }
+    setShowQualityMenu(false);
+  };
+
+  // Retry stream
+  const retryStream = () => {
+    setRetryCount(0);
+    initPlayer();
+  };
+
+  // Get title
+  const getTitle = () => {
+    if (channel) return channel.name;
+    if (event) return event.title;
+    return 'Live TV';
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <div className={styles.playerModal}>
+    <div className={styles.playerOverlay}>
       <div 
         ref={containerRef}
         className={styles.playerContainer}
-        onMouseMove={handleInteraction}
-        onTouchStart={handleInteraction}
+        onMouseMove={showControlsTemporarily}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) togglePlay();
+        }}
       >
+        {/* Video Element */}
         <video
           ref={videoRef}
-          className={styles.videoElement}
+          className={styles.video}
           playsInline
-          // @ts-ignore - iOS/Safari AirPlay attributes
-          x-webkit-airplay="allow"
-          // @ts-ignore
-          webkit-playsinline="true"
-          // @ts-ignore - Allow AirPlay
-          airplay="allow"
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePlay();
-            handleInteraction();
-          }}
+          onClick={togglePlay}
         />
 
-        {/* Loading Overlay - shows during initial load */}
+        {/* Loading Spinner */}
         {isLoading && (
           <div className={styles.loadingOverlay}>
-            <div className={styles.loadingContent}>
-              <div className={styles.loadingSpinnerLarge} />
-              <p className={styles.loadingText}>{getLoadingMessage()}</p>
-              <p className={styles.loadingSubtext}>{displayTitle}</p>
-              
-              {/* Server Status Indicator */}
-              {serverStatuses.length > 0 && (
-                <div className={styles.serverStatusContainer}>
-                  <div className={styles.serverStatusHeader}>
-                    <span>Checking servers...</span>
-                    <span className={styles.elapsedTime}>{(elapsedTime / 10).toFixed(1)}s</span>
-                  </div>
-                  <div className={styles.serverStatusList}>
-                    {serverStatuses.map((server, idx) => (
-                      <div key={idx} className={`${styles.serverStatusItem} ${styles[`status${server.status.charAt(0).toUpperCase() + server.status.slice(1)}`]}`}>
-                        <span className={styles.serverStatusIcon}>
-                          {server.status === 'pending' && '○'}
-                          {server.status === 'checking' && '◐'}
-                          {server.status === 'success' && '✓'}
-                          {server.status === 'failed' && '✗'}
-                        </span>
-                        <span className={styles.serverStatusName}>{server.name}</span>
-                        {server.elapsed !== undefined && (
-                          <span className={styles.serverStatusElapsed}>
-                            {(server.elapsed / 1000).toFixed(1)}s
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <div className={styles.spinner} />
+            <p>Loading stream...</p>
           </div>
         )}
 
-        {/* Buffering Indicator - shows during playback buffering */}
-        {isBuffering && !isLoading && (
-          <div className={styles.bufferingOverlay}>
-            <div className={styles.bufferingSpinner} />
-          </div>
-        )}
-
+        {/* Error Display */}
         {error && (
           <div className={styles.errorOverlay}>
-            <div className={styles.errorContent}>
-              <div className={styles.errorIcon}>⚠️</div>
-              <h3>Stream Error</h3>
-              <p>{error}</p>
-              <button 
-                onClick={() => {
-                  if (event) {
-                    if (event.source === 'viprow') {
-                      loadStream({
-                        type: 'viprow',
-                        channelId: event.viprowUrl || event.id,
-                        viprowUrl: event.viprowUrl,
-                        title: event.title,
-                        poster: event.poster,
-                      });
-                    } else {
-                      let channelId: string;
-                      if (event.channels?.length > 0) {
-                        channelId = event.channels[0].channelId;
-                      } else {
-                        channelId = event.id;
-                      }
-                      loadStream({
-                        type: event.source,
-                        channelId,
-                        title: event.title,
-                        poster: event.poster,
-                      });
-                    }
-                  } else if (channel) {
-                    const streamType = channel.source || 'dlhd';
-                    loadStream({
-                      type: streamType,
-                      channelId: channel.channelId || channel.id,
-                      title: channel.name,
-                      poster: channel.logo,
-                    });
-                  }
-                }}
-                className={styles.retryButton}
-              >
-                Retry
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Cast Error Message */}
-        {castError && (
-          <div className={styles.castErrorOverlay}>
-            <div className={styles.castErrorContent}>
-              <button 
-                className={styles.castErrorClose}
-                onClick={() => setCastError(null)}
-              >
-                ✕
-              </button>
-              <div className={styles.castErrorIcon}>📺</div>
-              <p className={styles.castErrorText}>{castError}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Cast Overlay - shown when casting to TV */}
-        {(cast.isCasting || cast.isAirPlayActive) && (
-          <div className={styles.castActiveOverlay}>
-            <div className={styles.castActiveContent}>
-              <div className={styles.castActiveIcon}>
-                {cast.isAirPlayAvailable ? (
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 22h12l-6-6-6 6z" />
-                    <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-                  </svg>
-                ) : (
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
-                    <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
-                    <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
-                    <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-                  </svg>
-                )}
-              </div>
-              <h3 className={styles.castActiveTitle}>
-                {cast.isAirPlayActive ? 'AirPlaying to TV' : 'Casting to TV'}
-              </h3>
-              <p className={styles.castActiveSubtitle}>{displayTitle}</p>
-              <button 
-                className={styles.stopCastButton}
-                onClick={() => cast.stop()}
-              >
-                Stop {cast.isAirPlayActive ? 'AirPlay' : 'Casting'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Controls - hide for iframe mode since iframe has its own controls */}
-        <div className={`${styles.playerControls} ${!showControls ? styles.hidden : ''}`}>
-          {/* Top Controls */}
-          <div className={styles.topControls}>
-            <div className={styles.eventInfo}>
-              <h3 className={styles.eventTitle}>{displayTitle}</h3>
-              <div>
-                {displaySport && (
-                  <span className={styles.eventSport}>
-                    {getSportIcon(displaySport)} {displaySport}
-                  </span>
-                )}
-                {isLive && (
-                  <span className={styles.liveIndicator}>
-                    <span className={styles.liveDot}></span>
-                    LIVE
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            <button onClick={onClose} className={styles.closeButton}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6L18 18" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-              </svg>
+            <div className={styles.errorIcon}>⚠️</div>
+            <p className={styles.errorMessage}>{error}</p>
+            <button onClick={retryStream} className={styles.retryButton}>
+              Retry
             </button>
           </div>
+        )}
 
-          {/* Bottom Controls */}
-          <div className={styles.bottomControls}>
-            <div className={styles.controlsRow}>
-              <button onClick={togglePlay} className={styles.playPauseButton}>
-                {isPlaying ? (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="4" width="4" height="16" rx="1"/>
-                    <rect x="14" y="4" width="4" height="16" rx="1"/>
-                  </svg>
-                ) : (
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
-                )}
-              </button>
-
-              <div className={styles.volumeControls}>
-                <button onClick={toggleMute} className={styles.muteButton}>
-                  {isMuted || volume === 0 ? (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                      <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                      <line x1="23" y1="9" x2="17" y2="15"/>
-                      <line x1="17" y1="9" x2="23" y2="15"/>
-                    </svg>
-                  ) : (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                      <path d="M11 5L6 9H2v6h4l5 4V5z"/>
-                      <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/>
-                    </svg>
-                  )}
-                </button>
-                
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={volume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className={styles.volumeSlider}
-                  aria-label="Volume"
-                />
-              </div>
-
-              <div className={styles.controlsSpacer}></div>
-
-              {currentSource && (
-                <CopyUrlButton getUrl={getStreamUrlForCopy} />
-              )}
-
-              {/* Server Picker - only for DLHD sources */}
-              {currentSource?.type === 'dlhd' && (
-                <div className={styles.serverPickerContainer}>
-                  <button 
-                    className={styles.serverPickerButton}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowServerPicker(!showServerPicker);
-                    }}
-                    title="Switch server"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="2" y="3" width="20" height="6" rx="1" />
-                      <rect x="2" y="15" width="20" height="6" rx="1" />
-                      <circle cx="6" cy="6" r="1" fill="currentColor" />
-                      <circle cx="6" cy="18" r="1" fill="currentColor" />
-                    </svg>
-                    <span>{currentBackend ? BACKEND_DISPLAY_NAMES[currentBackend] : 'Server'}</span>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points={showServerPicker ? "18 15 12 9 6 15" : "6 9 12 15 18 9"} />
-                    </svg>
-                  </button>
-                  
-                  {showServerPicker && (
-                    <div className={styles.serverPickerDropdown}>
-                      {DLHD_BACKENDS.map((backend) => (
-                        <button
-                          key={backend}
-                          className={`${styles.serverPickerOption} ${currentBackend === backend ? styles.active : ''}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (backend !== currentBackend) {
-                              switchBackend(backend);
-                            }
-                            setShowServerPicker(false);
-                          }}
-                        >
-                          <span className={styles.serverPickerOptionName}>
-                            {BACKEND_DISPLAY_NAMES[backend]}
-                          </span>
-                          {currentBackend === backend && (
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {currentSource && currentSource.type !== 'dlhd' && (
-                <span className={styles.sourceLabel}>
-                  {currentSource.type.toUpperCase()}
+        {/* Controls */}
+        <div className={`${styles.controls} ${showControls ? styles.visible : ''}`}>
+          {/* Top Bar */}
+          <div className={styles.topBar}>
+            <button onClick={onClose} className={styles.closeButton}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <div className={styles.titleSection}>
+              <h2 className={styles.title}>{getTitle()}</h2>
+              {event?.isLive && (
+                <span className={styles.liveBadge}>
+                  <span className={styles.liveDot} />
+                  LIVE
                 </span>
               )}
-
-              {/* Cast/AirPlay button */}
-              <button 
-                onClick={handleCastClick} 
-                className={`${styles.castButton} ${cast.isCasting || cast.isAirPlayActive ? styles.active : ''}`}
-                title={cast.isCasting || cast.isAirPlayActive 
-                  ? 'Stop casting' 
-                  : cast.isAirPlayAvailable 
-                    ? 'AirPlay to Apple TV' 
-                    : 'Cast to TV'}
-              >
-                {cast.isAirPlayAvailable ? (
-                  // AirPlay icon
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M6 22h12l-6-6-6 6z" />
-                    <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h4v-2H3V5h18v12h-4v2h4c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-                  </svg>
-                ) : (
-                  // Chromecast icon
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M1 18v3h3c0-1.66-1.34-3-3-3z" />
-                    <path d="M1 14v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7z" />
-                    <path d="M1 10v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z" />
-                    <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z" />
-                  </svg>
-                )}
-              </button>
-
-              <button onClick={toggleFullscreen} className={styles.fullscreenButton}>
-                {isFullscreen ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <path d="M8 3v3a2 2 0 01-2 2H3M21 8h-3a2 2 0 01-2-2V3M3 16h3a2 2 0 012 2v3M16 21v-3a2 2 0 012-2h3"/>
-                  </svg>
-                ) : (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                    <path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3"/>
-                  </svg>
-                )}
-              </button>
             </div>
+          </div>
+
+          {/* Bottom Bar */}
+          <div className={styles.bottomBar}>
+            {/* Play/Pause */}
+            <button onClick={togglePlay} className={styles.controlButton}>
+              {isPlaying ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+            </button>
+
+            {/* Volume */}
+            <div className={styles.volumeControl}>
+              <button 
+                onClick={() => {
+                  const video = videoRef.current;
+                  if (video) video.muted = !video.muted;
+                }}
+                className={styles.controlButton}
+              >
+                {isMuted || volume === 0 ? (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
+                  </svg>
+                ) : (
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                  </svg>
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={handleVolumeChange}
+                className={styles.volumeSlider}
+              />
+            </div>
+
+            <div className={styles.spacer} />
+
+            {/* Quality Selector */}
+            {qualities.length > 0 && (
+              <div className={styles.qualitySelector}>
+                <button 
+                  onClick={() => setShowQualityMenu(!showQualityMenu)}
+                  className={styles.controlButton}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                  </svg>
+                  <span className={styles.qualityLabel}>
+                    {currentQuality === -1 ? 'Auto' : `${qualities.find(q => q.index === currentQuality)?.height || ''}p`}
+                  </span>
+                </button>
+                
+                {showQualityMenu && (
+                  <div className={styles.qualityMenu}>
+                    <button
+                      onClick={() => selectQuality(-1)}
+                      className={`${styles.qualityOption} ${currentQuality === -1 ? styles.active : ''}`}
+                    >
+                      Auto
+                    </button>
+                    {qualities.map((q) => (
+                      <button
+                        key={q.index}
+                        onClick={() => selectQuality(q.index)}
+                        className={`${styles.qualityOption} ${currentQuality === q.index ? styles.active : ''}`}
+                      >
+                        {q.height}p
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Fullscreen */}
+            <button onClick={toggleFullscreen} className={styles.controlButton}>
+              {isFullscreen ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </div>
     </div>
   );
-});
+}
