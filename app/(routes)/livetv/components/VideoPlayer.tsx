@@ -108,7 +108,13 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
         
         setQualities(levels);
         setIsLoading(false);
-        video.play().catch(() => {});
+        video.play().then(() => {
+          console.log('[VideoPlayer] Autoplay started');
+          setIsPlaying(true);
+        }).catch((err) => {
+          console.log('[VideoPlayer] Autoplay blocked:', err);
+          setIsPlaying(false);
+        });
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
@@ -218,17 +224,34 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     };
   }, [isOpen, event, channel]);
 
-  // Video event handlers
+  // Video event handlers - sync play/pause/volume state with video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const onPlay = () => { setIsPlaying(true); setIsLoading(false); };
-    const onPause = () => setIsPlaying(false);
+    // Sync initial state
+    setIsPlaying(!video.paused);
+    setVolume(video.volume);
+    setIsMuted(video.muted);
+
+    const onPlay = () => { 
+      console.log('[VideoPlayer] play event');
+      setIsPlaying(true); 
+      setIsLoading(false); 
+    };
+    const onPause = () => {
+      console.log('[VideoPlayer] pause event');
+      setIsPlaying(false);
+    };
     const onWaiting = () => setIsLoading(true);
-    const onPlaying = () => { setIsPlaying(true); setIsLoading(false); };
+    const onPlaying = () => { 
+      console.log('[VideoPlayer] playing event');
+      setIsPlaying(true); 
+      setIsLoading(false); 
+    };
     const onCanPlay = () => setIsLoading(false);
     const onVolumeChange = () => {
+      console.log('[VideoPlayer] volumechange - volume:', video.volume, 'muted:', video.muted);
       setVolume(video.volume);
       setIsMuted(video.muted);
     };
@@ -248,7 +271,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('volumechange', onVolumeChange);
     };
-  }, []);
+  }, [isOpen]);
 
   // Auto-hide controls
   const showControlsTemporarily = useCallback(() => {
@@ -331,15 +354,26 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
 
   const togglePlay = () => {
     const video = videoRef.current;
-    if (video) video.paused ? video.play() : video.pause();
+    if (!video) return;
+    console.log('[VideoPlayer] togglePlay - paused:', video.paused);
+    if (video.paused) {
+      video.play().catch(err => console.error('[VideoPlayer] Play failed:', err));
+    } else {
+      video.pause();
+    }
   };
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const video = videoRef.current;
     if (!video) return;
     const val = parseFloat(e.target.value);
+    console.log('[VideoPlayer] Volume slider changed to:', val);
     video.volume = val;
-    if (val > 0) video.muted = false;
+    setVolume(val);
+    if (val > 0) {
+      video.muted = false;
+      setIsMuted(false);
+    }
   };
 
   const selectQuality = (index: number) => {
@@ -446,6 +480,7 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
                 value={isMuted ? 0 : volume}
                 onChange={handleVolumeChange}
                 className={styles.volumeSlider}
+                style={{ '--volume-percent': `${(isMuted ? 0 : volume) * 100}%` } as React.CSSProperties}
               />
             </div>
 

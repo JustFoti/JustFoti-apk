@@ -257,19 +257,23 @@
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: rgba(255, 255, 255, 0.3);
+  background: linear-gradient(to right, #fff var(--volume-percent, 100%), rgba(255, 255, 255, 0.3) var(--volume-percent, 100%));
   border-radius: 3px;
   cursor: pointer;
   outline: none;
+  margin: 0;
+  padding: 0;
 }
 
 .volumeSlider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
+  background: transparent;
 }
 
 .volumeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 16px;
   height: 16px;
   background: #fff;
@@ -278,6 +282,7 @@
   margin-top: -5px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
   transition: transform 0.1s;
+  border: none;
 }
 
 .volumeSlider::-webkit-slider-thumb:hover {
@@ -287,6 +292,13 @@
 .volumeSlider::-moz-range-track {
   height: 6px;
   background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  border: none;
+}
+
+.volumeSlider::-moz-range-progress {
+  height: 6px;
+  background: #fff;
   border-radius: 3px;
 }
 
