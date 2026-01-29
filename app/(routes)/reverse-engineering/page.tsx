@@ -344,48 +344,145 @@ export default function ReverseEngineeringPage() {
             >
               <h2 className={styles.sectionTitle}>
                 <span className={styles.sectionIcon}>💭</span>
-                Philosophy
+                Philosophy: On the Ethics of Robbing Pirates
               </h2>
               
-              <h3>Why We Do This</h3>
+              <h3>The Moral Quandary (Or Lack Thereof)</h3>
               <p>
-                The streaming sites we reverse engineer are not legitimate businesses. They profit 
-                from content they don&apos;t own by wrapping it in exploitative monetization. We&apos;re 
-                not stealing from creators—we&apos;re bypassing the middlemen who were already stealing.
+                Let us address the elephant in the room: Is it ethical to reverse engineer pirate 
+                streaming sites? To which we respond: Is it ethical to profit from content you don&apos;t 
+                own by wrapping it in malware and cryptocurrency miners?
+              </p>
+              
+              <p>
+                The streaming sites we reverse engineer occupy a fascinating moral gray area. They 
+                are not legitimate businesses—they do not license content, pay creators, or contribute 
+                to the creative economy in any meaningful way. Instead, they aggregate stolen content 
+                and monetize it through the most exploitative means available: malicious advertising, 
+                browser hijacking, and computational theft via cryptocurrency mining.
+              </p>
+
+              <p>
+                In essence, they are pirates. And we are pirates who rob pirates. It&apos;s like being 
+                Robin Hood, except instead of stealing from the rich to give to the poor, we&apos;re 
+                stealing from people who are already stealing, and giving to... well, ourselves and 
+                anyone else who wants a stream without seventeen pop-ups.
               </p>
               
               <blockquote className={styles.quote}>
                 <p>
-                  &quot;We are not pirates. We are pirates who rob pirates. It&apos;s like being a 
-                  vigilante, except instead of fighting crime we are fighting pop-up advertisements 
-                  and cryptocurrency miners.&quot;
+                  &quot;We are not stealing from creators. We are bypassing the middlemen who were 
+                  already stealing from creators. It&apos;s piracy all the way down, and we&apos;re 
+                  just cutting out the most exploitative layer.&quot;
                 </p>
+                <cite>- The Pirate&apos;s Code, Article 3, Subsection B</cite>
               </blockquote>
+
+              <h3>The Economic Argument: A Thought Experiment</h3>
+              <p>
+                Consider the typical pirate streaming site business model:
+              </p>
+              <ol>
+                <li>Aggregate content you don&apos;t own</li>
+                <li>Wrap it in aggressive advertising</li>
+                <li>Profit from users seeking free content</li>
+                <li>Claim this exploitation is &quot;necessary&quot; to cover costs</li>
+              </ol>
+
+              <p>
+                Now consider our model:
+              </p>
+              <ol>
+                <li>Reverse engineer their aggregation methods</li>
+                <li>Remove all advertising and tracking</li>
+                <li>Operate on free tiers of cloud services</li>
+                <li>Generate exactly $0.00 in revenue</li>
+              </ol>
+
+              <p>
+                The fascinating thing about this comparison is that <strong>both models work</strong>. 
+                The difference is that one chooses to exploit users for profit, while the other chooses 
+                not to. The exploitation is not a technical requirement—it&apos;s a business decision.
+              </p>
+
+              <h3>On the Feasibility of Ethical Piracy</h3>
+              <p>
+                This project serves as an existence proof: it is technically and economically feasible 
+                to provide streaming services without exploiting users. The pirate sites could choose 
+                to operate ethically. They simply choose not to, because malware and crypto miners are 
+                more profitable than ethics.
+              </p>
+
+              <p>
+                By demonstrating that their entire business model can be replicated without the 
+                exploitation, we remove their ability to hide behind claims of necessity. They can no 
+                longer say &quot;we have to serve malware to pay for servers&quot; when we&apos;re 
+                running the same service on free tiers.
+              </p>
               
-              <h3>The Rules</h3>
+              <h3>The Rules of Engagement</h3>
               <div className={styles.rulesList}>
                 <div className={styles.rule}>
                   <span className={styles.ruleIcon}>🚫</span>
                   <div>
                     <strong>No Puppeteer/Browser Automation</strong>
-                    <p>Pure HTTP requests only. If we need a browser, we haven&apos;t cracked it properly.</p>
+                    <p>If we need a headless browser, we haven&apos;t properly reverse engineered it. 
+                    Pure HTTP requests only. We&apos;re not barbarians.</p>
                   </div>
                 </div>
                 <div className={styles.rule}>
                   <span className={styles.ruleIcon}>🎬</span>
                   <div>
                     <strong>No Embedding Their Players</strong>
-                    <p>Their players contain ads and tracking. We extract the stream and use our own player.</p>
+                    <p>Their players contain ads, tracking, and probably a cryptocurrency miner or two. 
+                    We extract the stream URL and use our own player. It&apos;s cleaner that way.</p>
                   </div>
                 </div>
                 <div className={styles.rule}>
                   <span className={styles.ruleIcon}>📝</span>
                   <div>
                     <strong>Document Everything</strong>
-                    <p>Knowledge should be shared so others can build on it.</p>
+                    <p>Knowledge should be shared. If we crack an obfuscation method, we document it 
+                    so others can learn. Information wants to be free, and so do streaming URLs.</p>
+                  </div>
+                </div>
+                <div className={styles.rule}>
+                  <span className={styles.ruleIcon}>💰</span>
+                  <div>
+                    <strong>Zero Profit Motive</strong>
+                    <p>We generate no revenue. No ads, no subscriptions, no donations. This removes 
+                    any financial incentive and keeps the project purely educational and ethical.</p>
                   </div>
                 </div>
               </div>
+
+              <h3>A Note on Legality</h3>
+              <p>
+                Is this legal? That&apos;s a fascinating question that depends heavily on jurisdiction, 
+                interpretation of computer fraud laws, and whether you consider reverse engineering 
+                for interoperability to be protected activity.
+              </p>
+
+              <p>
+                What we can say with certainty is this: The sites we reverse engineer are themselves 
+                operating in legal gray areas (or outright illegally, depending on jurisdiction). 
+                They profit from content they don&apos;t own. They serve malware to users. They mine 
+                cryptocurrency without consent.
+              </p>
+
+              <p>
+                If there&apos;s a moral hierarchy here, we&apos;re comfortable with our position on it.
+              </p>
+
+              <blockquote className={styles.quote}>
+                <p>
+                  &quot;The question is not whether what we&apos;re doing is legal. The question is 
+                  whether what they&apos;re doing should be. And if the answer is no, then perhaps 
+                  someone should demonstrate that their entire business model can be replicated without 
+                  the exploitation. Consider this our demonstration.&quot;
+                </p>
+                <cite>- Closing Arguments, The People vs. Common Sense</cite>
+              </blockquote>
             </motion.div>
           </section>
 

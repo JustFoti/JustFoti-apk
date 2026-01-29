@@ -177,17 +177,35 @@ export default function AboutPage() {
               in a country you cannot pronounce.
             </p>
 
-            <h3>1.2 The Implicit Assumption</h3>
+            <h3>1.2 The Implicit Assumption (And Why It's Wrong)</h3>
             <p>
               Underlying this entire ecosystem is an assumption so pervasive that most people have 
-              stopped questioning it: free content requires exploitation. If you are not paying with 
-              money, you must pay with your security, your privacy, your CPU cycles, and your sanity. 
-              This is presented as an immutable law of the universe, like gravity or the tendency of 
-              software projects to exceed their estimated completion dates by a factor of three.
+              stopped questioning it: <strong>free content requires exploitation</strong>. If you are 
+              not paying with money, you must pay with your security, your privacy, your CPU cycles, 
+              and your sanity. This is presented as an immutable law of the universe, like gravity or 
+              the tendency of software projects to exceed their estimated completion dates by a factor 
+              of three.
             </p>
             <p>
-              We reject this assumption.
+              We reject this assumption. Not on philosophical grounds (though we have those too), but 
+              on empirical ones. This project exists as a counterexample. It is an existence proof that 
+              free streaming can exist without exploitation. The exploitation is not a technical 
+              requirement—it is a business decision.
             </p>
+
+            <p>
+              The pirate streaming sites could choose to operate without malware. They could choose 
+              not to mine cryptocurrency on users&apos; devices. They could choose not to serve 
+              seventeen pop-up advertisements before allowing access to a video. They simply choose 
+              not to, because exploitation is more profitable than ethics.
+            </p>
+
+            <blockquote>
+              &quot;The question is not whether ethical piracy is possible. We have demonstrated that 
+              it is. The question is why the unethical pirates continue to choose exploitation when 
+              alternatives exist. The answer, of course, is money. It is always money.&quot;
+              <cite>- Research Conclusions, Section 12.4</cite>
+            </blockquote>
 
             <h3>1.3 Research Questions</h3>
             <p>
@@ -314,17 +332,67 @@ export default function AboutPage() {
               download links, and countdown timers that reset when you are not looking.
             </p>
 
-            <h3>3.3 The &quot;Necessary Evil&quot; Myth</h3>
+            <h3>3.3 The &quot;Necessary Evil&quot; Myth (A Comprehensive Debunking)</h3>
             <p>
               Defenders of exploitative practices often argue that they are economically necessary. 
               &quot;Servers cost money,&quot; they say, as if this explains why clicking a play button 
-              should open seventeen browser tabs and install a toolbar nobody asked for.
+              should open seventeen browser tabs and install a toolbar nobody asked for. &quot;We need 
+              to monetize somehow,&quot; they claim, as if the only options are malware or bankruptcy.
             </p>
             <p>
-              This argument deserves scrutiny, primarily because it is wrong. Pirate streaming sites 
-              do not host content. They aggregate it. Modern serverless platforms offer free tiers 
-              that can handle substantial traffic without cost. The exploitation is not necessary. 
-              It is simply more profitable than the alternative.
+              This argument deserves scrutiny, primarily because it is demonstrably false. Let us 
+              examine the economics:
+            </p>
+
+            <div className="economic-analysis">
+              <h4>The Pirate Site Business Model</h4>
+              <ul>
+                <li><strong>Content Hosting:</strong> $0 (they don&apos;t host content, they aggregate it)</li>
+                <li><strong>Server Costs:</strong> Minimal (static HTML + JavaScript, easily cached)</li>
+                <li><strong>CDN Costs:</strong> $0 (they use other people&apos;s CDNs)</li>
+                <li><strong>Revenue:</strong> Substantial (malicious ads, crypto mining, affiliate schemes)</li>
+                <li><strong>Profit Margin:</strong> Excellent (when your costs are near-zero, everything is profit)</li>
+              </ul>
+
+              <h4>Our Model (For Comparison)</h4>
+              <ul>
+                <li><strong>Content Hosting:</strong> $0 (we also don&apos;t host content)</li>
+                <li><strong>Server Costs:</strong> $0 (Vercel free tier, Cloudflare Workers free tier)</li>
+                <li><strong>Database:</strong> $0 (Neon PostgreSQL free tier)</li>
+                <li><strong>Revenue:</strong> $0 (no ads, no tracking, no monetization)</li>
+                <li><strong>Profit Margin:</strong> Undefined (0/0 is mathematically problematic)</li>
+              </ul>
+            </div>
+
+            <p>
+              The fascinating thing about this comparison is that <strong>both models work</strong>. 
+              The pirate sites are not serving malware because they have to. They are serving malware 
+              because they want to. The exploitation is not a technical requirement—it is a business 
+              decision driven by profit maximization.
+            </p>
+
+            <p>
+              Modern serverless platforms offer free tiers that can handle substantial traffic. 
+              Cloudflare Workers provides 100,000 requests per day for free. Vercel offers generous 
+              bandwidth allowances. Neon PostgreSQL has a free tier that is more than sufficient for 
+              user data. The infrastructure costs for a streaming aggregation service are, in 2026, 
+              effectively zero for moderate traffic levels.
+            </p>
+
+            <blockquote>
+              &quot;The &apos;we need aggressive monetization to survive&apos; argument falls apart 
+              when someone builds the same service on free tiers and operates it at zero cost. At 
+              that point, you are not defending a necessary evil. You are defending an unnecessary 
+              one that happens to be profitable.&quot;
+              <cite>- Economic Analysis, Section 3.3.2</cite>
+            </blockquote>
+
+            <p>
+              To be clear: we are not arguing that all advertising is evil, or that content creators 
+              should not be compensated. We are arguing that the specific monetization practices 
+              employed by pirate streaming sites—malware, cryptocurrency mining, deceptive interfaces—are 
+              not economically necessary. They are choices. And those choices reveal the priorities of 
+              the people making them.
             </p>
           </section>
 
@@ -715,7 +783,7 @@ export default function AboutPage() {
 
           {/* Conclusion */}
           <section id="conclusion">
-            <h2>12. Conclusion</h2>
+            <h2>12. Conclusion: On the Feasibility of Ethical Piracy</h2>
             <p className="lead">
               We built a streaming platform. It works. It does not assault users with pop-ups, mine 
               cryptocurrency on their CPUs, or track them across the web. And we did it alone, 
@@ -728,26 +796,120 @@ export default function AboutPage() {
               budget, still without exploiting a single user.
             </p>
             <p>
-              That is the point. Not that we are special (we are not). The point is that if one person 
-              can do this under these constraints, then every pirate streaming site that serves 
-              malware is making a choice. They could treat users like humans instead of revenue 
-              sources. They choose not to because exploitation is more profitable than ethics.
+              That is the point. Not that we are special (we are not). Not that we are particularly 
+              clever (debatable). The point is that if one person can do this under these constraints, 
+              then every pirate streaming site that serves malware is making a choice. They could 
+              treat users like humans instead of revenue sources. They choose not to because 
+              exploitation is more profitable than ethics.
             </p>
+
+            <h3>12.1 The Existence Proof</h3>
+            <p>
+              In mathematics, an existence proof demonstrates that something is possible without 
+              necessarily showing how to construct it. This project is the opposite: a constructive 
+              proof that demonstrates not only that ethical streaming aggregation is possible, but 
+              exactly how to build it.
+            </p>
+            <p>
+              The pirate streaming sites can no longer hide behind claims of necessity. We have 
+              demonstrated that their entire business model can be replicated without the exploitation. 
+              The malware is optional. The cryptocurrency mining is optional. The seventeen pop-up 
+              advertisements are optional. They are choices, and those choices reveal priorities.
+            </p>
+
+            <h3>12.2 On Fighting Piracy with Piracy</h3>
+            <p>
+              There is a certain poetic justice in using piracy to fight piracy. The sites we reverse 
+              engineer profit from content they do not own. We profit from... well, we do not profit 
+              at all, which rather undermines the piracy metaphor, but the point stands.
+            </p>
+            <p>
+              By demonstrating that their systems can be bypassed and their content accessed without 
+              supporting their exploitative practices, we remove their ability to profit from stolen 
+              content. If enough users choose ethical alternatives, the economics of malware-based 
+              streaming become untenable.
+            </p>
+            <p>
+              Is this piracy? Technically, yes. Is it ethical? That depends on your framework. But 
+              if you accept that the original pirate sites are unethical (and they are—they serve 
+              malware to users), then perhaps fighting them with their own methods has a certain 
+              moral symmetry.
+            </p>
+
+            <h3>12.3 The Broader Implications</h3>
+            <p>
+              This project has implications beyond streaming. It demonstrates that:
+            </p>
+            <ul>
+              <li><strong>Exploitation is a choice:</strong> Services can operate without malware, 
+              tracking, or deceptive practices. The fact that many choose not to reveals their priorities.</li>
+              <li><strong>Obfuscation is not security:</strong> Every protection we encountered was 
+              eventually bypassed. Security through obscurity fails given sufficient motivation.</li>
+              <li><strong>Solo development is viable:</strong> Modern tools and platforms enable 
+              individuals to build production-quality services that would have required teams a decade ago.</li>
+              <li><strong>Free tiers are generous:</strong> The economics of cloud computing have 
+              shifted dramatically. Services that would have cost thousands per month can now run for free.</li>
+            </ul>
+
             <blockquote>
               &quot;The pop-ups are not necessary. The crypto miners are not necessary. The tracking 
               is not necessary. They are choices. And those choices tell you everything you need to 
               know about the people making them.&quot;
+              <cite>- Final Thoughts, Section 12.4</cite>
             </blockquote>
+
+            <h3>12.4 A Message to Users</h3>
             <p>
-              To users: you deserve better. You do not have to accept malware as the price of free 
-              content. Alternatives can exist.
+              You deserve better. You do not have to accept malware as the price of free content. 
+              You do not have to tolerate cryptocurrency miners running on your device. You do not 
+              have to navigate seventeen pop-up advertisements to watch a video.
             </p>
             <p>
-              To developers: if you have the skills to build something, build something good.
+              Alternatives can exist. This project is proof. Demand better from the services you use. 
+              And if they refuse to provide it, build it yourself. Or use something someone else built. 
+              The tools are available. The knowledge is documented. The only thing standing between 
+              you and a better internet is the willingness to build it.
             </p>
+
+            <h3>12.5 A Message to Developers</h3>
+            <p>
+              If you have the skills to build something, build something good. The world has enough 
+              services that exploit users. It has enough dark patterns, enough deceptive interfaces, 
+              enough malware disguised as legitimate software.
+            </p>
+            <p>
+              Build something that respects users. Build something that prioritizes their experience 
+              over your profit margins. Build something you would be proud to show your parents, or 
+              your children, or anyone else whose opinion you value.
+            </p>
+            <p>
+              The economics work. The technology exists. The only question is whether you choose to 
+              use your skills for good or for profit. And if you can find a way to do both, even better.
+            </p>
+
+            <h3>12.6 Final Thoughts</h3>
             <p>
               Flyx exists because we got tired of watching the internet get worse. It is proof that 
-              better is possible. And sometimes, proof is enough.
+              better is possible. It is proof that exploitation is optional. It is proof that one 
+              person, working part-time, with no budget, can build something that respects users.
+            </p>
+            <p>
+              And sometimes, proof is enough.
+            </p>
+            <p>
+              To the pirate sites we reverse engineered: Thank you for the learning experience. Your 
+              obfuscation techniques were educational, if ultimately futile. We hope you enjoy reading 
+              about how we bypassed all of them.
+            </p>
+            <p>
+              To the users: You deserve better than malware. We hope this helps.
+            </p>
+            <p>
+              To the developers: Build good things. The world needs more of them.
+            </p>
+            <p className="signature">
+              <em>- Vynx, Professional Insomniac and Occasional Pirate Hunter</em><br/>
+              <em>January 2026</em>
             </p>
           </section>
 
@@ -781,22 +943,45 @@ export default function AboutPage() {
               publicly available APIs, and external hosting services over which we exercise no control.
             </p>
 
-            <h3>13.3 DMCA Compliance</h3>
+            <h3>13.3 DMCA Compliance (Or: A Letter to Rights Holders)</h3>
             <div className="dmca-notice">
-              <h4>🏴‍☠️ A Note to Rights Holders</h4>
+              <h4>🏴‍☠️ Dear Rights Holders: Let&apos;s Talk</h4>
               <p>
-                Before you send that takedown request: <strong>We do not host any content.</strong> 
-                What we do is reverse engineer the obfuscation of <em>pirate streaming sites</em>—the 
-                same sites that are actually profiting from your content through malware and advertising.
+                Before you send that takedown request, let us save you some time: <strong>We do not 
+                host any content.</strong> Not a single video file. Not a single stream. Nothing. We 
+                are not the pirates you are looking for.
               </p>
               <p>
-                We have spent hundreds of hours reverse engineering these pirate operations. We know 
-                how they work. We know where they host. We know their infrastructure, their CDN 
-                providers, their obfuscation techniques.
+                What we <em>do</em> is reverse engineer the obfuscation techniques of <strong>actual 
+                pirate streaming sites</strong>—the ones that are profiting from your content through 
+                malicious advertising, cryptocurrency mining, and browser hijacking. You know, the 
+                sites that are actually making money from your intellectual property.
               </p>
               <p>
-                <strong>We would be more than happy to share our findings.</strong> Your fight is 
-                with them, not us. But we are happy to help you fight them.
+                We have spent hundreds of hours reverse engineering these operations. We know how 
+                they work. We know where they host their content. We know their CDN providers, their 
+                obfuscation techniques, their infrastructure, and in some cases, their approximate 
+                geographic locations based on server response times and TLS certificate authorities.
+              </p>
+              <p>
+                <strong>We would be more than happy to share our findings.</strong>
+              </p>
+              <p>
+                Your fight is with the pirate sites that are actually hosting and profiting from your 
+                content. We are just documenting how their systems work. But if you would like detailed 
+                technical documentation of their infrastructure, obfuscation methods, and operational 
+                patterns—information that might be useful in legal proceedings or takedown efforts—we 
+                are happy to provide it.
+              </p>
+              <p>
+                Think of us as unpaid security researchers who have thoroughly documented the systems 
+                you are trying to shut down. We are not your enemy. We might even be useful.
+              </p>
+              <p className="dmca-footer">
+                <strong>Contact:</strong> If you are a legitimate rights holder seeking information 
+                about pirate streaming infrastructure, we are open to discussion. If you are a pirate 
+                site operator who found this page and is now concerned about how much we know about 
+                your systems: Good. You should be.
               </p>
             </div>
 

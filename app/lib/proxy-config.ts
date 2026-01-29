@@ -66,7 +66,8 @@ export function getTvPlaylistUrl(channel: string): string {
   // Use the new DLHD extractor worker - it handles everything:
   // JWT generation, M3U8 fetch, URL rewriting, segment decryption
   const dlhdWorkerUrl = process.env.NEXT_PUBLIC_DLHD_WORKER_URL || 'https://dlhd.vynx.workers.dev';
-  const url = `${dlhdWorkerUrl}/play/${channel}`;
+  const apiKey = process.env.NEXT_PUBLIC_DLHD_API_KEY || 'vynx';
+  const url = `${dlhdWorkerUrl}/play/${channel}?key=${apiKey}`;
   console.log('[proxy-config] getTvPlaylistUrl (DLHD Worker):', url);
   return url;
 }
