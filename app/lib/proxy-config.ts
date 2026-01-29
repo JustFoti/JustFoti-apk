@@ -59,35 +59,32 @@ export function getTvProxyBaseUrl(): string {
   return cfProxyUrl;
 }
 
-// Get the TV proxy route path based on configuration
-// Returns '/dlhd' for Oxylabs residential proxy, '/tv' for direct/RPI fallback
-function getTvProxyRoute(): string {
-  return useDlhdProxy() ? '/dlhd' : '/tv';
-}
-
 // Get TV playlist URL
-// Uses /dlhd route (Oxylabs residential) if NEXT_PUBLIC_USE_DLHD_PROXY=true
-// Otherwise uses /tv route (direct fetch with RPI fallback)
+// NEW: Uses the dedicated DLHD extractor worker at dlhd.vynx.workers.dev
+// The /play/:channelId endpoint returns decrypted HLS streams directly
 export function getTvPlaylistUrl(channel: string): string {
-  const baseUrl = getTvProxyBaseUrl();
-  const route = getTvProxyRoute();
-  const url = `${baseUrl}${route}?channel=${channel}`;
-  console.log('[proxy-config] getTvPlaylistUrl:', url);
+  // Use the new DLHD extractor worker - it handles everything:
+  // JWT generation, M3U8 fetch, URL rewriting, segment decryption
+  const dlhdWorkerUrl = process.env.NEXT_PUBLIC_DLHD_WORKER_URL || 'https://dlhd.vynx.workers.dev';
+  const url = `${dlhdWorkerUrl}/play/${channel}`;
+  console.log('[proxy-config] getTvPlaylistUrl (DLHD Worker):', url);
   return url;
 }
 
 // Get TV key proxy URL
-export function getTvKeyProxyUrl(keyUrl: string): string {
-  const baseUrl = getTvProxyBaseUrl();
-  const route = getTvProxyRoute();
-  return `${baseUrl}${route}/key?url=${encodeURIComponent(keyUrl)}`;
+// NOTE: No longer needed - DLHD worker decrypts segments server-side
+// Kept for backwards compatibility but returns empty string
+export function getTvKeyProxyUrl(_keyUrl: string): string {
+  console.log('[proxy-config] getTvKeyProxyUrl called but not needed - DLHD worker handles decryption');
+  return ''; // Not needed - server-side decryption
 }
 
 // Get TV segment proxy URL
+// NOTE: No longer needed - segments go through DLHD worker's /dlhdprivate endpoint
+// which is embedded in the M3U8 URLs returned by /play/:channelId
 export function getTvSegmentProxyUrl(segmentUrl: string): string {
-  const baseUrl = getTvProxyBaseUrl();
-  const route = getTvProxyRoute();
-  return `${baseUrl}${route}/segment?url=${encodeURIComponent(segmentUrl)}`;
+  console.log('[proxy-config] getTvSegmentProxyUrl called but not needed - DLHD worker handles segments');
+  return segmentUrl; // Return as-is - M3U8 already has proxied URLs
 }
 
 // CDN-Live stream proxy URL - uses dedicated /cdn-live/stream route

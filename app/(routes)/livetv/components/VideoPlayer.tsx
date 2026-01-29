@@ -80,6 +80,8 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
 
   // Load HLS stream
   const loadHlsStream = useCallback((video: HTMLVideoElement, url: string) => {
+    console.log('[VideoPlayer] Loading HLS stream:', url);
+    
     if (Hls.isSupported()) {
       const hls = new Hls({
         enableWorker: true,
@@ -89,12 +91,16 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
         maxMaxBufferLength: 60,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 10,
-        manifestLoadingMaxRetry: 4,
-        manifestLoadingRetryDelay: 1000,
-        levelLoadingMaxRetry: 4,
-        levelLoadingRetryDelay: 1000,
-        fragLoadingMaxRetry: 6,
-        fragLoadingRetryDelay: 1000,
+        manifestLoadingMaxRetry: 6,
+        manifestLoadingRetryDelay: 2000,
+        levelLoadingMaxRetry: 6,
+        levelLoadingRetryDelay: 2000,
+        fragLoadingMaxRetry: 8,
+        fragLoadingRetryDelay: 2000,
+        xhrSetup: (xhr) => {
+          // Add timeout for requests
+          xhr.timeout = 30000;
+        },
       });
 
       hls.loadSource(url);
@@ -122,14 +128,18 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
       });
 
       hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error('[VideoPlayer] HLS Error:', data.type, data.details, data.fatal);
         if (data.fatal) {
           if (data.type === Hls.ErrorTypes.NETWORK_ERROR && retryCount < 3) {
+            console.log('[VideoPlayer] Network error, retrying...', retryCount + 1);
             setRetryCount(prev => prev + 1);
-            hls.startLoad();
+            setTimeout(() => hls.startLoad(), 2000);
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            console.log('[VideoPlayer] Media error, recovering...');
             hls.recoverMediaError();
           } else {
-            setError('Stream playback failed');
+            console.error('[VideoPlayer] Fatal error, giving up');
+            setError(`Stream failed: ${data.details || 'Unknown error'}`);
             setIsLoading(false);
             hls.destroy();
           }
@@ -167,8 +177,10 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     setError(null);
 
     const streamUrl = getStreamUrl();
+    console.log('[VideoPlayer] Stream URL:', streamUrl);
+    
     if (!streamUrl) {
-      setError('No stream URL available');
+      setError('No stream URL available - channel may not be configured');
       setIsLoading(false);
       return;
     }
@@ -176,23 +188,42 @@ export function VideoPlayer({ event, channel, isOpen, onClose }: VideoPlayerProp
     // Handle API endpoints that return JSON
     if (streamUrl.includes('/api/livetv/')) {
       try {
+        console.log('[VideoPlayer] Fetching from API:', streamUrl);
         const response = await fetch(streamUrl);
         const data = await response.json();
+        console.log('[VideoPlayer] API response:', data);
         if (data.streamUrl) {
           loadHlsStream(video, data.streamUrl);
         } else {
-          setError(data.error || 'Failed to get stream');
+          setError(data.error || 'Failed to get stream from API');
           setIsLoading(false);
         }
-      } catch {
-        setError('Failed to fetch stream');
+      } catch (err) {
+        console.error('[VideoPlayer] API fetch error:', err);
+        setError('Failed to fetch stream - network error');
         setIsLoading(false);
       }
       return;
     }
 
+    // Direct HLS URL (Cloudflare Worker proxy)
     loadHlsStream(video, streamUrl);
-  }, [getStreamUrl, loadHlsStream]);
+    
+    // Set a loading timeout - if stream doesn't load in 30s, show error
+    const loadingTimeout = setTimeout(() => {
+      if (isLoading && !error) {
+        console.warn('[VideoPlayer] Loading timeout - stream may be unavailable');
+        setError('Stream loading timeout - channel may be offline or blocked');
+        setIsLoading(false);
+        if (hlsRef.current) {
+          hlsRef.current.destroy();
+          hlsRef.current = null;
+        }
+      }
+    }, 30000);
+    
+    return () => clearTimeout(loadingTimeout);
+  }, [getStreamUrl, loadHlsStream, isLoading, error]);
 
   // Switch channel
   const switchChannel = useCallback((index: number) => {

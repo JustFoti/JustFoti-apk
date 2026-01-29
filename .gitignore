@@ -1,6 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 tauri-stream-extractor
 flyx-secure
+dlhd-extractor-worker
 # dependencies
 /node_modules
 /.pnp
@@ -105,3 +106,4 @@ streamsrcs-*.html
 # Results files with timestamps
 results-*.json
 working-*.json
+rpi-proxy/server.js

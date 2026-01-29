@@ -28,17 +28,7 @@ echo "Your API key: $API_KEY"
 export API_KEY="your-secret-key-here"
 ```
 
-### 3. Install dependencies
-
-The server requires the DLHD auth module:
-
-```bash
-cd rpi-proxy
-# The WASM PoW module will be downloaded automatically on first key request
-# Ensure dlhd-auth-v4.js is present
-```
-
-### 4. Run the server
+### 3. Run the server
 
 ```bash
 # Start the server
@@ -51,7 +41,7 @@ pm2 save
 pm2 startup  # Auto-start on boot
 ```
 
-### 5. Expose to the internet (choose one)
+### 4. Expose to the internet (choose one)
 
 #### Option A: Cloudflare Tunnel (Recommended - Free & Secure)
 
@@ -83,7 +73,7 @@ sudo apt update && sudo apt install ngrok
 ngrok http 3001
 ```
 
-### 6. Configure Vercel
+### 5. Configure Vercel
 
 Add these environment variables to your Vercel project:
 
@@ -119,8 +109,8 @@ async function fetchViaRpiProxy(url: string): Promise<Response> {
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /dlhd-key?url=<key_url>` | Fetch DLHD encryption key with v4 WASM PoW auth |
-| `GET /heartbeat?channel=&server=&domain=` | Establish DLHD heartbeat session |
+| `GET /dlhd-key-v4?url=&jwt=&timestamp=&nonce=&keyPath=&fingerprint=` | Passthrough for DLHD key fetch (CF Worker provides auth) |
+| `GET /dlhdprivate?url=&headers=` | Passthrough proxy for DLHD M3U8/segments |
 
 ### AnimeKai Endpoints
 
@@ -161,7 +151,7 @@ MegaUp blocks datacenter IPs and requests with Origin/Referer headers. The `/ani
 Flixer CDN blocks datacenter IPs but REQUIRES a Referer header. Pass `?referer=https://flixer.sh/` to include it.
 
 ### dvalna.ru (DLHD CDN)
-dvalna.ru blocks datacenter IPs and REQUIRES Referer, Origin, AND Authorization headers for M3U8 requests. Pass `?referer=https://dlhd.link/&origin=https://dlhd.link&auth=Bearer%20<JWT>` to include them. The JWT token is required for encrypted streams (returns E9 error without it).
+dvalna.ru blocks datacenter IPs. The CF Worker handles all authentication and passes pre-computed headers to the RPI proxy via `/dlhd-key-v4` and `/dlhdprivate` endpoints.
 
 ### VIPRow/Casthill (boanki.net)
 VIPRow blocks Cloudflare Workers entirely. The RPI proxy handles full stream extraction including token refresh via boanki.net with Origin: `https://casthill.net`.
