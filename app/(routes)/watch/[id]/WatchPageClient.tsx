@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { sourceMatchesAudioPreference } from '@/lib/utils/player-preferences';
 import { getProviderSettings, saveProviderSettings, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
 import styles from './WatchPage.module.css';
 
