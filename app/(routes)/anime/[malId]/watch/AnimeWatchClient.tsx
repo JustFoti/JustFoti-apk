@@ -4,10 +4,13 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { getAnimeAudioPreference, setAnimeAudioPreference, type AnimeAudioPreference } from '@/lib/utils/player-preferences';
+import { getProviderSettings, saveProviderSettings } from '@/lib/sync';
 import { malService } from '@/lib/services/mal';
 import type { MALAnime } from '@/lib/services/mal';
 import styles from '../../../watch/[id]/WatchPage.module.css';
+
+// Type alias for anime audio preference
+type AnimeAudioPreference = 'sub' | 'dub';
 
 // Desktop video player
 const DesktopVideoPlayer = dynamic(
@@ -84,7 +87,7 @@ export default function AnimeWatchClient() {
   const [loadingProvider, setLoadingProvider] = useState(false);
   
   // Audio preference for anime
-  const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
+  const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getProviderSettings().animeAudioPreference);
 
   // Load anime data
   useEffect(() => {
@@ -221,7 +224,7 @@ export default function AnimeWatchClient() {
   const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference, currentTime: number = 0) => {
     setMobileResumeTime(currentTime);
     setAudioPref(newPref);
-    setAnimeAudioPreference(newPref);
+    saveProviderSettings({ animeAudioPreference: newPref });
     fetchMobileStream(newPref);
   }, [fetchMobileStream]);
 

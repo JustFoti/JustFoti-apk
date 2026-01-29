@@ -4,9 +4,12 @@ import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { getAnimeAudioPreference, setAnimeAudioPreference, type AnimeAudioPreference } from '@/lib/utils/player-preferences';
-import { SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
+import { sourceMatchesAudioPreference } from '@/lib/utils/player-preferences';
+import { getProviderSettings, saveProviderSettings, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
 import styles from './WatchPage.module.css';
+
+// Type alias for anime audio preference
+type AnimeAudioPreference = 'sub' | 'dub';
 
 // Desktop video player
 const DesktopVideoPlayer = dynamic(
@@ -129,14 +132,14 @@ function WatchContent() {
   
   // Anime state for mobile player
   const [isAnimeContent, setIsAnimeContent] = useState(false);
-  const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
+  const [audioPref, setAudioPref] = useState<AnimeAudioPreference>(() => getProviderSettings().animeAudioPreference);
   const isAnimeDetectedRef = useRef(false); // Track if we've ever detected anime content
   
   // Listen for sync data changes and refresh preferences
   useEffect(() => {
     const handleSyncDataChanged = () => {
       console.log('[WatchPage] Sync data changed, refreshing audio preference');
-      setAudioPref(getAnimeAudioPreference());
+      setAudioPref(getProviderSettings().animeAudioPreference);
     };
     
     window.addEventListener(SYNC_DATA_CHANGED_EVENT, handleSyncDataChanged);
@@ -517,7 +520,7 @@ function WatchContent() {
     console.log('[WatchPage] Audio pref change, saving time:', currentTime);
     
     setAudioPref(newPref);
-    setAnimeAudioPreference(newPref);
+    saveProviderSettings({ animeAudioPreference: newPref });
     // Refetch with new preference
     fetchMobileStream(newPref);
   }, [fetchMobileStream]);

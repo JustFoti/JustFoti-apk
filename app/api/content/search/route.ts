@@ -11,6 +11,46 @@ import { GENRES } from '@/lib/constants/genres';
 
 export const dynamic = 'force-dynamic';
 
+// Animation genre ID in TMDB
+const ANIMATION_GENRE_ID = 16;
+
+// Check if a result is likely anime (Japanese animation)
+function isLikelyAnime(item: any): boolean {
+  const genreIds = item.genre_ids || [];
+  const isAnimation = genreIds.includes(ANIMATION_GENRE_ID);
+  
+  // Check original language - Japanese animation is likely anime
+  const originalLanguage = item.original_language || '';
+  const isJapanese = originalLanguage === 'ja';
+  
+  // If it's animation AND Japanese, it's likely anime
+  if (isAnimation && isJapanese) {
+    return true;
+  }
+  
+  // Additional heuristics for anime detection
+  // Check if title contains common anime indicators
+  const title = (item.title || item.name || '').toLowerCase();
+  const originalTitle = (item.original_title || item.original_name || '').toLowerCase();
+  
+  // Common anime title patterns
+  const animePatterns = [
+    /\bseason\s*\d+\b.*(?:part|cour)/i,
+    /\b(?:ova|ona|special)\b/i,
+  ];
+  
+  if (isAnimation) {
+    // If animation + has anime-like title patterns
+    for (const pattern of animePatterns) {
+      if (pattern.test(title) || pattern.test(originalTitle)) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
 export async function GET(request: NextRequest) {
   try {
     // Rate limiting (stricter for search to prevent abuse)
@@ -41,15 +81,22 @@ export async function GET(request: NextRequest) {
     const query = searchParams.get('query') || '';
     const category = searchParams.get('category') || '';
     const genre = searchParams.get('genre') || '';
-    const contentType = searchParams.get('type') || 'all';
+    const contentType = searchParams.get('type') || 'movie';
     const page = parseInt(searchParams.get('page') || '1');
     const sessionId = searchParams.get('sessionId') || '';
+    const excludeAnime = searchParams.get('excludeAnime') === 'true';
 
     let searchResults: any[] = [];
 
     if (!query && !category && !genre) {
       // If no search parameters, return trending content
-      searchResults = await tmdbService.getTrending('all', 'week', page);
+      const trendingType = contentType === 'movie' ? 'movie' : contentType === 'tv' ? 'tv' : 'movie';
+      searchResults = await tmdbService.getTrending(trendingType, 'week', page);
+      
+      // Filter out anime from trending results
+      if (excludeAnime) {
+        searchResults = searchResults.filter((item: any) => !isLikelyAnime(item));
+      }
     }
 
     // Helper to get genre IDs from slug or ID string
@@ -66,6 +113,18 @@ export async function GET(request: NextRequest) {
     if (query) {
       // Regular text search
       searchResults = await tmdbService.search(query, page);
+
+      // Filter by content type
+      if (contentType === 'movie') {
+        searchResults = searchResults.filter((item: any) => item.mediaType === 'movie');
+      } else if (contentType === 'tv') {
+        searchResults = searchResults.filter((item: any) => item.mediaType === 'tv');
+      }
+
+      // Filter out anime if requested (for movies/TV search)
+      if (excludeAnime) {
+        searchResults = searchResults.filter((item: any) => !isLikelyAnime(item));
+      }
 
       // Filter by genre if specified
       if (genre) {
@@ -87,8 +146,8 @@ export async function GET(request: NextRequest) {
       if (targetGenreIds.length > 0) {
         const promises = [];
 
-        // If specific type requested or 'all', fetch accordingly
-        if (contentType === 'movie' || contentType === 'all') {
+        // If specific type requested, fetch accordingly
+        if (contentType === 'movie') {
           // Find movie genre ID
           const movieGenreId = targetGenreIds.find(id => GENRES.find(g => g.id === id && g.type === 'movie'));
           // Fallback: use any ID if we can't distinguish (some IDs might be shared or we just have one)
@@ -98,7 +157,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        if (contentType === 'tv' || contentType === 'all') {
+        if (contentType === 'tv') {
           // Find TV genre ID
           const tvGenreId = targetGenreIds.find(id => GENRES.find(g => g.id === id && g.type === 'tv'));
           const idToUse = tvGenreId || targetGenreIds[0];
@@ -109,11 +168,12 @@ export async function GET(request: NextRequest) {
 
         const results = await Promise.all(promises);
         searchResults = results.flat().sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+        
+        // Filter out anime if requested
+        if (excludeAnime) {
+          searchResults = searchResults.filter((item: any) => !isLikelyAnime(item));
+        }
       }
-    } else if (contentType === 'person') {
-      // Person-only search (if no query but type=person is set, which shouldn't happen often without query)
-      // But if we have a query, it's handled in the first block.
-      // This block is just a fallback if needed, but usually query + type=person is handled above.
     }
 
     // Track the search query for popular searches

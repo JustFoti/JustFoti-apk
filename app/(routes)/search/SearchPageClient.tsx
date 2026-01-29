@@ -20,11 +20,42 @@ interface SearchPageClientProps {
 }
 
 interface SearchFilters {
-  contentType: 'all' | 'movie' | 'tv' | 'person';
+  contentType: 'movie' | 'tv' | 'anime';
   genres: string[];
   yearRange: [number, number];
   minRating: number;
   sortBy: 'relevance' | 'rating' | 'release_date' | 'popularity';
+}
+
+// MAL genre ID mapping
+const MAL_GENRE_IDS: Record<string, number> = {
+  'action': 1,
+  'adventure': 2,
+  'comedy': 4,
+  'drama': 8,
+  'fantasy': 10,
+  'horror': 14,
+  'mystery': 7,
+  'romance': 22,
+  'sci-fi': 24,
+  'slice-of-life': 36,
+  'sports': 30,
+  'supernatural': 37,
+  'suspense': 41,
+};
+
+// Anime result type from MAL
+interface AnimeResult {
+  mal_id: number;
+  title: string;
+  title_english: string | null;
+  type: string;
+  episodes: number | null;
+  score: number | null;
+  year: number | null;
+  images: {
+    jpg: { image_url: string; large_image_url: string };
+  };
 }
 
 export default function SearchPageClient({
@@ -45,7 +76,7 @@ export default function SearchPageClient({
   const [hasMore, setHasMore] = useState(true);
 
   const [filters, setFilters] = useState<SearchFilters>({
-    contentType: (initialContentType as any) || 'all',
+    contentType: (initialContentType === 'anime' ? 'anime' : initialContentType === 'tv' ? 'tv' : 'movie') as 'movie' | 'tv' | 'anime',
     genres: initialGenre ? [initialGenre] : [],
     yearRange: [1900, new Date().getFullYear()],
     minRating: 0,
@@ -130,7 +161,7 @@ export default function SearchPageClient({
     if (!sessionId) return;
 
     // DEBUG LOGGING
-    console.log(`performSearch called: query="${searchQuery}", page=${pageNum}, append=${append}`);
+    console.log(`performSearch called: query="${searchQuery}", page=${pageNum}, append=${append}, contentType=${searchFilters.contentType}`);
 
     if (loadingRef.current) {
       console.log('Aborting search: Already loading');
@@ -141,15 +172,19 @@ export default function SearchPageClient({
     loadingRef.current = true;
 
     try {
-      // Build search URL
+      // Handle anime search via MAL
+      if (searchFilters.contentType === 'anime') {
+        await performAnimeSearch(searchQuery, searchFilters, pageNum, append);
+        return;
+      }
+
+      // Build search URL for movies/TV (TMDB)
       const searchUrl = new URL('/api/content/search', window.location.origin);
       searchUrl.searchParams.set('query', searchQuery);
       searchUrl.searchParams.set('page', pageNum.toString());
       searchUrl.searchParams.set('sessionId', sessionId);
-
-      if (searchFilters.contentType !== 'all') {
-        searchUrl.searchParams.set('type', searchFilters.contentType);
-      }
+      searchUrl.searchParams.set('type', searchFilters.contentType);
+      searchUrl.searchParams.set('excludeAnime', 'true'); // Filter out anime from TMDB results
 
       // Pass genre to API if available (using the first one for now to guide the search)
       if (searchFilters.genres.length > 0) {
@@ -171,49 +206,47 @@ export default function SearchPageClient({
       let searchResults = data.data || [];
 
       // Client-side filtering for advanced features
-      if (searchFilters.contentType !== 'person') {
-        searchResults = searchResults.filter((item: any) => {
-          // Filter by Content Type (if API didn't already)
-          if (searchFilters.contentType !== 'all' && item.mediaType !== searchFilters.contentType) return false;
+      searchResults = searchResults.filter((item: any) => {
+        // Filter by Content Type
+        if (item.mediaType !== searchFilters.contentType) return false;
 
-          // Filter by Year
-          const year = new Date(item.release_date || item.first_air_date || '').getFullYear();
-          if (year < searchFilters.yearRange[0] || year > searchFilters.yearRange[1]) return false;
+        // Filter by Year
+        const year = new Date(item.release_date || item.first_air_date || '').getFullYear();
+        if (year < searchFilters.yearRange[0] || year > searchFilters.yearRange[1]) return false;
 
-          // Filter by Rating
-          if ((item.vote_average || 0) < searchFilters.minRating) return false;
+        // Filter by Rating
+        if ((item.vote_average || 0) < searchFilters.minRating) return false;
 
-          // Filter by Genres (if any selected)
-          if (searchFilters.genres.length > 0) {
-            // Get genre IDs matching the selected slugs, considering content type
-            const selectedGenreIds = searchFilters.genres.flatMap(slug => {
-              // Find all genres matching this slug
-              const matchingGenres = GENRES.filter(g => g.slug === slug);
-              
-              // If filtering by specific content type, only use that type's genre ID
-              if (searchFilters.contentType === 'movie') {
-                const movieGenre = matchingGenres.find(g => g.type === 'movie');
-                return movieGenre ? [movieGenre.id] : [];
-              } else if (searchFilters.contentType === 'tv') {
-                const tvGenre = matchingGenres.find(g => g.type === 'tv');
-                return tvGenre ? [tvGenre.id] : [];
-              }
-              
-              // For 'all' content type, include both movie and TV genre IDs
-              return matchingGenres.map(g => g.id);
-            }).filter((id, index, arr) => arr.indexOf(id) === index); // Remove duplicates
-
-            if (selectedGenreIds.length > 0) {
-              const itemGenreIds = item.genre_ids || item.genres?.map((g: any) => g.id) || [];
-              // Check if item has ANY of the selected genre IDs (more lenient matching)
-              const hasAnyGenre = selectedGenreIds.some(id => itemGenreIds.includes(id));
-              if (!hasAnyGenre) return false;
+        // Filter by Genres (if any selected)
+        if (searchFilters.genres.length > 0) {
+          // Get genre IDs matching the selected slugs, considering content type
+          const selectedGenreIds = searchFilters.genres.flatMap(slug => {
+            // Find all genres matching this slug
+            const matchingGenres = GENRES.filter(g => g.slug === slug);
+            
+            // If filtering by specific content type, only use that type's genre ID
+            if (searchFilters.contentType === 'movie') {
+              const movieGenre = matchingGenres.find(g => g.type === 'movie');
+              return movieGenre ? [movieGenre.id] : [];
+            } else if (searchFilters.contentType === 'tv') {
+              const tvGenre = matchingGenres.find(g => g.type === 'tv');
+              return tvGenre ? [tvGenre.id] : [];
             }
-          }
+            
+            // For 'all' content type, include both movie and TV genre IDs
+            return matchingGenres.map(g => g.id);
+          }).filter((id, index, arr) => arr.indexOf(id) === index); // Remove duplicates
 
-          return true;
-        });
-      }
+          if (selectedGenreIds.length > 0) {
+            const itemGenreIds = item.genre_ids || item.genres?.map((g: any) => g.id) || [];
+            // Check if item has ANY of the selected genre IDs (more lenient matching)
+            const hasAnyGenre = selectedGenreIds.some(id => itemGenreIds.includes(id));
+            if (!hasAnyGenre) return false;
+          }
+        }
+
+        return true;
+      });
 
       // Sort results
       searchResults = sortResults(searchResults, searchFilters.sortBy);
@@ -221,7 +254,7 @@ export default function SearchPageClient({
       // Update URL without reload
       const params = new URLSearchParams();
       if (searchQuery) params.set('q', searchQuery);
-      if (searchFilters.contentType !== 'all') params.set('type', searchFilters.contentType);
+      params.set('type', searchFilters.contentType);
       if (searchFilters.genres.length > 0) params.set('genre', searchFilters.genres[0]);
       window.history.replaceState(null, '', `/search?${params.toString()}`);
 
@@ -241,6 +274,110 @@ export default function SearchPageClient({
       loadingRef.current = false;
     }
   }, [sessionId]);
+
+  // Perform anime search via MAL API
+  const performAnimeSearch = useCallback(async (
+    searchQuery: string,
+    searchFilters: SearchFilters,
+    pageNum: number,
+    append: boolean = false
+  ) => {
+    try {
+      let animeResults: AnimeResult[] = [];
+      
+      // Build MAL API URL
+      const malUrl = new URL('https://api.jikan.moe/v4/anime');
+      malUrl.searchParams.set('page', pageNum.toString());
+      malUrl.searchParams.set('limit', '24');
+      malUrl.searchParams.set('order_by', searchFilters.sortBy === 'rating' ? 'score' : searchFilters.sortBy === 'release_date' ? 'start_date' : 'members');
+      malUrl.searchParams.set('sort', 'desc');
+      
+      if (searchQuery.trim()) {
+        malUrl.searchParams.set('q', searchQuery);
+      }
+      
+      // Add genre filter if selected
+      if (searchFilters.genres.length > 0) {
+        const genreIds = searchFilters.genres
+          .map(slug => MAL_GENRE_IDS[slug])
+          .filter(id => id !== undefined);
+        if (genreIds.length > 0) {
+          malUrl.searchParams.set('genres', genreIds.join(','));
+        }
+      }
+      
+      // Add year filter
+      if (searchFilters.yearRange[0] > 1900) {
+        malUrl.searchParams.set('start_date', `${searchFilters.yearRange[0]}-01-01`);
+      }
+      if (searchFilters.yearRange[1] < new Date().getFullYear()) {
+        malUrl.searchParams.set('end_date', `${searchFilters.yearRange[1]}-12-31`);
+      }
+      
+      // Add rating filter
+      if (searchFilters.minRating > 0) {
+        malUrl.searchParams.set('min_score', searchFilters.minRating.toString());
+      }
+
+      const response = await fetch(malUrl.toString());
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('MAL API error:', response.status, data);
+        if (response.status === 429) {
+          setHasMore(false);
+        }
+        throw new Error(data.message || 'Anime search failed');
+      }
+
+      animeResults = data.data || [];
+      
+      // Transform MAL results to MediaItem format for consistent display
+      const transformedResults: MediaItem[] = animeResults.map((anime: AnimeResult) => ({
+        id: anime.mal_id.toString(),
+        title: anime.title_english || anime.title,
+        name: anime.title,
+        overview: '',
+        posterPath: anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || '',
+        poster_path: anime.images?.jpg?.large_image_url || anime.images?.jpg?.image_url || '',
+        backdropPath: '',
+        releaseDate: anime.year ? `${anime.year}-01-01` : '',
+        first_air_date: anime.year ? `${anime.year}-01-01` : '',
+        rating: anime.score || 0,
+        vote_average: anime.score || 0,
+        voteCount: 0,
+        vote_count: 0,
+        mediaType: 'anime' as any,
+        genres: [],
+        genre_ids: [],
+        // Store MAL ID for navigation
+        mal_id: anime.mal_id,
+      }));
+
+      // Update URL without reload
+      const params = new URLSearchParams();
+      if (searchQuery) params.set('q', searchQuery);
+      params.set('type', 'anime');
+      if (searchFilters.genres.length > 0) params.set('genre', searchFilters.genres[0]);
+      window.history.replaceState(null, '', `/search?${params.toString()}`);
+
+      if (append) {
+        setResults(prev => [...prev, ...transformedResults]);
+      } else {
+        setResults(transformedResults);
+      }
+
+      setHasMore(data.pagination?.has_next_page || false);
+
+    } catch (error) {
+      console.error('Anime search error:', error);
+      if (!append) setResults([]);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
+    }
+  }, []);
 
   // Effect for live search and filter changes
   useEffect(() => {
@@ -277,10 +414,16 @@ export default function SearchPageClient({
   }, [hasMore, debouncedQuery, filters, performSearch]);
 
   const handleContentClick = (item: MediaItem) => {
-    if (item.mediaType === 'person') {
-      setQuery(item.name || '');
-      setFilters(prev => ({ ...prev, contentType: 'all' }));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Handle anime - navigate to MAL-based anime page (check for mal_id which we add for anime results)
+    if ((item as any).mal_id) {
+      const malId = (item as any).mal_id;
+      sessionStorage.setItem('flyx_navigation_origin', JSON.stringify({
+        type: 'search',
+        query: query || debouncedQuery,
+        filters: filters,
+        scrollY: window.scrollY,
+      }));
+      router.push(`/anime/${malId}`);
     } else {
       // Store navigation origin so details page can return here with the same query
       sessionStorage.setItem('flyx_navigation_origin', JSON.stringify({
@@ -327,7 +470,13 @@ export default function SearchPageClient({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search for movies, TV shows, people..."
+                  placeholder={
+                    filters.contentType === 'anime' 
+                      ? 'Search anime...' 
+                      : filters.contentType === 'tv' 
+                        ? 'Search TV shows...' 
+                        : 'Search movies...'
+                  }
                   className="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition-all"
                   data-tv-focusable="true"
                   data-tv-primary="true"

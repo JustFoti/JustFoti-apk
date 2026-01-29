@@ -12,7 +12,8 @@ interface SearchPageProps {
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const { q, type, genre } = await searchParams;
   const query = q || '';
-  const contentType = type || 'all';
+  // Default to 'movie' if no type specified, support 'anime' type
+  const contentType = type === 'anime' ? 'anime' : type === 'tv' ? 'tv' : 'movie';
   const genreFilter = genre || '';
 
   return (

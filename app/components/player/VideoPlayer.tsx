@@ -12,8 +12,6 @@ import {
   setAutoPlayNextEpisode, 
   setAutoPlayCountdown, 
   setShowNextEpisodeBeforeEnd, 
-  getAnimeAudioPreference,
-  setAnimeAudioPreference,
   getPreferredAnimeKaiServer,
   setPreferredAnimeKaiServer,
   sourceMatchesAudioPreference,
@@ -21,9 +19,11 @@ import {
   getSavedMuteState,
   saveVolumeSettings,
   type PlayerPreferences,
-  type AnimeAudioPreference 
 } from '@/lib/utils/player-preferences';
-import { getProviderSettings, recordSuccessfulProvider, getLastSuccessfulProvider, SYNC_DATA_CHANGED_EVENT } from '@/lib/sync';
+import { getProviderSettings, saveProviderSettings, recordSuccessfulProvider, getLastSuccessfulProvider, SYNC_DATA_CHANGED_EVENT, type ProviderSettings } from '@/lib/sync';
+
+// Type alias for anime audio preference
+type AnimeAudioPreference = 'sub' | 'dub';
 import { usePinchZoom } from '@/hooks/usePinchZoom';
 import { useCast, CastMedia } from '@/hooks/useCast';
 import { CastOverlay } from './CastButton';
@@ -217,7 +217,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       console.log('[VideoPlayer] Sync data changed, refreshing preferences');
       setPlayerPrefs(getPlayerPreferences());
       setSubtitleStyleState(getSubtitleStyle());
-      setAnimeAudioPref(getAnimeAudioPreference());
+      setAnimeAudioPref(getProviderSettings().animeAudioPreference);
       setVolume(getSavedVolume());
       setIsMuted(getSavedMuteState());
     };
@@ -246,7 +246,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   const [highlightServerButton, setHighlightServerButton] = useState(false);
   
   // Anime-specific preferences
-  const [animeAudioPref, setAnimeAudioPref] = useState<AnimeAudioPreference>(() => getAnimeAudioPreference());
+  const [animeAudioPref, setAnimeAudioPref] = useState<AnimeAudioPreference>(() => getProviderSettings().animeAudioPreference);
   
   // Skip intro/outro state (from AnimeKai)
   const [skipIntro, setSkipIntro] = useState<[number, number] | null>(null);
@@ -911,7 +911,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       // For AnimeKai, try to find preferred server and match dub/sub preference
       let selectedSourceIndex = 0;
       if (successfulProvider === 'animekai') {
-        const audioPref = getAnimeAudioPreference();
+        const audioPref = getProviderSettings().animeAudioPreference;
         const preferredServer = getPreferredAnimeKaiServer();
         
         // First, filter sources by dub/sub preference
@@ -4221,7 +4221,7 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
                 e.stopPropagation();
                 const newPref = animeAudioPref === 'sub' ? 'dub' : 'sub';
                 setAnimeAudioPref(newPref);
-                setAnimeAudioPreference(newPref);
+                saveProviderSettings({ animeAudioPreference: newPref });
                 
                 // Save current position before switching
                 if (videoRef.current && videoRef.current.currentTime > 0) {
