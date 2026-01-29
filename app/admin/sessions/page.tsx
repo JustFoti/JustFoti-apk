@@ -52,7 +52,6 @@ export default function AdminSessionsPage() {
   
   const [sessions, setSessions] = useState<WatchSession[]>([]);
   const [localMetrics, setLocalMetrics] = useState<SessionMetrics | null>(null);
-  const [trafficSources, setTrafficSources] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   
@@ -82,31 +81,53 @@ export default function AdminSessionsPage() {
     totalSessions: unifiedStats.totalSessions || localMetrics?.totalSessions || 0,
     avgDuration: unifiedStats.avgSessionDuration || localMetrics?.avgDuration || 0,
     avgCompletion: unifiedStats.completionRate || localMetrics?.avgCompletion || 0,
-    completedCount: localMetrics?.completedCount || 0,
+    completedCount: unifiedStats.completedSessions || localMetrics?.completedCount || 0,
     avgPauses: localMetrics?.avgPauses || 0,
     avgSeeks: localMetrics?.avgSeeks || 0,
     peakHour: localMetrics?.peakHour || 20,
     mostWatchedType: localMetrics?.mostWatchedType || 'Movies',
   };
+  
+  // Traffic data from unified stats - NO SEPARATE API CALL NEEDED
+  // For basic traffic overview, use unified stats
+  // For detailed traffic view, fetch on-demand
+  const [detailedTrafficData, setDetailedTrafficData] = useState<any>(null);
+  const [loadingTraffic, setLoadingTraffic] = useState(false);
+  
+  const trafficSources = useMemo(() => {
+    // If we have detailed data, use it
+    if (detailedTrafficData) return detailedTrafficData;
+    // Otherwise use basic data from unified stats
+    return {
+      totals: {
+        total_hits: unifiedStats.trafficTotals.totalHits,
+        unique_visitors: unifiedStats.trafficTotals.uniqueVisitors,
+        bot_hits: unifiedStats.trafficTotals.botHits,
+        human_hits: unifiedStats.trafficTotals.humanHits,
+      },
+      mediumStats: [],
+      topReferrers: [],
+      botStats: [],
+    };
+  }, [unifiedStats.trafficTotals, detailedTrafficData]);
+  
+  // Fetch detailed traffic data only when traffic view is selected
+  useEffect(() => {
+    if (viewMode === 'traffic' && !detailedTrafficData && !loadingTraffic) {
+      setLoadingTraffic(true);
+      fetch(getAdminAnalyticsUrl('traffic-sources', { days: 7 }))
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.success) setDetailedTrafficData(data);
+        })
+        .catch(err => console.error('Failed to fetch traffic sources:', err))
+        .finally(() => setLoadingTraffic(false));
+    }
+  }, [viewMode, detailedTrafficData, loadingTraffic]);
 
   useEffect(() => {
     fetchSessions(1, false);
-    fetchTrafficSources();
   }, [dateRange]);
-
-  const fetchTrafficSources = async () => {
-    try {
-      const response = await fetch(getAdminAnalyticsUrl('traffic-sources', { days: 7 }));
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setTrafficSources(data);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch traffic sources:', err);
-    }
-  };
 
   const fetchSessions = async (page: number = 1, append: boolean = false) => {
     try {

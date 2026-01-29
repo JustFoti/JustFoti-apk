@@ -6,7 +6,7 @@
  * Integrates with StatsContext for bot detection metrics and unified data.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAdmin } from '../context/AdminContext';
 import { useStats } from '../context/StatsContext';
 import { getAdminAnalyticsUrl } from '../hooks/useAnalyticsApi';
@@ -87,10 +87,10 @@ export default function TrafficSourcesPage() {
   const { stats, botFilterOptions } = useStats();
   
   const [trafficData, setTrafficData] = useState<TrafficData | null>(null);
-  const [presenceStats, setPresenceStats] = useState<PresenceStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'sources' | 'referrers' | 'bots' | 'presence'>('overview');
   const [referrerLimit, setReferrerLimit] = useState(100);
+  const [trafficDataLoaded, setTrafficDataLoaded] = useState(false);
 
   // Convert AdminContext dateRange to days
   const getDaysFromPeriod = (period: string) => {
@@ -104,8 +104,52 @@ export default function TrafficSourcesPage() {
   };
   
   const timeRange = dateRange.period === 'day' ? '24h' : dateRange.period === 'week' ? '7d' : dateRange.period === 'month' ? '30d' : '365d';
+  
+  // Presence stats from unified stats - NO SEPARATE API CALL NEEDED!
+  const presenceStats: PresenceStats = useMemo(() => ({
+    totals: {
+      total_active: stats.presenceStats.totalActive || stats.liveUsers,
+      truly_active: stats.presenceStats.trulyActive || stats.trulyActiveUsers,
+      total_sessions: stats.presenceStats.totalSessions || stats.totalSessions,
+    },
+    activityBreakdown: stats.presenceStats.activityBreakdown.length > 0 
+      ? stats.presenceStats.activityBreakdown.map(a => ({
+          activity_type: a.activityType,
+          user_count: a.userCount,
+          truly_active: a.trulyActive,
+        }))
+      : [
+          { activity_type: 'watching', user_count: stats.liveWatching, truly_active: stats.liveWatching },
+          { activity_type: 'browsing', user_count: stats.liveBrowsing, truly_active: stats.liveBrowsing },
+          { activity_type: 'livetv', user_count: stats.liveTVViewers, truly_active: stats.liveTVViewers },
+        ].filter(a => a.user_count > 0),
+    validationScores: stats.presenceStats.validationScores.map(v => ({
+      trust_level: v.trustLevel,
+      user_count: v.userCount,
+      avg_score: v.avgScore,
+    })),
+    entropyStats: [],
+    geoDistribution: stats.realtimeGeographic.map(g => ({
+      country: g.country,
+      city: g.countryName,
+      user_count: g.count,
+    })),
+    deviceDistribution: stats.deviceBreakdown.map(d => ({
+      device_type: d.device,
+      user_count: d.count,
+    })),
+    activeContent: stats.topContent.slice(0, 10).map(c => ({
+      content_title: c.contentTitle,
+      content_type: c.contentType,
+      activity_type: c.contentType === 'livetv' ? 'livetv' : 'watching',
+      viewer_count: c.watchCount,
+    })),
+  }), [stats]);
 
-  const fetchData = useCallback(async () => {
+  // Fetch traffic data only when needed (sources, referrers, bots tabs)
+  const fetchTrafficData = useCallback(async () => {
+    if (trafficDataLoaded) return;
+    
     setLoading(true);
     try {
       const days = getDaysFromPeriod(dateRange.period);
@@ -120,32 +164,38 @@ export default function TrafficSourcesPage() {
         params.set('botThreshold', botFilterOptions.confidenceThreshold.toString());
       }
       
-      const [trafficRes, presenceRes] = await Promise.all([
-        fetch(`${getAdminAnalyticsUrl('traffic-sources')}?${params.toString()}`),
-        fetch(getAdminAnalyticsUrl('presence-stats', { minutes: 30 })),
-      ]);
+      const trafficRes = await fetch(`${getAdminAnalyticsUrl('traffic-sources')}?${params.toString()}`);
       
       if (trafficRes.ok) {
         const data = await trafficRes.json();
-        if (data.success) setTrafficData(data);
-      }
-      
-      if (presenceRes.ok) {
-        const data = await presenceRes.json();
-        if (data.success) setPresenceStats(data);
+        if (data.success) {
+          setTrafficData(data);
+          setTrafficDataLoaded(true);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch traffic data:', error);
     } finally {
       setLoading(false);
     }
-  }, [dateRange.period, referrerLimit, botFilterOptions]);
+  }, [dateRange.period, referrerLimit, botFilterOptions, trafficDataLoaded]);
 
+  // Fetch traffic data when switching to tabs that need it
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    if (['sources', 'referrers', 'bots'].includes(activeTab) && !trafficDataLoaded) {
+      fetchTrafficData();
+    }
+  }, [activeTab, fetchTrafficData, trafficDataLoaded]);
+  
+  // Reset loaded flag when filters change
+  useEffect(() => {
+    setTrafficDataLoaded(false);
+  }, [dateRange.period, referrerLimit, botFilterOptions]);
+  
+  // Initial load - overview tab uses unified stats, no fetch needed
+  useEffect(() => {
+    setLoading(false);
+  }, []);
 
   const formatNumber = (num: number) => num?.toLocaleString() || '0';
   

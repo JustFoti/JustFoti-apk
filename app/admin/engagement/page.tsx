@@ -51,49 +51,103 @@ export default function EngagementPage() {
   
   const [activeTab, setActiveTab] = useState<'pages' | 'users' | 'sessions' | 'realtime'>('pages');
   const [timeRange, setTimeRange] = useState('7d');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   
-  // Page metrics state
+  // Page metrics state - fetched on-demand when pages tab is active
   const [pageMetrics, setPageMetrics] = useState<PageMetric[]>([]);
   const [pageStats, setPageStats] = useState<any>(null);
+  const [pageDataLoaded, setPageDataLoaded] = useState(false);
   
-  // User engagement state
+  // User engagement state - fetched on-demand when users tab is active
   const [users, setUsers] = useState<UserEngagement[]>([]);
   const [engagementStats, setEngagementStats] = useState<EngagementStats | null>(null);
   const [engagementDistribution, setEngagementDistribution] = useState<any[]>([]);
   const [visitFrequency, setVisitFrequency] = useState<any[]>([]);
+  const [userDataLoaded, setUserDataLoaded] = useState(false);
   
-  // Real-time presence state
-  const [presenceStats, setPresenceStats] = useState<any>(null);
+  // Real-time presence - USE UNIFIED STATS (no separate API call needed!)
+  const presenceStats = useMemo(() => ({
+    totals: {
+      total_active: unifiedStats.presenceStats.totalActive || unifiedStats.liveUsers,
+      truly_active: unifiedStats.presenceStats.trulyActive || unifiedStats.trulyActiveUsers,
+      total_sessions: unifiedStats.presenceStats.totalSessions || unifiedStats.totalSessions,
+    },
+    activityBreakdown: unifiedStats.presenceStats.activityBreakdown.length > 0 
+      ? unifiedStats.presenceStats.activityBreakdown.map(a => ({
+          activity_type: a.activityType,
+          user_count: a.userCount,
+          truly_active: a.trulyActive,
+        }))
+      : [
+          { activity_type: 'watching', user_count: unifiedStats.liveWatching, truly_active: unifiedStats.liveWatching },
+          { activity_type: 'browsing', user_count: unifiedStats.liveBrowsing, truly_active: unifiedStats.liveBrowsing },
+          { activity_type: 'livetv', user_count: unifiedStats.liveTVViewers, truly_active: unifiedStats.liveTVViewers },
+        ].filter(a => a.user_count > 0),
+    validationScores: unifiedStats.presenceStats.validationScores,
+    // Use top content from unified stats for "currently watching"
+    activeContent: unifiedStats.topContent.slice(0, 6).map(c => ({
+      content_title: c.contentTitle,
+      content_type: c.contentType,
+      activity_type: c.contentType === 'livetv' ? 'livetv' : 'watching',
+      viewer_count: c.watchCount,
+    })),
+    // Use realtime geographic from unified stats
+    geoDistribution: unifiedStats.realtimeGeographic.slice(0, 6).map(g => ({
+      country: g.country,
+      city: g.countryName,
+      user_count: g.count,
+    })),
+  }), [unifiedStats]);
   
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('last_visit');
 
+  // Fetch page data only when pages tab is active
   useEffect(() => {
-    fetchData();
-  }, [timeRange, sortBy]);
+    if (activeTab === 'pages' && !pageDataLoaded) {
+      fetchPageData();
+    }
+  }, [activeTab, timeRange]);
+  
+  // Fetch user data only when users tab is active
+  useEffect(() => {
+    if (activeTab === 'users' && !userDataLoaded) {
+      fetchUserData();
+    }
+  }, [activeTab, timeRange, sortBy]);
+  
+  // Reset loaded flags when time range changes
+  useEffect(() => {
+    setPageDataLoaded(false);
+    setUserDataLoaded(false);
+  }, [timeRange]);
 
-  const fetchData = async () => {
+  const fetchPageData = async () => {
     setLoading(true);
     try {
       const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
-      
-      // Fetch all data in parallel
-      const [pageRes, userRes, presenceRes] = await Promise.all([
-        fetch(getAdminAnalyticsUrl('page-view', { days })),
-        fetch(getAdminAnalyticsUrl('user-engagement', { days, sortBy })),
-        fetch(getAdminAnalyticsUrl('presence-stats', { minutes: 30 }))
-      ]);
-      
+      const pageRes = await fetch(getAdminAnalyticsUrl('page-view', { days }));
       if (pageRes.ok) {
         const pageData = await pageRes.json();
         if (pageData.success) {
           setPageMetrics(pageData.pageMetrics || []);
           setPageStats(pageData.overallStats);
+          setPageDataLoaded(true);
         }
       }
-      
+    } catch (error) {
+      console.error('Failed to fetch page data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const fetchUserData = async () => {
+    setLoading(true);
+    try {
+      const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 365;
+      const userRes = await fetch(getAdminAnalyticsUrl('user-engagement', { days, sortBy }));
       if (userRes.ok) {
         const userData = await userRes.json();
         if (userData.success) {
@@ -101,17 +155,11 @@ export default function EngagementPage() {
           setEngagementStats(userData.aggregateStats);
           setEngagementDistribution(userData.engagementDistribution || []);
           setVisitFrequency(userData.visitFrequency || []);
-        }
-      }
-      
-      if (presenceRes.ok) {
-        const presenceData = await presenceRes.json();
-        if (presenceData.success) {
-          setPresenceStats(presenceData);
+          setUserDataLoaded(true);
         }
       }
     } catch (error) {
-      console.error('Failed to fetch engagement data:', error);
+      console.error('Failed to fetch user data:', error);
     } finally {
       setLoading(false);
     }

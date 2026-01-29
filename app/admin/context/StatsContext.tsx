@@ -45,6 +45,23 @@ interface BotFilterOptions {
   showBotMetrics: boolean;
 }
 
+// Traffic data interface
+interface TrafficTotals {
+  totalHits: number;
+  uniqueVisitors: number;
+  botHits: number;
+  humanHits: number;
+}
+
+// Presence stats interface
+interface PresenceStats {
+  totalActive: number;
+  trulyActive: number;
+  totalSessions: number;
+  activityBreakdown: Array<{ activityType: string; userCount: number; trulyActive: number }>;
+  validationScores: Array<{ trustLevel: string; userCount: number; avgScore: number }>;
+}
+
 // Unified stats interface - SINGLE SOURCE OF TRUTH
 // All counts use DISTINCT user_id to avoid duplicates
 interface UnifiedStats {
@@ -101,6 +118,12 @@ interface UnifiedStats {
   
   // Bot detection metrics
   botDetection: BotDetectionMetrics;
+  
+  // Traffic data (consolidated from traffic-sources endpoint)
+  trafficTotals: TrafficTotals;
+  
+  // Presence stats (consolidated from presence-stats endpoint)
+  presenceStats: PresenceStats;
   
   // Time ranges for transparency
   timeRanges: {
@@ -172,6 +195,19 @@ const defaultStats: UnifiedStats = {
     pendingReview: 0,
     avgConfidenceScore: 0,
     recentDetections: [],
+  },
+  trafficTotals: {
+    totalHits: 0,
+    uniqueVisitors: 0,
+    botHits: 0,
+    humanHits: 0,
+  },
+  presenceStats: {
+    totalActive: 0,
+    trulyActive: 0,
+    totalSessions: 0,
+    activityBreakdown: [],
+    validationScores: [],
   },
   timeRanges: {
     realtime: '5 minutes',
@@ -385,6 +421,27 @@ export function StatsProvider({ children }: { children: ReactNode }) {
             pendingReview: 0,
             avgConfidenceScore: 0,
             recentDetections: [],
+          },
+          
+          // Traffic totals (from CF Worker if available)
+          trafficTotals: {
+            totalHits: s.trafficTotals?.totalHits || s.pageViews || 0,
+            uniqueVisitors: s.trafficTotals?.uniqueVisitors || s.uniqueVisitors || 0,
+            botHits: s.trafficTotals?.botHits || 0,
+            humanHits: s.trafficTotals?.humanHits || s.pageViews || 0,
+          },
+          
+          // Presence stats (from CF Worker if available)
+          presenceStats: {
+            totalActive: s.liveUsers || 0,
+            trulyActive: s.liveUsers || 0,
+            totalSessions: s.totalSessions || 0,
+            activityBreakdown: [
+              { activityType: 'watching', userCount: s.watching || 0, trulyActive: s.watching || 0 },
+              { activityType: 'browsing', userCount: s.browsing || 0, trulyActive: s.browsing || 0 },
+              { activityType: 'livetv', userCount: s.livetv || 0, trulyActive: s.livetv || 0 },
+            ].filter(a => a.userCount > 0),
+            validationScores: [],
           },
           
           // Time ranges
