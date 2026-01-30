@@ -1,6 +1,7 @@
 /**
  * MAL-Based Anime Stream API
  * GET /api/anime/stream?malId=57658&episode=1
+ * GET /api/anime/stream?malId=4107 (for movies, no episode needed)
  * 
  * This endpoint uses MAL ID directly without TMDB conversion
  */
@@ -8,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractAnimeKaiStreams } from '@/app/lib/services/animekai-extractor';
 import { malService } from '@/lib/services/mal';
+import { getAnimeKaiProxyUrl } from '@/app/lib/proxy-config';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
@@ -16,7 +18,7 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
 
     const malId = searchParams.get('malId') ? parseInt(searchParams.get('malId')!) : undefined;
-    const episode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : 1;
+    const episode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : undefined;
 
     if (!malId) {
       return NextResponse.json(
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`[ANIME-STREAM] Request: MAL ID ${malId}, Episode ${episode}`);
+    console.log(`[ANIME-STREAM] Request: MAL ID ${malId}, Episode ${episode || 'N/A (movie)'}`);
 
     // Get MAL anime info
     const anime = await malService.getById(malId);
@@ -36,49 +38,52 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`[ANIME-STREAM] Found anime: ${anime.title} (${anime.episodes} episodes)`);
+    const isMovie = anime.type === 'Movie';
+    console.log(`[ANIME-STREAM] Found anime: ${anime.title} (type: ${anime.type}, episodes: ${anime.episodes})`);
 
     // Extract streams using AnimeKai with MAL info
     // Use a dummy TMDB ID (0) since we're going MAL-direct
     const result = await extractAnimeKaiStreams(
       '0', // Dummy TMDB ID
-      'tv',
-      1, // Season 1 (MAL entries are separate)
-      episode,
+      isMovie ? 'movie' : 'tv',
+      isMovie ? undefined : 1, // Season 1 for TV (MAL entries are separate)
+      isMovie ? undefined : (episode || 1),
       malId,
       anime.title
     );
 
     if (!result.success || result.sources.length === 0) {
       return NextResponse.json(
-        { error: result.error || 'No streams found' },
+        { error: result.error || 'No streams found', success: false },
         { status: 404 }
       );
     }
 
     const executionTime = Date.now() - startTime;
 
-    // Proxy the URLs
+    // Proxy the URLs through the animekai proxy (residential proxy)
     const sources = result.sources.map(source => ({
       ...source,
-      url: `/api/stream/proxy?url=${encodeURIComponent(source.url)}`,
+      url: getAnimeKaiProxyUrl(source.url),
     }));
 
     return NextResponse.json({
       success: true,
       sources,
+      provider: 'animekai',
       anime: {
         malId: anime.mal_id,
         title: anime.title,
         titleEnglish: anime.title_english,
         episodes: anime.episodes,
+        type: anime.type,
       },
       executionTime,
     });
   } catch (error) {
     console.error('[ANIME-STREAM] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch anime stream' },
+      { error: 'Failed to fetch anime stream', success: false },
       { status: 500 }
     );
   }

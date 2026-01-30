@@ -139,13 +139,12 @@ export default function AnimeWatchClient() {
 
   // Fetch stream for mobile player
   const fetchMobileStream = useCallback(async (audioPreference?: AnimeAudioPreference) => {
-    if (!malId || !anime) return;
+    if (!malId) return;
     
     setMobileLoading(true);
     setMobileError(null);
     
     const currentAudioPref = audioPreference || audioPref;
-    const animeIsMovie = anime.type === 'Movie';
     
     const timeoutId = setTimeout(() => {
       setMobileError('Request timed out. Please try again.');
@@ -153,70 +152,55 @@ export default function AnimeWatchClient() {
     }, 30000);
     
     try {
-      // AnimeKai is primary for anime
-      const providerOrder: Array<'animekai' | 'vidsrc' | '1movies' | 'flixer' | 'videasy'> = ['animekai', 'vidsrc', 'flixer', '1movies', 'videasy'];
-      setAvailableProviders(providerOrder);
+      // Use the dedicated anime stream API
+      const params = new URLSearchParams({
+        malId: malId.toString(),
+      });
       
-      for (const provider of providerOrder) {
-        const params = new URLSearchParams({
-          tmdbId: '0', // Placeholder - we're using malId directly
-          type: animeIsMovie ? 'movie' : 'tv',
-          provider,
-          malId: malId.toString(),
-          malTitle: anime?.title_english || anime?.title || '',
-        });
+      // Only add episode for non-movies
+      if (anime && anime.type !== 'Movie') {
+        params.set('episode', episode.toString());
+      }
+
+      const response = await fetch(`/api/anime/stream?${params}`, { cache: 'no-store' });
+      const data = await response.json();
+
+      if (data.success && data.sources && data.sources.length > 0) {
+        const validSources = data.sources.filter((s: any) => s.url && s.url.length > 0);
         
-        // Only add season/episode for TV series, not movies
-        if (!animeIsMovie) {
-          params.set('season', '1');
-          params.set('episode', episode.toString());
-        }
-
-        try {
-          const response = await fetch(`/api/stream/extract?${params}`, { cache: 'no-store' });
-          const data = await response.json();
-
-          if (data.success && data.sources && data.sources.length > 0) {
-            const validSources = data.sources.filter((s: any) => s.url && s.url.length > 0);
-            
-            if (validSources.length > 0) {
-              const sources = validSources.map((s: any) => ({
-                title: s.title || s.quality || `${provider} Source`,
-                url: s.url,
-                quality: s.quality,
-                provider: provider,
-                skipIntro: s.skipIntro,
-                skipOutro: s.skipOutro,
-              }));
-              
-              setMobileSources(sources);
-              setCurrentProvider(provider);
-              
-              // Find source matching audio preference
-              let selectedIndex = 0;
-              if (provider === 'animekai') {
-                const matchingIndex = sources.findIndex((s: any) => 
-                  s.title && sourceMatchesAudioPref(s.title, currentAudioPref)
-                );
-                if (matchingIndex >= 0) {
-                  selectedIndex = matchingIndex;
-                }
-              }
-              
-              setMobileStreamUrl(sources[selectedIndex].url);
-              setMobileSourceIndex(selectedIndex);
-              clearTimeout(timeoutId);
-              setMobileLoading(false);
-              return;
-            }
+        if (validSources.length > 0) {
+          const sources = validSources.map((s: any) => ({
+            title: s.title || s.quality || 'AnimeKai Source',
+            url: s.url,
+            quality: s.quality,
+            provider: 'animekai',
+            skipIntro: s.skipIntro,
+            skipOutro: s.skipOutro,
+          }));
+          
+          setMobileSources(sources);
+          setCurrentProvider('animekai');
+          setAvailableProviders(['animekai']);
+          
+          // Find source matching audio preference
+          let selectedIndex = 0;
+          const matchingIndex = sources.findIndex((s: any) => 
+            s.title && sourceMatchesAudioPref(s.title, currentAudioPref)
+          );
+          if (matchingIndex >= 0) {
+            selectedIndex = matchingIndex;
           }
-        } catch (e) {
-          console.warn(`[AnimeWatch] ${provider} failed:`, e);
+          
+          setMobileStreamUrl(sources[selectedIndex].url);
+          setMobileSourceIndex(selectedIndex);
+          clearTimeout(timeoutId);
+          setMobileLoading(false);
+          return;
         }
       }
 
       clearTimeout(timeoutId);
-      setMobileError('No streams available');
+      setMobileError(data.error || 'No streams available');
       setMobileLoading(false);
     } catch (e) {
       clearTimeout(timeoutId);
@@ -225,15 +209,15 @@ export default function AnimeWatchClient() {
     }
   }, [malId, episode, audioPref, sourceMatchesAudioPref, anime]);
 
-  // Fetch mobile stream on mount - wait for anime data to load
+  // Fetch mobile stream on mount
   const lastFetchedRef = useRef<string | null>(null);
   useEffect(() => {
     const key = `${malId}-${episode}`;
-    if (useMobilePlayer && anime && lastFetchedRef.current !== key) {
+    if (useMobilePlayer && lastFetchedRef.current !== key) {
       lastFetchedRef.current = key;
       fetchMobileStream();
     }
-  }, [useMobilePlayer, malId, episode, fetchMobileStream, anime]);
+  }, [useMobilePlayer, malId, episode, fetchMobileStream]);
 
   // Handle audio preference change
   const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference, currentTime: number = 0) => {
@@ -243,30 +227,23 @@ export default function AnimeWatchClient() {
     fetchMobileStream(newPref);
   }, [fetchMobileStream]);
 
-  // Handle provider change
-  const handleProviderChange = useCallback(async (provider: 'animekai' | 'vidsrc' | '1movies' | 'flixer' | 'videasy', currentTime: number = 0) => {
-    if (!anime) return;
-    
+  // Handle provider change - for anime, we only use animekai via the anime stream API
+  const handleProviderChange = useCallback(async (_provider: 'animekai' | 'vidsrc' | '1movies' | 'flixer' | 'videasy', currentTime: number = 0) => {
+    // For anime, always use the anime stream API (animekai only)
     setMobileResumeTime(currentTime);
     setLoadingProvider(true);
     
-    const animeIsMovie = anime.type === 'Movie';
     const params = new URLSearchParams({
-      tmdbId: '0', // Placeholder - we're using malId directly
-      type: animeIsMovie ? 'movie' : 'tv',
-      provider,
       malId: malId.toString(),
-      malTitle: anime?.title_english || anime?.title || '',
     });
     
-    // Only add season/episode for TV series, not movies
-    if (!animeIsMovie) {
-      params.set('season', '1');
+    // Only add episode for non-movies
+    if (anime && anime.type !== 'Movie') {
       params.set('episode', episode.toString());
     }
 
     try {
-      const response = await fetch(`/api/stream/extract?${params}`, { cache: 'no-store' });
+      const response = await fetch(`/api/anime/stream?${params}`, { cache: 'no-store' });
       const data = await response.json();
 
       if (data.success && data.sources && data.sources.length > 0) {
@@ -274,16 +251,16 @@ export default function AnimeWatchClient() {
         
         if (validSources.length > 0) {
           const sources = validSources.map((s: any) => ({
-            title: s.title || s.quality || `${provider} Source`,
+            title: s.title || s.quality || 'AnimeKai Source',
             url: s.url,
             quality: s.quality,
-            provider: provider,
+            provider: 'animekai',
             skipIntro: s.skipIntro,
             skipOutro: s.skipOutro,
           }));
           
           setMobileSources(sources);
-          setCurrentProvider(provider);
+          setCurrentProvider('animekai');
           setMobileStreamUrl(sources[0].url);
           setMobileSourceIndex(0);
         }

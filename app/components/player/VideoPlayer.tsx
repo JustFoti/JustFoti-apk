@@ -653,6 +653,43 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
   // Helper function to fetch from a specific provider
   // No pre-flight validation - let HLS.js handle it with automatic fallback
   const fetchFromProvider = async (providerName: string): Promise<{ sources: any[], provider: string } | null> => {
+    // For anime with malId, use the dedicated anime stream API
+    if (malId && providerName === 'animekai') {
+      console.log(`[VideoPlayer] Using /api/anime/stream for malId=${malId}`);
+      
+      const params = new URLSearchParams({
+        malId: malId.toString(),
+      });
+      
+      // Only add episode for TV shows
+      if (mediaType === 'tv' && episode) {
+        params.append('episode', episode.toString());
+      }
+      
+      try {
+        const response = await fetch(`/api/anime/stream?${params}`, { priority: 'high' as RequestPriority, cache: 'no-store' });
+        const data = await response.json();
+
+        if (data.success && data.sources && data.sources.length > 0) {
+          console.log(`[VideoPlayer] ✓ AnimeKai (anime stream API) returned ${data.sources.length} sources`);
+          if (data.sources[0]?.skipIntro || data.sources[0]?.skipOutro) {
+            console.log(`[VideoPlayer] Skip data in response:`, {
+              skipIntro: data.sources[0].skipIntro,
+              skipOutro: data.sources[0].skipOutro,
+            });
+          }
+          return { sources: data.sources, provider: 'animekai' };
+        }
+        
+        console.warn(`[VideoPlayer] ✗ AnimeKai (anime stream API) failed:`, data.error);
+        return null;
+      } catch (err) {
+        console.error(`[VideoPlayer] ✗ AnimeKai (anime stream API) network error:`, err);
+        return null;
+      }
+    }
+    
+    // For non-anime or fallback providers, use the generic extract API
     const params = new URLSearchParams({
       tmdbId,
       type: mediaType,
