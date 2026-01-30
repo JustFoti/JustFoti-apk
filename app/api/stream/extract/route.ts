@@ -317,29 +317,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Validate parameters
-    if (!tmdbId) {
-      return NextResponse.json(
-        { error: 'Invalid or missing tmdbId' },
-        { status: 400 }
-      );
-    }
-
-    if (!type || !['movie', 'tv'].includes(type)) {
-      return NextResponse.json(
-        { error: 'Invalid or missing type (must be "movie" or "tv")' },
-        { status: 400 }
-      );
-    }
-
-    if (type === 'tv' && (!season || !episode)) {
-      return NextResponse.json(
-        { error: 'Season and episode required for TV shows' },
-        { status: 400 }
-      );
-    }
-
-    console.log('[EXTRACT] Request:', { tmdbId, type, season, episode, provider, sourceName });
+    console.log('[EXTRACT] Request:', { tmdbId, type, season, episode, provider, sourceName, malId, malTitle });
     performanceMonitor.start('stream-extraction');
 
     // If requesting a specific source by name, fetch it directly (no cache)

@@ -844,7 +844,11 @@ export default function VideoPlayer({ tmdbId, mediaType, season, episode, title,
       }
       
       // Add any remaining available providers not in user's order
-      const allProviders = ['vidsrc', 'flixer', '1movies', 'videasy', 'animekai'];
+      // For anime: prioritize videasy as fallback (other providers don't work well for anime)
+      // For non-anime: vidsrc is primary
+      const allProviders = isAnime 
+        ? ['animekai', 'videasy', 'vidsrc', 'flixer', '1movies']
+        : ['vidsrc', 'flixer', '1movies', 'videasy', 'animekai'];
       for (const providerName of allProviders) {
         if (providerOrder.includes(providerName)) continue;
         if (disabledProviders.has(providerName)) continue;
