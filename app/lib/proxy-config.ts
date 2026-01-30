@@ -203,17 +203,30 @@ export function getAnimeKaiProxyUrl(url: string): string {
  */
 export function isMegaUpCdnUrl(url: string): boolean {
   // MegaUp CDN domains
-  if (url.includes('megaup') || 
-      url.includes('hub26link') || 
-      url.includes('app28base')) {
+  if (url.includes('megaup')) {
     return true;
   }
   
-  // Other AnimeKai CDN domains that also block datacenter IPs
-  // These are used by different servers (Mega, Rapid, etc.)
-  if (url.includes('code29wave') ||    // rrr.code29wave.site
-      url.includes('pro25zone') ||     // rrr.pro25zone.site
-      url.includes('rapidshare') ||
+  // AnimeKai CDN domains - ALL block datacenter IPs
+  // These rotate frequently, so check for common patterns
+  const animeKaiCdnDomains = [
+    'hub26link.site',
+    'dev23app.site',
+    'net22lab.site',   // This was causing 403s!
+    'pro25zone.site',
+    'tech20hub.site',
+    'code29wave.site',
+    'app28base.site',
+  ];
+  
+  for (const domain of animeKaiCdnDomains) {
+    if (url.includes(domain)) {
+      return true;
+    }
+  }
+  
+  // Other streaming CDN domains that also block datacenter IPs
+  if (url.includes('rapidshare') ||
       url.includes('rapid-cloud') ||
       url.includes('rabbitstream') ||
       url.includes('vidcloud') ||
