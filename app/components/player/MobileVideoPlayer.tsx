@@ -1014,6 +1014,12 @@ export default function MobileVideoPlayer({
     // If no imdbId prop, fetch it from TMDB
     const getImdbIdAndFetchSubtitles = async () => {
       try {
+        // Skip TMDB lookup for MAL-direct anime (tmdbId=0)
+        if (tmdbId === '0') {
+          console.log('[MobilePlayer] Skipping IMDB lookup for MAL-direct anime (tmdbId=0)');
+          return;
+        }
+        
         const apiKey = process.env.NEXT_PUBLIC_TMDB_API_KEY;
         if (!apiKey || !tmdbId) return;
         

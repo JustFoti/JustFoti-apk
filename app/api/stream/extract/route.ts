@@ -215,10 +215,25 @@ export async function GET(request: NextRequest) {
     // INPUT VALIDATION - Prevent injection and abuse
     // ============================================================================
     
+    // MAL info for anime - used to get correct episode from AnimeKai
+    // When MAL splits a TMDB season into multiple parts, we need to use the MAL ID
+    // and calculate the episode number within that MAL part
+    let malId = searchParams.get('malId') ? parseInt(searchParams.get('malId')!) : undefined;
+    let malTitle = searchParams.get('malTitle') || undefined;
+    
     // Validate TMDB ID format (should be numeric)
+    // Allow tmdbId=0 when malId is provided (MAL-direct anime streaming)
     if (!tmdbId || !/^\d+$/.test(tmdbId)) {
       return NextResponse.json(
         { error: 'Invalid tmdbId format. Must be a positive integer.' },
+        { status: 400 }
+      );
+    }
+    
+    // If tmdbId is 0, malId MUST be provided (MAL-direct anime)
+    if (tmdbId === '0' && !malId) {
+      return NextResponse.json(
+        { error: 'malId is required when tmdbId is 0 (MAL-direct anime streaming)' },
         { status: 400 }
       );
     }
@@ -231,8 +246,9 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Validate season/episode for TV shows
-    if (type === 'tv') {
+    // Validate season/episode for TV shows (skip for MAL-direct movies)
+    const isMalDirectMovie = tmdbId === '0' && malId && type === 'movie';
+    if (type === 'tv' && !isMalDirectMovie) {
       if (!season || season < 0 || season > 100) {
         return NextResponse.json(
           { error: 'Invalid season number (must be between 1-100)' },
@@ -263,12 +279,6 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-    
-    // MAL info for anime - used to get correct episode from AnimeKai
-    // When MAL splits a TMDB season into multiple parts, we need to use the MAL ID
-    // and calculate the episode number within that MAL part
-    let malId = searchParams.get('malId') ? parseInt(searchParams.get('malId')!) : undefined;
-    let malTitle = searchParams.get('malTitle') || undefined;
     
     // IMPORTANT: For anime with absolute episode numbering (like JJK), calculate the correct MAL entry
     // JJK on TMDB uses absolute numbering: all episodes in Season 1
@@ -494,13 +504,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if this is anime content (for automatic provider selection)
-    let isAnime = false;
-    if (provider !== 'animekai') {
-      // Only check if not explicitly requesting animekai
+    // MAL-direct content (tmdbId=0 with malId) is ALWAYS anime
+    let isAnime = tmdbId === '0' && malId ? true : false;
+    if (!isAnime && provider !== 'animekai') {
+      // Only check TMDB if not MAL-direct and not explicitly requesting animekai
       isAnime = await isAnimeContent(tmdbId, type);
       if (isAnime) {
         console.log('[EXTRACT] Detected ANIME content - will use AnimeKai as primary');
       }
+    } else if (isAnime) {
+      console.log('[EXTRACT] MAL-direct anime content (tmdbId=0, malId provided)');
     }
 
     // Create extraction based on provider preference
