@@ -49,7 +49,7 @@ interface AnimeResult {
   mal_id: number;
   title: string;
   title_english: string | null;
-  type: string;
+  type: string; // "TV", "Movie", "OVA", "ONA", "Special", etc.
   episodes: number | null;
   score: number | null;
   year: number | null;
@@ -350,8 +350,10 @@ export default function SearchPageClient({
         mediaType: 'anime' as any,
         genres: [],
         genre_ids: [],
-        // Store MAL ID for navigation
+        // Store MAL ID and anime type for navigation
         mal_id: anime.mal_id,
+        anime_type: anime.type, // "TV", "Movie", "OVA", "ONA", "Special", etc.
+        episodes: anime.episodes,
       }));
 
       // Update URL without reload
@@ -417,13 +419,23 @@ export default function SearchPageClient({
     // Handle anime - navigate to MAL-based anime page (check for mal_id which we add for anime results)
     if ((item as any).mal_id) {
       const malId = (item as any).mal_id;
+      const animeType = (item as any).anime_type;
+      
       sessionStorage.setItem('flyx_navigation_origin', JSON.stringify({
         type: 'search',
         query: query || debouncedQuery,
         filters: filters,
         scrollY: window.scrollY,
       }));
-      router.push(`/anime/${malId}`);
+      
+      // For anime movies, go directly to watch page
+      // Anime movies are: "Movie" type
+      if (animeType === 'Movie') {
+        router.push(`/anime/${malId}/watch`);
+      } else {
+        // For TV series, OVA, ONA, Specials - go to details page for episode selection
+        router.push(`/anime/${malId}`);
+      }
     } else {
       // Store navigation origin so details page can return here with the same query
       sessionStorage.setItem('flyx_navigation_origin', JSON.stringify({
@@ -537,6 +549,21 @@ export default function SearchPageClient({
                             <div className="flex items-center gap-2 text-sm text-gray-300 mt-1">
                               <span>{new Date(item.release_date || item.first_air_date || '').getFullYear() || 'N/A'}</span>
                               <span>•</span>
+                              {/* Show anime type badge for anime content */}
+                              {(item as any).anime_type && (
+                                <>
+                                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    (item as any).anime_type === 'Movie' 
+                                      ? 'bg-purple-500/30 text-purple-300' 
+                                      : (item as any).anime_type === 'TV'
+                                        ? 'bg-blue-500/30 text-blue-300'
+                                        : 'bg-gray-500/30 text-gray-300'
+                                  }`}>
+                                    {(item as any).anime_type}
+                                  </span>
+                                  <span>•</span>
+                                </>
+                              )}
                               <span className="flex items-center gap-1">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-yellow-500">
                                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />

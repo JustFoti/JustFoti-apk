@@ -31,10 +31,13 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
   const [loadingEpisodes, setLoadingEpisodes] = useState(false);
   
   const currentSeason = allSeasons[selectedSeason] || allSeasons[0];
+  
+  // Check if this is a movie (no episode selection needed)
+  const isMovie = anime.type === 'Movie';
 
-  // Fetch episode data when season changes
+  // Fetch episode data when season changes (only for non-movies)
   useEffect(() => {
-    if (!currentSeason) return;
+    if (!currentSeason || isMovie) return;
     
     const malId = currentSeason.malId;
     
@@ -61,7 +64,7 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
     }
     
     fetchEpisodes();
-  }, [currentSeason, episodeData]);
+  }, [currentSeason, episodeData, isMovie]);
 
   // Get episodes for current season
   const currentEpisodes = currentSeason ? episodeData[currentSeason.malId] : null;
@@ -89,7 +92,10 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
   };
 
   const handleWatchNow = () => {
-    if (currentSeason) {
+    // For movies, go directly to watch page without episode param
+    if (isMovie) {
+      router.push(`/anime/${anime.mal_id}/watch`);
+    } else if (currentSeason) {
       router.push(`/anime/${currentSeason.malId}/watch?episode=1`);
     }
   };
@@ -142,14 +148,19 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
               <span className={styles.type}>{anime.type}</span>
               <span className={styles.separator}>•</span>
               <span className={styles.status}>{anime.status}</span>
-              {allSeasons.length > 1 && (
+              {/* Only show seasons/episodes count for non-movies */}
+              {!isMovie && allSeasons.length > 1 && (
                 <>
                   <span className={styles.separator}>•</span>
                   <span className={styles.seasons}>{allSeasons.length} Seasons</span>
                 </>
               )}
-              <span className={styles.separator}>•</span>
-              <span className={styles.episodes}>{totalEpisodes} Episodes</span>
+              {!isMovie && (
+                <>
+                  <span className={styles.separator}>•</span>
+                  <span className={styles.episodes}>{totalEpisodes} Episodes</span>
+                </>
+              )}
             </div>
 
             {anime.genres && anime.genres.length > 0 && (
@@ -168,14 +179,15 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
               <svg className={styles.playIcon} fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z" />
               </svg>
-              Watch Now
+              {isMovie ? 'Watch Movie' : 'Watch Now'}
             </FluidButton>
           </div>
         </div>
       </div>
 
-      {/* Episodes Section */}
-      <section className={styles.episodesSection}>
+      {/* Episodes Section - Only show for non-movies */}
+      {!isMovie && (
+        <section className={styles.episodesSection}>
         <GlassPanel className={styles.episodesPanel}>
           <h2 className={styles.sectionTitle}>Episodes</h2>
           
@@ -266,6 +278,7 @@ export default function AnimeDetailsClient({ anime, allSeasons, totalEpisodes }:
           </div>
         </GlassPanel>
       </section>
+      )}
     </div>
   );
 }

@@ -54,12 +54,18 @@ export default function AnimeWatchClient() {
   const mobileInfo = useIsMobile();
   
   const malId = parseInt(params.malId as string);
-  const episode = parseInt(searchParams.get('episode') || '1');
+  // For movies, episode param is ignored
+  const episodeParam = searchParams.get('episode');
   const shouldAutoplay = searchParams.get('autoplay') === 'true';
   
   const [anime, setAnime] = useState<MALAnime | null>(null);
   const [loading, setLoading] = useState(true);
   const [nextEpisode, setNextEpisode] = useState<NextEpisodeInfo | null>(null);
+  
+  // Determine if this is a movie based on anime type
+  const isMovie = anime?.type === 'Movie';
+  // For movies, episode is always 1 (or ignored); for series, use URL param or default to 1
+  const episode = isMovie ? 1 : parseInt(episodeParam || '1');
   
   // Mobile player detection - lock once set
   const [useMobilePlayer, setUseMobilePlayer] = useState<boolean | null>(null);
@@ -96,26 +102,30 @@ export default function AnimeWatchClient() {
       setAnime(data);
       setLoading(false);
       
-      // Calculate next episode
-      if (data && data.episodes) {
-        if (episode < data.episodes) {
+      // Calculate next episode - only for TV series, not movies
+      if (data && data.episodes && data.type !== 'Movie') {
+        const currentEp = parseInt(episodeParam || '1');
+        if (currentEp < data.episodes) {
           setNextEpisode({
             season: 1,
-            episode: episode + 1,
-            title: `Episode ${episode + 1}`,
+            episode: currentEp + 1,
+            title: `Episode ${currentEp + 1}`,
             isLastEpisode: false,
           });
         } else {
           setNextEpisode({
             season: 1,
-            episode: episode,
+            episode: currentEp,
             isLastEpisode: true,
           });
         }
+      } else {
+        // Movies don't have next episodes
+        setNextEpisode(null);
       }
     }
     loadAnime();
-  }, [malId, episode]);
+  }, [malId, episodeParam]);
 
   // Helper to check if source matches audio preference
   const sourceMatchesAudioPref = useCallback((sourceTitle: string, pref: AnimeAudioPreference): boolean => {
@@ -129,12 +139,13 @@ export default function AnimeWatchClient() {
 
   // Fetch stream for mobile player
   const fetchMobileStream = useCallback(async (audioPreference?: AnimeAudioPreference) => {
-    if (!malId) return;
+    if (!malId || !anime) return;
     
     setMobileLoading(true);
     setMobileError(null);
     
     const currentAudioPref = audioPreference || audioPref;
+    const animeIsMovie = anime.type === 'Movie';
     
     const timeoutId = setTimeout(() => {
       setMobileError('Request timed out. Please try again.');
@@ -149,13 +160,17 @@ export default function AnimeWatchClient() {
       for (const provider of providerOrder) {
         const params = new URLSearchParams({
           tmdbId: '0', // Placeholder - we're using malId directly
-          type: 'tv',
-          season: '1',
-          episode: episode.toString(),
+          type: animeIsMovie ? 'movie' : 'tv',
           provider,
           malId: malId.toString(),
           malTitle: anime?.title_english || anime?.title || '',
         });
+        
+        // Only add season/episode for TV series, not movies
+        if (!animeIsMovie) {
+          params.set('season', '1');
+          params.set('episode', episode.toString());
+        }
 
         try {
           const response = await fetch(`/api/stream/extract?${params}`, { cache: 'no-store' });
@@ -210,15 +225,15 @@ export default function AnimeWatchClient() {
     }
   }, [malId, episode, audioPref, sourceMatchesAudioPref, anime]);
 
-  // Fetch mobile stream on mount
+  // Fetch mobile stream on mount - wait for anime data to load
   const lastFetchedRef = useRef<string | null>(null);
   useEffect(() => {
     const key = `${malId}-${episode}`;
-    if (useMobilePlayer && lastFetchedRef.current !== key) {
+    if (useMobilePlayer && anime && lastFetchedRef.current !== key) {
       lastFetchedRef.current = key;
       fetchMobileStream();
     }
-  }, [useMobilePlayer, malId, episode, fetchMobileStream]);
+  }, [useMobilePlayer, malId, episode, fetchMobileStream, anime]);
 
   // Handle audio preference change
   const handleAudioPrefChange = useCallback((newPref: AnimeAudioPreference, currentTime: number = 0) => {
@@ -230,18 +245,25 @@ export default function AnimeWatchClient() {
 
   // Handle provider change
   const handleProviderChange = useCallback(async (provider: 'animekai' | 'vidsrc' | '1movies' | 'flixer' | 'videasy', currentTime: number = 0) => {
+    if (!anime) return;
+    
     setMobileResumeTime(currentTime);
     setLoadingProvider(true);
     
+    const animeIsMovie = anime.type === 'Movie';
     const params = new URLSearchParams({
       tmdbId: '0', // Placeholder - we're using malId directly
-      type: 'tv',
-      season: '1',
-      episode: episode.toString(),
+      type: animeIsMovie ? 'movie' : 'tv',
       provider,
       malId: malId.toString(),
       malTitle: anime?.title_english || anime?.title || '',
     });
+    
+    // Only add season/episode for TV series, not movies
+    if (!animeIsMovie) {
+      params.set('season', '1');
+      params.set('episode', episode.toString());
+    }
 
     try {
       const response = await fetch(`/api/stream/extract?${params}`, { cache: 'no-store' });
@@ -379,9 +401,9 @@ export default function AnimeWatchClient() {
       <div className={styles.container}>
         <MobileVideoPlayer
           tmdbId="0"
-          mediaType="tv"
-          season={1}
-          episode={episode}
+          mediaType={isMovie ? 'movie' : 'tv'}
+          season={isMovie ? undefined : 1}
+          episode={isMovie ? undefined : episode}
           title={title}
           streamUrl={mobileStreamUrl}
           availableSources={mobileSources}
@@ -411,9 +433,9 @@ export default function AnimeWatchClient() {
     <div className={styles.container}>
       <DesktopVideoPlayer
         tmdbId="0"
-        mediaType="tv"
-        season={1}
-        episode={episode}
+        mediaType={isMovie ? 'movie' : 'tv'}
+        season={isMovie ? undefined : 1}
+        episode={isMovie ? undefined : episode}
         title={title}
         onBack={handleBack}
         nextEpisode={nextEpisodeProp}
