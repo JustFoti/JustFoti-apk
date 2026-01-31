@@ -1,0 +1,20 @@
+name: Build My Gatekeeper APK
+on: [push, workflow_dispatch] # workflow_dispatch lets you click a button to build
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build APK
+        uses: Jipok/website-to-apk@v2
+        with:
+          mode: 'file'
+          input: 'index.html' # Change this if the main file is named differently
+          app_name: 'My Gatekeeper App'
+          package_name: 'com.my.gatekeeper'
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: gatekeeper-apk
+          path: ./*.apk
